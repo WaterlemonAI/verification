@@ -9,8 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/admin.css?v=2" />
-    <script src="/admin/admin.js?v=2" defer></script>
+    <link rel="stylesheet" href="/admin/admin.css?v=3" />
+    <script src="/admin/admin.js?v=3" defer></script>
   </head>
   <body>
     <div class="login" id="login-view">
@@ -87,6 +87,7 @@
           <label>AI7 public path<input name="publicPath" value="/service/" required /></label>
         </div>
         <label>Private upstream URL<input name="upstreamUrl" type="url" placeholder="https://provider.example/api/endpoint" required /></label>
+        <label>Protocol adapter<select name="adapter"><option value="passthrough">Direct pass-through</option><option value="encrypted-json-relay">Encrypt → verify → decrypt (JSON)</option></select></label>
         <div class="grid three">
           <label>Upstream authentication<select name="authType"><option value="bearer">Bearer token</option><option value="header">Custom header</option><option value="none">No authentication</option></select></label>
           <label>Auth header<input name="authHeader" value="authorization" /></label>
@@ -100,6 +101,18 @@
         <label class="check"><input name="enabled" type="checkbox" checked /> Enable this public route</label>
         <p class="error" id="integration-error" aria-live="polite"></p>
         <div class="actions"><button type="button" class="secondary" data-close="integration-dialog">Cancel</button><button type="submit">Save API securely</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="supplier-credential-dialog">
+      <form id="supplier-credential-form">
+        <div class="dialog-head"><div><p class="eyebrow">PRIVATE CREDENTIAL</p><h2>Set API credential</h2></div><button type="button" class="close" data-close="supplier-credential-dialog">×</button></div>
+        <p class="notice">This value is stored write-only in the AI7 UAE Key Vault and is applied only to <strong id="supplier-credential-name"></strong>.</p>
+        <input name="id" type="hidden" />
+        <label id="supplier-credential-label">Supplier credential<input name="credential" type="password" autocomplete="off" placeholder="Enter the private credential" required /></label>
+        <p class="field-help" id="supplier-credential-help"></p>
+        <p class="error" id="supplier-credential-error" aria-live="polite"></p>
+        <div class="actions"><button type="button" class="secondary" data-close="supplier-credential-dialog">Cancel</button><button type="submit">Save credential securely</button></div>
       </form>
     </dialog>
 

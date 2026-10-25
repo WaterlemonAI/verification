@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AI7 UAE Verification API",
-    "description": "Verify a UAE trade licence issued by any emirate or free zone. Send JSON or multipart/form-data. Responses are JSON.",
-    "version": "1.0.0"
+    "description": "AI7 UAE verification APIs for UAE trade licences and international bank accounts. Responses are JSON.",
+    "version": "1.1.0"
   },
   "servers": [{ "url": "https://api.ai7uae.com", "description": "Live" }],
   "paths": {
@@ -41,6 +41,43 @@
           "500": {
             "description": "The request failed.",
             "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "status": "Error", "error": "The service is temporarily unavailable. Please try again shortly." } } }
+          }
+        }
+      }
+    },
+    "/service/iban_verification": {
+      "post": {
+        "summary": "Verify an international bank account",
+        "description": "Verifies international bank and account-owner details. AI7 handles the private encrypted relay internally.",
+        "operationId": "verifyInternationalBankAccount",
+        "security": [{ "ApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IbanVerificationRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification completed, including match and no-record results.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IbanVerificationResponse" } } }
+          },
+          "400": {
+            "description": "The request format or parameters are invalid.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "401": {
+            "description": "The AI7 API key is missing or invalid.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "500": {
+            "description": "The verification service failed.",
+            "content": {
+              "application/json": {
+                "oneOf": [
+                  { "$ref": "#/components/schemas/IbanVerificationResponse" },
+                  { "$ref": "#/components/schemas/Error" }
+                ]
+              }
+            }
           }
         }
       }
@@ -137,6 +174,58 @@
             "properties": { "trade_license_number": { "type": ["number", "null"], "format": "float" } },
             "additionalProperties": true
           }
+        },
+        "additionalProperties": true
+      },
+      "IbanVerificationRequest": {
+        "type": "object",
+        "required": ["transID", "docType", "country"],
+        "properties": {
+          "source": { "type": "string", "default": "API" },
+          "transID": { "type": "string", "description": "Unique transaction ID supplied by the client." },
+          "docType": { "type": ["integer", "string"], "description": "Document type; use 610 for IBAN verification.", "example": 610 },
+          "requestCategory": { "type": "string" },
+          "country": { "type": "string", "description": "ISO country code.", "example": "AE" },
+          "firstName": { "type": "string" },
+          "lastName": { "type": "string" },
+          "completeName": { "type": "string" },
+          "bankCode": { "type": "string" },
+          "bankAccountNumber": { "type": "string" },
+          "bic": { "type": "string" },
+          "iban": { "type": "string" },
+          "id": { "type": "string" },
+          "idType": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "IbanVerificationResponse": {
+        "type": "object",
+        "required": ["msg", "status"],
+        "properties": {
+          "msg": { "type": "string" },
+          "status": { "type": "integer" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "results": {
+                "type": "object",
+                "properties": {
+                  "bank": { "type": "string" },
+                  "result": { "type": "string" },
+                  "country": { "type": "string" },
+                  "bankCode": { "type": "string" },
+                  "completeName": { "type": "string" },
+                  "bankAccountNumber": { "type": "string" }
+                },
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          },
+          "trans_id": { "type": "string" },
+          "ts_transaction_id": { "type": "string" },
+          "transID": { "type": "string" },
+          "tsTransId": { "type": "string" }
         },
         "additionalProperties": true
       },
