@@ -44,3 +44,23 @@ test('request-time search returns adverse article URLs about an alias from appro
   assert.ok(raw.usage.reserved_provider_cost_upper_bound_usd <= 0.07);
   assert.equal(raw.usage.cost_guardrail_usd, 0.08);
 });
+
+test('association discovery runs when a supplied alias contains the full name', async () => {
+  const queries = [];
+  const request = validateAdverseMediaRequest({
+    entity_type: 'individual', name: 'Prabhpreet Gill', aliases: ['Prabhpreet Singh Gill'], languages: ['en']
+  });
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      queries.push(url.searchParams.get('q'));
+      return Response.json(url.pathname.includes('/news/') ? { results: [] } : { web: { results: [] } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+  const response = await screenAdverseMedia({ request, apiKey: 'test', aiApiKey: 'test', fetchImpl, approvedPublisherSearchEnabled: true });
+  assert.ok(queries.some((query) => query.includes('Prabhpreet Singh Gill') && query.includes('"founder"')));
+  assert.equal(response.methodology.entity_resolution.status, 'completed');
+  assert.ok(response.usage.reserved_provider_cost_upper_bound_usd <= 0.07);
+});
