@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { after, before, test } from 'node:test';
 
 process.env.NODE_ENV = 'test';
+process.env.API_PUBLIC_BASE_URL = 'https://api.ai7uae.com';
 const apiKey = 'ai7_adverse_test_key';
 process.env.AI7_API_KEY_HASHES = createHash('sha256').update(apiKey).digest('hex');
 
@@ -285,7 +286,8 @@ test('adverse media endpoint returns a customer-safe evidence response', async (
   assert.equal(body.report.transaction_id, body.screening_id);
   assert.equal(body.report.retention, 'permanent');
   assert.match(body.report.sha256, /^[0-9a-f]{64}$/);
-  const reportResponse = await fetch(`${appUrl}${body.report.download_url}`, { headers: { authorization: `Bearer ${apiKey}` } });
+  assert.match(body.report.download_url, /^https:\/\/api\.ai7uae\.com\/service\/adverse_media\/reports\/[0-9a-f-]{36}\.pdf$/);
+  const reportResponse = await fetch(`${appUrl}${new URL(body.report.download_url).pathname}`, { headers: { authorization: `Bearer ${apiKey}` } });
   assert.equal(reportResponse.status, 200);
   assert.equal(reportResponse.headers.get('content-type'), 'application/pdf');
   assert.equal(Buffer.from(await reportResponse.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');

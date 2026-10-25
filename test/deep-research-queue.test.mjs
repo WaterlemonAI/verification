@@ -12,35 +12,34 @@ function messageFor(job) {
   return { messageId: 'message-1', popReceipt: 'receipt-1', messageText: JSON.stringify(job) };
 }
 
-test('deep research worker retains incomplete screenings for a later retry', async () => {
+test('deep research worker delivers a final partial result instead of silently waiting forever', async () => {
   const job = makeDeepResearchJob(request);
-  let delivered = false;
-  let completed = false;
+  let deliveredResult;
+  let released = false;
   let controller;
   const done = new Promise((resolve) => {
     const queue = {
       receive: async () => messageFor(job),
-      complete: async () => { completed = true; },
-      release: async (_message, releasedJob, seconds) => {
-        assert.equal(releasedJob.screening_id, job.screening_id);
-        assert.equal(seconds, 15 * 60);
-        controller.stop();
-        resolve();
-      }
+      complete: async () => { controller.stop(); resolve(); },
+      release: async () => { released = true; }
     };
     controller = startDeepResearchWorker({
       queue,
       store: { getMasterKey: async () => 'configured' },
       screen: async () => ({ status: 'partial', summary: { decision_eligible: false } }),
-      deliver: async () => { delivered = true; }
+      present: (result) => ({ status: result.status, screening_id: result.screening_id, summary: result.summary }),
+      finalize: async ({ response }) => ({ ...response, report: { report_id: 'report-partial', retention: 'permanent' } }),
+      deliver: async (_job, result) => { deliveredResult = result; }
     });
   });
   await done;
-  assert.equal(delivered, false);
-  assert.equal(completed, false);
+  assert.equal(released, false);
+  assert.equal(deliveredResult.status, 'partial');
+  assert.equal(deliveredResult.summary.decision_eligible, false);
+  assert.equal(deliveredResult.report.retention, 'permanent');
 });
 
-test('deep research worker delivers and removes only a completed decision-eligible screening', async () => {
+test('deep research worker delivers and removes a completed decision-eligible screening', async () => {
   const job = makeDeepResearchJob(request);
   let released = false;
   let deliveredResult;

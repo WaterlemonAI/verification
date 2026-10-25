@@ -97,6 +97,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ADVERSE_MEDIA_REPORT_CONTAINER', value: 'adverse-media-reports' }
             { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
             { name: 'AZURE_REGION_DISPLAY', value: 'Microsoft Azure UAE North' }
+            { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
           ]
           resources: {
             cpu: json('0.25')

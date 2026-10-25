@@ -58,8 +58,8 @@
               <div><strong>date_from / date_to</strong><span>date · optional</span><p>Inclusive publication-date search window.</p></div>
               <div><strong>risk_threshold</strong><span>number · optional</span><p>Scores at or above this 0–1 value require review. Default: <code>0.65</code>.</p></div>
               <div><strong>max_results</strong><span>integer · optional</span><p>One to 50 results. Default: 25.</p></div>
-              <div><strong>deep_research</strong><span>boolean · optional</span><p>Enables completion-gated research and the optional callback workflow.</p></div>
-              <div><strong>callback_url</strong><span>HTTPS URI · optional</span><p>Available only with deep research. A signed result is posted only after the screening is complete and decision-eligible.</p></div>
+              <div><strong>deep_research</strong><span>boolean · optional</span><p>Enables asynchronous screening and the optional callback workflow.</p></div>
+              <div><strong>callback_url</strong><span>HTTPS URI · optional</span><p>Available only with deep research. The signed final result is posted to this public URL. Partial results remain explicitly inconclusive and require review.</p></div>
               <div><strong>customer_logo_url</strong><span>HTTPS URI · optional</span><p>PNG or JPEG logo shown on the automatically generated audit PDF. The PDF is permanently retained in private storage.</p></div>
             </div>
             <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
@@ -107,7 +107,7 @@
           <article id="methodology">
             <p class="label">METHODOLOGY</p>
             <h2>Designed for review, not automated guilt decisions</h2>
-            <p>The engine normalizes names and aliases, generates tightly constrained name transliterations for selected non-English languages, and performs a bounded identity-resolution pass for multi-part individual names to discover explicit aliases and associated organizations. It searches current and archived indexes with controlled retries, removes duplicate URLs, classifies adverse-event terms, and ranks evidence. Regional selections add native-language and country-focused official-source searches inside the fixed 12-query guardrail. Partial individual-name matches are rejected before classification, while only high-confidence evidence mismatches can suppress a candidate. Any exhausted source or required classification failure makes the run <code>partial</code>, returns an <code>inconclusive</code> outcome, blocks decision eligibility, and requires manual review. Deep research callbacks are sent only for completed, decision-eligible runs. A media result is a review lead—not proof of wrongdoing.</p>
+            <p>The engine normalizes names and aliases, generates tightly constrained name transliterations for selected non-English languages, and performs a bounded identity-resolution pass for multi-part individual names to discover explicit aliases and associated organizations. It searches current and archived indexes with controlled retries, removes duplicate URLs, classifies adverse-event terms, and ranks evidence. Regional selections add native-language and country-focused official-source searches inside the fixed 12-query guardrail. Partial individual-name matches are rejected before classification, while only high-confidence evidence mismatches can suppress a candidate. Any exhausted source or required classification failure makes the run <code>partial</code>, returns an <code>inconclusive</code> outcome, blocks decision eligibility, and requires manual review. Deep research callbacks always receive the final result; consumers must inspect <code>data.status</code>, <code>data.summary.decision_eligible</code>, and <code>data.coverage</code>. A media result is a review lead—not proof of wrongdoing.</p>
           </article>
 
           <article id="tester" class="tester">
@@ -137,7 +137,7 @@
                 <label>To date <code>date_to</code><input id="date-to" type="date" /></label>
                 <label>Acceptable risk threshold <code>risk_threshold</code><input id="risk-threshold" type="number" min="0" max="100" step="1" value="65" /><small class="field-help">Percentage score at or above which review is required.</small></label>
                 <label>Maximum results <code>max_results</code><input id="max-results" type="number" min="1" max="50" value="25" /></label>
-                <label><span>Deep research <code>deep_research</code></span><span><input id="deep-research" type="checkbox" /> Wait for complete, decision-eligible coverage</span></label>
+                <label><span>Deep research <code>deep_research</code></span><span><input id="deep-research" type="checkbox" /> Queue an asynchronous signed callback</span></label>
                 <label id="callback-field" hidden>Callback URL <code>callback_url</code><input id="callback-url" type="url" inputmode="url" placeholder="https://your-domain.example/webhooks/ai7" disabled /><small class="field-help">Optional. The queued response returns a one-time signing secret for verifying callbacks.</small></label>
                 <label>Customer logo URL <code>customer_logo_url</code><input id="customer-logo-url" type="url" inputmode="url" placeholder="https://your-domain.example/logo.png" /><small class="field-help">Optional PNG/JPEG. Every completed check creates a private, permanently stored audit PDF.</small></label>
               </div>
