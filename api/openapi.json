@@ -321,7 +321,8 @@
       "get": {
         "summary": "Download a permanent adverse-media audit report",
         "operationId": "downloadAdverseMediaReport",
-        "security": [{ "ApiKey": [] }],
+        "description": "Downloads a permanently retained PDF without an API key. The UUID is an unguessable capability identifier; anyone with the URL can download the report.",
+        "security": [],
         "parameters": [{
           "name": "reportId",
           "in": "path",
@@ -330,11 +331,10 @@
         }],
         "responses": {
           "200": {
-            "description": "The authenticated customer's PDF report.",
+            "description": "The PDF report identified by the capability URL.",
             "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } } }
           },
-          "401": { "description": "Missing or invalid AI7 API key.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-          "404": { "description": "No report belonging to this credential has that ID.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "No report has that capability ID.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "503": { "description": "The report store is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
@@ -2696,7 +2696,7 @@
           "report_id": { "type": "string", "format": "uuid" },
           "transaction_id": { "type": "string", "format": "uuid" },
           "generated_at": { "type": "string", "format": "date-time" },
-          "download_url": { "type": "string", "format": "uri", "description": "Absolute authenticated URL for the permanently stored PDF report." },
+          "download_url": { "type": "string", "format": "uri", "description": "Absolute public capability URL for the permanently stored PDF report. Anyone with the unguessable URL can download it without an API key." },
           "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
           "filename": { "type": "string" },
           "retention": { "type": "string", "const": "permanent" }

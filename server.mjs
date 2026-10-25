@@ -259,16 +259,16 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
   }
 }
 
-async function downloadAdverseMediaReport(req, res, store, reportStore, reportId) {
-  const token = bearerToken(req);
-  if (!(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+async function downloadAdverseMediaReport(res, reportStore, reportId) {
   try {
-    const report = await reportStore.get({ ownerId: reportOwnerId(token), reportId });
+    const report = await reportStore.getPublic({ reportId });
     if (!report) return json(res, 404, { status: 'Error', error: 'The report was not found.' });
     const filename = String(report.metadata.filename || `ai7-adverse-media-${reportId}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '-');
     res.writeHead(200, {
       'content-type': 'application/pdf', 'content-length': report.bytes.length,
       'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'private, no-store',
+      'content-security-policy': "default-src 'none'; sandbox", 'referrer-policy': 'no-referrer',
+      'x-robots-tag': 'noindex, nofollow, noarchive',
       'x-ai7-report-id': reportId, 'x-content-sha256': report.metadata.sha256
     });
     return res.end(report.bytes);
@@ -541,7 +541,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
       const adverseReportMatch = /^\/service\/adverse_media\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
-      if (req.method === 'GET' && adverseReportMatch) return downloadAdverseMediaReport(req, res, store, reportStore, adverseReportMatch[1]);
+      if (req.method === 'GET' && adverseReportMatch) return downloadAdverseMediaReport(res, reportStore, adverseReportMatch[1]);
       if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
         return json(res, 200, {
           supported_languages: adverseMediaConfig.supportedLanguages,
