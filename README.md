@@ -19,13 +19,15 @@ The GitHub deployment identity receives the custom role in `infrastructure/ai7ua
 
 ## Verification API
 
-The provider-neutral API portal and wrapper are served from `api.ai7uae.com`. The first endpoint is:
+The provider-neutral API portal and wrapper are served from `api.ai7uae.com`. Current endpoints are:
 
 ```text
 POST /service/uae_tlv
+POST /service/iban_verification
+POST /service/entity_search
 ```
 
-It accepts `application/json` and `multipart/form-data`, authenticates each AI7 customer with a Bearer API key, and relays the upstream JSON body and HTTP status without exposing upstream hostnames, credentials, or identifying headers. The portal includes copyable cURL, JavaScript, and Python examples, an OpenAPI document, and a live JSON response console.
+The services authenticate each AI7 customer with one Bearer API key and relay the upstream JSON body and HTTP status without exposing upstream hostnames, credentials, or identifying headers. The portal includes copyable cURL, JavaScript, and Python examples, an OpenAPI document, and live JSON response consoles. The comprehensive entity-search page also exposes a searchable response-field reference generated from every path in its official schema and response variants.
 
 Client keys are stored only as SHA-256 hashes. Upstream configuration and hashes are loaded from Azure Key Vault through the API app's dedicated managed identity. No provider secrets are committed to this repository or sent to the browser.
 

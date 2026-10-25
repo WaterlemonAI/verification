@@ -15,13 +15,44 @@ const store = new EnvironmentStore();
 let app;
 let appUrl;
 let receivedUpstream;
+let receivedEntitySearch;
 let relayRequests = [];
+
+const completeEntitySearchResponse = {
+  apc_success: true,
+  profiles_success: true,
+  message: 'Search Successful',
+  response_id: '4e9aa7cb-f42d-4f87-828f-ac1ea6d34c1e',
+  data: {
+    profiles: [{
+      uid: 'PROFILE-1',
+      category: ['PEP', 'WLT', 'SAN'],
+      personal_details: {
+        uid: 'PROFILE-1', type: 'Individual', gender: 'Male', deceased: '', nationalities: ['AE'], citizenships: ['AE'],
+        name: [{ first_name: 'Test', middle_name: '', last_name: 'Person' }],
+        aliases: [{ alias_name: 'Test Alias', alias_type: 'AKA', alias_language: 'English', alias_script: 'Latin' }],
+        date_of_birth: [{ date_of_birth_year: '1980', date_of_birth_month: '1', date_of_birth_date: '2' }],
+        image_details: [{ image_url: 'https://example.test/image.jpg' }], physical_description: []
+      },
+      sanctions: { authority: [{ sanction_authority: 'Authority', sanctions_list_name: 'List' }] },
+      watchlists: { additional_information: ['Information'], authority: [{ watchlist_list_id: '1', watchlist_list_name: 'List' }] },
+      apc_info: [{ date_published_year: '2026', date_published_month: '10', date_published_date: '1', apc_summary: 'Summary', apc_news_link: 'https://example.test/news' }],
+      unknown_future_field: { preserved: true }
+    }],
+    aml: { data: [{ name: 'Test Person', AmlCategory: 'AML', Score: 0.99 }] },
+    russiabridge: [{ uid: 'RB-1', name: 'Event', type: 'Individual' }]
+  }
+};
 
 before(async () => {
   app = createAppServer({
     store,
     fetchImpl: async (url, options) => {
       const requestUrl = new URL(url);
+      if (requestUrl.hostname === 'screening.test') {
+        receivedEntitySearch = { url: String(url), headers: options.headers, body: JSON.parse(options.body.toString('utf8')) };
+        return new Response(JSON.stringify(completeEntitySearchResponse), { status: 200, headers: { 'content-type': 'application/json', 'x-supplier': 'hidden' } });
+      }
       if (requestUrl.hostname === 'bank.test') {
         relayRequests.push({ url: String(url), headers: options.headers, body: JSON.parse(options.body.toString('utf8')) });
         if (requestUrl.pathname === '/v1/apicall/encrypt') {
@@ -248,5 +279,132 @@ test('IBAN public docs include every input and response field without provider d
   for (const publicAsset of [html, script, specText]) {
     assert.equal(publicAsset.toLowerCase().includes('truthscreen'), false);
     assert.equal(publicAsset.includes('www.truthscreen.com'), false);
+  }
+});
+
+test('comprehensive entity search preserves every request field and the exact response body', async () => {
+  const configured = await fetch(`${appUrl}/admin/api/integrations/entity-search`, {
+    method: 'PUT',
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      name: 'Comprehensive Entity Search',
+      publicPath: '/service/entity_search',
+      method: 'POST',
+      upstreamUrl: 'http://screening.test/rzolut-one/v1/search',
+      authType: 'header',
+      authHeader: 'x-api-key',
+      authPrefix: '',
+      adapter: 'passthrough',
+      acceptedContentTypes: ['application/json'],
+      documentedStatuses: [200, 400, 401, 500],
+      enabled: true
+    })
+  });
+  assert.equal(configured.status, 200);
+  assert.equal((await configured.json()).integration.masterAuthKeyConfigured, false);
+
+  const credential = await fetch(`${appUrl}/admin/api/integrations/entity-search/credential`, {
+    method: 'PUT', headers: adminHeaders(), body: JSON.stringify({ credential: 'private-screening-key' })
+  });
+  assert.equal(credential.status, 200);
+
+  const issued = await (await fetch(`${appUrl}/admin/api/clients`, {
+    method: 'POST', headers: adminHeaders(), body: JSON.stringify({ name: 'Entity Search Test' })
+  })).json();
+  const requestBody = {
+    name: 'Test Person',
+    type: 'Individual',
+    alias: ['Test Alias'],
+    country: 'AE',
+    city: 'Dubai',
+    state: 'Dubai',
+    designation: 'Director',
+    gender: 'Male',
+    dob: '1980/01/02',
+    identifier: [{ type: 'passport', value: 'P123' }],
+    watchlist_list_ids: [1, 2],
+    sanction_list_ids: [3, 4],
+    search_type: ['pep', 'sanction', 'aml', 'watchlist', 'russiabridge', 'dualgoods', 'sanctionedgoods', 'er_apc'],
+    fields_weightage: [
+      { field: 'name', weightage: 0.7 }, { field: 'alias', weightage: 0.1 }, { field: 'country', weightage: 0.1 },
+      { field: 'dob', weightage: 0.1 }, { field: 'address', weightage: 0 }, { field: 'gender', weightage: 0 },
+      { field: 'identifier', weightage: 0 }
+    ],
+    fuzziness: 0.8,
+    event_stage_score: 2,
+    sentiment_confidence: 0.7,
+    apc_duration: 365,
+    apc_countries: 'global',
+    apc_sort_by: 'relevance'
+  };
+  const response = await fetch(`${appUrl}/service/entity_search`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), completeEntitySearchResponse);
+  assert.equal(response.headers.get('x-supplier'), null);
+  assert.equal(receivedEntitySearch.url, 'http://screening.test/rzolut-one/v1/search');
+  assert.equal(receivedEntitySearch.headers['x-api-key'], 'private-screening-key');
+  assert.equal(receivedEntitySearch.headers.authorization, undefined);
+  assert.deepEqual(receivedEntitySearch.body, requestBody);
+});
+
+test('entity search docs expose every official response path and no supplier details', async () => {
+  const html = await (await fetch(`${appUrl}/entity-search`)).text();
+  const script = await (await fetch(`${appUrl}/entity-search.js`)).text();
+  const fieldsScript = await (await fetch(`${appUrl}/entity-search-fields.js`)).text();
+  const specText = await (await fetch(`${appUrl}/openapi.json`)).text();
+  const spec = JSON.parse(specText);
+  const requestFields = [
+    'name', 'type', 'alias', 'country', 'city', 'state', 'designation', 'gender', 'dob', 'identifier',
+    'watchlist_list_ids', 'sanction_list_ids', 'search_type', 'fields_weightage', 'fuzziness',
+    'event_stage_score', 'sentiment_confidence', 'apc_duration', 'apc_countries', 'apc_sort_by'
+  ];
+  for (const field of requestFields) {
+    assert.equal(html.includes(field), true, `entity-search page omitted request field ${field}`);
+    assert.equal(Object.hasOwn(spec.components.schemas.EntitySearchRequest.properties, field), true, `OpenAPI omitted request field ${field}`);
+  }
+  for (const value of ['pep', 'sanction', 'aml', 'watchlist', 'russiabridge', 'dualgoods', 'sanctionedgoods', 'apc', 'er_apc']) {
+    assert.equal(html.includes(`value="${value}"`), true, `tester omitted search type ${value}`);
+  }
+
+  const serializedFields = fieldsScript.match(/= (\[[\s\S]*\]);\s*$/)?.[1];
+  assert.ok(serializedFields, 'response field catalog was not parseable');
+  const fields = JSON.parse(serializedFields);
+  assert.equal(fields.length, 382);
+  assert.equal(new Set(fields.map((field) => field.path)).size, 382);
+
+  const schemaPaths = new Set();
+  function collectPaths(schema, path = '') {
+    if (!schema || typeof schema !== 'object') return;
+    for (const [name, value] of Object.entries(schema.properties || {})) {
+      const next = path ? `${path}.${name}` : name;
+      schemaPaths.add(next);
+      collectPaths(value, next);
+    }
+    if ((schema.type === 'array' || schema.type?.includes?.('array')) && schema.items) {
+      const next = `${path}[]`;
+      schemaPaths.add(next);
+      collectPaths(schema.items, next);
+    }
+  }
+  collectPaths(spec.components.schemas.EntitySearchResponse);
+  for (const field of fields) assert.equal(schemaPaths.has(field.path), true, `OpenAPI omitted response path ${field.path}`);
+  for (const path of [
+    'data.profiles[].sanctions.authority[].sanctions_list_name',
+    'data.profiles[].watchlists.authority[].watchlist_list_name',
+    'data.profiles[].apc_info[].apc_summary',
+    'data.apc.data[].framework[].risk_areas[].categories[].subcategories[].events[].keywords[].event_stages',
+    'data.aml.data[].Total FineAmountUSD',
+    'data.russiabridge[].percentage_of_shareholding'
+  ]) assert.equal(fields.some((field) => field.path === path), true, `response catalog omitted ${path}`);
+
+  assert.equal(script.includes("fetch('/service/entity_search'"), true);
+  assert.equal(Object.hasOwn(spec.paths, '/service/entity_search'), true);
+  for (const publicAsset of [html, script, fieldsScript, specText]) {
+    assert.equal(publicAsset.toLowerCase().includes('rzolut'), false);
+    assert.equal(publicAsset.includes('api-datasets'), false);
   }
 });

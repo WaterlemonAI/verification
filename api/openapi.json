@@ -2,45 +2,104 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AI7 UAE Verification API",
-    "description": "AI7 UAE verification APIs for UAE trade licences and international bank accounts. Responses are JSON.",
-    "version": "1.1.0"
+    "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, and comprehensive entity screening. Responses are JSON.",
+    "version": "1.2.0"
   },
-  "servers": [{ "url": "https://api.ai7uae.com", "description": "Live" }],
+  "servers": [
+    {
+      "url": "https://api.ai7uae.com",
+      "description": "Live"
+    }
+  ],
   "paths": {
     "/service/uae_tlv": {
       "post": {
         "summary": "Verify a UAE trade licence",
         "description": "Verifies a UAE trade licence issued by any emirate or free zone.",
         "operationId": "verifyUaeTradeLicence",
-        "security": [{ "ApiKey": [] }],
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "description": "At least one of license_number, licence_number, company_name, or license_document is required.",
           "content": {
-            "application/json": { "schema": { "$ref": "#/components/schemas/JsonRequest" } },
-            "multipart/form-data": { "schema": { "$ref": "#/components/schemas/MultipartRequest" } }
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/MultipartRequest"
+              }
+            }
           }
         },
         "responses": {
           "200": {
             "description": "Verification completed.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Success" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "400": {
             "description": "The request format or parameters are invalid.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "status": "Error", "error": "A required variable is missing or in the wrong format." } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "status": "Error",
+                  "error": "A required variable is missing or in the wrong format."
+                }
+              }
+            }
           },
           "401": {
             "description": "The API key is missing or invalid.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "status": "Error", "error": "API key is missing or incorrect." } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "status": "Error",
+                  "error": "API key is missing or incorrect."
+                }
+              }
+            }
           },
           "422": {
             "description": "An uploaded document is invalid or could not be recognised.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DocumentError" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentError"
+                }
+              }
+            }
           },
           "500": {
             "description": "The request failed.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "status": "Error", "error": "The service is temporarily unavailable. Please try again shortly." } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "status": "Error",
+                  "error": "The service is temporarily unavailable. Please try again shortly."
+                }
+              }
+            }
           }
         }
       }
@@ -50,32 +109,128 @@
         "summary": "Verify an international bank account",
         "description": "Verifies international bank and account-owner details. AI7 handles the private encrypted relay internally.",
         "operationId": "verifyInternationalBankAccount",
-        "security": [{ "ApiKey": [] }],
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
         "requestBody": {
           "required": true,
-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IbanVerificationRequest" } } }
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IbanVerificationRequest"
+              }
+            }
+          }
         },
         "responses": {
           "200": {
             "description": "Verification completed, including match and no-record results.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IbanVerificationResponse" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IbanVerificationResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "The request format or parameters are invalid.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
             "description": "The AI7 API key is missing or invalid.",
-            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "500": {
             "description": "The verification service failed.",
             "content": {
               "application/json": {
                 "oneOf": [
-                  { "$ref": "#/components/schemas/IbanVerificationResponse" },
-                  { "$ref": "#/components/schemas/Error" }
+                  {
+                    "$ref": "#/components/schemas/IbanVerificationResponse"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Error"
+                  }
                 ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/entity_search": {
+      "post": {
+        "summary": "Run a comprehensive entity search",
+        "description": "Searches people, organizations, aircraft, vessels, and goods across PEP, sanctions, watchlists, AML, adverse media, and specialist risk datasets.",
+        "operationId": "searchEntities",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EntitySearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Search completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitySearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request or search-type combination is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntitySearchBadRequest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The AI7 API key is missing or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The screening service is temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
               }
             }
           }
@@ -95,27 +250,137 @@
       "BaseRequest": {
         "type": "object",
         "anyOf": [
-          { "required": ["license_number"] },
-          { "required": ["licence_number"] },
-          { "required": ["company_name"] },
-          { "required": ["license_document"] }
+          {
+            "required": [
+              "license_number"
+            ]
+          },
+          {
+            "required": [
+              "licence_number"
+            ]
+          },
+          {
+            "required": [
+              "company_name"
+            ]
+          },
+          {
+            "required": [
+              "license_document"
+            ]
+          }
         ],
         "properties": {
-          "license_number": { "type": "string", "title": "License number" },
-          "licence_number": { "type": "string", "title": "Licence number", "description": "Alternate spelling for license_number." },
-          "company_name": { "type": "string", "title": "Company name", "description": "Company name in English or Arabic." },
-          "license_document": { "type": "string", "title": "License document" },
+          "license_number": {
+            "type": "string",
+            "title": "License number"
+          },
+          "licence_number": {
+            "type": "string",
+            "title": "Licence number",
+            "description": "Alternate spelling for license_number."
+          },
+          "company_name": {
+            "type": "string",
+            "title": "Company name",
+            "description": "Company name in English or Arabic."
+          },
+          "license_document": {
+            "type": "string",
+            "title": "License document"
+          },
           "emirate": {
             "type": "string",
             "title": "Emirate",
-            "enum": ["ajman", "abu_dhabi", "abu_dahbi", "dubai", "fujairah", "fujirah", "umm_al_quwain", "sharjah", "ras_al_khaimah"]
+            "enum": [
+              "ajman",
+              "abu_dhabi",
+              "abu_dahbi",
+              "dubai",
+              "fujairah",
+              "fujirah",
+              "umm_al_quwain",
+              "sharjah",
+              "ras_al_khaimah"
+            ]
           },
           "authorising_body": {
             "type": "string",
             "title": "Authorising body",
             "description": "The authority that issued the trade licence.",
             "enum": [
-              "abu_dhabi_department_of_economic_development", "abu_dhabi_tourism_authority", "abu_dhabi_industrial_development", "moe_industrial_licensing_department", "khalifa_industrial_zone_abu_dhabi", "kizad", "abu_dhabi_global_market", "abu_dhabi_airports_free_zone", "masdar_city", "dubai_department_of_economy_and_tourism", "dubai_municipality", "dubai_airport_free_zone_authority", "dubai_development_authority", "dubai_healthcare_city", "dubai_international_financial_centre", "difc", "dubai_multi_commodities_centre", "dubai_silicon_oasis", "international_humanitarian_city", "jabel_ali_freezone_authority", "dubai_south", "dubai_world_trade_centre", "dwtc", "meydan", "dubai_internet_city", "dubai_media_city", "dubai_knowledge_park", "ports_customs_and_free_zone_corporation", "trakhees", "dubai_maritime_city_authority", "dubai_science_park", "dubai_industrial_city", "dubai_commercity", "international_free_zone_authority", "ifza", "dubai_auto_zone", "dubai_flower_centre", "dubai_logistics_city", "dubai_outsource_zone", "gold_and_diamond_park", "dubai_cars_and_automotive_zone", "ducamz", "national_industries_park", "dubai_textile_city", "dibba_municipality", "fujairah_municipality", "fujairah_free_zone_authority", "creative_city_free_zone_authority", "ccfz", "fujairah_culture_and_media_authority", "ras_al_khaimah_tourism_development_authority", "ras_al_khaimah_economic_zone", "rakez", "rak_international_corporate_centre", "rakicc", "ras_al_khaimah_department_of_economic_development", "ras_al_khaimah_maritime_city", "umm_al_quwain_department_of_economic_development", "umm_al_quwain_free_trade_zone", "ajman_municipality", "ajman_department_of_economic_development", "ajman_free_zone", "ajman_media_city_free_zone", "sharjah_economic_development_department", "sharjah_airport_international_free_zone_authority", "hamriyah_free_zone_authority", "sharjah_media_city", "sharjah_publishing_free_zone", "sharjah_research_technology_and_innovation_park", "sharjah_oasis_technology_and_innovation_free_zone_authority", "abu_dhabi_media_freezone_twofour54"
+              "abu_dhabi_department_of_economic_development",
+              "abu_dhabi_tourism_authority",
+              "abu_dhabi_industrial_development",
+              "moe_industrial_licensing_department",
+              "khalifa_industrial_zone_abu_dhabi",
+              "kizad",
+              "abu_dhabi_global_market",
+              "abu_dhabi_airports_free_zone",
+              "masdar_city",
+              "dubai_department_of_economy_and_tourism",
+              "dubai_municipality",
+              "dubai_airport_free_zone_authority",
+              "dubai_development_authority",
+              "dubai_healthcare_city",
+              "dubai_international_financial_centre",
+              "difc",
+              "dubai_multi_commodities_centre",
+              "dubai_silicon_oasis",
+              "international_humanitarian_city",
+              "jabel_ali_freezone_authority",
+              "dubai_south",
+              "dubai_world_trade_centre",
+              "dwtc",
+              "meydan",
+              "dubai_internet_city",
+              "dubai_media_city",
+              "dubai_knowledge_park",
+              "ports_customs_and_free_zone_corporation",
+              "trakhees",
+              "dubai_maritime_city_authority",
+              "dubai_science_park",
+              "dubai_industrial_city",
+              "dubai_commercity",
+              "international_free_zone_authority",
+              "ifza",
+              "dubai_auto_zone",
+              "dubai_flower_centre",
+              "dubai_logistics_city",
+              "dubai_outsource_zone",
+              "gold_and_diamond_park",
+              "dubai_cars_and_automotive_zone",
+              "ducamz",
+              "national_industries_park",
+              "dubai_textile_city",
+              "dibba_municipality",
+              "fujairah_municipality",
+              "fujairah_free_zone_authority",
+              "creative_city_free_zone_authority",
+              "ccfz",
+              "fujairah_culture_and_media_authority",
+              "ras_al_khaimah_tourism_development_authority",
+              "ras_al_khaimah_economic_zone",
+              "rakez",
+              "rak_international_corporate_centre",
+              "rakicc",
+              "ras_al_khaimah_department_of_economic_development",
+              "ras_al_khaimah_maritime_city",
+              "umm_al_quwain_department_of_economic_development",
+              "umm_al_quwain_free_trade_zone",
+              "ajman_municipality",
+              "ajman_department_of_economic_development",
+              "ajman_free_zone",
+              "ajman_media_city_free_zone",
+              "sharjah_economic_development_department",
+              "sharjah_airport_international_free_zone_authority",
+              "hamriyah_free_zone_authority",
+              "sharjah_media_city",
+              "sharjah_publishing_free_zone",
+              "sharjah_research_technology_and_innovation_park",
+              "sharjah_oasis_technology_and_innovation_free_zone_authority",
+              "abu_dhabi_media_freezone_twofour54"
             ]
           }
         },
@@ -123,55 +388,149 @@
       },
       "JsonRequest": {
         "allOf": [
-          { "$ref": "#/components/schemas/BaseRequest" },
-          { "type": "object", "properties": { "license_document": { "type": "string", "description": "Raw base64 or a data URI; a name parameter may be included in the data URI." } } }
+          {
+            "$ref": "#/components/schemas/BaseRequest"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "license_document": {
+                "type": "string",
+                "description": "Raw base64 or a data URI; a name parameter may be included in the data URI."
+              }
+            }
+          }
         ]
       },
       "MultipartRequest": {
         "allOf": [
-          { "$ref": "#/components/schemas/BaseRequest" },
-          { "type": "object", "properties": { "license_document": { "type": "string", "format": "binary" } } }
+          {
+            "$ref": "#/components/schemas/BaseRequest"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "license_document": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
         ]
       },
       "Success": {
         "type": "object",
-        "required": ["status", "client_id", "seconds"],
+        "required": [
+          "status",
+          "client_id",
+          "seconds"
+        ],
         "oneOf": [
-          { "required": ["uae_tl_verification"] },
-          { "required": ["trade_licence_verification_api"] }
+          {
+            "required": [
+              "uae_tl_verification"
+            ]
+          },
+          {
+            "required": [
+              "trade_licence_verification_api"
+            ]
+          }
         ],
         "properties": {
-          "status": { "type": "string", "example": "Success" },
-          "client_id": { "type": "string", "format": "uuid", "example": "123e4567-e89b-12d3-a456-426614174000" },
-          "seconds": { "type": "number", "format": "float", "example": 1.234 },
-          "uae_tl_verification": { "$ref": "#/components/schemas/VerificationResult" },
-          "trade_licence_verification_api": { "$ref": "#/components/schemas/VerificationResult", "description": "Compatibility response object name." }
+          "status": {
+            "type": "string",
+            "example": "Success"
+          },
+          "client_id": {
+            "type": "string",
+            "format": "uuid",
+            "example": "123e4567-e89b-12d3-a456-426614174000"
+          },
+          "seconds": {
+            "type": "number",
+            "format": "float",
+            "example": 1.234
+          },
+          "uae_tl_verification": {
+            "$ref": "#/components/schemas/VerificationResult"
+          },
+          "trade_licence_verification_api": {
+            "$ref": "#/components/schemas/VerificationResult",
+            "description": "Compatibility response object name."
+          }
         },
         "additionalProperties": true
       },
       "VerificationResult": {
         "type": "object",
         "properties": {
-          "uae_licence_number": { "type": "string" },
-          "expiration_date": { "type": "string" },
-          "registration_date": { "type": "string" },
-          "licence_registration_name_arabic": { "type": "string" },
-          "licence_registration_name": { "type": "string" },
-          "licence_registration_address": { "type": "string" },
-          "governing_body_name": { "type": "string" },
-          "emirate_name": { "type": "string" },
-          "emirate_name_arabic": { "type": "string" },
-          "lcn_renewal_date": { "type": "string" },
-          "moec_status": { "type": "string" },
-          "legal_type_from_entity": { "type": "string" },
-          "unified_licence_number": { "type": "string" },
-          "activity_start_time": { "type": "string" },
-          "licence_registration_address_arabic": { "type": "string" },
-          "license_status": { "type": "string" },
-          "trade_license_number": { "type": ["number", "null"], "format": "float" },
+          "uae_licence_number": {
+            "type": "string"
+          },
+          "expiration_date": {
+            "type": "string"
+          },
+          "registration_date": {
+            "type": "string"
+          },
+          "licence_registration_name_arabic": {
+            "type": "string"
+          },
+          "licence_registration_name": {
+            "type": "string"
+          },
+          "licence_registration_address": {
+            "type": "string"
+          },
+          "governing_body_name": {
+            "type": "string"
+          },
+          "emirate_name": {
+            "type": "string"
+          },
+          "emirate_name_arabic": {
+            "type": "string"
+          },
+          "lcn_renewal_date": {
+            "type": "string"
+          },
+          "moec_status": {
+            "type": "string"
+          },
+          "legal_type_from_entity": {
+            "type": "string"
+          },
+          "unified_licence_number": {
+            "type": "string"
+          },
+          "activity_start_time": {
+            "type": "string"
+          },
+          "licence_registration_address_arabic": {
+            "type": "string"
+          },
+          "license_status": {
+            "type": "string"
+          },
+          "trade_license_number": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
           "risk_scores": {
             "type": "object",
-            "properties": { "trade_license_number": { "type": ["number", "null"], "format": "float" } },
+            "properties": {
+              "trade_license_number": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "float"
+              }
+            },
             "additionalProperties": true
           }
         },
@@ -179,71 +538,1993 @@
       },
       "IbanVerificationRequest": {
         "type": "object",
-        "required": ["transID", "country", "requestCategory"],
+        "required": [
+          "transID",
+          "country",
+          "requestCategory"
+        ],
         "properties": {
-          "source": { "type": "string", "default": "API" },
-          "transID": { "type": "string", "description": "Unique transaction ID supplied by the client." },
-          "docType": { "type": "integer", "const": 610, "default": 610, "description": "Always 610. AI7 enforces this value before forwarding the request." },
-          "requestCategory": { "type": "string", "enum": ["business"], "default": "business", "description": "Use business for document type 610." },
-          "country": { "type": "string", "description": "ISO country code.", "example": "AE" },
-          "firstName": { "type": "string" },
-          "lastName": { "type": "string" },
-          "completeName": { "type": "string" },
-          "bankCode": { "type": "string" },
-          "bankAccountNumber": { "type": "string" },
-          "bic": { "type": "string" },
-          "iban": { "type": "string" },
-          "id": { "type": "string" },
-          "idType": { "type": "string" }
+          "source": {
+            "type": "string",
+            "default": "API"
+          },
+          "transID": {
+            "type": "string",
+            "description": "Unique transaction ID supplied by the client."
+          },
+          "docType": {
+            "type": "integer",
+            "const": 610,
+            "default": 610,
+            "description": "Always 610. AI7 enforces this value before forwarding the request."
+          },
+          "requestCategory": {
+            "type": "string",
+            "enum": [
+              "business"
+            ],
+            "default": "business",
+            "description": "Use business for document type 610."
+          },
+          "country": {
+            "type": "string",
+            "description": "ISO country code.",
+            "example": "AE"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "completeName": {
+            "type": "string"
+          },
+          "bankCode": {
+            "type": "string"
+          },
+          "bankAccountNumber": {
+            "type": "string"
+          },
+          "bic": {
+            "type": "string"
+          },
+          "iban": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "idType": {
+            "type": "string"
+          }
         },
         "additionalProperties": false
       },
       "IbanVerificationResponse": {
         "type": "object",
-        "required": ["msg", "status"],
+        "required": [
+          "msg",
+          "status"
+        ],
         "properties": {
-          "msg": { "type": "string" },
-          "status": { "type": "integer" },
+          "msg": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
           "data": {
             "type": "object",
             "properties": {
               "results": {
                 "type": "object",
                 "properties": {
-                  "bank": { "type": "string" },
-                  "result": { "type": "string" },
-                  "country": { "type": "string" },
-                  "bankCode": { "type": "string" },
-                  "completeName": { "type": "string" },
-                  "bankAccountNumber": { "type": "string" }
+                  "bank": {
+                    "type": "string"
+                  },
+                  "result": {
+                    "type": "string"
+                  },
+                  "country": {
+                    "type": "string"
+                  },
+                  "bankCode": {
+                    "type": "string"
+                  },
+                  "completeName": {
+                    "type": "string"
+                  },
+                  "bankAccountNumber": {
+                    "type": "string"
+                  }
                 },
                 "additionalProperties": true
               }
             },
             "additionalProperties": true
           },
-          "trans_id": { "type": "string" },
-          "ts_transaction_id": { "type": "string" },
-          "transID": { "type": "string" },
-          "tsTransId": { "type": "string" }
+          "trans_id": {
+            "type": "string"
+          },
+          "ts_transaction_id": {
+            "type": "string"
+          },
+          "transID": {
+            "type": "string"
+          },
+          "tsTransId": {
+            "type": "string"
+          }
         },
         "additionalProperties": true
       },
       "Error": {
         "type": "object",
-        "required": ["status", "error"],
-        "properties": { "status": { "type": "string" }, "error": { "type": "string" } }
+        "required": [
+          "status",
+          "error"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
       },
       "DocumentError": {
         "type": "object",
-        "required": ["status", "error"],
+        "required": [
+          "status",
+          "error"
+        ],
         "properties": {
-          "status": { "type": "string", "example": "Document identification failed" },
+          "status": {
+            "type": "string",
+            "example": "Document identification failed"
+          },
           "error": {
             "type": "object",
-            "properties": { "file": { "type": "string" }, "title": { "type": "string" }, "message": { "type": "string" } }
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
           }
         }
+      },
+      "EntityIdentifier": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Identifier type."
+          },
+          "value": {
+            "type": "string",
+            "description": "Identifier value."
+          }
+        },
+        "additionalProperties": true
+      },
+      "EntityFieldWeight": {
+        "type": "object",
+        "required": [
+          "field",
+          "weightage"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "name",
+              "alias",
+              "country",
+              "dob",
+              "address",
+              "gender",
+              "identifier"
+            ]
+          },
+          "weightage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "EntitySearchRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "search_type",
+          "fields_weightage",
+          "fuzziness"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the entity."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Individual",
+              "Organization",
+              "Aircraft",
+              "Vessel",
+              "Goods"
+            ],
+            "description": "Entity type."
+          },
+          "alias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Aliases or alternate names."
+          },
+          "country": {
+            "type": "string",
+            "description": "Associated country."
+          },
+          "city": {
+            "type": "string",
+            "description": "Associated city."
+          },
+          "state": {
+            "type": "string",
+            "description": "Associated state or province."
+          },
+          "designation": {
+            "type": "string",
+            "description": "Known designation."
+          },
+          "gender": {
+            "type": "string",
+            "description": "Known gender."
+          },
+          "dob": {
+            "type": "string",
+            "pattern": "^\\d{4}/\\d{2}/\\d{2}$",
+            "description": "Known date of birth in yyyy/MM/dd format."
+          },
+          "identifier": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntityIdentifier"
+            },
+            "description": "Other known identifiers."
+          },
+          "watchlist_list_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Watchlist list IDs used to filter data."
+          },
+          "sanction_list_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Sanctions list IDs used to filter data."
+          },
+          "search_type": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "pep",
+                "sanction",
+                "aml",
+                "watchlist",
+                "russiabridge",
+                "dualgoods",
+                "sanctionedgoods",
+                "apc",
+                "er_apc"
+              ]
+            },
+            "description": "Datasets to search. APC must be used alone. ER-APC must be combined with pep, sanction, or watchlist."
+          },
+          "fields_weightage": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/EntityFieldWeight"
+                },
+                "minItems": 7,
+                "maxItems": 7
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "description": "Weights for name, alias, country, dob, address, gender, and identifier. Values must total 1. The structured array is the current request format; the string form remains represented for contract compatibility."
+          },
+          "fuzziness": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "string",
+                "pattern": "^(0(\\.\\d+)?|1(\\.0+)?)$"
+              }
+            ],
+            "description": "Matching threshold from 0 to 1."
+          },
+          "event_stage_score": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "default": 1,
+            "description": "APC event-stage filter."
+          },
+          "sentiment_confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.68,
+            "description": "APC negative-sentiment threshold."
+          },
+          "apc_duration": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Number of past days to retrieve. Required for APC-only searches."
+          },
+          "apc_countries": {
+            "type": "string",
+            "default": "global",
+            "description": "APC country filter."
+          },
+          "apc_sort_by": {
+            "type": "string",
+            "enum": [
+              "relevance",
+              "date"
+            ],
+            "default": "relevance",
+            "description": "APC result sort order."
+          }
+        },
+        "additionalProperties": true
+      },
+      "EntitySearchResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "profiles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "additional_identifiers": {
+                      "description": "Additional unique identifiers related to the individual or entity.",
+                      "type": "object",
+                      "properties": {
+                        "identifiers": {
+                          "description": "A list of additional identifiers, such as tax IDs or registration numbers.",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "category": {
+                      "description": "Categories under which the individual or entity falls.",
+                      "type": "array",
+                      "items": {
+                        "description": "Specific categories, such as \"politician\" or \"business executive.\"",
+                        "type": "string"
+                      }
+                    },
+                    "sub_category": {
+                      "description": "Sub-Categories under which the individual or entity falls.",
+                      "type": "array",
+                      "items": {
+                        "description": "Specific sub-categories, such as \"PRM\" or \"ASC\"",
+                        "type": "string"
+                      }
+                    },
+                    "contact_details": {
+                      "description": "Contact information for the individual or entity.",
+                      "type": "object",
+                      "properties": {
+                        "addresses": {
+                          "description": "A list of addresses associated with the individual or entity.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "address_city": {
+                                "description": "The city of the address.",
+                                "type": "string"
+                              },
+                              "address_country": {
+                                "description": "The country of the address.",
+                                "type": "string"
+                              },
+                              "address_country_code": {
+                                "description": "The country code of the address.",
+                                "type": "string"
+                              },
+                              "address_postal_code": {
+                                "description": "The postal code of the address.",
+                                "type": "string"
+                              },
+                              "address_province": {
+                                "description": "The province or state of the address.",
+                                "type": "string"
+                              },
+                              "address_street": {
+                                "description": "The street address.",
+                                "type": "string"
+                              },
+                              "address_type": {
+                                "description": "Type of address (e.g., residential, business).",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        },
+                        "contact_information": {
+                          "description": "Additional contact information, such as phone numbers or emails.",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "website": {
+                          "description": "A list of websites associated with the individual or entity.",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "created_at": {
+                      "description": "The date and time when the profile was created.",
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "key_associations": {
+                      "description": "Key relationships and associations of the individual or entity.",
+                      "type": "object",
+                      "properties": {
+                        "relationships": {
+                          "description": "A list of relationships with other individuals or entities.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "relationship_name": {
+                                "description": "Name of the connected entity or individual.",
+                                "type": "string"
+                              },
+                              "relationship_subject_type": {
+                                "description": "Type of subject, like \"Organization\" or \"Individual\".",
+                                "type": "string"
+                              },
+                              "relationship_type": {
+                                "description": "Category of the relationship, e.g., \"Associate\".",
+                                "type": "string"
+                              },
+                              "relationship_type_description": {
+                                "description": "Detailed description of the relationship type.",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        },
+                        "root_relationships": {
+                          "description": "Direct relationships that are most significant.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "association_description": {
+                                "description": "A description of the association.",
+                                "type": "string"
+                              },
+                              "name": {
+                                "description": "The name of the associated individual or entity.",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "litigation_details": {
+                      "description": "Details regarding any litigation involving the individual or entity.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "others": {
+                      "description": "Additional miscellaneous information.",
+                      "type": "object",
+                      "properties": {
+                        "profile_summary": {
+                          "description": "A brief summary of the profile.",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "pep_status": {
+                      "description": "Indicates if the individual is a Politically Exposed Person (PEP).",
+                      "type": "boolean"
+                    },
+                    "personal_details": {
+                      "description": "Personal information about the individual.",
+                      "type": "object",
+                      "properties": {
+                        "aliases": {
+                          "description": "A list of aliases used by the individual.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "alias_language": {
+                                "description": "The language of the alias.",
+                                "type": "string"
+                              },
+                              "alias_name": {
+                                "description": "The alias name.",
+                                "type": "string"
+                              },
+                              "alias_script": {
+                                "description": "The script used for the alias (e.g., Latin, Cyrillic).",
+                                "type": "string"
+                              },
+                              "alias_type": {
+                                "description": "The type of alias (e.g., nickname, maiden name).",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        },
+                        "date_of_birth": {
+                          "description": "The individual's date of birth.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "date_of_birth_date": {
+                                "description": "The day of birth.",
+                                "type": "string"
+                              },
+                              "date_of_birth_month": {
+                                "description": "The month of birth.",
+                                "type": "string"
+                              },
+                              "date_of_birth_year": {
+                                "description": "The year of birth.",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        },
+                        "deceased": {
+                          "description": "Indicates if the individual is deceased.",
+                          "type": "string"
+                        },
+                        "gender": {
+                          "description": "The gender of the individual.",
+                          "type": "string"
+                        },
+                        "image_details": {
+                          "description": "A list of images associated with the individual.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "image_url": {
+                                "description": "URL of the image.",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        },
+                        "name": {
+                          "description": "The individual's name details.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "first_name": {
+                                "description": "The individual's first name.",
+                                "type": "string"
+                              },
+                              "last_name": {
+                                "description": "The individual's last name.",
+                                "type": "string"
+                              },
+                              "middle_name": {
+                                "description": "The individual's middle name.",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        },
+                        "nationalities": {
+                          "description": "A list of nationalities held by the individual.",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "citizenships": {
+                          "description": "A list of citizenships held by the individual.",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "physical_description": {
+                          "description": "Physical characteristics of the individual.",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "type": {
+                          "description": "The type of individual (e.g., individual, organization).",
+                          "type": "string"
+                        },
+                        "uid": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "professional_details": {
+                      "description": "Professional background and qualifications of the individual.",
+                      "type": "object",
+                      "properties": {
+                        "ownership_details": {
+                          "description": "Ownership details of businesses or assets.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        },
+                        "positions": {
+                          "description": "A list of positions held by the individual.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "organization_id": {
+                                "description": "The unique identifier for the organization.",
+                                "type": "string"
+                              },
+                              "organization_name": {
+                                "description": "The name of the organization.",
+                                "type": "string"
+                              },
+                              "pep_level": {
+                                "description": "The level of PEP status associated with the position.",
+                                "type": "string"
+                              },
+                              "pep_type": {
+                                "description": "Type of PEP status.",
+                                "type": "string"
+                              },
+                              "position": {
+                                "description": "The title of the position held.",
+                                "type": "string"
+                              },
+                              "position_end_date_date": {
+                                "description": "The day the position ended.",
+                                "type": "string"
+                              },
+                              "position_end_date_month": {
+                                "description": "The month the position ended.",
+                                "type": "string"
+                              },
+                              "position_end_date_year": {
+                                "description": "The year the position ended.",
+                                "type": "string"
+                              },
+                              "position_start_date_date": {
+                                "description": "The day the position started.",
+                                "type": "string"
+                              },
+                              "position_start_date_month": {
+                                "description": "The month the position started.",
+                                "type": "string"
+                              },
+                              "position_start_date_year": {
+                                "description": "The year the position started.",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "remarks": {
+                      "description": "General remarks or notes about the individual or entity.",
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "sanction_fines_and_penalties": {
+                      "description": "Details of any sanctions, fines, or penalties imposed.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "sanction_status": {
+                      "description": "Indicates if the individual is currently under any sanctions.",
+                      "type": "boolean"
+                    },
+                    "sanctions": {
+                      "description": "Detailed information about any sanctions imposed.",
+                      "type": "object",
+                      "properties": {
+                        "authority": {
+                          "description": "A list of authorities that imposed sanctions.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "sanction_action_date_date": {
+                                "description": "The day the sanction action was taken.",
+                                "type": "string"
+                              },
+                              "sanction_action_date_month": {
+                                "description": "The month the sanction action was taken.",
+                                "type": "string"
+                              },
+                              "sanction_action_date_year": {
+                                "description": "The year the sanction action was taken.",
+                                "type": "string"
+                              },
+                              "sanction_authority": {
+                                "description": "The name of the authority that imposed the sanction.",
+                                "type": "string"
+                              },
+                              "sanction_authority_country": {
+                                "description": "The country of the sanctioning authority.",
+                                "type": "string"
+                              },
+                              "sanction_authority_id": {
+                                "description": "A unique identifier for the sanctioning authority.",
+                                "type": "string"
+                              },
+                              "sanction_programme_name": {
+                                "description": "The name of the sanction program.",
+                                "type": "string"
+                              },
+                              "sanction_programme_country_code": {
+                                "description": "The code of the sanction program country.",
+                                "type": "string"
+                              },
+                              "sanction_programme_country": {
+                                "description": "The name of the sanction program country.",
+                                "type": "string"
+                              },
+                              "sanction_order_number": {
+                                "description": "The number of the sanction order.",
+                                "type": "string"
+                              },
+                              "sanction_change_date_date": {
+                                "description": "The day a change to the sanction occurred.",
+                                "type": "string"
+                              },
+                              "sanction_change_date_month": {
+                                "description": "The month a change to the sanction occurred.",
+                                "type": "string"
+                              },
+                              "sanction_change_date_year": {
+                                "description": "The year ta change to the sanction occurred.",
+                                "type": "string"
+                              },
+                              "sanction_end_date_date": {
+                                "description": "The day the sanction ends.",
+                                "type": "string"
+                              },
+                              "sanction_end_date_month": {
+                                "description": "The month the sanction ends.",
+                                "type": "string"
+                              },
+                              "sanction_end_date_year": {
+                                "description": "The year the sanction ends.",
+                                "type": "string"
+                              },
+                              "sanctions_authority_unique_id": {
+                                "type": "string"
+                              },
+                              "sanctions_list_name": {
+                                "type": "string"
+                              },
+                              "sanctions_status_(former)": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "score": {
+                      "description": "A score representing the risk level or status of the individual or entity.",
+                      "type": "string"
+                    },
+                    "sources_details": {
+                      "description": "Details about the sources used for the profile.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "description": "The name of the source.",
+                            "type": "string"
+                          },
+                          "source_description": {
+                            "description": "A description of the source.",
+                            "type": "string"
+                          },
+                          "source_type": {
+                            "description": "The type of source (e.g., media, government).",
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    },
+                    "uid": {
+                      "description": "A unique identifier assigned to the profile.",
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "description": "The date and time when the profile was last updated.",
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "watchlist_fines_and_penalties": {
+                      "description": "Details of any fines or penalties related to watchlist status.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "watchlist_status": {
+                      "description": "Indicates if the individual is currently on any watchlists.",
+                      "type": "boolean"
+                    },
+                    "watchlists": {
+                      "description": "Information regarding watchlists related to the individual or entity.",
+                      "type": "object",
+                      "properties": {
+                        "additional_information": {
+                          "description": "Any additional information regarding the watchlist status.",
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "authority": {
+                          "description": "A list of authorities maintaining the watchlist.",
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "watchlist_action_date_date": {
+                                "description": "The day the watchlist action was taken.",
+                                "type": "string"
+                              },
+                              "watchlist_action_date_month": {
+                                "description": "The month the watchlist action was taken.",
+                                "type": "string"
+                              },
+                              "watchlist_action_date_year": {
+                                "description": "The year the watchlist action was taken.",
+                                "type": "string"
+                              },
+                              "watchlist_authority": {
+                                "description": "The authority maintaining the watchlist.",
+                                "type": "string"
+                              },
+                              "watchlist_authority_country": {
+                                "description": "The country of the watchlist authority.",
+                                "type": "string"
+                              },
+                              "watchlist_list_id": {
+                                "description": "Unique ID for the watchlist.",
+                                "type": "string"
+                              },
+                              "watchlist_list_name": {
+                                "description": "Name of the watchlist.",
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "apc": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "event_description": {
+                            "type": "string"
+                          },
+                          "framework": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "risk_areas": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "categories": {
+                                        "type": "array",
+                                        "items": {
+                                          "type": "object",
+                                          "properties": {
+                                            "code": {
+                                              "type": "string"
+                                            },
+                                            "name": {
+                                              "type": "string"
+                                            },
+                                            "priority_order": {
+                                              "type": "integer"
+                                            },
+                                            "score": {
+                                              "type": "integer"
+                                            },
+                                            "subcategories": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "events": {
+                                                    "type": "array",
+                                                    "items": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "keywords": {
+                                                          "type": "array",
+                                                          "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "event_stages": {
+                                                                "type": "array",
+                                                                "items": {}
+                                                              },
+                                                              "name": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "additionalProperties": true
+                                                          }
+                                                        },
+                                                        "name": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "additionalProperties": true
+                                                    }
+                                                  },
+                                                  "name": {
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "additionalProperties": true
+                                              }
+                                            }
+                                          },
+                                          "additionalProperties": true
+                                        }
+                                      },
+                                      "code": {
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "additionalProperties": true
+                                  }
+                                },
+                                "risk_score": {
+                                  "type": "integer"
+                                }
+                              },
+                              "additionalProperties": true
+                            }
+                          },
+                          "headlines": {
+                            "type": "string"
+                          },
+                          "identifications": {
+                            "type": "string"
+                          },
+                          "language": {
+                            "type": "string"
+                          },
+                          "similar_stories": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "source_information": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          },
+                          "source_publication_details": {
+                            "type": "object",
+                            "properties": {
+                              "Source URL": {
+                                "type": "string"
+                              },
+                              "author": {
+                                "type": "string"
+                              },
+                              "domain": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": true
+                          },
+                          "source_type": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    },
+                    "pep_status_(former)": {
+                      "type": "string"
+                    },
+                    "basic_details": {
+                      "type": "object",
+                      "properties": {
+                        "uid": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "first_name": {
+                          "type": "string"
+                        },
+                        "middle_name": {
+                          "type": "string"
+                        },
+                        "last_name": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": true
+                    },
+                    "apc_info": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date_published_date": {
+                            "type": "string"
+                          },
+                          "date_published_month": {
+                            "type": "string"
+                          },
+                          "date_published_year": {
+                            "type": "string"
+                          },
+                          "apc_summary": {
+                            "type": "string"
+                          },
+                          "apc_news_link": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    },
+                    "match_details": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "aml": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "Address": {
+                          "type": "string",
+                          "description": "Address of the individual or entity."
+                        },
+                        "Alias": {
+                          "type": "string",
+                          "description": "Alias or alternate name used."
+                        },
+                        "AmlCategory": {
+                          "type": "string",
+                          "description": "Category of the AML data."
+                        },
+                        "City (1)": {
+                          "type": "string",
+                          "description": "City associated with the individual or entity."
+                        },
+                        "City (2)": {
+                          "type": "string",
+                          "description": "Additional city information if available."
+                        },
+                        "City (3)": {
+                          "type": "string",
+                          "description": "Further city details if applicable."
+                        },
+                        "Connected Entities": {
+                          "type": "string",
+                          "description": "Entities connected to the individual or entity."
+                        },
+                        "Country": {
+                          "type": "string",
+                          "description": "Country where the event or individual is associated."
+                        },
+                        "Country (1)": {
+                          "type": "string",
+                          "description": "Additional country information if available."
+                        },
+                        "Country (2)": {
+                          "type": "string",
+                          "description": "Further country details if applicable."
+                        },
+                        "Country (3)": {
+                          "type": "string",
+                          "description": "Additional country data if applicable."
+                        },
+                        "Country of Entity": {
+                          "type": "string",
+                          "description": "Country where the entity is based."
+                        },
+                        "Country of Nationality": {
+                          "type": "string",
+                          "description": "Country of nationality of the individual."
+                        },
+                        "DOB": {
+                          "type": "string",
+                          "description": "Date of birth of the individual."
+                        },
+                        "Date of Event": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "Date when the event occurred."
+                        },
+                        "DateOfBirth - Day(1)": {
+                          "type": "string",
+                          "description": "Day component of the date of birth."
+                        },
+                        "DateOfBirth - Day(2)": {
+                          "type": "string",
+                          "description": "Additional day component if available."
+                        },
+                        "DateOfBirth - Month(1)": {
+                          "type": "string",
+                          "description": "Month component of the date of birth."
+                        },
+                        "DateOfBirth - Month(2)": {
+                          "type": "string",
+                          "description": "Additional month component if available."
+                        },
+                        "DateOfBirth - Year(1)": {
+                          "type": "string",
+                          "description": "Year component of the date of birth."
+                        },
+                        "DateOfBirth - Year(2)": {
+                          "type": "string",
+                          "description": "Additional year component if available."
+                        },
+                        "Entity_individual_id": {
+                          "type": "string",
+                          "description": "Unique identifier for the individual or entity."
+                        },
+                        "Fine Amount (USD)": {
+                          "type": "string",
+                          "description": "Amount of the fine imposed, in USD."
+                        },
+                        "Fine Imposing Date": {
+                          "type": "string",
+                          "description": "Date when the fine was imposed."
+                        },
+                        "Fine Impositing Date": {
+                          "type": "string",
+                          "description": "Alternative date field for when the fine was imposed."
+                        },
+                        "Gender": {
+                          "type": "string",
+                          "description": "Gender of the individual."
+                        },
+                        "Image URL": {
+                          "type": "string",
+                          "description": "URL to an image of the individual or entity."
+                        },
+                        "Imprisonment (in Months)": {
+                          "type": "string",
+                          "description": "Duration of imprisonment in months."
+                        },
+                        "Imprisonment Date": {
+                          "type": "string",
+                          "description": "Date when imprisonment was imposed."
+                        },
+                        "Legal Action Type": {
+                          "type": "string",
+                          "description": "Type of legal action taken."
+                        },
+                        "Legal Actions": {
+                          "type": "string",
+                          "description": "Summary of legal actions taken."
+                        },
+                        "Pincode (1)": {
+                          "type": "string",
+                          "description": "Pincode related to the individual or entity."
+                        },
+                        "Pincode (2)": {
+                          "type": "string",
+                          "description": "Additional pincode information if available."
+                        },
+                        "Pincode (3)": {
+                          "type": "string",
+                          "description": "Further pincode details if applicable."
+                        },
+                        "Province (1)": {
+                          "type": "string",
+                          "description": "Province associated with the individual or entity."
+                        },
+                        "Province (2)": {
+                          "type": "string",
+                          "description": "Additional province information if available."
+                        },
+                        "Province (3)": {
+                          "type": "string",
+                          "description": "Further province details if applicable."
+                        },
+                        "Score": {
+                          "type": "number",
+                          "format": "float",
+                          "description": "Score associated with the individual or entity."
+                        },
+                        "Sources": {
+                          "type": "string",
+                          "description": "Sources providing information related to the individual or entity."
+                        },
+                        "Street Address (1)": {
+                          "type": "string",
+                          "description": "Street address of the individual or entity."
+                        },
+                        "Street Address (2)": {
+                          "type": "string",
+                          "description": "Additional street address information if available."
+                        },
+                        "Street Address (3)": {
+                          "type": "string",
+                          "description": "Further street address details if applicable."
+                        },
+                        "Summary": {
+                          "type": "string",
+                          "description": "Summary of the event or information related to the individual or entity."
+                        },
+                        "Total FineAmountUSD": {
+                          "type": "string",
+                          "description": "Total amount of the fine in USD."
+                        },
+                        "entities": {
+                          "type": "string",
+                          "description": "Entities related to or involved with the individual."
+                        },
+                        "event_name": {
+                          "type": "string",
+                          "description": "Name or title of the event."
+                        },
+                        "fuzzy_score": {
+                          "type": "number",
+                          "format": "float",
+                          "description": "Fuzzy matching score."
+                        },
+                        "key_words": {
+                          "type": "string",
+                          "description": "Keywords related to the data."
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "Name of the individual or entity."
+                        },
+                        "score_category": {
+                          "type": "integer",
+                          "description": "Category score for the data."
+                        },
+                        "status_category": {
+                          "type": "string",
+                          "description": "Status category of the data."
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "additionalProperties": true
+              },
+              "russiabridge": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "uid": {
+                      "type": "string",
+                      "description": "A unique identifier assigned to the profile."
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Name of the event based on Press release and updated list of Sanction"
+                    },
+                    "first_name": {
+                      "type": "string",
+                      "description": "First Name of the Individual"
+                    },
+                    "middle_name": {
+                      "type": "string",
+                      "description": "Middle Name of the Individual"
+                    },
+                    "last_name": {
+                      "type": "string",
+                      "description": "Last Name of the Individual"
+                    },
+                    "entity_name": {
+                      "type": "string",
+                      "description": "Full Name of the Organization"
+                    },
+                    "event_date_year": {
+                      "type": "string",
+                      "description": "Year of Event Date"
+                    },
+                    "event_date_month": {
+                      "type": "string",
+                      "description": "Month of Event Date"
+                    },
+                    "event_date_date": {
+                      "type": "string",
+                      "description": "Date of Event Date"
+                    },
+                    "authority": {
+                      "type": "string",
+                      "description": "Sanctions Regulators who impose sanction like OFAC, EU, UN etc."
+                    },
+                    "list_name": {
+                      "type": "string",
+                      "description": "Name of sub list of every regulator"
+                    },
+                    "order": {
+                      "type": "string",
+                      "description": "Executive Order number"
+                    },
+                    "programme_name": {
+                      "type": "string",
+                      "description": "Specific sanction program or regime under which the subject has been designated."
+                    },
+                    "programme_country": {
+                      "type": "string",
+                      "description": "Country name whose subjects are sanctioned"
+                    },
+                    "action_date_year": {
+                      "type": "string",
+                      "description": "Sanction imposed date - Year of start date"
+                    },
+                    "action_date_month": {
+                      "type": "string",
+                      "description": "Sanction imposed date - Month of start date"
+                    },
+                    "action_date_date": {
+                      "type": "string",
+                      "description": "Sanction imposed date - Date of start date"
+                    },
+                    "change_date_year": {
+                      "type": "string",
+                      "description": "Sanction Changes date - Year of Change date"
+                    },
+                    "change_date_month": {
+                      "type": "string",
+                      "description": "Sanction changes date - Month of Change date"
+                    },
+                    "change_date_date": {
+                      "type": "string",
+                      "description": "Sanction changes date - Date of Change date"
+                    },
+                    "end_date_year": {
+                      "type": "string",
+                      "description": "Sanction End date - Year of End date"
+                    },
+                    "end_date_month": {
+                      "type": "string",
+                      "description": "Sanction End date - Month of End date"
+                    },
+                    "end_date_date": {
+                      "type": "string",
+                      "description": "Sanction End date - Date of End date"
+                    },
+                    "name_of_local_currency": {
+                      "type": "string",
+                      "description": "Capture the name of Local currency in which penalty is imposed"
+                    },
+                    "fine_amount_in_local_currency": {
+                      "type": "string",
+                      "description": "Monetary penalty imposed on the subject for violating sanctions regulations, expressed in the local currency of the jurisdiction where the fine was issued."
+                    },
+                    "fine_amount_in_usd": {
+                      "type": "string",
+                      "description": "Monetary penalty imposed on the subject for violating sanctions regulations, expressed in United States Dollars (USD)"
+                    },
+                    "association_type": {
+                      "type": "string",
+                      "description": "Categorization of Association on which sanction is Imposed (Individual, Organizations, Aircraft and Vessel etc.)"
+                    },
+                    "summary": {
+                      "type": "string",
+                      "description": "Capture event summary of sanctioned subjects"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "description": "Comprehensive explanation of the actions, behaviors, or policies that led to the imposition of sanctions"
+                    },
+                    "sources": {
+                      "type": "string",
+                      "description": "Source links which were referred to develop the profile"
+                    },
+                    "source_description": {
+                      "type": "string",
+                      "description": "Description of the source"
+                    },
+                    "remarks": {
+                      "type": "string",
+                      "description": "Additional comments, notes, or contextual information relevant to the subject's sanctions designation."
+                    },
+                    "gender": {
+                      "type": "string",
+                      "description": "Gender of the Individual"
+                    },
+                    "image_url": {
+                      "type": "string",
+                      "description": "Image URL of the Individual"
+                    },
+                    "country_of_nationality": {
+                      "type": "string",
+                      "description": "Nationality, denotes where an individual has been born, or holds citizenship with a state. Nationality is obtained through inheritance from his/her parents."
+                    },
+                    "type": {
+                      "type": "string",
+                      "description": "Type of the subject (Individual/Organization)"
+                    },
+                    "date_of_birth_year": {
+                      "type": "string",
+                      "description": "Year of Birth"
+                    },
+                    "date_of_birth_month": {
+                      "type": "string",
+                      "description": "Month of Birth"
+                    },
+                    "date_of_birth_date": {
+                      "type": "string",
+                      "description": "Date of Birth"
+                    },
+                    "deceased": {
+                      "type": "string",
+                      "description": "Deceased status of the subjects (applicable in case it is 'Yes')"
+                    },
+                    "date_of_death_year": {
+                      "type": "string",
+                      "description": "Year of Death"
+                    },
+                    "date_of_death_month": {
+                      "type": "string",
+                      "description": "Month of Death"
+                    },
+                    "date_of_death_date": {
+                      "type": "string",
+                      "description": "Date of Death"
+                    },
+                    "country_of_citizenship": {
+                      "type": "string",
+                      "description": "Citizenship is the status of a person recognized under the law of a country of belonging to thereof. In international law it is membership to a sovereign state (a country)"
+                    },
+                    "alias_type": {
+                      "type": "string",
+                      "description": "Type - Also Known As (AKA), Local Script (LOC), Formerly Known As (FKA), Spelling Variant (SPV)"
+                    },
+                    "alias": {
+                      "type": "string",
+                      "description": "Name in Local Language"
+                    },
+                    "alias_script": {
+                      "type": "string",
+                      "description": "Script of the alias being captured for the subject"
+                    },
+                    "alias_language": {
+                      "type": "string",
+                      "description": "Language of the alias being captured for the subject"
+                    },
+                    "profile_summary": {
+                      "type": "string",
+                      "description": "Concise overview or summary of the individual subject's background and any pertinent information related to their designation under sanctions."
+                    },
+                    "address_type": {
+                      "type": "string",
+                      "description": "Address of the Individual includes residential; Birth address of the Individual"
+                    },
+                    "street": {
+                      "type": "string",
+                      "description": "Street Number and Name in the Address"
+                    },
+                    "city": {
+                      "type": "string",
+                      "description": "City Name in the Address"
+                    },
+                    "province": {
+                      "type": "string",
+                      "description": "State Code in the Address"
+                    },
+                    "postal_code": {
+                      "type": "string",
+                      "description": "ZIP/Postal Code in the Address"
+                    },
+                    "country": {
+                      "type": "string",
+                      "description": "Country in the Address"
+                    },
+                    "identifier_name": {
+                      "type": "string",
+                      "description": "Name of an Identifier - Passport, National Identification, Clave Única de Registry de Población (C.U.R.P.), Driving Licence, Birth Certificate, Registro Federal de Contribuyentes (R.F.C.), OFAC UID & etc."
+                    },
+                    "value": {
+                      "type": "string",
+                      "description": "Value - For e.g., Passport No."
+                    },
+                    "issuing_country": {
+                      "type": "string",
+                      "description": "Country Name - who issues the identity"
+                    },
+                    "issuing_authority": {
+                      "type": "string",
+                      "description": "The organization, government entity, or authority responsible for issuing the identifier associated with the subject. This identifier could be a passport, national identification card, driver's license, or other relevant identification document."
+                    },
+                    "issue_date_year": {
+                      "type": "string",
+                      "description": "Year of Issuing date"
+                    },
+                    "issue_date_month": {
+                      "type": "string",
+                      "description": "Month of Issuing date"
+                    },
+                    "issue_date_date": {
+                      "type": "string",
+                      "description": "Date of Issuing date"
+                    },
+                    "expiry_date_year": {
+                      "type": "string",
+                      "description": "Year of Expiry date"
+                    },
+                    "expiry_date_month": {
+                      "type": "string",
+                      "description": "Month of Expiry date"
+                    },
+                    "expiry_date_date": {
+                      "type": "string",
+                      "description": "Date of Expiry date"
+                    },
+                    "position": {
+                      "type": "string",
+                      "description": "Description of the Designation for an Individual in an Organization following with Start Date and End Date"
+                    },
+                    "organizations_name": {
+                      "type": "string",
+                      "description": "Name of organizations or entities that are linked or affiliated with the subject of sanctions"
+                    },
+                    "start_date_year": {
+                      "type": "string",
+                      "description": "Year of Position Start Date"
+                    },
+                    "start_date_month": {
+                      "type": "string",
+                      "description": "Month of Position Start Date"
+                    },
+                    "start_date_date": {
+                      "type": "string",
+                      "description": "Date of Position Start Date"
+                    },
+                    "designation": {
+                      "type": "string",
+                      "description": "Designation of the Individual"
+                    },
+                    "ownership_details": {
+                      "type": "string",
+                      "description": "Capture the ownership percentage that an Individual holds in any organization"
+                    },
+                    "event_id": {
+                      "type": "string",
+                      "description": "Unique Identifier for Each Event"
+                    },
+                    "legal_action_description": {
+                      "type": "string",
+                      "description": "Summary or description of the legal actions taken against the subject"
+                    },
+                    "reasoning_for_legal_actions": {
+                      "type": "string",
+                      "description": "Brief description of reasons for action by a regulating agency(ies)"
+                    },
+                    "reasoning_taxonomy": {
+                      "type": "string",
+                      "description": "Grouping Tag. Like AML, Sanction"
+                    },
+                    "name_of_family_member_associate": {
+                      "type": "string",
+                      "description": "Name of Family member and Association"
+                    },
+                    "relationship_type": {
+                      "type": "string",
+                      "description": "Relationship linking with the 'Family Member/Association'"
+                    },
+                    "relationship_type_description": {
+                      "type": "string",
+                      "description": "Relationship description e.g. Father, Friend etc."
+                    },
+                    "additional_info": {
+                      "type": "string",
+                      "description": "Additional comments, notes, or contextual information relevant to the subject's sanctions designation."
+                    },
+                    "entity_status": {
+                      "type": "string",
+                      "description": "Status includes 'Dissolved', 'Active', 'Under Liquidation' etc."
+                    },
+                    "date_of_incorporation_year": {
+                      "type": "string",
+                      "description": "Year of Date of Incorporation of Entity"
+                    },
+                    "date_of_incorporation_month": {
+                      "type": "string",
+                      "description": "Month of Date of Incorporation of Entity"
+                    },
+                    "date_of_incorporation_date": {
+                      "type": "string",
+                      "description": "Date of Date of Incorporation of Entity"
+                    },
+                    "country_of_incorporation": {
+                      "type": "string",
+                      "description": "The country of incorporation is the nation in which a business entity is legally registered and recognized as a corporation or company."
+                    },
+                    "country_of_origin": {
+                      "type": "string",
+                      "description": "The nation where the entity was originally established or founded."
+                    },
+                    "entity_website": {
+                      "type": "string",
+                      "description": "Capture the 'Home Page' of Organization Website"
+                    },
+                    "uid_of_family_member_associate": {
+                      "type": "string",
+                      "description": "UID of the Association"
+                    },
+                    "vessel_type": {
+                      "type": "string",
+                      "description": "Type of Vessel for like Crude Oil Tanker, LPG Tanker etc."
+                    },
+                    "current_country_flag": {
+                      "type": "string",
+                      "description": "Name of the country whose flag is on the vessel"
+                    },
+                    "former_country_flag": {
+                      "type": "string",
+                      "description": "Former name of the country whose flag is on the vessel"
+                    },
+                    "aircraft_manufacture_date_year": {
+                      "type": "string",
+                      "description": "Year of Aircraft Manufacture Date"
+                    },
+                    "aircraft_manufacture_date_month": {
+                      "type": "string",
+                      "description": "Month of Aircraft Manufacture Date"
+                    },
+                    "aircraft_manufacture_date_date": {
+                      "type": "string",
+                      "description": "Date of Aircraft Manufacture Date"
+                    },
+                    "aircraft_model": {
+                      "type": "string",
+                      "description": "Model of an Aircraft"
+                    },
+                    "legal_action_type": {
+                      "type": "string",
+                      "description": "Action on the Organization like Travel ban, Economic ban, Asset freeze etc."
+                    },
+                    "percentage_of_shareholding": {
+                      "type": "string",
+                      "description": "Capture the ownership percentage that an organization holds in other organization"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "apc": {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "date": {
+                          "type": "string"
+                        },
+                        "event_description": {
+                          "type": "string"
+                        },
+                        "framework": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "risk_areas": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "categories": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "code": {
+                                            "type": "string"
+                                          },
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "priority_order": {
+                                            "type": "integer"
+                                          },
+                                          "score": {
+                                            "type": "integer"
+                                          },
+                                          "subcategories": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "events": {
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "keywords": {
+                                                        "type": "array",
+                                                        "items": {
+                                                          "type": "object",
+                                                          "properties": {
+                                                            "event_stages": {
+                                                              "type": "array",
+                                                              "items": {}
+                                                            },
+                                                            "name": {
+                                                              "type": "string"
+                                                            }
+                                                          },
+                                                          "additionalProperties": true
+                                                        }
+                                                      },
+                                                      "name": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "additionalProperties": true
+                                                  }
+                                                },
+                                                "name": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "additionalProperties": true
+                                            }
+                                          }
+                                        },
+                                        "additionalProperties": true
+                                      }
+                                    },
+                                    "code": {
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "additionalProperties": true
+                                }
+                              },
+                              "risk_score": {
+                                "type": "integer"
+                              }
+                            },
+                            "additionalProperties": true
+                          }
+                        },
+                        "headlines": {
+                          "type": "string"
+                        },
+                        "identifications": {
+                          "type": "string"
+                        },
+                        "language": {
+                          "type": "string"
+                        },
+                        "similar_stories": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "source_information": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": true
+                        },
+                        "source_publication_details": {
+                          "type": "object",
+                          "properties": {
+                            "Source URL": {
+                              "type": "string"
+                            },
+                            "author": {
+                              "type": "string"
+                            },
+                            "domain": {
+                              "type": "string"
+                            }
+                          },
+                          "additionalProperties": true
+                        },
+                        "source_type": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          },
+          "apc_success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "profiles_success": {
+            "type": "boolean"
+          },
+          "response_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "description": "Exact pass-through response. Fields vary with selected checks; all documented fields and any additional dataset-specific fields are preserved.",
+        "x-ai7-response-field-count": 382
+      },
+      "EntitySearchBadRequest": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "array"
+              },
+              {
+                "type": "object"
+              }
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
       }
     }
   }

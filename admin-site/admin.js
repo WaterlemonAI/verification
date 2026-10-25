@@ -46,10 +46,13 @@ async function loadIntegrations() {
       byId('supplier-credential-name').textContent = item.name;
       byId('supplier-credential-error').textContent = '';
       const isIban = item.id === 'iban-verification';
-      byId('supplier-credential-label').firstChild.textContent = isIban ? 'Supplier username' : 'Supplier credential';
-      form.elements.credential.placeholder = isIban ? 'Enter the supplier username' : 'Enter the private credential';
+      const isEntitySearch = item.id === 'entity-search';
+      byId('supplier-credential-label').firstChild.textContent = isIban ? 'Supplier username' : isEntitySearch ? 'Private API key' : 'Supplier credential';
+      form.elements.credential.placeholder = isIban ? 'Enter the supplier username' : isEntitySearch ? 'Enter the private API key' : 'Enter the private credential';
       byId('supplier-credential-help').textContent = isIban
         ? 'The supplied IBAN collection authenticates each internal request with this username header; it does not transmit a password.'
+        : isEntitySearch
+          ? 'This write-only API key is applied internally to comprehensive entity-search requests.'
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });
