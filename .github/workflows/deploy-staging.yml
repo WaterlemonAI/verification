@@ -35,11 +35,10 @@ jobs:
           set -euo pipefail
           repository="ai7uae-web"
           tag="${GITHUB_SHA}"
-          az acr build \
-            --registry "${{ vars.ACR_NAME }}" \
-            --image "${repository}:${tag}" \
-            --file Dockerfile \
-            .
+          tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
+          az acr login --name "${{ vars.ACR_NAME }}"
+          docker build --pull --tag "${tagged_image}" .
+          docker push "${tagged_image}"
           digest="$(az acr repository show \
             --name "${{ vars.ACR_NAME }}" \
             --image "${repository}:${tag}" \
