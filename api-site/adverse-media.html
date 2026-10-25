@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=6" />
-    <script src="/adverse-media.js?v=1" defer></script>
+    <script src="/adverse-media.js?v=2" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#docs">Skip to documentation</a>
@@ -24,7 +24,7 @@
       <section class="hero">
         <p class="eyebrow">ADVERSE MEDIA / GLOBAL</p>
         <h1>Multilingual media<br /><em>screening.</em></h1>
-        <p>Screen an individual or business across global news and open-web indexes, with evidence links, entity-match scoring, risk categories, legal stage, and documented coverage.</p>
+        <p>Screen an individual or business across current and archived global news plus open-web indexes, with evidence links, entity-match scoring, risk categories, legal stage, and documented coverage.</p>
         <div class="meta"><span>POST</span><code>/service/adverse_media</code><button class="copy" data-copy="https://api.ai7uae.com/service/adverse_media">Copy endpoint</button></div>
       </section>
 
@@ -80,6 +80,7 @@
               <div><code>results[].legal_stage</code><span>string</span><span>Media mention, allegation, investigation, charge, arrest, conviction, or regulatory action.</span></div>
               <div><code>results[].entity_match_score</code><span>number</span><span>How strongly the article matches the requested entity.</span></div>
               <div><code>results[].risk_score</code><span>number</span><span>Combined, explainable prioritisation score.</span></div>
+              <div><code>results[].ai_classification</code><span>object</span><span>Optional bounded AI review of the evidence, including confidence, summary, and rationale.</span></div>
             </div>
             <h3>Status codes</h3>
             <div class="responses">
@@ -93,13 +94,13 @@
           <article id="methodology">
             <p class="label">METHODOLOGY</p>
             <h2>Designed for review, not automated guilt decisions</h2>
-            <p>The engine normalizes names and aliases, searches in the selected languages, removes duplicate URLs, requires an entity-name match, classifies adverse-event terms, and ranks evidence. A media result is a review lead—not proof of wrongdoing. Qualified human review remains required before taking action.</p>
+            <p>The engine normalizes names and aliases, searches current and archived indexes, removes duplicate URLs, requires an entity-name match, classifies adverse-event terms, and ranks evidence. The most relevant candidates receive a bounded AI review when configured; deterministic results remain available if that review is unavailable. A media result is a review lead—not proof of wrongdoing. Qualified human review remains required before taking action.</p>
           </article>
 
           <article id="tester" class="tester">
             <p class="label">LIVE TESTER</p>
             <h2>Run an adverse media check</h2>
-            <p>The cost guardrail limits each uncached screening to 12 paid search requests. Repeating the same request within 15 minutes uses the cached evidence.</p>
+            <p>The cost guardrail limits each uncached screening to 12 paid search requests plus one bounded AI classification batch. Repeating the same request within 15 minutes uses the cached evidence.</p>
             <form id="adverse-media-form" novalidate>
               <label>AI7 API key<input id="api-key" type="password" autocomplete="off" placeholder="Paste your API key" required /></label>
               <div class="input-grid">
