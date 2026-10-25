@@ -41,10 +41,11 @@ before(async () => {
         const russiaCheck = query.includes('ООО Ромашка');
         const regionalCheck = query.includes('Region Example');
         const mismatchCheck = query.includes('Prabhpreet Singh Gill');
+        const associationCheck = query.includes('Pay10') || query.includes('Harry Gill');
         const highConfidenceMismatchCheck = query.includes('Query Person Mismatch');
         const partialNameCheck = query.includes('Ansh Bodele');
         const coverageFailureCheck = query.includes('Coverage Failure Example');
-        assert.ok(query.includes('John Example') || failureCheck || schemaEscapeCheck || chinaCheck || russiaCheck || regionalCheck || mismatchCheck || highConfidenceMismatchCheck || partialNameCheck || coverageFailureCheck);
+        assert.ok(query.includes('John Example') || failureCheck || schemaEscapeCheck || chinaCheck || russiaCheck || regionalCheck || mismatchCheck || associationCheck || highConfidenceMismatchCheck || partialNameCheck || coverageFailureCheck);
         if (coverageFailureCheck) return Response.json({ error: 'temporary' }, { status: 503 });
         let result = url.searchParams.get('search_lang') === 'de' ? {
           ...indexedResult,
@@ -79,9 +80,21 @@ before(async () => {
         };
         if (mismatchCheck) result = {
           ...indexedResult,
-          title: 'Prabhpreet Singh Gill named in fraud investigation',
-          url: 'https://publisher.example/news/prabhpreet-singh-gill',
-          description: 'Authorities investigated Prabhpreet Singh Gill over alleged fraud.'
+          title: query === '("Prabhpreet Singh Gill")'
+            ? 'Prabhpreet Singh Gill, also known as Harry Gill, leads Pay10'
+            : 'Prabhpreet Singh Gill named in fraud investigation',
+          url: query === '("Prabhpreet Singh Gill")'
+            ? 'https://publisher.example/profile/prabhpreet-singh-gill'
+            : 'https://publisher.example/news/prabhpreet-singh-gill',
+          description: query === '("Prabhpreet Singh Gill")'
+            ? 'Prabhpreet Singh Gill, also known as Harry Gill, is the founder and chairman of Pay10.'
+            : 'Authorities investigated Prabhpreet Singh Gill over alleged fraud.'
+        };
+        if (associationCheck) result = {
+          ...indexedResult,
+          title: 'Authorities investigate Pay10 in money laundering probe',
+          url: 'https://publisher.example/news/pay10-investigation',
+          description: 'The investigation concerns Pay10, founded by Prabhpreet Singh Gill, also known as Harry Gill.'
         };
         if (partialNameCheck) result = {
           ...indexedResult,
@@ -164,6 +177,20 @@ before(async () => {
               }))
             }) }] } }],
             usageMetadata: { promptTokenCount: 300, candidatesTokenCount: 80 }
+          });
+        }
+        if (prompt.job === 'resolve_adverse_media_search_terms') {
+          assert.match(payload.systemInstruction.parts[0].text, /single-purpose entity-resolution engine/);
+          assert.match(payload.systemInstruction.parts[0].text, /Never infer an association/);
+          assert.equal(payload.generationConfig.responseJsonSchema.additionalProperties, false);
+          assert.equal(payload.generationConfig.maxOutputTokens, 512);
+          return Response.json({
+            candidates: [{ content: { parts: [{ text: JSON.stringify({
+              search_terms: prompt.entity.name === 'Prabhpreet Singh Gill'
+                ? [{ value: 'Harry Gill', type: 'alias' }, { value: 'Pay10', type: 'organization' }]
+                : []
+            }) }] } }],
+            usageMetadata: { promptTokenCount: 400, candidatesTokenCount: 60 }
           });
         }
         assert.match(payload.systemInstruction.parts[0].text, /single-purpose adverse-media evidence classifier/);
@@ -388,23 +415,27 @@ test('returns deterministic evidence when optional AI classification is unavaila
 });
 
 test('does not suppress exact-name adverse evidence using a zero-confidence AI negative', async () => {
+  const beforeCount = requests.length;
   const response = await fetch(`${appUrl}/service/adverse_media`, {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({ entity_type: 'individual', name: 'Prabhpreet Singh Gill', countries: ['IN'], languages: ['en'], max_results: 5 })
   });
   const body = await response.json();
+  const paidCalls = requests.slice(beforeCount).filter(({ url }) => url.hostname === 'api.search.brave.com');
   assert.equal(response.status, 200);
   assert.equal(body.status, 'completed');
-  assert.equal(body.results.length, 1);
-  assert.match(body.results[0].title, /Prabhpreet Singh Gill/);
-  assert.equal(body.summary.potentially_relevant_results, 1);
+  assert.ok(body.results.length >= 1);
+  assert.ok(body.results.some((result) => /Prabhpreet Singh Gill|Pay10/.test(result.title)));
+  assert.equal(body.summary.potentially_relevant_results, body.results.length);
   assert.equal(body.summary.raw_candidate_results, undefined);
   assert.equal(body.summary.ai_excluded_results, undefined);
-  assert.equal(body.summary.results_at_or_above_threshold, 1);
+  assert.ok(body.summary.results_at_or_above_threshold >= 1);
   assert.equal(body.summary.risk_level, 'high');
   assert.equal(body.summary.human_review_required, true);
   assert.equal(body.summary.decision_eligible, true);
+  assert.ok(paidCalls.length <= 12);
+  assert.ok(paidCalls.some(({ url }) => url.searchParams.get('q').includes('Pay10')));
 });
 
 test('rejects one-token individual-name noise before AI classification', async () => {
