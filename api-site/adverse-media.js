@@ -11,6 +11,8 @@ const samples = {
     "languages": ["en", "ar"],
     "date_from": "2023-01-01",
     "risk_threshold": 0.65,
+    "deep_research": true,
+    "callback_url": "https://your-domain.example/webhooks/ai7",
     "max_results": 25
   }'`,
   javascript: `const response = await fetch(
@@ -29,6 +31,8 @@ const samples = {
       languages: ['en', 'ar'],
       date_from: '2023-01-01',
       risk_threshold: 0.65,
+      deep_research: true,
+      callback_url: 'https://your-domain.example/webhooks/ai7',
       max_results: 25
     })
   }
@@ -48,6 +52,8 @@ response = requests.post(
         "languages": ["en", "ar"],
         "date_from": "2023-01-01",
         "risk_threshold": 0.65,
+        "deep_research": True,
+        "callback_url": "https://your-domain.example/webhooks/ai7",
         "max_results": 25,
     },
 )
@@ -62,6 +68,9 @@ const responseStatus = byId('response-status');
 const copyResponse = byId('copy-response');
 const sendButton = byId('send-request');
 const formError = byId('form-error');
+const deepResearch = byId('deep-research');
+const callbackField = byId('callback-field');
+const callbackUrl = byId('callback-url');
 
 const regionPresets = {
   gulf: { countries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'], languages: ['en', 'ar'] },
@@ -137,6 +146,11 @@ function requestBody() {
   if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 50) throw new Error('Maximum results must be from 1 to 50.');
   const thresholdPercent = Number(byId('risk-threshold').value);
   if (!Number.isFinite(thresholdPercent) || thresholdPercent < 0 || thresholdPercent > 100) throw new Error('Review threshold must be from 0% to 100%.');
+  if (deepResearch.checked && callbackUrl.value.trim()) {
+    let parsed;
+    try { parsed = new URL(callbackUrl.value.trim()); } catch { throw new Error('Callback URL must be a valid HTTPS URL.'); }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('Callback URL must be a public HTTPS URL without embedded credentials.');
+  }
 
   const body = {
     entity_type: byId('entity-type').value,
@@ -147,10 +161,18 @@ function requestBody() {
     date_from: byId('date-from').value,
     date_to: byId('date-to').value,
     risk_threshold: thresholdPercent / 100,
-    max_results: maxResults
+    max_results: maxResults,
+    deep_research: deepResearch.checked,
+    callback_url: deepResearch.checked ? callbackUrl.value.trim() : ''
   };
   return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== '' && (!Array.isArray(value) || value.length)));
 }
+
+deepResearch.addEventListener('change', () => {
+  callbackField.hidden = !deepResearch.checked;
+  callbackUrl.disabled = !deepResearch.checked;
+  if (!deepResearch.checked) callbackUrl.value = '';
+});
 
 byId('regions').addEventListener('change', (event) => {
   formError.textContent = '';
