@@ -2622,6 +2622,7 @@
       },
       "AdverseMediaResult": {
         "type": "object",
+        "required": ["result_id", "title", "url", "publisher", "published_at", "language", "source_type", "excerpt", "risk_score", "risk_level", "categories", "legal_stage", "review_required"],
         "properties": {
           "result_id": { "type": "string" },
           "title": { "type": "string" },
@@ -2631,45 +2632,17 @@
           "language": { "type": "string" },
           "source_type": { "type": "string", "enum": ["news_index", "open_web", "global_news_archive", "official_regulatory"] },
           "excerpt": { "type": "string" },
-          "matched_name": { "type": "string" },
-          "entity_match_score": { "type": "number", "minimum": 0, "maximum": 1 },
-          "adverse_relevance_score": { "type": "number", "minimum": 0, "maximum": 1 },
-          "source_reliability_score": { "type": "number", "minimum": 0, "maximum": 1 },
-          "severity_score": { "type": "number", "minimum": 0, "maximum": 1 },
           "risk_score": { "type": "number", "minimum": 0, "maximum": 1 },
           "risk_level": { "type": "string", "enum": ["low", "medium", "high"] },
           "categories": { "type": "array", "items": { "type": "string" } },
           "legal_stage": { "type": "string" },
-          "matched_terms": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "language": { "type": "string" },
-                "term": { "type": "string" }
-              }
-            }
-          },
-          "review_required": { "type": "boolean", "description": "True when risk_score meets or exceeds risk_threshold and high-confidence AI evidence review has not excluded the candidate as a mismatch or non-adverse item." },
-          "final_disposition": { "type": "string", "enum": ["excluded_by_ai_evidence_review", "review_required", "below_threshold"] },
-          "ai_classification": {
-            "type": "object",
-            "description": "Present when bounded AI review completed for this candidate.",
-            "properties": {
-              "entity_match": { "type": "string", "enum": ["confirmed", "possible", "unlikely"] },
-              "adverse": { "type": "string", "enum": ["confirmed", "possible", "not_adverse"] },
-              "categories": { "type": "array", "items": { "type": "string" } },
-              "legal_stage": { "type": "string" },
-              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-              "summary": { "type": "string", "maxLength": 240 }
-            },
-            "additionalProperties": false
-          }
+          "review_required": { "type": "boolean", "description": "True when the retained result meets or exceeds risk_threshold." }
         },
         "additionalProperties": false
       },
       "AdverseMediaResponse": {
         "type": "object",
+        "required": ["screening_id", "status", "completed_at", "entity", "summary", "coverage", "results"],
         "properties": {
           "screening_id": { "type": "string", "format": "uuid" },
           "status": { "type": "string", "enum": ["completed", "partial"] },
@@ -2677,15 +2650,6 @@
           "entity": { "type": "object", "additionalProperties": true },
           "summary": { "type": "object", "additionalProperties": true },
           "coverage": { "type": "object", "additionalProperties": true },
-          "methodology": { "type": "object", "additionalProperties": true },
-          "usage": { "type": "object", "additionalProperties": true },
-          "transliterations": {
-            "type": "object",
-            "description": "Two strictly generated entity-name variants for each selected non-English language.",
-            "additionalProperties": {
-              "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "string" }
-            }
-          },
           "results": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/AdverseMediaResult" }
