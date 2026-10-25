@@ -72,8 +72,10 @@
               <div><code>screening_id</code><span>UUID</span><span>Unique screening reference.</span></div>
               <div><code>summary.risk_level</code><span>string</span><span>High, medium, low, or no material results.</span></div>
               <div><code>summary.categories</code><span>object</span><span>Count of results by adverse-event category.</span></div>
-              <div><code>summary.threshold_status</code><span>string</span><span>Review required or within the configured acceptable threshold.</span></div>
-              <div><code>coverage</code><span>object</span><span>Languages, indexes, dates, and explicit limitations.</span></div>
+              <div><code>status</code><span>string</span><span><code>completed</code> only when every configured search and AI review stage succeeds; otherwise <code>partial</code>.</span></div>
+              <div><code>summary.threshold_status</code><span>string</span><span>Review required, within threshold, or incomplete coverage.</span></div>
+              <div><code>summary.decision_eligible</code><span>boolean</span><span>False whenever the run is partial and must not be treated as a completed compliance decision.</span></div>
+              <div><code>coverage</code><span>object</span><span>Completeness, per-index attempt counts, languages, dates, and explicit limitations.</span></div>
               <div><code>usage</code><span>object</span><span>Paid-query usage, cache state, and cost guardrail.</span></div>
               <div><code>results[].title</code><span>string</span><span>Article or page title.</span></div>
               <div><code>results[].url</code><span>URI</span><span>Original evidence URL.</span></div>
@@ -83,12 +85,13 @@
               <div><code>results[].legal_stage</code><span>string</span><span>Media mention, allegation, investigation, charge, arrest, conviction, or regulatory action.</span></div>
               <div><code>results[].entity_match_score</code><span>number</span><span>How strongly the article matches the requested entity.</span></div>
               <div><code>results[].risk_score</code><span>number</span><span>Combined, explainable prioritisation score.</span></div>
-              <div><code>results[].review_required</code><span>boolean</span><span>True when the result meets or exceeds the configured threshold.</span></div>
+              <div><code>results[].review_required</code><span>boolean</span><span>True when the result meets the threshold and has not been excluded by high-confidence AI evidence review.</span></div>
+              <div><code>results[].final_disposition</code><span>string</span><span>Review required, below threshold, or retained for audit but excluded by AI evidence review.</span></div>
               <div><code>results[].ai_classification</code><span>object</span><span>Optional bounded AI review containing only entity match, adverse status, categories, legal stage, confidence, and a concise evidence summary.</span></div>
             </div>
             <h3>Status codes</h3>
             <div class="responses">
-              <div><b class="ok">200</b><span>Screening completed</span></div>
+              <div><b class="ok">200</b><span>Screening returned; inspect <code>status</code> and <code>summary.decision_eligible</code> before use</span></div>
               <div><b>400</b><span>Invalid request fields</span></div>
               <div><b>401</b><span>Missing or invalid AI7 API key</span></div>
               <div><b>502</b><span>Media indexes temporarily unavailable</span></div>
@@ -98,7 +101,7 @@
           <article id="methodology">
             <p class="label">METHODOLOGY</p>
             <h2>Designed for review, not automated guilt decisions</h2>
-            <p>The engine normalizes names and aliases, searches current and archived indexes, removes duplicate URLs, requires an entity-name match, classifies adverse-event terms, and ranks evidence. Regional selections add native-language and country-focused official-source searches inside the fixed 12-query guardrail; eligible Russia business searches also check a free structured regulatory source. The most relevant candidates receive a bounded AI review when configured; deterministic results remain available if that review is unavailable. A media result is a review lead—not proof of wrongdoing. Qualified human review remains required before taking action.</p>
+            <p>The engine normalizes names and aliases, searches current and archived indexes with controlled retries, removes duplicate URLs, requires an entity-name match, classifies adverse-event terms, and ranks evidence. Regional selections add native-language and country-focused official-source searches inside the fixed 12-query guardrail; eligible Russia business searches also check a free structured regulatory source. High-confidence AI mismatch or non-adverse findings remain in the response for audit but cannot trigger review. Any exhausted source or AI failure makes the run <code>partial</code>, blocks decision eligibility, and requires manual review. A media result is a review lead—not proof of wrongdoing. Qualified human review remains required before taking action.</p>
           </article>
 
           <article id="tester" class="tester">
