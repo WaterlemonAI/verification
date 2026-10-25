@@ -189,11 +189,12 @@ async function finalizeAdverseMediaReport({ request, response, ownerId, origin, 
     const logo = await fetchPublicLogo(request.customer_logo_url);
     const narrative = await createAdverseMediaNarrative({ response, apiKey: aiApiKey, fetchImpl });
     const report = await createAdverseMediaAuditPdf({ request, response, narrative, origin, ...logo });
+    const reportPath = `/service/adverse_media/reports/${report.reportId}.pdf`;
     const metadata = {
       report_id: report.reportId,
       transaction_id: response.screening_id,
       generated_at: report.generatedAt,
-      download_url: `/service/adverse_media/reports/${report.reportId}.pdf`,
+      download_url: process.env.API_PUBLIC_BASE_URL ? new URL(reportPath, process.env.API_PUBLIC_BASE_URL).href : reportPath,
       sha256: report.sha256,
       filename: report.filename,
       retention: 'permanent'
@@ -230,7 +231,7 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
           signature_header: 'x-ai7-signature',
           signing_secret: job.callback_secret
         },
-        message: 'The completed, decision-eligible result will be posted to the callback URL. Store the signing secret now; it is not shown again.'
+        message: 'The final screening result will be posted to the callback URL. Check data.status, data.summary.decision_eligible, and data.coverage before use. Store the signing secret now; it is not shown again.'
       });
     }
     const providerKey = await store.getMasterKey('adverse-media');
