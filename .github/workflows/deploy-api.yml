@@ -5,7 +5,9 @@ on:
     branches: [main]
     paths:
       - api-site/**
+      - admin-site/**
       - api/**
+      - lib/**
       - test/**
       - server.mjs
       - package.json
@@ -72,10 +74,9 @@ jobs:
               image="${{ steps.image.outputs.image }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
+              runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
-              upstreamUrlSecretUri="${{ vars.UPSTREAM_URL_SECRET_URI }}" \
-              upstreamTokenSecretUri="${{ vars.UPSTREAM_TOKEN_SECRET_URI }}" \
-              clientKeyHashesSecretUri="${{ vars.CLIENT_KEY_HASHES_SECRET_URI }}" \
+              keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}"
 
       - name: Deploy digest-pinned API revision
@@ -88,10 +89,9 @@ jobs:
               image="${{ steps.image.outputs.image }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
+              runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
-              upstreamUrlSecretUri="${{ vars.UPSTREAM_URL_SECRET_URI }}" \
-              upstreamTokenSecretUri="${{ vars.UPSTREAM_TOKEN_SECRET_URI }}" \
-              clientKeyHashesSecretUri="${{ vars.CLIENT_KEY_HASHES_SECRET_URI }}" \
+              keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
             --query properties.outputs \
             --output json > api-deployment-outputs.json

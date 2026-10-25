@@ -4,8 +4,10 @@ WORKDIR /app
 
 COPY package.json ./
 COPY server.mjs ./
+COPY lib/ ./lib/
 COPY site/ ./site/
 COPY api-site/ ./api-site/
+COPY admin-site/ ./admin-site/
 COPY api/openapi.json ./api/openapi.json
 
 USER node

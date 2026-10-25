@@ -23,7 +23,6 @@ param registryId string
 
 var acrPullRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 var acrPushRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '8311e382-0749-4cb8-b61a-304f252e45ec')
-var keyVaultSecretsUserRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
 var keyVaultSecretsOfficerRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')
 var ai7DeployerRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '49bb2024-1835-4b1b-a28f-818ee6f5f889')
 
@@ -76,10 +75,10 @@ resource runtimeCanPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 }
 
 resource runtimeCanReadSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(vault.id, runtimeIdentity.id, keyVaultSecretsUserRoleDefinitionId)
+  name: guid(vault.id, runtimeIdentity.id, keyVaultSecretsOfficerRoleDefinitionId)
   scope: vault
   properties: {
-    roleDefinitionId: keyVaultSecretsUserRoleDefinitionId
+    roleDefinitionId: keyVaultSecretsOfficerRoleDefinitionId
     principalId: runtimeIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -115,6 +114,7 @@ resource deployerCanDeploy 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 }
 
 output runtimeIdentityResourceId string = runtimeIdentity.id
+output runtimeIdentityClientId string = runtimeIdentity.properties.clientId
 output runtimeIdentityPrincipalId string = runtimeIdentity.properties.principalId
 output deployerClientId string = deployerIdentity.properties.clientId
 output deployerPrincipalId string = deployerIdentity.properties.principalId

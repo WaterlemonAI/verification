@@ -12,20 +12,14 @@ param environmentId string
 @description('Resource ID of the dedicated API runtime managed identity.')
 param runtimeIdentityResourceId string
 
+@description('Client ID of the dedicated API runtime managed identity.')
+param runtimeIdentityClientId string
+
 @description('Azure Container Registry login server.')
 param acrLoginServer string
 
-@secure()
-@description('Versionless Key Vault URI for the upstream endpoint secret.')
-param upstreamUrlSecretUri string
-
-@secure()
-@description('Versionless Key Vault URI for the upstream bearer-token secret.')
-param upstreamTokenSecretUri string
-
-@secure()
-@description('Versionless Key Vault URI containing comma-separated SHA-256 client-key hashes.')
-param clientKeyHashesSecretUri string
+@description('URI of the dedicated API Key Vault.')
+param keyVaultUri string
 
 @description('Resource ID of the managed certificate for api.ai7uae.com. Leave blank until DNS validation is complete.')
 param apiCertificateId string = ''
@@ -73,23 +67,6 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           identity: runtimeIdentityResourceId
         }
       ]
-      secrets: [
-        {
-          name: 'upstream-url'
-          keyVaultUrl: upstreamUrlSecretUri
-          identity: runtimeIdentityResourceId
-        }
-        {
-          name: 'upstream-token'
-          keyVaultUrl: upstreamTokenSecretUri
-          identity: runtimeIdentityResourceId
-        }
-        {
-          name: 'client-key-hashes'
-          keyVaultUrl: clientKeyHashesSecretUri
-          identity: runtimeIdentityResourceId
-        }
-      ]
     }
     template: {
       containers: [
@@ -98,9 +75,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           image: image
           env: [
             { name: 'API_HOSTS', value: 'api.ai7uae.com' }
-            { name: 'UAE_TLV_UPSTREAM_URL', secretRef: 'upstream-url' }
-            { name: 'UAE_TLV_UPSTREAM_TOKEN', secretRef: 'upstream-token' }
-            { name: 'AI7_API_KEY_HASHES', secretRef: 'client-key-hashes' }
+            { name: 'KEY_VAULT_URI', value: keyVaultUri }
+            { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
           ]
           resources: {
             cpu: json('0.25')

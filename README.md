@@ -29,6 +29,20 @@ It accepts `application/json` and `multipart/form-data`, authenticates each AI7 
 
 Client keys are stored only as SHA-256 hashes. Upstream configuration and hashes are loaded from Azure Key Vault through the API app's dedicated managed identity. No provider secrets are committed to this repository or sent to the browser.
 
+### API Engine administration
+
+The protected console at `/admin` lets an operator:
+
+- register a provider-neutral public route and private upstream endpoint;
+- store or rotate a write-only upstream master authentication key;
+- configure Bearer, custom-header, or unauthenticated upstream access;
+- constrain accepted content types and document expected status codes;
+- enable or disable an integration;
+- issue a one-time customer API key that works across every configured integration; and
+- revoke a customer key without changing other customers or upstream credentials.
+
+The admin key stays in browser memory only. Issued customer keys are displayed once, while only SHA-256 hashes are retained. Public catalog responses omit upstream URLs, authentication configuration, Key Vault names, and supplier identity.
+
 Run the contract tests locally with:
 
 ```bash
@@ -45,14 +59,15 @@ docker run --rm -p 8080:8080 --env-file .env ai7uae-api:local
 API-specific Azure definitions are intentionally separate from the existing landing app:
 
 - `infrastructure/api-platform.bicep` creates dedicated API runtime/deployment identities, workload federation, and Key Vault.
-- `infrastructure/api.bicep` creates `ca-ai7uae-api` and reads its three secrets through managed identity.
+- `infrastructure/api.bicep` creates `ca-ai7uae-api` and gives the engine its managed-identity Key Vault connection.
 - `infrastructure/api-dns.bicep` adds only the `api` and `asuid.api` records to the existing AI7 UAE DNS zone.
 - `.github/workflows/deploy-api.yml` builds and deploys a digest-pinned API image through the protected `ai7uae-api` GitHub environment.
 
-The API app expects these versionless Key Vault secrets:
+The API Engine manages these records inside the dedicated Key Vault:
 
-- `uae-tlv-upstream-url`: the private upstream endpoint.
-- `uae-tlv-upstream-token`: the private upstream Bearer token.
-- `ai7-client-key-hashes`: comma-separated SHA-256 hashes of active AI7 customer API keys.
+- `ai7-admin-key-hashes`: comma-separated SHA-256 hashes of authorized admin keys; bootstrapped outside the app.
+- `api-engine-integrations`: the private integration registry.
+- `client-<id>`: one customer record per key, containing only the hash plus non-secret lifecycle tags.
+- `integration-<id>-master-key`: one write-only upstream master key per integration.
 
-Do not commit or place plaintext credentials in GitHub variables. Create and rotate them in the dedicated API vault, then keep only each customer's hash in `ai7-client-key-hashes`.
+Do not commit or place plaintext credentials in GitHub variables. Bootstrap the admin hash in the dedicated API vault, then manage integrations and customer credentials through the protected console.

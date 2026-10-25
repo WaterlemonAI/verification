@@ -1,8 +1,8 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { createReadStream, readFileSync, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createStore } from './lib/api-store.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -10,22 +10,16 @@ const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 15 * 1024 * 1024);
 const apiHosts = new Set((process.env.API_HOSTS || 'api.ai7uae.com,localhost,127.0.0.1').split(',').map((v) => v.trim().toLowerCase()));
 
 const mimeTypes = {
-  '.css': 'text/css; charset=utf-8',
-  '.html': 'text/html; charset=utf-8',
-  '.ico': 'image/x-icon',
-  '.js': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.webp': 'image/webp'
+  '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon',
+  '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml', '.webp': 'image/webp'
 };
+
+const hopByHopHeaders = new Set(['authorization', 'connection', 'content-length', 'host', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']);
 
 function json(res, status, body, extraHeaders = {}) {
   const payload = Buffer.from(JSON.stringify(body));
-  res.writeHead(status, {
-    'content-type': 'application/json; charset=utf-8',
-    'content-length': payload.length,
-    ...extraHeaders
-  });
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': payload.length, 'cache-control': 'no-store', ...extraHeaders });
   res.end(payload);
 }
 
@@ -38,28 +32,16 @@ function securityHeaders(res) {
 }
 
 function bearerToken(req) {
-  const header = req.headers.authorization || '';
-  const match = /^Bearer\s+(.+)$/i.exec(header);
+  const match = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '');
   return match?.[1] || '';
 }
 
-function configuredKeyHashes() {
-  const raw = process.env.AI7_API_KEY_HASHES || '';
-  return raw.split(',').map((value) => value.trim().toLowerCase()).filter((value) => /^[a-f0-9]{64}$/.test(value));
-}
-
-function validApiKey(token) {
-  if (!token) return false;
-  const presented = Buffer.from(createHash('sha256').update(token).digest('hex'));
-  return configuredKeyHashes().some((hash) => timingSafeEqual(presented, Buffer.from(hash)));
-}
-
-async function readBody(req) {
+async function readBody(req, limit = maxBodyBytes) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > maxBodyBytes) {
+    if (size > limit) {
       const error = new Error('request_too_large');
       error.statusCode = 400;
       throw error;
@@ -69,40 +51,84 @@ async function readBody(req) {
   return Buffer.concat(chunks);
 }
 
-async function proxyTradeLicence(req, res) {
-  if (!validApiKey(bearerToken(req))) {
+async function readJson(req) {
+  if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) {
+    const error = new Error('json_required');
+    error.statusCode = 400;
+    throw error;
+  }
+  const raw = await readBody(req, 1024 * 1024);
+  try { return JSON.parse(raw.toString('utf8')); } catch {
+    const error = new Error('invalid_json');
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function validateIntegration(body) {
+  const id = String(body.id || '').trim().toLowerCase();
+  const name = String(body.name || '').trim();
+  const publicPath = String(body.publicPath || '').trim();
+  const method = String(body.method || 'POST').toUpperCase();
+  const upstreamUrl = String(body.upstreamUrl || '').trim();
+  const authType = String(body.authType || 'bearer');
+  const authHeader = String(body.authHeader || 'authorization').trim().toLowerCase();
+  const authPrefix = String(body.authPrefix ?? (authType === 'bearer' ? 'Bearer ' : ''));
+  const acceptedContentTypes = Array.isArray(body.acceptedContentTypes) ? body.acceptedContentTypes.map(String).filter(Boolean) : [];
+  const documentedStatuses = Array.isArray(body.documentedStatuses) ? body.documentedStatuses.map(Number).filter((value) => Number.isInteger(value) && value >= 100 && value <= 599) : [];
+
+  if (!/^[a-z0-9][a-z0-9-]{1,62}$/.test(id)) throw new Error('Integration ID must use lowercase letters, numbers, and hyphens.');
+  if (name.length < 3 || name.length > 100) throw new Error('Display name must be between 3 and 100 characters.');
+  if (!/^\/service\/[a-z0-9_/-]+$/.test(publicPath)) throw new Error('Public path must start with /service/ and use URL-safe characters.');
+  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) throw new Error('Unsupported HTTP method.');
+  let parsedUpstream;
+  try { parsedUpstream = new URL(upstreamUrl); } catch { throw new Error('Upstream URL is invalid.'); }
+  if (parsedUpstream.protocol !== 'https:' && process.env.NODE_ENV !== 'test') throw new Error('Upstream URL must use HTTPS.');
+  if (!['bearer', 'header', 'none'].includes(authType)) throw new Error('Authentication type is invalid.');
+  if (authType !== 'none' && !/^[a-z0-9-]{2,64}$/.test(authHeader)) throw new Error('Authentication header is invalid.');
+
+  return { id, name, publicPath, method, upstreamUrl, authType, authHeader, authPrefix, acceptedContentTypes, documentedStatuses, enabled: body.enabled !== false };
+}
+
+function forwardHeaders(req) {
+  const headers = {};
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (!hopByHopHeaders.has(name.toLowerCase()) && value !== undefined) headers[name] = Array.isArray(value) ? value.join(', ') : value;
+  }
+  if (!headers.accept) headers.accept = 'application/json';
+  return headers;
+}
+
+async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
+  if (!(await store.isClientKey(bearerToken(req)))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
 
   const contentType = String(req.headers['content-type'] || '').toLowerCase();
-  if (!contentType.startsWith('application/json') && !contentType.startsWith('multipart/form-data')) {
-    return json(res, 400, { status: 'Error', error: 'Content-Type must be application/json or multipart/form-data.' });
-  }
-
-  const upstreamUrl = process.env.UAE_TLV_UPSTREAM_URL;
-  const upstreamToken = process.env.UAE_TLV_UPSTREAM_TOKEN;
-  if (!upstreamUrl || !upstreamToken) {
-    return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });
+  if (integration.acceptedContentTypes?.length && !integration.acceptedContentTypes.some((type) => contentType.startsWith(type))) {
+    return json(res, 400, { status: 'Error', error: `Content-Type must be one of: ${integration.acceptedContentTypes.join(', ')}.` });
   }
 
   let body;
-  try {
-    body = await readBody(req);
-  } catch (error) {
-    if (error.statusCode === 400) {
-      return json(res, 400, { status: 'Error', error: 'The request body is too large.' });
+  if (!['GET', 'HEAD'].includes(req.method)) {
+    try { body = await readBody(req); } catch (error) {
+      if (error.statusCode === 400) return json(res, 400, { status: 'Error', error: 'The request body is too large.' });
+      throw error;
     }
-    throw error;
   }
 
   try {
-    const upstream = await fetch(upstreamUrl, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${upstreamToken}`,
-        'content-type': req.headers['content-type'],
-        accept: 'application/json'
-      },
+    const target = new URL(integration.upstreamUrl);
+    target.search = url.search;
+    const headers = forwardHeaders(req);
+    if (integration.authType !== 'none') {
+      const masterKey = await store.getMasterKey(integration.id);
+      if (!masterKey) return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });
+      headers[integration.authHeader] = `${integration.authPrefix || ''}${masterKey}`;
+    }
+    const upstream = await fetchImpl(target, {
+      method: integration.method,
+      headers,
       body,
       signal: AbortSignal.timeout(Number(process.env.UPSTREAM_TIMEOUT_MS || 120000))
     });
@@ -118,6 +144,56 @@ async function proxyTradeLicence(req, res) {
   }
 }
 
+async function requireAdmin(req, res, store) {
+  if (await store.isAdminKey(bearerToken(req))) return true;
+  json(res, 401, { status: 'Error', error: 'Admin key is missing or incorrect.' });
+  return false;
+}
+
+async function handleAdminApi(req, res, url, store) {
+  if (!(await requireAdmin(req, res, store))) return;
+
+  if (req.method === 'GET' && url.pathname === '/admin/api/integrations') {
+    return json(res, 200, { integrations: await store.listIntegrations() });
+  }
+
+  if (req.method === 'PUT' && /^\/admin\/api\/integrations\/[a-z0-9-]+$/.test(url.pathname)) {
+    try {
+      const body = await readJson(req);
+      const pathId = url.pathname.split('/').pop();
+      const integration = validateIntegration({ ...body, id: pathId });
+      const saved = await store.upsertIntegration(integration, String(body.masterAuthKey || ''));
+      return json(res, 200, { integration: saved });
+    } catch (error) {
+      return json(res, error.statusCode || 400, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : error.message });
+    }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/admin/api/clients') {
+    return json(res, 200, { clients: await store.listClients() });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/admin/api/clients') {
+    try {
+      const body = await readJson(req);
+      const name = String(body.name || '').trim();
+      if (name.length < 2 || name.length > 100) return json(res, 400, { status: 'Error', error: 'Client name must be between 2 and 100 characters.' });
+      const created = await store.createClient(name);
+      return json(res, 201, { ...created, notice: 'Copy this API key now. It will not be shown again.' });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : 'The client credential could not be created.' });
+    }
+  }
+
+  if (req.method === 'POST' && /^\/admin\/api\/clients\/[a-f0-9]+\/revoke$/.test(url.pathname)) {
+    const id = url.pathname.split('/')[4];
+    const client = await store.revokeClient(id);
+    return client ? json(res, 200, { client }) : json(res, 404, { status: 'Error', error: 'Client was not found.' });
+  }
+
+  json(res, 404, { status: 'Error', error: 'Admin operation was not found.' });
+}
+
 function safeAssetPath(directory, requestPath) {
   const decoded = decodeURIComponent(requestPath.split('?')[0]);
   const wanted = decoded === '/' ? '/index.html' : decoded;
@@ -127,56 +203,45 @@ function safeAssetPath(directory, requestPath) {
 
 function serveStatic(res, directory, requestPath) {
   let filePath = safeAssetPath(directory, requestPath);
-  if (!filePath || !existsSync(filePath) || !statSync(filePath).isFile()) {
-    filePath = join(directory, 'index.html');
-  }
+  if (!filePath || !existsSync(filePath) || !statSync(filePath).isFile()) filePath = join(directory, 'index.html');
   const stat = statSync(filePath);
-  res.writeHead(200, {
-    'content-type': mimeTypes[extname(filePath)] || 'application/octet-stream',
-    'content-length': stat.size,
-    'cache-control': extname(filePath) === '.html' ? 'no-cache' : 'public, max-age=3600'
-  });
+  res.writeHead(200, { 'content-type': mimeTypes[extname(filePath)] || 'application/octet-stream', 'content-length': stat.size, 'cache-control': 'no-cache' });
   createReadStream(filePath).pipe(res);
 }
 
-export function createAppServer() {
+export function createAppServer({ store = createStore(), fetchImpl = fetch } = {}) {
   return createServer(async (req, res) => {
     securityHeaders(res);
     const url = new URL(req.url || '/', 'http://localhost');
     const host = String(req.headers.host || '').split(':')[0].toLowerCase();
 
-    if (url.pathname === '/healthz') {
-      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
-      return res.end('ok\n');
-    }
-
-    if (url.pathname === '/service/uae_tlv') {
-      if (req.method !== 'POST') {
-        res.setHeader('allow', 'POST');
-        return json(res, 405, { status: 'Error', error: 'Method not allowed.' });
+    try {
+      if (url.pathname === '/healthz') {
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        return res.end('ok\n');
       }
-      return proxyTradeLicence(req, res);
-    }
+      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store);
+      if (url.pathname === '/admin' || url.pathname === '/admin/') return serveStatic(res, join(root, 'admin-site'), '/');
+      if (url.pathname.startsWith('/admin/')) return serveStatic(res, join(root, 'admin-site'), url.pathname.replace(/^\/admin/, '') || '/');
+      if (url.pathname === '/catalog.json') return json(res, 200, { integrations: await store.listIntegrations({ publicOnly: true }) }, { 'cache-control': 'public, max-age=60' });
+      if (url.pathname === '/openapi.json') {
+        const spec = readFileSync(join(root, 'api', 'openapi.json'));
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
+        return res.end(spec);
+      }
 
-    if (url.pathname === '/openapi.json') {
-      const spec = readFileSync(join(root, 'api', 'openapi.json'));
-      res.writeHead(200, {
-        'content-type': 'application/json; charset=utf-8',
-        'content-length': spec.length,
-        'cache-control': 'public, max-age=300'
-      });
-      return res.end(spec);
-    }
+      const integration = await store.getIntegration(url.pathname, req.method || 'GET');
+      if (integration) return proxyIntegration(req, res, url, integration, store, fetchImpl);
+      if (url.pathname.startsWith('/service/')) return json(res, 404, { status: 'Error', error: 'Service was not found.' });
 
-    const directory = apiHosts.has(host) || url.pathname.startsWith('/docs')
-      ? join(root, 'api-site')
-      : join(root, 'site');
-    return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
+      const directory = apiHosts.has(host) || url.pathname.startsWith('/docs') ? join(root, 'api-site') : join(root, 'site');
+      return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
+    } catch {
+      return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });
+    }
   });
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  createAppServer().listen(port, '0.0.0.0', () => {
-    console.log(`AI7 UAE service listening on port ${port}`);
-  });
+  createAppServer().listen(port, '0.0.0.0', () => console.log(`AI7 UAE service listening on port ${port}`));
 }
