@@ -190,6 +190,9 @@ test('adverse media endpoint validates credentials and input', async () => {
 });
 
 test('public documentation exposes the complete route without provider or key details', async () => {
+  const config = await (await fetch(`${appUrl}/service/adverse_media/config`)).json();
+  assert.equal(config.maximum_ai_candidates, 15);
+  assert.equal(config.cost_guardrail_usd, 0.15);
   const html = await (await fetch(`${appUrl}/adverse-media`)).text();
   const script = await (await fetch(`${appUrl}/adverse-media.js`)).text();
   const specText = await (await fetch(`${appUrl}/openapi.json`)).text();
