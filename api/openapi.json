@@ -2591,7 +2591,7 @@
           },
           "countries": {
             "type": "array",
-            "maxItems": 10,
+            "maxItems": 20,
             "items": { "type": "string", "pattern": "^[A-Za-z]{2}$" }
           },
           "languages": {

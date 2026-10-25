@@ -39,7 +39,8 @@ before(async () => {
         const schemaEscapeCheck = query.includes('Schema Escape Example');
         const chinaCheck = query.includes('华信科技');
         const russiaCheck = query.includes('ООО Ромашка');
-        assert.ok(query.includes('John Example') || failureCheck || schemaEscapeCheck || chinaCheck || russiaCheck);
+        const regionalCheck = query.includes('Region Example');
+        assert.ok(query.includes('John Example') || failureCheck || schemaEscapeCheck || chinaCheck || russiaCheck || regionalCheck);
         let result = url.searchParams.get('search_lang') === 'de' ? {
           ...indexedResult,
           title: 'John Example wegen Betrug angeklagt',
@@ -270,6 +271,36 @@ test('Russia business pack includes free structured regulatory evidence without 
   assert.equal(officialResult.legal_stage, 'regulatory_action');
 });
 
+test('Gulf, India, USA, and ANZ packs target regional official domains without extra paid queries', async () => {
+  const cases = [
+    { id: 'gulf', name: 'Gulf Region Example', countries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'], languages: ['ar'], domain: 'site:gov.ae' },
+    { id: 'india', name: 'India Region Example', countries: ['IN'], languages: ['en'], domain: 'site:sebi.gov.in' },
+    { id: 'usa', name: 'USA Region Example', countries: ['US'], languages: ['en'], domain: 'site:sec.gov' },
+    { id: 'anz', name: 'ANZ Region Example', countries: ['AU', 'NZ'], languages: ['en'], domain: 'site:asic.gov.au' }
+  ];
+
+  for (const regionalCase of cases) {
+    const beforeCount = requests.length;
+    const response = await fetch(`${appUrl}/service/adverse_media`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entity_type: 'business', name: regionalCase.name, countries: regionalCase.countries,
+        languages: regionalCase.languages, max_results: 5
+      })
+    });
+    const body = await response.json();
+    const callSet = requests.slice(beforeCount);
+    const paidCalls = callSet.filter(({ url }) => url.hostname === 'api.search.brave.com');
+    const officialWebCall = paidCalls.find(({ url }) => url.pathname.includes('/web/'));
+    assert.equal(response.status, 200);
+    assert.equal(body.usage.paid_search_queries, 3);
+    assert.deepEqual(body.coverage.country_packs, [regionalCase.id]);
+    assert.equal(paidCalls.length, 3);
+    assert.ok(officialWebCall.url.searchParams.get('q').includes(regionalCase.domain));
+  }
+});
+
 test('returns deterministic evidence when optional AI classification is unavailable', async () => {
   const response = await fetch(`${appUrl}/service/adverse_media`, {
     method: 'POST',
@@ -317,6 +348,8 @@ test('public documentation exposes the complete route without provider or key de
   const config = await (await fetch(`${appUrl}/service/adverse_media/config`)).json();
   assert.equal(config.maximum_ai_candidates, 15);
   assert.equal(config.cost_guardrail_usd, 0.15);
+  assert.deepEqual(config.regions.gulf.countries, ['AE', 'SA', 'QA', 'KW', 'BH', 'OM']);
+  assert.deepEqual(config.regions.anz.countries, ['AU', 'NZ']);
   const html = await (await fetch(`${appUrl}/adverse-media`)).text();
   const script = await (await fetch(`${appUrl}/adverse-media.js`)).text();
   const specText = await (await fetch(`${appUrl}/openapi.json`)).text();
@@ -325,6 +358,12 @@ test('public documentation exposes the complete route without provider or key de
   for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'max_results']) {
     assert.ok(Object.hasOwn(spec.components.schemas.AdverseMediaRequest.properties, field));
     assert.ok(html.includes(field));
+  }
+  for (const region of ['Gulf countries', 'India', 'United States', 'Australia &amp; New Zealand', 'China', 'Russia']) {
+    assert.ok(html.includes(region));
+  }
+  for (const regionId of ['gulf', 'india', 'usa', 'anz', 'china', 'russia']) {
+    assert.ok(script.includes(`${regionId}:`));
   }
   for (const publicAsset of [html, script, specText]) {
     for (const providerName of ['brave', 'gdelt', 'gemini', 'cbr.ru']) assert.equal(publicAsset.toLowerCase().includes(providerName), false);

@@ -60,6 +60,17 @@ const copyResponse = byId('copy-response');
 const sendButton = byId('send-request');
 const formError = byId('form-error');
 
+const regionPresets = {
+  gulf: { countries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'], languages: ['en', 'ar'] },
+  india: { countries: ['IN'], languages: ['en', 'hi'] },
+  usa: { countries: ['US'], languages: ['en'] },
+  anz: { countries: ['AU', 'NZ'], languages: ['en'] },
+  china: { countries: ['CN'], languages: ['zh'] },
+  russia: { countries: ['RU'], languages: ['ru'] }
+};
+const autoRegionCountries = new Set();
+const autoRegionLanguages = new Set();
+
 sampleCode.textContent = samples.curl;
 
 async function copyText(value, button) {
@@ -84,12 +95,41 @@ function commaList(value) {
   return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
 }
 
+function applyRegionPresets(changedInput) {
+  const selected = [...document.querySelectorAll('#regions input:checked')]
+    .map((input) => regionPresets[input.value]);
+  const requiredLanguages = new Set(selected.flatMap((preset) => preset.languages));
+  const checkedLanguages = new Set([...document.querySelectorAll('#languages input:checked')].map((input) => input.value));
+  const manualLanguages = new Set([...checkedLanguages].filter((language) => !autoRegionLanguages.has(language)));
+  const nextLanguages = new Set([...manualLanguages, ...requiredLanguages]);
+  if (nextLanguages.size > 5 && changedInput) {
+    changedInput.checked = false;
+    formError.textContent = 'That preset would exceed the five-language limit. Uncheck another language first.';
+    applyRegionPresets();
+    return;
+  }
+
+  document.querySelectorAll('#languages input').forEach((input) => { input.checked = nextLanguages.has(input.value); });
+  autoRegionLanguages.clear();
+  requiredLanguages.forEach((language) => {
+    if (!manualLanguages.has(language)) autoRegionLanguages.add(language);
+  });
+
+  const currentCountries = commaList(byId('countries').value).map((country) => country.toUpperCase());
+  const manualCountries = currentCountries.filter((country) => !autoRegionCountries.has(country));
+  const requiredCountries = [...new Set(selected.flatMap((preset) => preset.countries))];
+  byId('countries').value = [...new Set([...manualCountries, ...requiredCountries])].join(', ');
+  autoRegionCountries.clear();
+  requiredCountries.forEach((country) => autoRegionCountries.add(country));
+}
+
 function requestBody() {
   const languages = [...document.querySelectorAll('#languages input:checked')].map((input) => input.value);
   if (!languages.length) throw new Error('Select at least one language.');
   if (languages.length > 5) throw new Error('Select no more than five languages.');
   const countries = commaList(byId('countries').value).map((value) => value.toUpperCase());
   if (countries.some((value) => !/^[A-Z]{2}$/.test(value))) throw new Error('Countries must use two-letter ISO codes such as AE or GB.');
+  if (countries.length > 20) throw new Error('Select no more than 20 countries.');
   const maxResults = Number(byId('max-results').value);
   if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 50) throw new Error('Maximum results must be from 1 to 50.');
 
@@ -106,7 +146,17 @@ function requestBody() {
   return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== '' && (!Array.isArray(value) || value.length)));
 }
 
+byId('regions').addEventListener('change', (event) => {
+  formError.textContent = '';
+  applyRegionPresets(event.target);
+});
+
 byId('languages').addEventListener('change', (event) => {
+  if (!event.target.checked && autoRegionLanguages.has(event.target.value)) {
+    event.target.checked = true;
+    formError.textContent = 'That language is required by a selected regional preset.';
+    return;
+  }
   const checked = [...document.querySelectorAll('#languages input:checked')];
   if (checked.length > 5) {
     event.target.checked = false;
