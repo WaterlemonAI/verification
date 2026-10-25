@@ -11,6 +11,7 @@ import { adverseMediaConfig, presentAdverseMediaResponse, screenAdverseMedia, va
 import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, validatePublicCallbackUrl } from './lib/deep-research-queue.mjs';
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
+import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -237,14 +238,15 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     const providerKey = await store.getMasterKey('adverse-media');
     if (!providerKey) return providerUnavailable(res);
     const aiApiKey = await store.getMasterKey('adverse-media-ai');
-    const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, fetchImpl });
+    const costGuard = createScreeningCostGuard(fetchImpl);
+    const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, fetchImpl, costGuard });
     const response = await finalizeAdverseMediaReport({
       request,
       response: presentAdverseMediaResponse(result),
       ownerId: reportOwnerId(token),
       origin: requestOrigin(req),
       aiApiKey,
-      fetchImpl,
+      fetchImpl: costGuard.fetch,
       reportStore
     });
     return json(res, 200, response);
@@ -521,9 +523,9 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       store,
       screen: screenAdverseMedia,
       present: presentAdverseMediaResponse,
-      finalize: async ({ job, response, aiApiKey }) => finalizeAdverseMediaReport({
+      finalize: async ({ job, response, aiApiKey, costGuard }) => finalizeAdverseMediaReport({
         request: job.request, response, ownerId: job.owner_id, origin: job.request_origin,
-        aiApiKey, fetchImpl, reportStore
+        aiApiKey, fetchImpl: costGuard.fetch, reportStore
       }),
       fetchImpl
     });

@@ -589,7 +589,7 @@ test('deep research queues an optional signed HTTPS callback without exposing cr
 test('public documentation exposes the complete route without provider or key details', async () => {
   const config = await (await fetch(`${appUrl}/service/adverse_media/config`)).json();
   assert.equal(config.maximum_ai_candidates, 15);
-  assert.equal(config.cost_guardrail_usd, 0.15);
+  assert.equal(config.cost_guardrail_usd, 0.08);
   assert.equal(config.default_risk_threshold, 0.65);
   assert.deepEqual(config.regions.gulf.countries, ['AE', 'SA', 'QA', 'KW', 'BH', 'OM']);
   assert.deepEqual(config.regions.anz.countries, ['AU', 'NZ']);
