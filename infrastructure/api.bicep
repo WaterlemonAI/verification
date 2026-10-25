@@ -31,7 +31,6 @@ param containerAppName string = 'ca-ai7uae-api'
 param deepResearchStorageName string = 'stai7uaejobsuaen001'
 
 var deepResearchQueueName = 'adverse-media-deep-research'
-var storageQueueDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '974c5e8b-45b9-4653-ba55-5f855dd0fb88')
 
 var customDomains = empty(apiCertificateId) ? [] : [
   {
@@ -41,37 +40,8 @@ var customDomains = empty(apiCertificateId) ? [] : [
   }
 ]
 
-resource deepResearchStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+resource deepResearchStorage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: deepResearchStorageName
-  location: location
-  sku: { name: 'Standard_LRS' }
-  kind: 'StorageV2'
-  properties: {
-    minimumTlsVersion: 'TLS1_2'
-    supportsHttpsTrafficOnly: true
-    allowBlobPublicAccess: false
-    publicNetworkAccess: 'Enabled'
-  }
-}
-
-resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
-  parent: deepResearchStorage
-  name: 'default'
-}
-
-resource deepResearchQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
-  parent: queueService
-  name: deepResearchQueueName
-}
-
-resource deepResearchQueueAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(deepResearchStorage.id, runtimeIdentityResourceId, storageQueueDataContributorRoleId)
-  scope: deepResearchStorage
-  properties: {
-    roleDefinitionId: storageQueueDataContributorRoleId
-    principalId: reference(runtimeIdentityResourceId, '2023-01-31').principalId
-    principalType: 'ServicePrincipal'
-  }
 }
 
 resource api 'Microsoft.App/containerApps@2024-03-01' = {
@@ -145,7 +115,6 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       scale: { minReplicas: 1, maxReplicas: 3 }
     }
   }
-  dependsOn: [deepResearchQueueAccess]
 }
 
 output fqdn string = api.properties.configuration.ingress.fqdn
