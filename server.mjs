@@ -443,7 +443,8 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch } = {
           supported_languages: adverseMediaConfig.supportedLanguages,
           maximum_languages: adverseMediaConfig.maxLanguages,
           maximum_paid_queries: adverseMediaConfig.maxPaidQueries,
-          cost_guardrail_usd: 0.12
+          maximum_ai_candidates: adverseMediaConfig.maxAiCandidates,
+          cost_guardrail_usd: adverseMediaConfig.costGuardrailUsd
         }, { 'cache-control': 'public, max-age=3600' });
       }
       if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store);
