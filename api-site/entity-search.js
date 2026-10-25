@@ -89,6 +89,8 @@ const sampleCode = byId('sample-code');
 const responseJson = byId('response-json');
 const responseStatus = byId('response-status');
 const responseLabel = byId('response-label');
+const copyResponseButton = byId('copy-response');
+const downloadPdf = byId('download-pdf');
 const sendButton = byId('send-request');
 const formError = byId('form-error');
 const responseFields = globalThis.ENTITY_SEARCH_RESPONSE_FIELDS || [];
@@ -111,6 +113,42 @@ document.querySelectorAll('[data-sample]').forEach((button) => {
   });
 });
 byId('copy-sample').addEventListener('click', (event) => copyText(sampleCode.textContent, event.currentTarget));
+copyResponseButton.addEventListener('click', (event) => copyText(responseJson.textContent, event.currentTarget));
+
+function reportFilename(disposition, entityName) {
+  const match = /filename="([^"]+)"/i.exec(disposition || '');
+  if (match) return match[1];
+  const slug = entityName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'entity';
+  return `ai7-entity-search-${slug}.pdf`;
+}
+
+async function createAuditPdf({ key, request, response, httpStatus, httpStatusText }) {
+  responseStatus.className = '';
+  responseStatus.textContent = 'Building PDF…';
+  const reportResponse = await fetch('/reports/entity-search.pdf', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      request,
+      response,
+      httpStatus,
+      httpStatusText,
+      completedAt: new Date().toISOString(),
+      logoUrl: byId('report-logo-url').value.trim()
+    })
+  });
+  if (!reportResponse.ok) throw new Error('The audit PDF could not be created. The JSON response is still available below.');
+  const blob = await reportResponse.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  if (downloadPdf.dataset.objectUrl) URL.revokeObjectURL(downloadPdf.dataset.objectUrl);
+  downloadPdf.dataset.objectUrl = objectUrl;
+  downloadPdf.href = objectUrl;
+  downloadPdf.download = reportFilename(reportResponse.headers.get('content-disposition'), request.name);
+  downloadPdf.hidden = false;
+  downloadPdf.click();
+  responseStatus.className = 'success';
+  responseStatus.textContent = `${httpStatus} ${httpStatusText} · PDF ready`;
+}
 
 function renderResponseFields(filter = '') {
   const query = filter.trim().toLowerCase();
@@ -224,8 +262,12 @@ byId('entity-search-form').addEventListener('submit', async (event) => {
   let body;
   try { body = requestBody(); }
   catch (error) { formError.textContent = error.message; return; }
+  const logoUrl = byId('report-logo-url').value.trim();
+  if (logoUrl && !/^https:\/\//i.test(logoUrl)) { formError.textContent = 'Logo URL must use HTTPS.'; byId('report-logo-url').focus(); return; }
 
   sendButton.disabled = true;
+  copyResponseButton.disabled = true;
+  downloadPdf.hidden = true;
   responseLabel.textContent = 'REQUEST SENT · RESPONSE PENDING';
   responseStatus.className = '';
   responseStatus.textContent = 'Sending…';
@@ -239,16 +281,28 @@ byId('entity-search-form').addEventListener('submit', async (event) => {
     });
     const text = await response.text();
     let formatted = text;
-    try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch { /* retain exact non-JSON response */ }
+    let parsedResponse;
+    try { parsedResponse = JSON.parse(text); formatted = JSON.stringify(parsedResponse, null, 2); } catch { parsedResponse = text; }
     responseLabel.textContent = 'API RESPONSE';
     responseJson.textContent = formatted;
+    copyResponseButton.disabled = false;
     responseStatus.className = response.ok ? 'success' : 'error';
     responseStatus.textContent = `${response.status} ${response.statusText}`;
+    if (byId('get-pdf').checked) {
+      try {
+        await createAuditPdf({ key, request: body, response: parsedResponse, httpStatus: response.status, httpStatusText: response.statusText });
+      } catch (error) {
+        formError.textContent = error.message;
+        responseStatus.className = response.ok ? 'success' : 'error';
+        responseStatus.textContent = `${response.status} ${response.statusText} · PDF unavailable`;
+      }
+    }
   } catch {
     responseLabel.textContent = 'API RESPONSE';
     responseStatus.className = 'error';
     responseStatus.textContent = 'Request error';
     responseJson.textContent = JSON.stringify({ status: 'Error', error: 'The request could not be sent.' }, null, 2);
+    copyResponseButton.disabled = false;
   } finally {
     sendButton.disabled = false;
   }

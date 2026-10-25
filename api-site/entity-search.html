@@ -9,9 +9,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/api.css?v=4" />
+    <link rel="stylesheet" href="/api.css?v=5" />
     <script src="/entity-search-fields.js?v=1" defer></script>
-    <script src="/entity-search.js?v=2" defer></script>
+    <script src="/entity-search.js?v=3" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#docs">Skip to documentation</a>
@@ -159,10 +159,19 @@
                   <label>Sort by <code>apc_sort_by</code><select id="apc-sort-by"><option value="">Default (relevance)</option><option value="relevance">relevance</option><option value="date">date</option></select></label>
                 </div>
               </fieldset>
+              <fieldset class="report-options">
+                <legend>Audit report <span>Optional · AI7 wrapper feature</span></legend>
+                <label>Logo URL <code>HTTPS PNG or JPEG · optional</code><input id="report-logo-url" type="url" inputmode="url" placeholder="https://your-company.com/logo.png" /></label>
+                <label class="report-toggle"><input id="get-pdf" type="checkbox" /><span><strong>Create audit PDF</strong><small>Generate and download a branded PDF after this search, including execution evidence, separate risk sections, integrity hashes, the complete result appendix, and attached source JSON.</small></span></label>
+                <p class="field-help">The logo and report settings stay within AI7 and are not sent to the screening data provider.</p>
+              </fieldset>
               <p class="form-error" id="form-error" role="alert"></p>
               <button type="submit" id="send-request">Send request <span>→</span></button>
             </form>
-            <div class="response-head"><span id="response-label">API RESPONSE</span><span id="response-status">Ready</span></div>
+            <div class="response-head">
+              <span id="response-label">API RESPONSE</span>
+              <span class="response-actions"><button id="copy-response" type="button" disabled>Copy JSON</button><a id="download-pdf" hidden>Download PDF</a><span id="response-status">Ready</span></span>
+            </div>
             <pre id="response-json" aria-live="polite">{
   "status": "ready",
   "message": "Submit a search to see the complete JSON response."
