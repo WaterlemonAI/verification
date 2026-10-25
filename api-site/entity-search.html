@@ -54,12 +54,12 @@
               <div><strong>name</strong><span>string · required</span><p>Name of the entity.</p></div>
               <div><strong>type</strong><span>enum · required</span><p>Individual, Organization, Aircraft, Vessel, or Goods.</p></div>
               <div><strong>alias</strong><span>string[] · optional</span><p>Aliases or alternate names.</p></div>
-              <div><strong>country</strong><span>string · optional</span><p>Associated country.</p></div>
+              <div><strong>country</strong><span>string · required key</span><p>Associated country. Send an empty string when unknown.</p></div>
               <div><strong>city</strong><span>string · optional</span><p>Associated city.</p></div>
               <div><strong>state</strong><span>string · optional</span><p>Associated state or province.</p></div>
               <div><strong>designation</strong><span>string · optional</span><p>Known designation or position.</p></div>
-              <div><strong>gender</strong><span>string · optional</span><p>Known gender.</p></div>
-              <div><strong>dob</strong><span>yyyy/MM/dd · optional</span><p>Known date of birth.</p></div>
+              <div><strong>gender</strong><span>string · required key</span><p>Known gender. Send an empty string when unknown.</p></div>
+              <div><strong>dob</strong><span>yyyy/MM/dd · required key</span><p>Known date of birth. Send an empty string when unknown.</p></div>
               <div><strong>identifier</strong><span>object[] · optional</span><p>Known identifiers using <code>type</code> and <code>value</code>.</p></div>
               <div><strong>watchlist_list_ids</strong><span>integer[] · optional</span><p>Watchlist list IDs used to filter results.</p></div>
               <div><strong>sanction_list_ids</strong><span>integer[] · optional</span><p>Sanctions list IDs used to filter results.</p></div>
@@ -111,12 +111,12 @@
                   <label>Name <code>name · required</code><input id="name" type="text" required /></label>
                   <label>Entity type <code>type · required</code><select id="type" required><option>Individual</option><option>Organization</option><option>Aircraft</option><option>Vessel</option><option>Goods</option></select></label>
                   <label>Aliases <code>alias</code><input id="alias" type="text" placeholder="Comma-separated aliases" /></label>
-                  <label>Country <code>country</code><input id="country" type="text" /></label>
+                  <label>Country <code>country · key always sent</code><input id="country" type="text" placeholder="May be blank" /></label>
                   <label>City <code>city</code><input id="city" type="text" /></label>
                   <label>State / province <code>state</code><input id="state" type="text" /></label>
                   <label>Designation <code>designation</code><input id="designation" type="text" /></label>
-                  <label>Gender <code>gender</code><input id="gender" type="text" /></label>
-                  <label>Date of birth <code>dob · yyyy/MM/dd</code><input id="dob" type="text" inputmode="numeric" placeholder="yyyy/MM/dd" /></label>
+                  <label>Gender <code>gender · key always sent</code><input id="gender" type="text" placeholder="May be blank" /></label>
+                  <label>Date of birth <code>dob · key always sent</code><input id="dob" type="text" inputmode="numeric" placeholder="yyyy/MM/dd or blank" /></label>
                   <label>Identifiers <code>identifier</code><textarea id="identifier" spellcheck="false" placeholder='[{"type":"passport","value":"P123"}]'>[]</textarea></label>
                   <label>Watchlist list IDs <code>watchlist_list_ids</code><input id="watchlist-list-ids" type="text" inputmode="numeric" placeholder="1, 2, 3" /></label>
                   <label>Sanctions list IDs <code>sanction_list_ids</code><input id="sanction-list-ids" type="text" inputmode="numeric" placeholder="1, 2, 3" /></label>
@@ -162,9 +162,10 @@
               <p class="form-error" id="form-error" role="alert"></p>
               <button type="submit" id="send-request">Send request <span>→</span></button>
             </form>
-            <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
+            <div class="response-head"><span id="response-label">API RESPONSE</span><span id="response-status">Ready</span></div>
             <pre id="response-json" aria-live="polite">{
-  "message": "Your JSON response will appear here."
+  "status": "ready",
+  "message": "Submit a search to see the complete JSON response."
 }</pre>
           </article>
         </div>

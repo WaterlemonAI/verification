@@ -366,6 +366,9 @@ test('entity search docs expose every official response path and no supplier det
     assert.equal(html.includes(field), true, `entity-search page omitted request field ${field}`);
     assert.equal(Object.hasOwn(spec.components.schemas.EntitySearchRequest.properties, field), true, `OpenAPI omitted request field ${field}`);
   }
+  for (const requiredKey of ['country', 'gender', 'dob']) {
+    assert.equal(spec.components.schemas.EntitySearchRequest.required.includes(requiredKey), true, `OpenAPI did not mark ${requiredKey} as a required key`);
+  }
   for (const value of ['pep', 'sanction', 'aml', 'watchlist', 'russiabridge', 'dualgoods', 'sanctionedgoods', 'apc', 'er_apc']) {
     assert.equal(html.includes(`value="${value}"`), true, `tester omitted search type ${value}`);
   }
@@ -402,6 +405,9 @@ test('entity search docs expose every official response path and no supplier det
   ]) assert.equal(fields.some((field) => field.path === path), true, `response catalog omitted ${path}`);
 
   assert.equal(script.includes("fetch('/service/entity_search'"), true);
+  assert.equal(script.includes("new Set(['country', 'gender', 'dob'])"), true);
+  assert.equal(script.includes("status: 'pending', request: body"), true);
+  assert.equal(html.includes('id="response-label"'), true);
   assert.equal(Object.hasOwn(spec.paths, '/service/entity_search'), true);
   for (const publicAsset of [html, script, fieldsScript, specText]) {
     assert.equal(publicAsset.toLowerCase().includes('rzolut'), false);
