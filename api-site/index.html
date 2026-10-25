@@ -58,13 +58,45 @@
               <div><strong>authorising_body</strong><span>enum · optional</span><p>Authority that issued the licence.</p></div>
             </div>
             <p class="footnote">* At least one of the four primary lookup fields is required.</p>
-            <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
+            <details class="enum-reference">
+              <summary>Accepted <code>emirate</code> and <code>authorising_body</code> values</summary>
+              <p><strong>emirate</strong></p>
+              <div class="enum-values"><code>ajman</code><code>abu_dhabi</code><code>abu_dahbi</code><code>dubai</code><code>fujairah</code><code>fujirah</code><code>umm_al_quwain</code><code>sharjah</code><code>ras_al_khaimah</code></div>
+              <p><strong>authorising_body</strong></p>
+              <div class="enum-values" id="authorising-values"></div>
+            </details>
+            <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL · JSON</button><button data-sample="upload">cURL · File</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
             <div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div>
           </article>
 
           <article id="responses">
             <p class="label">RESPONSES</p>
-            <h2>Status codes</h2>
+            <h2>Exact response contract</h2>
+            <p>The wrapper returns the original HTTP status and JSON body unchanged. A successful response contains the complete envelope and trade licence result below.</p>
+            <div class="schema-table" aria-label="Success response fields">
+              <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
+              <div><code>status</code><span>string</span><span>Request result.</span></div>
+              <div><code>client_id</code><span>UUID</span><span>Request identifier.</span></div>
+              <div><code>seconds</code><span>number</span><span>Processing time.</span></div>
+              <div><code>trade_licence_verification_api</code><span>object</span><span>Complete verification result.</span></div>
+              <div><code>↳ uae_licence_number</code><span>string</span><span>UAE licence number.</span></div>
+              <div><code>↳ expiration_date</code><span>string</span><span>Licence expiration date.</span></div>
+              <div><code>↳ registration_date</code><span>string</span><span>Licence registration date.</span></div>
+              <div><code>↳ licence_registration_name_arabic</code><span>string</span><span>Arabic registration name.</span></div>
+              <div><code>↳ licence_registration_name</code><span>string</span><span>Registration name.</span></div>
+              <div><code>↳ licence_registration_address</code><span>string</span><span>Registration address.</span></div>
+              <div><code>↳ governing_body_name</code><span>string</span><span>Issuing authority.</span></div>
+              <div><code>↳ emirate_name</code><span>string</span><span>Issuing emirate.</span></div>
+              <div><code>↳ lcn_renewal_date</code><span>string</span><span>Licence renewal date.</span></div>
+              <div><code>↳ moec_status</code><span>string</span><span>Ministry status.</span></div>
+              <div><code>↳ legal_type_from_entity</code><span>string</span><span>Registered legal type.</span></div>
+              <div><code>↳ unified_licence_number</code><span>string</span><span>Unified licence number.</span></div>
+              <div><code>↳ activity_start_time</code><span>string</span><span>Activity start time.</span></div>
+              <div><code>↳ licence_registration_address_arabic</code><span>string</span><span>Arabic registration address.</span></div>
+              <div><code>↳ license_status</code><span>string</span><span>Current licence status.</span></div>
+              <div><code>↳ trade_license_number</code><span>number</span><span>Trade licence number returned by the service.</span></div>
+            </div>
+            <h3>Status codes</h3>
             <div class="responses">
               <div><b class="ok">200</b><span>Verification completed</span></div>
               <div><b>400</b><span>Invalid request format or parameters</span></div>
@@ -78,13 +110,28 @@
             <p class="label">LIVE TESTER</p>
             <h2>Run a request</h2>
             <p>Your credential and request are sent only to <code>api.ai7uae.com</code>. The credential is kept in memory for this page and is not stored.</p>
-            <form id="api-form">
+            <form id="api-form" novalidate>
               <label>AI7 API key<input id="api-key" type="password" autocomplete="off" placeholder="Paste your API key" required /></label>
-              <label>Licence number<input id="license-number" type="text" placeholder="e.g. 123456" required /></label>
-              <div class="form-row">
-                <label>Emirate<select id="emirate"><option value="">Any emirate</option><option value="abu_dhabi">Abu Dhabi</option><option value="ajman">Ajman</option><option value="dubai">Dubai</option><option value="fujairah">Fujairah</option><option value="ras_al_khaimah">Ras Al Khaimah</option><option value="sharjah">Sharjah</option><option value="umm_al_quwain">Umm Al Quwain</option></select></label>
-                <button type="submit" id="send-request">Send request <span>→</span></button>
-              </div>
+              <label>Request format<select id="request-format"><option value="application/json">application/json</option><option value="multipart/form-data">multipart/form-data</option></select></label>
+              <fieldset>
+                <legend>Primary lookup <span>Provide at least one</span></legend>
+                <div class="input-grid">
+                  <label>License number <code>license_number</code><input id="license-number" type="text" placeholder="e.g. 123456" /></label>
+                  <label>Licence number <code>licence_number</code><input id="licence-number" type="text" placeholder="Alternate spelling" /></label>
+                  <label>Company name <code>company_name</code><input id="company-name" type="text" placeholder="English or Arabic" /></label>
+                  <label>License document <code>license_document</code><input id="license-document" type="file" /></label>
+                </div>
+                <p class="field-help" id="document-help">For JSON, the selected document is encoded as a data URI. For multipart, the original binary file is uploaded.</p>
+              </fieldset>
+              <fieldset>
+                <legend>Optional filters</legend>
+                <div class="input-grid">
+                  <label>Emirate <code>emirate</code><select id="emirate"><option value="">Any emirate</option><option value="ajman">Ajman</option><option value="abu_dhabi">Abu Dhabi</option><option value="abu_dahbi">Abu Dahbi (accepted alias)</option><option value="dubai">Dubai</option><option value="fujairah">Fujairah</option><option value="fujirah">Fujirah (accepted alias)</option><option value="umm_al_quwain">Umm Al Quwain</option><option value="sharjah">Sharjah</option><option value="ras_al_khaimah">Ras Al Khaimah</option></select></label>
+                  <label>Authorising body <code>authorising_body</code><select id="authorising-body"><option value="">Any issuing authority</option></select></label>
+                </div>
+              </fieldset>
+              <p class="form-error" id="form-error" role="alert"></p>
+              <button type="submit" id="send-request">Send request <span>→</span></button>
             </form>
             <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
             <pre id="response-json" aria-live="polite">{
