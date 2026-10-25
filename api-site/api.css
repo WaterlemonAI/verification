@@ -97,12 +97,22 @@ article > p:not(.label,.footnote) { color: var(--muted); line-height: 1.75; }
 #send-request { height: 45px; border: 0; padding: 0 1.4rem; background: var(--mint); color: var(--dark); font-weight: 700; cursor: pointer; }
 #send-request:disabled { opacity: .5; cursor: wait; }
 .response-head { display: flex; justify-content: space-between; padding: .8rem 1rem; color: #95a8a1; background: #10241e; font: .65rem "DM Mono", monospace; border-bottom: 1px solid #31433e; }
+.response-actions { display: flex; align-items: center; gap: .8rem; }
+.response-actions button, .response-actions a { border: 0; padding: 0; color: #d7e4df; background: transparent; cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.response-actions button:hover, .response-actions a:hover { color: var(--mint); }
+.response-actions button:disabled { color: #64756f; cursor: default; text-decoration: none; }
 #response-status.success { color: var(--mint); }
 #response-status.error { color: #ffab8e; }
 #response-json { min-height: 230px; max-height: 600px; margin: 0; padding: 1.2rem; overflow: auto; color: #d7e4df; background: var(--dark); font-size: .75rem; line-height: 1.65; }
 .checkbox-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .65rem; }
 .checkbox-grid label { display: flex; grid-template-columns: none; align-items: center; gap: .6rem; padding: .7rem .8rem; border: 1px solid var(--line); background: #fbfcfa; font-family: "DM Mono", monospace; font-size: .68rem; font-weight: 500; }
 .checkbox-grid input { width: auto; margin: 0; accent-color: var(--green); }
+.report-options { display: grid; gap: 1rem; }
+.report-options .report-toggle { display: flex; grid-template-columns: none; align-items: flex-start; gap: .75rem; padding: 1rem; border: 1px solid var(--line); background: #f7faf7; cursor: pointer; }
+.report-toggle input { width: auto; margin: .18rem 0 0; accent-color: var(--green); }
+.report-toggle span { display: grid; gap: .3rem; }
+.report-toggle strong { font-size: .78rem; }
+.report-toggle small { color: var(--muted); font-size: .7rem; font-weight: 400; line-height: 1.55; }
 .weight-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; }
 .schema-tools { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin: 1.25rem 0 .75rem; }
 .schema-tools input { width: min(360px, 100%); border: 1px solid #cad5d1; padding: .7rem .85rem; background: #fbfcfa; }

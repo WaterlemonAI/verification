@@ -1,8 +1,12 @@
 import { createReadStream, readFileSync, existsSync, statSync } from 'node:fs';
+import { lookup } from 'node:dns/promises';
 import { createServer } from 'node:http';
+import { get as httpsGet } from 'node:https';
+import { isIP } from 'node:net';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
+import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -51,17 +55,115 @@ async function readBody(req, limit = maxBodyBytes) {
   return Buffer.concat(chunks);
 }
 
-async function readJson(req) {
+async function readJson(req, limit = 1024 * 1024) {
   if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) {
     const error = new Error('json_required');
     error.statusCode = 400;
     throw error;
   }
-  const raw = await readBody(req, 1024 * 1024);
+  const raw = await readBody(req, limit);
   try { return JSON.parse(raw.toString('utf8')); } catch {
     const error = new Error('invalid_json');
     error.statusCode = 400;
     throw error;
+  }
+}
+
+function isPrivateAddress(address) {
+  if (isIP(address) === 4) {
+    const [a, b] = address.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 || a >= 224
+      || (a === 100 && b >= 64 && b <= 127)
+      || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && b === 168)
+      || (a === 198 && (b === 18 || b === 19));
+  }
+  if (isIP(address) === 6) {
+    const normalized = address.toLowerCase();
+    if (normalized.startsWith('::ffff:')) return isPrivateAddress(normalized.slice(7));
+    return normalized === '::' || normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd')
+      || /^fe[89ab]/.test(normalized);
+  }
+  return true;
+}
+
+async function fetchPublicLogo(rawUrl) {
+  if (!rawUrl) return {};
+  let logoUrl;
+  try { logoUrl = new URL(String(rawUrl)); } catch { return {}; }
+  if (logoUrl.protocol !== 'https:' || logoUrl.username || logoUrl.password || (logoUrl.port && logoUrl.port !== '443')) return {};
+  try {
+    const addresses = await lookup(logoUrl.hostname, { all: true });
+    if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address))) return {};
+    const pinned = addresses[0];
+    return await new Promise((resolve) => {
+      let settled = false;
+      const done = (value) => { if (!settled) { settled = true; resolve(value); } };
+      const request = httpsGet(logoUrl, {
+        timeout: 5000,
+        headers: { accept: 'image/png,image/jpeg' },
+        lookup: (_hostname, options, callback) => {
+          if (options?.all) callback(null, [pinned]);
+          else callback(null, pinned.address, pinned.family);
+        }
+      }, (response) => {
+        const logoType = String(response.headers['content-type'] || '').split(';')[0].toLowerCase();
+        const declaredSize = Number(response.headers['content-length'] || 0);
+        if (response.statusCode !== 200 || !['image/png', 'image/jpeg', 'image/jpg'].includes(logoType) || declaredSize > 2 * 1024 * 1024) {
+          response.resume();
+          return done({});
+        }
+        const chunks = [];
+        let size = 0;
+        response.on('data', (chunk) => {
+          size += chunk.length;
+          if (size > 2 * 1024 * 1024) { request.destroy(); return done({}); }
+          chunks.push(chunk);
+        });
+        response.on('end', () => done({ logoBytes: Buffer.concat(chunks), logoType }));
+        response.on('error', () => done({}));
+      });
+      request.on('timeout', () => request.destroy());
+      request.on('error', () => done({}));
+    });
+  } catch { return {}; }
+}
+
+function reportFilename(name) {
+  const slug = String(name || 'entity').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'entity';
+  return `ai7-entity-search-${slug}-${new Date().toISOString().slice(0, 10)}.pdf`;
+}
+
+async function createEntitySearchReport(req, res, store) {
+  if (!(await store.isClientKey(bearerToken(req)))) {
+    return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  }
+  try {
+    const body = await readJson(req, 10 * 1024 * 1024);
+    if (!body || typeof body !== 'object' || Array.isArray(body) || !body.request || !Object.hasOwn(body, 'response')) {
+      return json(res, 400, { status: 'Error', error: 'A request and response are required to create the audit PDF.' });
+    }
+    const logo = await fetchPublicLogo(String(body.logoUrl || '').slice(0, 2048));
+    const report = await createEntitySearchAuditPdf({
+      request: body.request,
+      response: body.response,
+      httpStatus: Number(body.httpStatus) || 0,
+      completedAt: body.completedAt,
+      ...logo
+    });
+    const filename = reportFilename(body.request.name);
+    res.writeHead(200, {
+      'content-type': 'application/pdf',
+      'content-length': report.bytes.length,
+      'content-disposition': `attachment; filename="${filename}"`,
+      'cache-control': 'no-store',
+      'x-ai7-report-id': report.reportId
+    });
+    res.end(report.bytes);
+  } catch (error) {
+    if (error.statusCode === 400) return json(res, 400, { status: 'Error', error: 'The report request is too large or invalid.' });
+    return json(res, 500, { status: 'Error', error: 'The audit PDF could not be created.' });
   }
 }
 
@@ -313,6 +415,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch } = {
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
         return res.end('ok\n');
       }
+      if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
       if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store);
       if (url.pathname === '/admin' || url.pathname === '/admin/') return serveStatic(res, join(root, 'admin-site'), '/');
       if (url.pathname.startsWith('/admin/')) return serveStatic(res, join(root, 'admin-site'), url.pathname.replace(/^\/admin/, '') || '/');
