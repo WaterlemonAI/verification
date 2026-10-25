@@ -179,11 +179,11 @@
       },
       "IbanVerificationRequest": {
         "type": "object",
-        "required": ["transID", "docType", "country", "requestCategory"],
+        "required": ["transID", "country", "requestCategory"],
         "properties": {
           "source": { "type": "string", "default": "API" },
           "transID": { "type": "string", "description": "Unique transaction ID supplied by the client." },
-          "docType": { "type": ["integer", "string"], "description": "Document type; use 610 for IBAN verification.", "example": 610 },
+          "docType": { "type": "integer", "const": 610, "default": 610, "description": "Always 610. AI7 enforces this value before forwarding the request." },
           "requestCategory": { "type": "string", "enum": ["business"], "default": "business", "description": "Use business for document type 610." },
           "country": { "type": "string", "description": "ISO country code.", "example": "AE" },
           "firstName": { "type": "string" },

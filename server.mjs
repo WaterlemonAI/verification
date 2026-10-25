@@ -185,7 +185,9 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
   try {
     if (integration.adapter === 'encrypted-json-relay') {
       if (!contentType.startsWith('application/json')) return json(res, 400, { status: 'Error', error: 'Content-Type must be application/json.' });
-      if (!parseJsonText(body.toString('utf8'))) return json(res, 400, { status: 'Error', error: 'The request body must contain valid JSON.' });
+      const parsedBody = parseJsonText(body.toString('utf8'));
+      if (!parsedBody || typeof parsedBody !== 'object' || Array.isArray(parsedBody)) return json(res, 400, { status: 'Error', error: 'The request body must contain a valid JSON object.' });
+      if (integration.id === 'iban-verification') body = Buffer.from(JSON.stringify({ ...parsedBody, docType: 610 }));
       return await encryptedJsonRelay(res, integration, store, fetchImpl, body);
     }
 
