@@ -7,6 +7,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
 import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
+import { adverseMediaConfig, screenAdverseMedia, validateAdverseMediaRequest } from './lib/adverse-media.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -164,6 +165,25 @@ async function createEntitySearchReport(req, res, store) {
   } catch (error) {
     if (error.statusCode === 400) return json(res, 400, { status: 'Error', error: 'The report request is too large or invalid.' });
     return json(res, 500, { status: 'Error', error: 'The audit PDF could not be created.' });
+  }
+}
+
+async function createAdverseMediaScreening(req, res, store, fetchImpl) {
+  if (!(await store.isClientKey(bearerToken(req)))) {
+    return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  }
+  try {
+    const input = await readJson(req);
+    const request = validateAdverseMediaRequest(input);
+    const providerKey = await store.getMasterKey('adverse-media');
+    if (!providerKey) return providerUnavailable(res);
+    const result = await screenAdverseMedia({ request, apiKey: providerKey, fetchImpl });
+    return json(res, 200, result);
+  } catch (error) {
+    if (error.statusCode === 400 || (!error.statusCode && error.message !== 'search_provider_unavailable')) {
+      return json(res, 400, { status: 'Error', error: error.message || 'The request is invalid.' });
+    }
+    return json(res, 502, { status: 'Error', error: 'The media search service is temporarily unavailable. Please try again shortly.' });
   }
 }
 
@@ -416,6 +436,15 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch } = {
         return res.end('ok\n');
       }
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
+      if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl);
+      if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
+        return json(res, 200, {
+          supported_languages: adverseMediaConfig.supportedLanguages,
+          maximum_languages: adverseMediaConfig.maxLanguages,
+          maximum_paid_queries: adverseMediaConfig.maxPaidQueries,
+          cost_guardrail_usd: 0.12
+        }, { 'cache-control': 'public, max-age=3600' });
+      }
       if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store);
       if (url.pathname === '/admin' || url.pathname === '/admin/') return serveStatic(res, join(root, 'admin-site'), '/');
       if (url.pathname.startsWith('/admin/')) return serveStatic(res, join(root, 'admin-site'), url.pathname.replace(/^\/admin/, '') || '/');
@@ -433,6 +462,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch } = {
       const directory = apiHosts.has(host) || url.pathname.startsWith('/docs') ? join(root, 'api-site') : join(root, 'site');
       if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
       return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
     } catch {
       return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });

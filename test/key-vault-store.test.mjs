@@ -56,10 +56,10 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
     enabled: true
   };
   await store.upsertIntegration(integration, '');
-  assert.equal((await store.listIntegrations())[0].masterAuthKeyConfigured, false);
+  assert.equal((await store.listIntegrations()).find((item) => item.id === 'uae-trade-licence').masterAuthKeyConfigured, false);
 
   await store.upsertIntegration(integration, 'upstream-master-key');
-  assert.equal((await store.listIntegrations())[0].masterAuthKeyConfigured, true);
+  assert.equal((await store.listIntegrations()).find((item) => item.id === 'uae-trade-licence').masterAuthKeyConfigured, true);
   assert.equal(secrets.get('integration-uae-trade-licence-master-key').value, 'upstream-master-key');
 
   const ibanIntegration = {

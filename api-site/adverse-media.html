@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071412" />
+    <meta name="description" content="AI7 UAE multilingual adverse media screening API documentation and live tester." />
+    <title>AI7 UAE API — Adverse Media Screening</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/api.css?v=6" />
+    <script src="/adverse-media.js?v=1" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#docs">Skip to documentation</a>
+    <header>
+      <a class="brand" href="https://ai7uae.com" aria-label="AI7 UAE home"><span>A7</span> AI7 <b>UAE</b></a>
+      <nav><a href="/">Trade licence</a><a href="/iban">IBAN verification</a><a href="/entity-search">Entity search</a><a href="#docs">Adverse media</a><a href="#tester">API tester</a><a href="/openapi.json">OpenAPI</a></nav>
+      <span class="status"><i></i> API available</span>
+    </header>
+
+    <main id="docs">
+      <section class="hero">
+        <p class="eyebrow">ADVERSE MEDIA / GLOBAL</p>
+        <h1>Multilingual media<br /><em>screening.</em></h1>
+        <p>Screen an individual or business across global news and open-web indexes, with evidence links, entity-match scoring, risk categories, legal stage, and documented coverage.</p>
+        <div class="meta"><span>POST</span><code>/service/adverse_media</code><button class="copy" data-copy="https://api.ai7uae.com/service/adverse_media">Copy endpoint</button></div>
+      </section>
+
+      <section class="layout">
+        <aside aria-label="On this page">
+          <p>ON THIS PAGE</p>
+          <a href="#authentication">Authentication</a>
+          <a href="#request">Request</a>
+          <a href="#responses">Responses</a>
+          <a href="#methodology">Methodology</a>
+          <a href="#tester">Live tester</a>
+        </aside>
+
+        <div class="content">
+          <article id="authentication">
+            <p class="label">AUTHENTICATION</p>
+            <h2>Use your existing AI7 credential</h2>
+            <p>Send your personal AI7 API key as a Bearer token. The media-source credential, query strategy, and private configuration remain server-side.</p>
+            <div class="code-block"><code>Authorization: Bearer YOUR_AI7_API_KEY</code><button class="copy" data-copy="Authorization: Bearer YOUR_AI7_API_KEY">Copy</button></div>
+          </article>
+
+          <article id="request">
+            <p class="label">REQUEST</p>
+            <h2>Screen a person or business</h2>
+            <div class="field-grid">
+              <div><strong>entity_type</strong><span>enum · required</span><p><code>individual</code> or <code>business</code>.</p></div>
+              <div><strong>name</strong><span>string · required</span><p>Primary individual or business name.</p></div>
+              <div><strong>aliases</strong><span>string[] · optional</span><p>Alternate spellings, former names, or transliterations.</p></div>
+              <div><strong>countries</strong><span>string[] · optional</span><p>ISO two-letter country codes used for identity context.</p></div>
+              <div><strong>languages</strong><span>string[] · optional</span><p>Up to five languages. Defaults to English and Arabic.</p></div>
+              <div><strong>date_from / date_to</strong><span>date · optional</span><p>Inclusive publication-date search window.</p></div>
+              <div><strong>max_results</strong><span>integer · optional</span><p>One to 50 results. Default: 25.</p></div>
+            </div>
+            <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
+            <div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div>
+          </article>
+
+          <article id="responses">
+            <p class="label">RESPONSE</p>
+            <h2>Evidence and explainable scores</h2>
+            <p>Every result includes its original URL and separate entity-match, adverse-relevance, source-reliability, severity, and combined risk scores.</p>
+            <div class="schema-table" aria-label="Adverse media response fields">
+              <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
+              <div><code>screening_id</code><span>UUID</span><span>Unique screening reference.</span></div>
+              <div><code>summary.risk_level</code><span>string</span><span>High, medium, low, or no material results.</span></div>
+              <div><code>summary.categories</code><span>object</span><span>Count of results by adverse-event category.</span></div>
+              <div><code>coverage</code><span>object</span><span>Languages, indexes, dates, and explicit limitations.</span></div>
+              <div><code>usage</code><span>object</span><span>Paid-query usage, cache state, and cost guardrail.</span></div>
+              <div><code>results[].title</code><span>string</span><span>Article or page title.</span></div>
+              <div><code>results[].url</code><span>URI</span><span>Original evidence URL.</span></div>
+              <div><code>results[].excerpt</code><span>string</span><span>Relevant indexed excerpt.</span></div>
+              <div><code>results[].categories</code><span>string[]</span><span>Detected risk categories.</span></div>
+              <div><code>results[].legal_stage</code><span>string</span><span>Media mention, allegation, investigation, charge, arrest, conviction, or regulatory action.</span></div>
+              <div><code>results[].entity_match_score</code><span>number</span><span>How strongly the article matches the requested entity.</span></div>
+              <div><code>results[].risk_score</code><span>number</span><span>Combined, explainable prioritisation score.</span></div>
+            </div>
+            <h3>Status codes</h3>
+            <div class="responses">
+              <div><b class="ok">200</b><span>Screening completed</span></div>
+              <div><b>400</b><span>Invalid request fields</span></div>
+              <div><b>401</b><span>Missing or invalid AI7 API key</span></div>
+              <div><b>502</b><span>Media indexes temporarily unavailable</span></div>
+            </div>
+          </article>
+
+          <article id="methodology">
+            <p class="label">METHODOLOGY</p>
+            <h2>Designed for review, not automated guilt decisions</h2>
+            <p>The engine normalizes names and aliases, searches in the selected languages, removes duplicate URLs, requires an entity-name match, classifies adverse-event terms, and ranks evidence. A media result is a review lead—not proof of wrongdoing. Qualified human review remains required before taking action.</p>
+          </article>
+
+          <article id="tester" class="tester">
+            <p class="label">LIVE TESTER</p>
+            <h2>Run an adverse media check</h2>
+            <p>The cost guardrail limits each uncached screening to 12 paid search requests. Repeating the same request within 15 minutes uses the cached evidence.</p>
+            <form id="adverse-media-form" novalidate>
+              <label>AI7 API key<input id="api-key" type="password" autocomplete="off" placeholder="Paste your API key" required /></label>
+              <div class="input-grid">
+                <label>Entity type <code>entity_type</code><select id="entity-type"><option value="individual">Individual</option><option value="business">Business</option></select></label>
+                <label>Name <code>name</code><input id="name" type="text" placeholder="Full legal name" required /></label>
+                <label>Aliases <code>aliases</code><input id="aliases" type="text" placeholder="Comma-separated aliases" /></label>
+                <label>Countries <code>countries</code><input id="countries" type="text" placeholder="AE, GB" maxlength="30" /></label>
+                <label>From date <code>date_from</code><input id="date-from" type="date" /></label>
+                <label>To date <code>date_to</code><input id="date-to" type="date" /></label>
+                <label>Maximum results <code>max_results</code><input id="max-results" type="number" min="1" max="50" value="25" /></label>
+              </div>
+              <fieldset>
+                <legend>Search languages <span>Select up to five</span></legend>
+                <div class="checkbox-grid" id="languages">
+                  <label><input type="checkbox" value="en" checked /> English</label>
+                  <label><input type="checkbox" value="ar" checked /> Arabic</label>
+                  <label><input type="checkbox" value="fr" /> French</label>
+                  <label><input type="checkbox" value="es" /> Spanish</label>
+                  <label><input type="checkbox" value="ru" /> Russian</label>
+                  <label><input type="checkbox" value="hi" /> Hindi</label>
+                  <label><input type="checkbox" value="ur" /> Urdu</label>
+                  <label><input type="checkbox" value="zh" /> Chinese</label>
+                  <label><input type="checkbox" value="de" /> German</label>
+                  <label><input type="checkbox" value="tr" /> Turkish</label>
+                  <label><input type="checkbox" value="fa" /> Persian</label>
+                  <label><input type="checkbox" value="pt" /> Portuguese</label>
+                </div>
+              </fieldset>
+              <p class="form-error" id="form-error" role="alert"></p>
+              <button type="submit" id="send-request">Run screening <span>→</span></button>
+            </form>
+            <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
+            <div class="response-actions"><button class="copy" id="copy-response" disabled>Copy JSON</button></div>
+            <pre id="response-json" aria-live="polite">{
+  "message": "Your JSON response will appear here."
+}</pre>
+          </article>
+        </div>
+      </section>
+    </main>
+    <footer><span>AI7 UAE Verification API</span><a href="https://ai7uae.com">ai7uae.com</a></footer>
+  </body>
+</html>
