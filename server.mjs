@@ -322,6 +322,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch } = {
 
       const directory = apiHosts.has(host) || url.pathname.startsWith('/docs') ? join(root, 'api-site') : join(root, 'site');
       if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
     } catch {
       return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });
