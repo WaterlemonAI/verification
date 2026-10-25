@@ -72,12 +72,16 @@
             <div class="schema-table" aria-label="Adverse media response fields">
               <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
               <div><code>screening_id</code><span>UUID</span><span>Unique screening reference.</span></div>
-              <div><code>summary.risk_level</code><span>string</span><span>High, medium, low, or no material results.</span></div>
+              <div><code>summary.outcome</code><span>string</span><span>Potential match, no material results, or inconclusive when required processing is incomplete.</span></div>
+              <div><code>summary.risk_level</code><span>string</span><span>High, medium, low, no material results, or indeterminate for an incomplete run.</span></div>
               <div><code>summary.categories</code><span>object</span><span>Count of results by adverse-event category.</span></div>
               <div><code>status</code><span>string</span><span><code>completed</code> only when every configured search and AI review stage succeeds; otherwise <code>partial</code>.</span></div>
               <div><code>summary.threshold_status</code><span>string</span><span>Review required, within threshold, or incomplete coverage.</span></div>
               <div><code>summary.decision_eligible</code><span>boolean</span><span>False whenever the run is partial and must not be treated as a completed compliance decision.</span></div>
-              <div><code>coverage</code><span>object</span><span>Completeness, languages, dates, search time, archive window, and explicit limitations.</span></div>
+              <div><code>coverage</code><span>object</span><span>Overall completeness, geographic scope, languages, dates, search time, and explicit limitations.</span></div>
+              <div><code>coverage.sources</code><span>object[]</span><span>Provider-neutral status for current news, open web, archive, and official-record coverage.</span></div>
+              <div><code>coverage.reason_codes</code><span>string[]</span><span>Safe diagnostic codes explaining incomplete coverage without exposing suppliers.</span></div>
+              <div><code>coverage.retryable</code><span>boolean</span><span>True when retrying may complete the screening.</span></div>
               <div><code>results[].title</code><span>string</span><span>Article or page title.</span></div>
               <div><code>results[].url</code><span>URI</span><span>Original evidence URL.</span></div>
               <div><code>results[].source_type</code><span>string</span><span>News index, open web, global archive, or official regulatory evidence.</span></div>
@@ -100,7 +104,7 @@
           <article id="methodology">
             <p class="label">METHODOLOGY</p>
             <h2>Designed for review, not automated guilt decisions</h2>
-            <p>The engine normalizes names and aliases, generates tightly constrained name transliterations for selected non-English languages, searches current and archived indexes with controlled retries, removes duplicate URLs, resolves the requested entity, classifies adverse-event terms, and ranks evidence. Regional selections add native-language and country-focused official-source searches inside the fixed guardrail. Entity mismatches and non-adverse candidates are removed from customer responses. Any exhausted source or required classification failure makes the run <code>partial</code>, blocks decision eligibility, and requires manual review. Deep research callbacks are sent only for completed, decision-eligible runs. A media result is a review lead—not proof of wrongdoing.</p>
+            <p>The engine normalizes names and aliases, generates tightly constrained name transliterations for selected non-English languages, searches current and archived indexes with controlled retries, removes duplicate URLs, resolves the requested entity, classifies adverse-event terms, and ranks evidence. Regional selections add native-language and country-focused official-source searches inside the fixed guardrail. Partial individual-name matches are rejected before classification, while only high-confidence evidence mismatches can suppress a candidate. Any exhausted source or required classification failure makes the run <code>partial</code>, returns an <code>inconclusive</code> outcome, blocks decision eligibility, and requires manual review. Deep research callbacks are sent only for completed, decision-eligible runs. A media result is a review lead—not proof of wrongdoing.</p>
           </article>
 
           <article id="tester" class="tester">
