@@ -80,13 +80,13 @@ before(async () => {
         };
         if (mismatchCheck) result = {
           ...indexedResult,
-          title: query === '("Prabhpreet Singh Gill")'
+          title: query.includes('"founder"')
             ? 'Prabhpreet Singh Gill, also known as Harry Gill, leads Pay10'
             : 'Prabhpreet Singh Gill named in fraud investigation',
-          url: query === '("Prabhpreet Singh Gill")'
+          url: query.includes('"founder"')
             ? 'https://publisher.example/profile/prabhpreet-singh-gill'
             : 'https://publisher.example/news/prabhpreet-singh-gill',
-          description: query === '("Prabhpreet Singh Gill")'
+          description: query.includes('"founder"')
             ? 'Prabhpreet Singh Gill, also known as Harry Gill, is the founder and chairman of Pay10.'
             : 'Authorities investigated Prabhpreet Singh Gill over alleged fraud.'
         };
@@ -435,6 +435,10 @@ test('does not suppress exact-name adverse evidence using a zero-confidence AI n
   assert.equal(body.summary.human_review_required, true);
   assert.equal(body.summary.decision_eligible, true);
   assert.ok(paidCalls.length <= 12);
+  assert.ok(paidCalls.some(({ url }) => {
+    const query = url.searchParams.get('q');
+    return query.includes('Prabhpreet Singh Gill') && query.includes('"founder"') && query.includes('"also known as"');
+  }));
   assert.ok(paidCalls.some(({ url }) => url.searchParams.get('q').includes('Pay10')));
 });
 
