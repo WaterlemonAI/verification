@@ -33,6 +33,9 @@ param deepResearchStorageName string = 'stai7uaejobsuaen001'
 @description('Dedicated storage account for the local GDELT archive and entity index.')
 param gdeltStorageName string = 'stai7uaegdeltuaen001'
 
+@description('Dedicated storage account for permanent adverse-media PDF reports.')
+param reportStorageName string = 'stai7uaereportsuaen001'
+
 var deepResearchQueueName = 'adverse-media-deep-research'
 
 var customDomains = empty(apiCertificateId) ? [] : [
@@ -89,6 +92,11 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
             { name: 'GDELT_INDEX_TABLE', value: 'GdeltEntityMentions' }
+            { name: 'ADVERSE_MEDIA_REPORT_BLOB_URL', value: 'https://${reportStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'ADVERSE_MEDIA_REPORT_CONTAINER', value: 'adverse-media-reports' }
+            { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
+            { name: 'AZURE_REGION_DISPLAY', value: 'Microsoft Azure UAE North' }
           ]
           resources: {
             cpu: json('0.25')

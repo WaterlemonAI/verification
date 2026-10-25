@@ -240,7 +240,7 @@
     "/service/adverse_media": {
       "post": {
         "summary": "Screen an individual or business for adverse media",
-        "description": "Searches current and archived global news plus open-web indexes in up to five languages, resolves the requested entity, applies deterministic and optional bounded AI classification, and returns evidence for human review.",
+        "description": "Searches current and archived global news plus open-web indexes in up to five languages, resolves the requested entity, applies deterministic and bounded AI review, and returns evidence for human review. Every synchronous result includes an automatically generated, permanently retained PDF audit report; customer_logo_url is the only report-specific input.",
         "operationId": "screenAdverseMedia",
         "security": [
           {
@@ -305,7 +305,37 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "The permanent PDF report service is temporarily unavailable.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
           }
+        }
+      }
+    },
+    "/service/adverse_media/reports/{reportId}.pdf": {
+      "get": {
+        "summary": "Download a permanent adverse-media audit report",
+        "operationId": "downloadAdverseMediaReport",
+        "security": [{ "ApiKey": [] }],
+        "parameters": [{
+          "name": "reportId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "format": "uuid" }
+        }],
+        "responses": {
+          "200": {
+            "description": "The authenticated customer's PDF report.",
+            "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "401": { "description": "Missing or invalid AI7 API key.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "No report belonging to this credential has that ID.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "The report store is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     }
@@ -2616,7 +2646,8 @@
           "risk_threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.65, "description": "Retained results at or above this score are flagged for review. Only high-confidence evidence mismatches are suppressed." },
           "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 },
           "deep_research": { "type": "boolean", "default": false, "description": "Enables completion-gated research and optional asynchronous callback delivery." },
-          "callback_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS callback URL. Accepted only when deep_research is true." }
+          "callback_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS callback URL. Accepted only when deep_research is true." },
+          "customer_logo_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS PNG or JPEG used on the automatically generated PDF report." }
         },
         "additionalProperties": false
       },
@@ -2642,7 +2673,7 @@
       },
       "AdverseMediaResponse": {
         "type": "object",
-        "required": ["screening_id", "status", "completed_at", "entity", "summary", "coverage", "results"],
+        "required": ["screening_id", "status", "completed_at", "entity", "summary", "coverage", "results", "report"],
         "properties": {
           "screening_id": { "type": "string", "format": "uuid" },
           "status": { "type": "string", "enum": ["completed", "partial"] },
@@ -2653,7 +2684,22 @@
           "results": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/AdverseMediaResult" }
-          }
+          },
+          "report": { "$ref": "#/components/schemas/AdverseMediaReport" }
+        },
+        "additionalProperties": false
+      },
+      "AdverseMediaReport": {
+        "type": "object",
+        "required": ["report_id", "transaction_id", "generated_at", "download_url", "sha256", "filename", "retention"],
+        "properties": {
+          "report_id": { "type": "string", "format": "uuid" },
+          "transaction_id": { "type": "string", "format": "uuid" },
+          "generated_at": { "type": "string", "format": "date-time" },
+          "download_url": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "filename": { "type": "string" },
+          "retention": { "type": "string", "const": "permanent" }
         },
         "additionalProperties": false
       },

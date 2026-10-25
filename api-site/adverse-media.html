@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=6" />
-    <script src="/adverse-media.js?v=4" defer></script>
+    <script src="/adverse-media.js?v=5" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#docs">Skip to documentation</a>
@@ -60,6 +60,7 @@
               <div><strong>max_results</strong><span>integer · optional</span><p>One to 50 results. Default: 25.</p></div>
               <div><strong>deep_research</strong><span>boolean · optional</span><p>Enables completion-gated research and the optional callback workflow.</p></div>
               <div><strong>callback_url</strong><span>HTTPS URI · optional</span><p>Available only with deep research. A signed result is posted only after the screening is complete and decision-eligible.</p></div>
+              <div><strong>customer_logo_url</strong><span>HTTPS URI · optional</span><p>PNG or JPEG logo shown on the automatically generated audit PDF. The PDF is permanently retained in private storage.</p></div>
             </div>
             <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
             <div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div>
@@ -90,6 +91,7 @@
               <div><code>results[].legal_stage</code><span>string</span><span>Media mention, allegation, investigation, charge, arrest, conviction, or regulatory action.</span></div>
               <div><code>results[].risk_score</code><span>number</span><span>Combined, explainable prioritisation score.</span></div>
               <div><code>results[].review_required</code><span>boolean</span><span>True when the retained result meets the configured review threshold.</span></div>
+              <div><code>report</code><span>object</span><span>Permanent report ID, transaction ID, SHA-256 digest, and authenticated PDF download URL.</span></div>
             </div>
             <h3>Status codes</h3>
             <div class="responses">
@@ -98,6 +100,7 @@
               <div><b>400</b><span>Invalid request fields</span></div>
               <div><b>401</b><span>Missing or invalid AI7 API key</span></div>
               <div><b>502</b><span>Media indexes temporarily unavailable</span></div>
+              <div><b>503</b><span>Permanent report generation or storage temporarily unavailable</span></div>
             </div>
           </article>
 
@@ -136,6 +139,7 @@
                 <label>Maximum results <code>max_results</code><input id="max-results" type="number" min="1" max="50" value="25" /></label>
                 <label><span>Deep research <code>deep_research</code></span><span><input id="deep-research" type="checkbox" /> Wait for complete, decision-eligible coverage</span></label>
                 <label id="callback-field" hidden>Callback URL <code>callback_url</code><input id="callback-url" type="url" inputmode="url" placeholder="https://your-domain.example/webhooks/ai7" disabled /><small class="field-help">Optional. The queued response returns a one-time signing secret for verifying callbacks.</small></label>
+                <label>Customer logo URL <code>customer_logo_url</code><input id="customer-logo-url" type="url" inputmode="url" placeholder="https://your-domain.example/logo.png" /><small class="field-help">Optional PNG/JPEG. Every completed check creates a private, permanently stored audit PDF.</small></label>
               </div>
               <fieldset>
                 <legend>Search languages <span>Select up to five</span></legend>
@@ -158,7 +162,7 @@
               <button type="submit" id="send-request">Run screening <span>→</span></button>
             </form>
             <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
-            <div class="response-actions"><button class="copy" id="copy-response" disabled>Copy JSON</button></div>
+            <div class="response-actions"><button class="copy" id="copy-response" disabled>Copy JSON</button><button class="copy" id="download-report" disabled>Download PDF</button></div>
             <pre id="response-json" aria-live="polite">{
   "message": "Your JSON response will appear here."
 }</pre>
