@@ -281,18 +281,26 @@ test('adverse media endpoint returns a customer-safe evidence response', async (
   assert.equal(body.summary.risk_threshold, 0.65);
   assert.equal(body.summary.results_at_or_above_threshold, 1);
   assert.equal(body.summary.threshold_status, 'review_required');
-  assert.deepEqual(Object.keys(body).sort(), ['completed_at', 'coverage', 'entity', 'results', 'screening_id', 'status', 'summary']);
+  assert.deepEqual(Object.keys(body).sort(), ['completed_at', 'coverage', 'entity', 'report', 'results', 'screening_id', 'status', 'summary']);
+  assert.equal(body.report.transaction_id, body.screening_id);
+  assert.equal(body.report.retention, 'permanent');
+  assert.match(body.report.sha256, /^[0-9a-f]{64}$/);
+  const reportResponse = await fetch(`${appUrl}${body.report.download_url}`, { headers: { authorization: `Bearer ${apiKey}` } });
+  assert.equal(reportResponse.status, 200);
+  assert.equal(reportResponse.headers.get('content-type'), 'application/pdf');
+  assert.equal(Buffer.from(await reportResponse.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
   assert.equal(body.methodology, undefined);
   assert.equal(body.usage, undefined);
   assert.equal(body.transliterations, undefined);
   for (const field of ['ai_classification', 'matched_terms', 'entity_match_score', 'adverse_relevance_score', 'source_reliability_score', 'severity_score', 'final_disposition']) {
     assert.equal(body.results[0][field], undefined);
   }
-  assert.equal(requests.length, 5);
+  assert.equal(requests.length, 6);
 });
 
 test('identical checks reuse cached evidence without paid search calls', async () => {
-  const beforeCount = requests.length;
+  const paidSearchCount = () => requests.filter(({ url }) => url.hostname === 'api.search.brave.com').length;
+  const beforeCount = paidSearchCount();
   const response = await fetch(`${appUrl}/service/adverse_media`, {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -308,7 +316,7 @@ test('identical checks reuse cached evidence without paid search calls', async (
   assert.equal(body.summary.human_review_required, false);
   assert.equal(body.summary.threshold_status, 'within_acceptable_threshold');
   assert.equal(body.results[0].review_required, false);
-  assert.equal(requests.length, beforeCount);
+  assert.equal(paidSearchCount(), beforeCount);
 });
 
 test('uses native adverse-event terms for a non-English language pack', async () => {

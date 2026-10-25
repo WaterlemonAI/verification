@@ -9,6 +9,8 @@ import { createStore } from './lib/api-store.mjs';
 import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
 import { adverseMediaConfig, presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from './lib/adverse-media.mjs';
 import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, validatePublicCallbackUrl } from './lib/deep-research-queue.mjs';
+import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
+import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -40,6 +42,19 @@ function securityHeaders(res) {
 function bearerToken(req) {
   const match = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '');
   return match?.[1] || '';
+}
+
+function requestOrigin(req) {
+  const candidates = [req.headers['x-envoy-external-address'], req.headers['x-azure-clientip']]
+    .map((value) => String(value || '').trim()).filter(Boolean);
+  candidates.push(...String(req.headers['x-forwarded-for'] || '').split(',').map((value) => value.trim()).filter(Boolean));
+  candidates.push(String(req.socket?.remoteAddress || '').replace(/^::ffff:/, ''));
+  const networkOrigin = candidates.find((address) => isIP(address) && !isPrivateAddress(address));
+  return {
+    received_at: new Date().toISOString(),
+    network_origin: networkOrigin || 'Unavailable (private or internal network)',
+    processing_location: process.env.AZURE_REGION_DISPLAY || 'Microsoft Azure UAE North'
+  };
 }
 
 async function readBody(req, limit = maxBodyBytes) {
@@ -169,8 +184,32 @@ async function createEntitySearchReport(req, res, store) {
   }
 }
 
-async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue) {
-  if (!(await store.isClientKey(bearerToken(req)))) {
+async function finalizeAdverseMediaReport({ request, response, ownerId, origin, aiApiKey, fetchImpl, reportStore }) {
+  try {
+    const logo = await fetchPublicLogo(request.customer_logo_url);
+    const narrative = await createAdverseMediaNarrative({ response, apiKey: aiApiKey, fetchImpl });
+    const report = await createAdverseMediaAuditPdf({ request, response, narrative, origin, ...logo });
+    const metadata = {
+      report_id: report.reportId,
+      transaction_id: response.screening_id,
+      generated_at: report.generatedAt,
+      download_url: `/service/adverse_media/reports/${report.reportId}.pdf`,
+      sha256: report.sha256,
+      filename: report.filename,
+      retention: 'permanent'
+    };
+    await reportStore.save({ ownerId, reportId: report.reportId, bytes: report.bytes, metadata });
+    return { ...response, report: metadata };
+  } catch {
+    const error = new Error('report_service_unavailable');
+    error.statusCode = 503;
+    throw error;
+  }
+}
+
+async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore) {
+  const token = bearerToken(req);
+  if (!(await store.isClientKey(token))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
   try {
@@ -179,7 +218,7 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     if (request.deep_research && request.callback_url) {
       if (!deepResearchQueue) return json(res, 503, { status: 'Error', error: 'Deep research callback processing is temporarily unavailable.' });
       await validatePublicCallbackUrl(request.callback_url);
-      const job = makeDeepResearchJob(request);
+      const job = makeDeepResearchJob(request, { owner_id: reportOwnerId(token), request_origin: requestOrigin(req) });
       await deepResearchQueue.enqueue(job);
       return json(res, 202, {
         screening_id: job.screening_id,
@@ -198,12 +237,42 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     if (!providerKey) return providerUnavailable(res);
     const aiApiKey = await store.getMasterKey('adverse-media-ai');
     const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, fetchImpl });
-    return json(res, 200, presentAdverseMediaResponse(result));
+    const response = await finalizeAdverseMediaReport({
+      request,
+      response: presentAdverseMediaResponse(result),
+      ownerId: reportOwnerId(token),
+      origin: requestOrigin(req),
+      aiApiKey,
+      fetchImpl,
+      reportStore
+    });
+    return json(res, 200, response);
   } catch (error) {
     if (error.statusCode === 400 || (!error.statusCode && error.message !== 'search_provider_unavailable')) {
       return json(res, 400, { status: 'Error', error: error.message || 'The request is invalid.' });
     }
+    if (String(error.message || '').startsWith('report_') || /Blob|Table|storage/i.test(String(error.message || ''))) {
+      return json(res, 503, { status: 'Error', error: 'The screening report service is temporarily unavailable. Please try again shortly.' });
+    }
     return json(res, 502, { status: 'Error', error: 'The media search service is temporarily unavailable. Please try again shortly.' });
+  }
+}
+
+async function downloadAdverseMediaReport(req, res, store, reportStore, reportId) {
+  const token = bearerToken(req);
+  if (!(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  try {
+    const report = await reportStore.get({ ownerId: reportOwnerId(token), reportId });
+    if (!report) return json(res, 404, { status: 'Error', error: 'The report was not found.' });
+    const filename = String(report.metadata.filename || `ai7-adverse-media-${reportId}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '-');
+    res.writeHead(200, {
+      'content-type': 'application/pdf', 'content-length': report.bytes.length,
+      'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'private, no-store',
+      'x-ai7-report-id': reportId, 'x-content-sha256': report.metadata.sha256
+    });
+    return res.end(report.bytes);
+  } catch {
+    return json(res, 503, { status: 'Error', error: 'The screening report service is temporarily unavailable. Please try again shortly.' });
   }
 }
 
@@ -444,13 +513,17 @@ function serveStatic(res, directory, requestPath) {
   createReadStream(filePath).pipe(res);
 }
 
-export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), reportStore = createAdverseMediaReportStore(), startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   if (startWorker && deepResearchQueue) {
     startDeepResearchWorker({
       queue: deepResearchQueue,
       store,
       screen: screenAdverseMedia,
       present: presentAdverseMediaResponse,
+      finalize: async ({ job, response, aiApiKey }) => finalizeAdverseMediaReport({
+        request: job.request, response, ownerId: job.owner_id, origin: job.request_origin,
+        aiApiKey, fetchImpl, reportStore
+      }),
       fetchImpl
     });
   }
@@ -465,7 +538,9 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
         return res.end('ok\n');
       }
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
-      if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue);
+      if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
+      const adverseReportMatch = /^\/service\/adverse_media\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
+      if (req.method === 'GET' && adverseReportMatch) return downloadAdverseMediaReport(req, res, store, reportStore, adverseReportMatch[1]);
       if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
         return json(res, 200, {
           supported_languages: adverseMediaConfig.supportedLanguages,

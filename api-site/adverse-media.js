@@ -13,6 +13,7 @@ const samples = {
     "risk_threshold": 0.65,
     "deep_research": true,
     "callback_url": "https://your-domain.example/webhooks/ai7",
+    "customer_logo_url": "https://your-domain.example/logo.png",
     "max_results": 25
   }'`,
   javascript: `const response = await fetch(
@@ -33,6 +34,7 @@ const samples = {
       risk_threshold: 0.65,
       deep_research: true,
       callback_url: 'https://your-domain.example/webhooks/ai7',
+      customer_logo_url: 'https://your-domain.example/logo.png',
       max_results: 25
     })
   }
@@ -54,6 +56,7 @@ response = requests.post(
         "risk_threshold": 0.65,
         "deep_research": True,
         "callback_url": "https://your-domain.example/webhooks/ai7",
+        "customer_logo_url": "https://your-domain.example/logo.png",
         "max_results": 25,
     },
 )
@@ -71,6 +74,9 @@ const formError = byId('form-error');
 const deepResearch = byId('deep-research');
 const callbackField = byId('callback-field');
 const callbackUrl = byId('callback-url');
+const customerLogoUrl = byId('customer-logo-url');
+const downloadReport = byId('download-report');
+let latestReportUrl = '';
 
 const regionPresets = {
   gulf: { countries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'], languages: ['en', 'ar'] },
@@ -151,6 +157,11 @@ function requestBody() {
     try { parsed = new URL(callbackUrl.value.trim()); } catch { throw new Error('Callback URL must be a valid HTTPS URL.'); }
     if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('Callback URL must be a public HTTPS URL without embedded credentials.');
   }
+  if (customerLogoUrl.value.trim()) {
+    let parsed;
+    try { parsed = new URL(customerLogoUrl.value.trim()); } catch { throw new Error('Customer logo URL must be a valid HTTPS URL.'); }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('Customer logo URL must be a public HTTPS URL without embedded credentials.');
+  }
 
   const body = {
     entity_type: byId('entity-type').value,
@@ -163,7 +174,8 @@ function requestBody() {
     risk_threshold: thresholdPercent / 100,
     max_results: maxResults,
     deep_research: deepResearch.checked,
-    callback_url: deepResearch.checked ? callbackUrl.value.trim() : ''
+    callback_url: deepResearch.checked ? callbackUrl.value.trim() : '',
+    customer_logo_url: customerLogoUrl.value.trim()
   };
   return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== '' && (!Array.isArray(value) || value.length)));
 }
@@ -194,6 +206,22 @@ byId('languages').addEventListener('change', (event) => {
   }
 });
 
+downloadReport.addEventListener('click', async () => {
+  const key = byId('api-key').value.trim();
+  if (!latestReportUrl || !key) return;
+  downloadReport.disabled = true;
+  try {
+    const response = await fetch(latestReportUrl, { headers: { Authorization: `Bearer ${key}` } });
+    if (!response.ok) throw new Error('download_failed');
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1] || 'ai7-adverse-media-report.pdf';
+    document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(link.href);
+  } catch { formError.textContent = 'The PDF could not be downloaded. Confirm the API key and try again.'; }
+  finally { downloadReport.disabled = !latestReportUrl; }
+});
+
 byId('adverse-media-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const key = byId('api-key').value.trim();
@@ -207,6 +235,8 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
 
   sendButton.disabled = true;
   copyResponse.disabled = true;
+  downloadReport.disabled = true;
+  latestReportUrl = '';
   responseStatus.className = '';
   responseStatus.textContent = 'Searching…';
   responseJson.textContent = JSON.stringify({ status: 'pending', request: body }, null, 2);
@@ -223,6 +253,8 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
     try { parsed = JSON.parse(text); formatted = JSON.stringify(parsed, null, 2); } catch { /* display raw response */ }
     responseJson.textContent = formatted;
     copyResponse.disabled = false;
+    latestReportUrl = parsed?.report?.download_url || '';
+    downloadReport.disabled = !latestReportUrl;
     const isPartial = response.ok && parsed?.status === 'partial';
     responseStatus.className = response.ok && !isPartial ? 'success' : 'error';
     responseStatus.textContent = isPartial
