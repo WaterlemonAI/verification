@@ -10,13 +10,13 @@ permissions:
   id-token: write
 
 concurrency:
-  group: ai7uae-staging
+  group: ai7uae-production
   cancel-in-progress: false
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    environment: staging
+    environment: ai7uae
     steps:
       - name: Check out reviewed source
         uses: actions/checkout@v4
@@ -52,7 +52,10 @@ jobs:
             > deployment-evidence.json
 
       - name: Validate Bicep
-        run: az bicep build --file infrastructure/main.bicep
+        run: |
+          az bicep build --file infrastructure/platform.bicep
+          az bicep build --file infrastructure/dns.bicep
+          az bicep build --file infrastructure/main.bicep
 
       - name: Preview infrastructure change
         run: |
@@ -64,7 +67,9 @@ jobs:
               image="${{ steps.image.outputs.image }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
-              acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}"
+              acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
+              apexCertificateId="${{ vars.APEX_CERTIFICATE_RESOURCE_ID }}" \
+              wwwCertificateId="${{ vars.WWW_CERTIFICATE_RESOURCE_ID }}"
 
       - name: Deploy digest-pinned revision
         id: deploy
@@ -78,6 +83,8 @@ jobs:
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
+              apexCertificateId="${{ vars.APEX_CERTIFICATE_RESOURCE_ID }}" \
+              wwwCertificateId="${{ vars.WWW_CERTIFICATE_RESOURCE_ID }}" \
             --query properties.outputs \
             --output json > deployment-outputs.json
 

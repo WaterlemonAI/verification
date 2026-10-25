@@ -1,0 +1,22 @@
+{
+  "Name": "AI7 UAE Web Deployer",
+  "Id": "49bb2024-1835-4b1b-a28f-818ee6f5f889",
+  "IsCustom": true,
+  "Description": "Deploys the isolated AI7 UAE Container App from its protected GitHub environment.",
+  "Actions": [
+    "Microsoft.Resources/subscriptions/resourceGroups/read",
+    "Microsoft.Resources/deployments/*",
+    "Microsoft.App/containerApps/*",
+    "Microsoft.App/managedEnvironments/read",
+    "Microsoft.App/managedEnvironments/join/action",
+    "Microsoft.ManagedIdentity/userAssignedIdentities/read",
+    "Microsoft.ManagedIdentity/userAssignedIdentities/assign/action",
+    "Microsoft.Authorization/*/read"
+  ],
+  "NotActions": [],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/d3a8f32e-2a05-4513-b8f7-1649a9c888ce/resourceGroups/rg-ai7uae-web-uaen-001"
+  ]
+}
