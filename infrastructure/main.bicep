@@ -1,6 +1,6 @@
 targetScope = 'resourceGroup'
 
-@description('UAE North region used by the existing Container Apps environment.')
+@description('UAE North region used by the dedicated AI7 UAE Container Apps environment.')
 param location string = 'uaenorth'
 
 @description('Digest-pinned ACR image reference.')
@@ -16,13 +16,26 @@ param runtimeIdentityResourceId string
 param acrLoginServer string
 
 @description('Resource ID of the managed certificate for ai7uae.com.')
-param apexCertificateId string
+param apexCertificateId string = ''
 
 @description('Resource ID of the managed certificate for www.ai7uae.com.')
-param wwwCertificateId string
+param wwwCertificateId string = ''
 
 @description('Name of the landing-page Container App.')
-param containerAppName string = 'ca-ai7uae-staging-web'
+param containerAppName string = 'ca-ai7uae-web'
+
+var customDomains = empty(apexCertificateId) || empty(wwwCertificateId) ? [] : [
+  {
+    name: 'ai7uae.com'
+    bindingType: 'SniEnabled'
+    certificateId: apexCertificateId
+  }
+  {
+    name: 'www.ai7uae.com'
+    bindingType: 'SniEnabled'
+    certificateId: wwwCertificateId
+  }
+]
 
 resource web 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName
@@ -42,18 +55,7 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
         allowInsecure: false
         targetPort: 8080
         transport: 'Auto'
-        customDomains: [
-          {
-            name: 'ai7uae.com'
-            bindingType: 'SniEnabled'
-            certificateId: apexCertificateId
-          }
-          {
-            name: 'www.ai7uae.com'
-            bindingType: 'SniEnabled'
-            certificateId: wwwCertificateId
-          }
-        ]
+        customDomains: customDomains
         traffic: [
           {
             latestRevision: true
