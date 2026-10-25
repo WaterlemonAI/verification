@@ -197,11 +197,15 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
     });
     const text = await response.text();
     let formatted = text;
-    try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch { /* display raw response */ }
+    let parsed;
+    try { parsed = JSON.parse(text); formatted = JSON.stringify(parsed, null, 2); } catch { /* display raw response */ }
     responseJson.textContent = formatted;
     copyResponse.disabled = false;
-    responseStatus.className = response.ok ? 'success' : 'error';
-    responseStatus.textContent = `${response.status} ${response.statusText}`;
+    const isPartial = response.ok && parsed?.status === 'partial';
+    responseStatus.className = response.ok && !isPartial ? 'success' : 'error';
+    responseStatus.textContent = isPartial
+      ? `${response.status} Partial — manual review required`
+      : `${response.status} ${response.statusText}`;
   } catch {
     responseStatus.className = 'error';
     responseStatus.textContent = 'Request error';

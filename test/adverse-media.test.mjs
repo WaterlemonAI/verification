@@ -40,7 +40,10 @@ before(async () => {
         const chinaCheck = query.includes('华信科技');
         const russiaCheck = query.includes('ООО Ромашка');
         const regionalCheck = query.includes('Region Example');
-        assert.ok(query.includes('John Example') || failureCheck || schemaEscapeCheck || chinaCheck || russiaCheck || regionalCheck);
+        const mismatchCheck = query.includes('Prabhpreet Singh Gill');
+        const coverageFailureCheck = query.includes('Coverage Failure Example');
+        assert.ok(query.includes('John Example') || failureCheck || schemaEscapeCheck || chinaCheck || russiaCheck || regionalCheck || mismatchCheck || coverageFailureCheck);
+        if (coverageFailureCheck) return Response.json({ error: 'temporary' }, { status: 503 });
         let result = url.searchParams.get('search_lang') === 'de' ? {
           ...indexedResult,
           title: 'John Example wegen Betrug angeklagt',
@@ -72,6 +75,12 @@ before(async () => {
           description: 'Начато расследование в отношении ООО Ромашка по делу о мошенничестве.',
           meta_url: { hostname: 'news.example.ru' }
         };
+        if (mismatchCheck) result = {
+          ...indexedResult,
+          title: 'Search for Prabhpreet Singh Gill surfaces case concerning Harprit Singh Gill',
+          url: 'https://publisher.example/news/harprit-singh-gill',
+          description: 'Authorities investigated Harprit Singh Gill over alleged fraud; Prabhpreet Singh Gill was not the subject.'
+        };
         if (url.pathname.includes('/news/')) return Response.json({ results: [result] });
         return Response.json({ web: { results: [result] } });
       }
@@ -83,16 +92,22 @@ before(async () => {
         const schemaEscapeCheck = url.searchParams.get('query').includes('Schema Escape Example');
         const chinaCheck = url.searchParams.get('query').includes('华信科技');
         const russiaCheck = url.searchParams.get('query').includes('ООО Ромашка');
+        const mismatchCheck = url.searchParams.get('query').includes('Prabhpreet Singh Gill');
+        const coverageFailureCheck = url.searchParams.get('query').includes('Coverage Failure Example');
         return Response.json({ articles: [{
           title: failureCheck ? 'AI Failure Example charged in fraud investigation'
             : schemaEscapeCheck ? 'Schema Escape Example charged in fraud investigation'
               : chinaCheck ? '华信科技因欺诈被立案调查'
                 : russiaCheck ? 'ООО Ромашка: расследование мошенничества'
+                  : mismatchCheck ? 'Search for Prabhpreet Singh Gill surfaces case concerning Harprit Singh Gill'
+                    : coverageFailureCheck ? 'Coverage Failure Example charged in fraud investigation'
                   : indexedResult.title,
           url: failureCheck ? 'https://publisher.example/news/ai-failure'
             : schemaEscapeCheck ? 'https://publisher.example/news/schema-escape'
               : chinaCheck ? 'https://news.example.cn/华信科技-调查'
                 : russiaCheck ? 'https://news.example.ru/romashka-investigation'
+                  : mismatchCheck ? 'https://publisher.example/news/harprit-singh-gill'
+                    : coverageFailureCheck ? 'https://publisher.example/news/coverage-failure'
                   : indexedResult.url,
           domain: chinaCheck ? 'news.example.cn' : russiaCheck ? 'news.example.ru' : 'publisher.example',
           seendate: '20261020T100000Z',
@@ -133,6 +148,18 @@ before(async () => {
             unwanted_field: 'This must never reach the API response.'
           }] }) }] } }],
           usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 100 }
+        });
+        if (prompt.entity.name === 'Prabhpreet Singh Gill') return Response.json({
+          candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: prompt.evidence.map((evidence) => ({
+            result_id: evidence.result_id,
+            entity_match: 'unlikely',
+            adverse: 'not_adverse',
+            categories: [],
+            legal_stage: 'media_mention',
+            confidence: 0.97,
+            summary: 'The evidence concerns a different person with a partially matching name.'
+          })) }) }] } }],
+          usageMetadata: { promptTokenCount: 800, candidatesTokenCount: 120 }
         });
         return Response.json({
           candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: prompt.evidence.map((evidence) => ({
@@ -186,6 +213,7 @@ test('adverse media endpoint authenticates, searches, deduplicates, classifies, 
   assert.deepEqual(Object.keys(body.results[0].ai_classification).sort(), ['adverse', 'categories', 'confidence', 'entity_match', 'legal_stage', 'summary']);
   assert.equal(body.methodology.ai_classification.status, 'completed');
   assert.equal(body.usage.paid_search_queries, 3);
+  assert.equal(body.usage.paid_search_attempts, 3);
   assert.equal(body.usage.free_search_queries, 1);
   assert.equal(body.usage.estimated_search_cost_usd, 0.015);
   assert.equal(body.usage.estimated_ai_cost_usd, 0.0008);
@@ -248,6 +276,7 @@ test('China pack uses native terms, official-domain targeting, and an archive la
   assert.equal(body.usage.free_search_queries, 1);
   assert.deepEqual(body.coverage.country_packs, ['china']);
   assert.equal(paidCalls.length, 3);
+  assert.ok(paidCalls.every(({ url }) => url.searchParams.get('search_lang') === 'zh-hans'));
   assert.match(officialWebCall.url.searchParams.get('q'), /site:csrc\.gov\.cn/);
   assert.match(officialWebCall.url.searchParams.get('q'), /立案调查/);
   assert.match(archiveCall.url.searchParams.get('query'), /sourcelang:chinese/);
@@ -319,8 +348,53 @@ test('returns deterministic evidence when optional AI classification is unavaila
   assert.equal(response.status, 200);
   assert.equal(body.results.length, 1);
   assert.equal(body.results[0].ai_classification, undefined);
+  assert.equal(body.status, 'partial');
+  assert.equal(body.summary.decision_eligible, false);
+  assert.equal(body.summary.threshold_status, 'incomplete_coverage');
   assert.equal(body.methodology.ai_classification.status, 'failed');
   assert.equal(body.usage.ai_classification_used, false);
+});
+
+test('retains AI-confirmed name mismatches for audit without creating false review hits', async () => {
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'individual', name: 'Prabhpreet Singh Gill', countries: ['IN'], languages: ['en'], max_results: 5 })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.status, 'completed');
+  assert.equal(body.results.length, 1);
+  assert.equal(body.results[0].review_required, false);
+  assert.equal(body.results[0].final_disposition, 'excluded_by_ai_evidence_review');
+  assert.equal(body.summary.raw_candidate_results, 1);
+  assert.equal(body.summary.potentially_relevant_results, 0);
+  assert.equal(body.summary.ai_excluded_results, 1);
+  assert.equal(body.summary.results_at_or_above_threshold, 0);
+  assert.equal(body.summary.risk_level, 'no_material_results');
+  assert.equal(body.summary.human_review_required, false);
+  assert.equal(body.summary.decision_eligible, true);
+});
+
+test('retries transient provider failures and reports partial coverage instead of completed', async () => {
+  const beforeCount = requests.length;
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: 'Coverage Failure Example', languages: ['en'], max_results: 5 })
+  });
+  const body = await response.json();
+  const paidCalls = requests.slice(beforeCount).filter(({ url }) => url.hostname === 'api.search.brave.com');
+  assert.equal(response.status, 200);
+  assert.equal(paidCalls.length, 6);
+  assert.equal(body.status, 'partial');
+  assert.equal(body.coverage.complete, false);
+  assert.equal(body.coverage.source_status.global_news.failed, 2);
+  assert.equal(body.coverage.source_status.open_web.failed, 1);
+  assert.equal(body.coverage.source_status.global_news_archive.completed, 1);
+  assert.equal(body.summary.decision_eligible, false);
+  assert.equal(body.summary.threshold_status, 'incomplete_coverage');
+  assert.equal(body.summary.human_review_required, true);
 });
 
 test('rejects model output containing fields outside the strict classification contract', async () => {

@@ -2640,7 +2640,8 @@
               }
             }
           },
-          "review_required": { "type": "boolean", "description": "True when risk_score meets or exceeds the request risk_threshold." },
+          "review_required": { "type": "boolean", "description": "True when risk_score meets or exceeds risk_threshold and high-confidence AI evidence review has not excluded the candidate as a mismatch or non-adverse item." },
+          "final_disposition": { "type": "string", "enum": ["excluded_by_ai_evidence_review", "review_required", "below_threshold"] },
           "ai_classification": {
             "type": "object",
             "description": "Present when bounded AI review completed for this candidate.",
@@ -2661,7 +2662,7 @@
         "type": "object",
         "properties": {
           "screening_id": { "type": "string", "format": "uuid" },
-          "status": { "type": "string", "const": "completed" },
+          "status": { "type": "string", "enum": ["completed", "partial"] },
           "completed_at": { "type": "string", "format": "date-time" },
           "entity": { "type": "object", "additionalProperties": true },
           "summary": { "type": "object", "additionalProperties": true },
