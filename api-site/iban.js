@@ -6,6 +6,7 @@ const samples = {
     "source": "API",
     "transID": "YOUR-UNIQUE-ID",
     "docType": 610,
+    "requestCategory": "business",
     "country": "AE",
     "firstName": "FIRST",
     "lastName": "LAST",
@@ -28,6 +29,7 @@ const samples = {
       source: 'API',
       transID: 'YOUR-UNIQUE-ID',
       docType: 610,
+      requestCategory: 'business',
       country: 'AE',
       iban: 'YOUR-IBAN'
     })
@@ -44,6 +46,7 @@ response = requests.post(
         "source": "API",
         "transID": "YOUR-UNIQUE-ID",
         "docType": 610,
+        "requestCategory": "business",
         "country": "AE",
         "iban": "YOUR-IBAN",
     },
@@ -105,7 +108,7 @@ byId('iban-form').addEventListener('submit', async (event) => {
   const body = requestBody();
   formError.textContent = '';
   if (!key) { formError.textContent = 'Enter your AI7 API key.'; byId('api-key').focus(); return; }
-  for (const [name, id] of [['transID', 'trans-id'], ['docType', 'doc-type'], ['country', 'country']]) {
+  for (const [name, id] of [['transID', 'trans-id'], ['docType', 'doc-type'], ['country', 'country'], ['requestCategory', 'request-category']]) {
     if (body[name] === undefined) { formError.textContent = `${name} is required.`; byId(id).focus(); return; }
   }
 

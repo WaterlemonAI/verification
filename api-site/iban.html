@@ -57,7 +57,7 @@
               <div><strong>firstName</strong><span>string · optional</span><p>Account owner's first name.</p></div>
               <div><strong>lastName</strong><span>string · optional</span><p>Account owner's last name.</p></div>
               <div><strong>completeName</strong><span>string · optional</span><p>Complete account-owner name.</p></div>
-              <div><strong>requestCategory</strong><span>string · optional</span><p>Optional request category.</p></div>
+              <div><strong>requestCategory</strong><span>string · required</span><p>Request category. Use <code>business</code> for document type <code>610</code>.</p></div>
               <div><strong>bankCode</strong><span>string · optional</span><p>Bank or branch code.</p></div>
               <div><strong>bankAccountNumber</strong><span>string · optional</span><p>Bank account number.</p></div>
               <div><strong>bic</strong><span>string · optional</span><p>Bank Identifier Code.</p></div>
@@ -110,6 +110,7 @@
                   <label>Transaction ID <code>transID</code><input id="trans-id" type="text" placeholder="Unique transaction ID" required /></label>
                   <label>Document type <code>docType</code><input id="doc-type" type="text" value="610" required /></label>
                   <label>Country <code>country</code><input id="country" type="text" placeholder="AE" maxlength="3" required /></label>
+                  <label>Request category <code>requestCategory</code><input id="request-category" type="text" value="business" required /></label>
                   <label>Source <code>source</code><input id="source" type="text" value="API" /></label>
                 </div>
               </fieldset>
@@ -119,7 +120,6 @@
                   <label>First name <code>firstName</code><input id="first-name" type="text" /></label>
                   <label>Last name <code>lastName</code><input id="last-name" type="text" /></label>
                   <label>Complete name <code>completeName</code><input id="complete-name" type="text" /></label>
-                  <label>Request category <code>requestCategory</code><input id="request-category" type="text" /></label>
                   <label>Bank code <code>bankCode</code><input id="bank-code" type="text" /></label>
                   <label>Bank account number <code>bankAccountNumber</code><input id="bank-account-number" type="text" /></label>
                   <label>BIC <code>bic</code><input id="bic" type="text" /></label>
