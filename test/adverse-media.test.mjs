@@ -439,7 +439,8 @@ test('does not suppress exact-name adverse evidence using a zero-confidence AI n
   }));
   assert.ok(paidCalls.some(({ url }) => {
     const query = url.searchParams.get('q');
-    return query.includes('Pay10 Global') && query.includes('Harry Gill');
+    return query.includes('Pay10') && query.includes('Harry Gill') && query.includes('"money laundering"')
+      && !query.includes('"embezzlement"');
   }));
 });
 
