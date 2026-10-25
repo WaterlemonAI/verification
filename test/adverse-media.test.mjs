@@ -186,9 +186,7 @@ before(async () => {
           assert.equal(payload.generationConfig.maxOutputTokens, 512);
           return Response.json({
             candidates: [{ content: { parts: [{ text: JSON.stringify({
-              search_terms: prompt.entity.name === 'Prabhpreet Singh Gill'
-                ? [{ value: 'Harry Gill', type: 'alias' }, { value: 'Pay10', type: 'organization' }]
-                : []
+              search_terms: []
             }) }] } }],
             usageMetadata: { promptTokenCount: 400, candidatesTokenCount: 60 }
           });
