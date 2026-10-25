@@ -6,6 +6,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY server.mjs ./
 COPY lib/ ./lib/
+COPY scripts/ ./scripts/
 COPY site/ ./site/
 COPY api-site/ ./api-site/
 COPY admin-site/ ./admin-site/
