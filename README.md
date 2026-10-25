@@ -79,9 +79,9 @@ The adverse-media service can use a dedicated, locally indexed GDELT Global Know
 
 The default schedule is `01:30 UTC` daily. All raw files and index entries remain private. GDELT-derived data must retain attribution to the [GDELT Project](https://www.gdeltproject.org/).
 
-### Planned owned news index
+### Approved publisher search
 
-The implementation handoff for the isolated, compliance-oriented 1,000-publisher news index is in [`docs/owned-news-index-build-handoff.md`](docs/owned-news-index-build-handoff.md). It defines the source registry, crawl and licensing controls, Azure resource boundaries, storage contracts, API integration, rollout gates, tests, and definition of done. It is a build specification only; its presence does not mean those resources or coverage are deployed.
+The owner-approved [publisher catalog](top_50_media_publishers_30_largest_economies_2026.json) contains 1,499 unique domains across 30 economies. When `APPROVED_PUBLISHER_SEARCH_ENABLED=true`, each adverse-media request searches for the subject and aliases through the existing search providers, keeps adverse candidate URLs on approved publisher domains, and retains the separate official-record source. No publisher is crawled or indexed by this feature. See the [current design and cost gate](docs/dynamic-adverse-media-publisher-search.md). The older [owned-index handoff](docs/owned-news-index-build-handoff.md) is superseded and is retained for history.
 
 The API Engine manages these records inside the dedicated Key Vault:
 

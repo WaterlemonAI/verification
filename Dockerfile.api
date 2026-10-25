@@ -6,6 +6,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY server.mjs ./
 COPY lib/ ./lib/
+COPY top_50_media_publishers_30_largest_economies_2026.json ./
 COPY scripts/ ./scripts/
 COPY site/ ./site/
 COPY api-site/ ./api-site/

@@ -1,5 +1,7 @@
 # AI7 Owned News Index — Build Handoff
 
+> **Superseded on 26 October 2026.** The owner changed the requirement to request-time adverse-media URL search using the approved publisher list, with no publisher crawling or article indexing and a USD 0.08 per-screening ceiling. See [the current design](dynamic-adverse-media-publisher-search.md). Do not implement or deploy the collection architecture below.
+
 This document is the implementation brief for a separate agent building a compliance-oriented news index for the AI7 adverse-media API. It is intentionally self-contained. Read the repository `README.md`, this document, and the current source before changing anything.
 
 ## 1. Objective
