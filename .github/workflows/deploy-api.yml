@@ -1,0 +1,107 @@
+name: Deploy AI7 UAE API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - api-site/**
+      - admin-site/**
+      - api/**
+      - lib/**
+      - test/**
+      - server.mjs
+      - package.json
+      - Dockerfile.api
+      - infrastructure/api.bicep
+      - .github/workflows/deploy-api.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ai7uae-api-production
+  cancel-in-progress: false
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+    environment: ai7uae-api
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@v4
+
+      - name: Test API contract and isolation
+        run: npm test
+
+      - name: Sign in to Azure with workload identity
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and publish immutable API image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="ai7uae-api"
+          tag="${GITHUB_SHA}"
+          tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
+          az acr login --name "${{ vars.ACR_NAME }}"
+          docker build --pull --file Dockerfile.api --tag "${tagged_image}" .
+          docker push "${tagged_image}"
+          digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}:${tag}" --query digest --output tsv)"
+          test -n "${digest}"
+          image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          printf '{"repository":"%s","source_sha":"%s","run_id":"%s","run_attempt":"%s","digest":"%s","image":"%s"}\n' \
+            "${repository}" "${GITHUB_SHA}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" "${digest}" "${image}" \
+            > api-deployment-evidence.json
+
+      - name: Validate API Bicep
+        run: az bicep build --file infrastructure/api.bicep
+
+      - name: Preview API infrastructure change
+        run: |
+          az deployment group what-if \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "ai7uae-api-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/api.bicep \
+            --parameters \
+              image="${{ steps.image.outputs.image }}" \
+              environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
+              runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
+              runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
+              acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
+              keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
+              apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}"
+
+      - name: Deploy digest-pinned API revision
+        run: |
+          az deployment group create \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "ai7uae-api-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/api.bicep \
+            --parameters \
+              image="${{ steps.image.outputs.image }}" \
+              environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
+              runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
+              runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
+              acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
+              keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
+              apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
+            --query properties.outputs \
+            --output json > api-deployment-outputs.json
+
+      - name: Retain API deployment evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai7uae-api-deployment-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            api-deployment-evidence.json
+            api-deployment-outputs.json
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071412" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>AI7 API Engine — Administration</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/admin/admin.css?v=2" />
+    <script src="/admin/admin.js?v=2" defer></script>
+  </head>
+  <body>
+    <div class="login" id="login-view">
+      <div class="login-card">
+        <a class="brand" href="https://ai7uae.com"><span>A7</span> AI7 <b>UAE</b></a>
+        <p class="eyebrow">RESTRICTED ADMINISTRATION</p>
+        <h1>API Engine</h1>
+        <p>Configure provider-neutral APIs, secure upstream authentication, and customer access.</p>
+        <form id="login-form">
+          <label>Admin API key<input id="admin-key" type="password" autocomplete="off" placeholder="Enter admin key" required /></label>
+          <button type="submit">Unlock engine <span>→</span></button>
+        </form>
+        <p class="error" id="login-error" aria-live="polite"></p>
+        <small>Your key stays in memory for this browser tab and is never stored.</small>
+      </div>
+    </div>
+
+    <div class="app" id="app-view" hidden>
+      <aside>
+        <a class="brand" href="https://ai7uae.com"><span>A7</span> AI7 <b>UAE</b></a>
+        <p class="nav-label">API ENGINE</p>
+        <nav>
+          <button class="active" data-view="integrations"><i>⌁</i> Integrations</button>
+          <button data-view="clients"><i>◇</i> Customer keys</button>
+        </nav>
+        <div class="secure-note"><i></i><span>Secrets protected<br />by Azure Key Vault</span></div>
+        <button class="sign-out" id="sign-out">Lock console</button>
+      </aside>
+
+      <main>
+        <header>
+          <div><p class="eyebrow">ADMINISTRATION</p><h1 id="page-title">Integrations</h1></div>
+          <span class="environment"><i></i> UAE North</span>
+        </header>
+
+        <section id="integrations-view">
+          <div class="summary">
+            <div><span>Configured APIs</span><strong id="integration-count">0</strong></div>
+            <div><span>Active routes</span><strong id="active-count">0</strong></div>
+            <button id="new-integration">＋ Add API</button>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><p class="eyebrow">ROUTE REGISTRY</p><h2>Configured APIs</h2></div><button class="refresh" data-refresh="integrations">Refresh</button></div>
+            <div class="empty" id="integration-empty">No APIs are configured yet.</div>
+            <div class="route-list" id="integration-list"></div>
+          </div>
+        </section>
+
+        <section id="clients-view" hidden>
+          <div class="summary">
+            <div><span>Customer keys</span><strong id="client-count">0</strong></div>
+            <div><span>Active keys</span><strong id="active-client-count">0</strong></div>
+            <button id="new-client">＋ Issue credential</button>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><p class="eyebrow">ACCESS REGISTRY</p><h2>Customer credentials</h2></div><button class="refresh" data-refresh="clients">Refresh</button></div>
+            <div class="empty" id="client-empty">No customer credentials have been issued.</div>
+            <div class="client-list" id="client-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="integration-dialog">
+      <form id="integration-form">
+        <div class="dialog-head"><div><p class="eyebrow">API CONFIGURATION</p><h2>Add or update an API</h2></div><button type="button" class="close" data-close="integration-dialog">×</button></div>
+        <p class="notice">Supplier details and master keys remain inside the protected engine and are never included in public documentation.</p>
+        <div class="grid two">
+          <label>Integration ID<input name="id" placeholder="company-search" pattern="[a-z0-9][a-z0-9-]+" required /></label>
+          <label>Public display name<input name="name" placeholder="Company Search" required /></label>
+        </div>
+        <div class="grid path-row">
+          <label>Method<select name="method"><option>POST</option><option>GET</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select></label>
+          <label>AI7 public path<input name="publicPath" value="/service/" required /></label>
+        </div>
+        <label>Private upstream URL<input name="upstreamUrl" type="url" placeholder="https://provider.example/api/endpoint" required /></label>
+        <div class="grid three">
+          <label>Upstream authentication<select name="authType"><option value="bearer">Bearer token</option><option value="header">Custom header</option><option value="none">No authentication</option></select></label>
+          <label>Auth header<input name="authHeader" value="authorization" /></label>
+          <label>Value prefix<input name="authPrefix" value="Bearer " /></label>
+        </div>
+        <label>Master authentication key<input name="masterAuthKey" type="password" autocomplete="off" placeholder="Stored write-only in Key Vault" /></label>
+        <div class="grid two">
+          <label>Accepted content types<input name="acceptedContentTypes" value="application/json" placeholder="application/json, multipart/form-data" /></label>
+          <label>Documented status codes<input name="documentedStatuses" value="200,400,401,422,500" /></label>
+        </div>
+        <label class="check"><input name="enabled" type="checkbox" checked /> Enable this public route</label>
+        <p class="error" id="integration-error" aria-live="polite"></p>
+        <div class="actions"><button type="button" class="secondary" data-close="integration-dialog">Cancel</button><button type="submit">Save API securely</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="client-dialog">
+      <form id="client-form">
+        <div class="dialog-head"><div><p class="eyebrow">CUSTOMER ACCESS</p><h2>Issue an API credential</h2></div><button type="button" class="close" data-close="client-dialog">×</button></div>
+        <p class="notice">The plaintext credential is displayed once. Only its SHA-256 hash is retained.</p>
+        <label>Customer or workspace name<input name="name" placeholder="Customer name" required /></label>
+        <p class="error" id="client-error" aria-live="polite"></p>
+        <div class="actions"><button type="button" class="secondary" data-close="client-dialog">Cancel</button><button type="submit">Issue credential</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="credential-dialog" class="credential-dialog">
+      <div class="dialog-head"><div><p class="eyebrow">DISPLAYED ONCE</p><h2>Customer API key</h2></div></div>
+      <p>Copy this key now. It cannot be recovered after this window closes.</p>
+      <div class="credential"><code id="new-credential"></code><button id="copy-credential">Copy</button></div>
+      <div class="actions"><button id="close-credential">I have stored it securely</button></div>
+    </dialog>
+  </body>
+</html>

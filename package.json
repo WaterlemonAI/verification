@@ -1,0 +1,14 @@
+{
+  "name": "ai7uae-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "bootstrap:admin": "node scripts/create-bootstrap-admin.mjs",
+    "start": "node server.mjs",
+    "test": "node --test"
+  }
+}

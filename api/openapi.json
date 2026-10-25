@@ -1,0 +1,148 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AI7 UAE Verification API",
+    "description": "Verify a UAE trade licence issued by any emirate or free zone. Send JSON or multipart/form-data. Responses are JSON.",
+    "version": "1.0.0"
+  },
+  "servers": [{ "url": "https://api.ai7uae.com", "description": "Live" }],
+  "paths": {
+    "/service/uae_tlv": {
+      "post": {
+        "summary": "Verify a UAE trade licence",
+        "description": "Verifies a UAE trade licence issued by any emirate or free zone.",
+        "operationId": "verifyUaeTradeLicence",
+        "security": [{ "ApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "description": "At least one of license_number, licence_number, company_name, or license_document is required.",
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/JsonRequest" } },
+            "multipart/form-data": { "schema": { "$ref": "#/components/schemas/MultipartRequest" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification completed.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Success" } } }
+          },
+          "400": {
+            "description": "The request format or parameters are invalid.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "status": "Error", "error": "A required variable is missing or in the wrong format." } } }
+          },
+          "401": {
+            "description": "The API key is missing or invalid.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "status": "Error", "error": "API key is missing or incorrect." } } }
+          },
+          "422": {
+            "description": "An uploaded document is invalid or could not be recognised.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DocumentError" } } }
+          },
+          "500": {
+            "description": "The request failed.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" }, "example": { "status": "Error", "error": "The service is temporarily unavailable. Please try again shortly." } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Use your AI7 UAE API key as a Bearer token."
+      }
+    },
+    "schemas": {
+      "BaseRequest": {
+        "type": "object",
+        "anyOf": [
+          { "required": ["license_number"] },
+          { "required": ["licence_number"] },
+          { "required": ["company_name"] },
+          { "required": ["license_document"] }
+        ],
+        "properties": {
+          "license_number": { "type": "string", "title": "License number" },
+          "licence_number": { "type": "string", "title": "Licence number", "description": "Alternate spelling for license_number." },
+          "company_name": { "type": "string", "title": "Company name", "description": "Company name in English or Arabic." },
+          "license_document": { "type": "string", "title": "License document" },
+          "emirate": {
+            "type": "string",
+            "title": "Emirate",
+            "enum": ["ajman", "abu_dhabi", "abu_dahbi", "dubai", "fujairah", "fujirah", "umm_al_quwain", "sharjah", "ras_al_khaimah"]
+          },
+          "authorising_body": {
+            "type": "string",
+            "title": "Authorising body",
+            "description": "The authority that issued the trade licence.",
+            "enum": [
+              "abu_dhabi_department_of_economic_development", "abu_dhabi_tourism_authority", "abu_dhabi_industrial_development", "moe_industrial_licensing_department", "khalifa_industrial_zone_abu_dhabi", "kizad", "abu_dhabi_global_market", "abu_dhabi_airports_free_zone", "masdar_city", "dubai_department_of_economy_and_tourism", "dubai_municipality", "dubai_airport_free_zone_authority", "dubai_development_authority", "dubai_healthcare_city", "dubai_international_financial_centre", "difc", "dubai_multi_commodities_centre", "dubai_silicon_oasis", "international_humanitarian_city", "jabel_ali_freezone_authority", "dubai_south", "dubai_world_trade_centre", "dwtc", "meydan", "dubai_internet_city", "dubai_media_city", "dubai_knowledge_park", "ports_customs_and_free_zone_corporation", "trakhees", "dubai_maritime_city_authority", "dubai_science_park", "dubai_industrial_city", "dubai_commercity", "international_free_zone_authority", "ifza", "dubai_auto_zone", "dubai_flower_centre", "dubai_logistics_city", "dubai_outsource_zone", "gold_and_diamond_park", "dubai_cars_and_automotive_zone", "ducamz", "national_industries_park", "dubai_textile_city", "dibba_municipality", "fujairah_municipality", "fujairah_free_zone_authority", "creative_city_free_zone_authority", "ccfz", "fujairah_culture_and_media_authority", "ras_al_khaimah_tourism_development_authority", "ras_al_khaimah_economic_zone", "rakez", "rak_international_corporate_centre", "rakicc", "ras_al_khaimah_department_of_economic_development", "ras_al_khaimah_maritime_city", "umm_al_quwain_department_of_economic_development", "umm_al_quwain_free_trade_zone", "ajman_municipality", "ajman_department_of_economic_development", "ajman_free_zone", "ajman_media_city_free_zone", "sharjah_economic_development_department", "sharjah_airport_international_free_zone_authority", "hamriyah_free_zone_authority", "sharjah_media_city", "sharjah_publishing_free_zone", "sharjah_research_technology_and_innovation_park", "sharjah_oasis_technology_and_innovation_free_zone_authority", "abu_dhabi_media_freezone_twofour54"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "JsonRequest": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseRequest" },
+          { "type": "object", "properties": { "license_document": { "type": "string", "description": "Raw base64 or a data URI; a name parameter may be included in the data URI." } } }
+        ]
+      },
+      "MultipartRequest": {
+        "allOf": [
+          { "$ref": "#/components/schemas/BaseRequest" },
+          { "type": "object", "properties": { "license_document": { "type": "string", "format": "binary" } } }
+        ]
+      },
+      "Success": {
+        "type": "object",
+        "required": ["status", "client_id", "seconds", "trade_licence_verification_api"],
+        "properties": {
+          "status": { "type": "string", "example": "Success" },
+          "client_id": { "type": "string", "format": "uuid", "example": "123e4567-e89b-12d3-a456-426614174000" },
+          "seconds": { "type": "number", "format": "float", "example": 1.234 },
+          "trade_licence_verification_api": {
+            "type": "object",
+            "required": ["uae_licence_number", "expiration_date", "registration_date", "licence_registration_name_arabic", "licence_registration_name", "licence_registration_address", "governing_body_name", "emirate_name", "lcn_renewal_date", "moec_status", "legal_type_from_entity", "unified_licence_number", "activity_start_time", "licence_registration_address_arabic", "license_status", "trade_license_number"],
+            "properties": {
+              "uae_licence_number": { "type": "string" },
+              "expiration_date": { "type": "string" },
+              "registration_date": { "type": "string" },
+              "licence_registration_name_arabic": { "type": "string" },
+              "licence_registration_name": { "type": "string" },
+              "licence_registration_address": { "type": "string" },
+              "governing_body_name": { "type": "string" },
+              "emirate_name": { "type": "string" },
+              "lcn_renewal_date": { "type": "string" },
+              "moec_status": { "type": "string" },
+              "legal_type_from_entity": { "type": "string" },
+              "unified_licence_number": { "type": "string" },
+              "activity_start_time": { "type": "string" },
+              "licence_registration_address_arabic": { "type": "string" },
+              "license_status": { "type": "string" },
+              "trade_license_number": { "type": "number", "format": "float" }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["status", "error"],
+        "properties": { "status": { "type": "string" }, "error": { "type": "string" } }
+      },
+      "DocumentError": {
+        "type": "object",
+        "required": ["status", "error"],
+        "properties": {
+          "status": { "type": "string", "example": "Document identification failed" },
+          "error": {
+            "type": "object",
+            "properties": { "file": { "type": "string" }, "title": { "type": "string" }, "message": { "type": "string" } }
+          }
+        }
+      }
+    }
+  }
+}
