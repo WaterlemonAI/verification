@@ -77,6 +77,10 @@ The adverse-media service can use a dedicated, locally indexed GDELT Global Know
 
 The default schedule is `01:30 UTC` daily. All raw files and index entries remain private. GDELT-derived data must retain attribution to the [GDELT Project](https://www.gdeltproject.org/).
 
+### Planned owned news index
+
+The implementation handoff for the isolated, compliance-oriented 1,000-publisher news index is in [`docs/owned-news-index-build-handoff.md`](docs/owned-news-index-build-handoff.md). It defines the source registry, crawl and licensing controls, Azure resource boundaries, storage contracts, API integration, rollout gates, tests, and definition of done. It is a build specification only; its presence does not mean those resources or coverage are deployed.
+
 The API Engine manages these records inside the dedicated Key Vault:
 
 - `ai7-admin-key-hashes`: comma-separated SHA-256 hashes of authorized admin keys; bootstrapped outside the app.
