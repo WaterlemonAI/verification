@@ -78,7 +78,8 @@
               <div><code>status</code><span>string</span><span>Request result.</span></div>
               <div><code>client_id</code><span>UUID</span><span>Request identifier.</span></div>
               <div><code>seconds</code><span>number</span><span>Processing time.</span></div>
-              <div><code>trade_licence_verification_api</code><span>object</span><span>Complete verification result.</span></div>
+              <div><code>uae_tl_verification</code><span>object</span><span>Current verification result object.</span></div>
+              <div><code>trade_licence_verification_api</code><span>object</span><span>Compatibility result object name.</span></div>
               <div><code>↳ uae_licence_number</code><span>string</span><span>UAE licence number.</span></div>
               <div><code>↳ expiration_date</code><span>string</span><span>Licence expiration date.</span></div>
               <div><code>↳ registration_date</code><span>string</span><span>Licence registration date.</span></div>
@@ -87,6 +88,7 @@
               <div><code>↳ licence_registration_address</code><span>string</span><span>Registration address.</span></div>
               <div><code>↳ governing_body_name</code><span>string</span><span>Issuing authority.</span></div>
               <div><code>↳ emirate_name</code><span>string</span><span>Issuing emirate.</span></div>
+              <div><code>↳ emirate_name_arabic</code><span>string</span><span>Issuing emirate in Arabic, when returned.</span></div>
               <div><code>↳ lcn_renewal_date</code><span>string</span><span>Licence renewal date.</span></div>
               <div><code>↳ moec_status</code><span>string</span><span>Ministry status.</span></div>
               <div><code>↳ legal_type_from_entity</code><span>string</span><span>Registered legal type.</span></div>
@@ -94,7 +96,9 @@
               <div><code>↳ activity_start_time</code><span>string</span><span>Activity start time.</span></div>
               <div><code>↳ licence_registration_address_arabic</code><span>string</span><span>Arabic registration address.</span></div>
               <div><code>↳ license_status</code><span>string</span><span>Current licence status.</span></div>
-              <div><code>↳ trade_license_number</code><span>number</span><span>Trade licence number returned by the service.</span></div>
+              <div><code>↳ trade_license_number</code><span>number/null</span><span>Trade licence number score or value, when returned directly.</span></div>
+              <div><code>↳ risk_scores</code><span>object</span><span>Verification risk-score container.</span></div>
+              <div><code>↳ risk_scores.trade_license_number</code><span>number/null</span><span>Trade licence number risk score.</span></div>
             </div>
             <h3>Status codes</h3>
             <div class="responses">

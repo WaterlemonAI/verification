@@ -19,23 +19,21 @@ const completeSuccess = {
   status: 'Success',
   client_id: '123e4567-e89b-12d3-a456-426614174000',
   seconds: 1.234,
-  trade_licence_verification_api: {
+  uae_tl_verification: {
     uae_licence_number: 'FULL-123',
-    expiration_date: '2027-01-01',
-    registration_date: '2020-01-01',
-    licence_registration_name_arabic: 'شركة تجريبية',
     licence_registration_name: 'Example Trading LLC',
-    licence_registration_address: 'Dubai, UAE',
-    governing_body_name: 'Dubai Department of Economy and Tourism',
+    licence_registration_name_arabic: 'شركة تجريبية',
     emirate_name: 'Dubai',
-    lcn_renewal_date: '2026-01-01',
-    moec_status: 'Active',
+    emirate_name_arabic: 'دبي',
+    governing_body_name: 'Dubai Department of Economy and Tourism',
     legal_type_from_entity: 'Limited Liability Company',
-    unified_licence_number: 'ULN-123',
-    activity_start_time: '2020-01-01',
+    registration_date: '2020-01-01',
+    expiration_date: '2027-01-01',
+    licence_registration_address: 'Dubai, UAE',
     licence_registration_address_arabic: 'دبي، الإمارات العربية المتحدة',
     license_status: 'Active',
-    trade_license_number: 123456
+    moec_status: 'Active',
+    risk_scores: { trade_license_number: null }
   }
 };
 
@@ -186,9 +184,12 @@ test('serves a complete live tester and response-field reference', async () => {
     assert.equal(html.includes(`id="${input}"`), true, `tester omitted ${input}`);
     assert.equal(Object.hasOwn(inputs, name), true, `OpenAPI omitted ${name}`);
   }
-  for (const output of Object.keys(completeSuccess.trade_licence_verification_api)) {
+  const outputs = spec.components.schemas.VerificationResult.properties;
+  for (const output of Object.keys(outputs)) {
     assert.equal(html.includes(output), true, `response reference omitted ${output}`);
   }
+  assert.equal(html.includes('uae_tl_verification'), true);
+  assert.equal(html.includes('trade_licence_verification_api'), true);
 
   const script = await (await fetch(`${appUrl}/api.js`)).text();
   for (const value of inputs.emirate.enum) assert.equal(html.includes(`value="${value}"`), true, `tester omitted emirate ${value}`);
