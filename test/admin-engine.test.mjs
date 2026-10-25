@@ -158,7 +158,7 @@ test('encrypted IBAN adapter privately encrypts, verifies and decrypts without c
   })).json();
   relayRequests = [];
   const requestBody = {
-    source: 'API', transID: 'CLIENT-001', docType: 610, requestCategory: 'STANDARD', country: 'AE',
+    source: 'API', transID: 'CLIENT-001', docType: 610, requestCategory: 'business', country: 'AE',
     firstName: 'FIRST', lastName: 'LAST', completeName: 'FIRST LAST', bankCode: 'BANKCODE',
     bankAccountNumber: '1234567890', bic: 'BICCODE', iban: 'AE000000000000000000000', id: 'ID-1', idType: 'PASSPORT'
   };
@@ -228,6 +228,10 @@ test('IBAN public docs include every input and response field without provider d
     assert.equal(Object.hasOwn(spec.components.schemas.IbanVerificationRequest.properties, field), true, `OpenAPI omitted request field ${field}`);
   }
   for (const field of responseFields) assert.equal(html.includes(field), true, `IBAN page omitted response field ${field}`);
+  assert.equal(spec.components.schemas.IbanVerificationRequest.required.includes('requestCategory'), true);
+  assert.deepEqual(spec.components.schemas.IbanVerificationRequest.properties.requestCategory.enum, ['business']);
+  assert.equal(html.includes('id="request-category" type="text" value="business" required'), true);
+  assert.equal(script.includes("requestCategory: 'business'"), true);
   assert.equal(Object.hasOwn(spec.paths, '/service/iban_verification'), true);
   for (const publicAsset of [html, script, specText]) {
     assert.equal(publicAsset.toLowerCase().includes('truthscreen'), false);
