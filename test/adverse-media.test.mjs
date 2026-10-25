@@ -287,10 +287,14 @@ test('adverse media endpoint returns a customer-safe evidence response', async (
   assert.equal(body.report.retention, 'permanent');
   assert.match(body.report.sha256, /^[0-9a-f]{64}$/);
   assert.match(body.report.download_url, /^https:\/\/api\.ai7uae\.com\/service\/adverse_media\/reports\/[0-9a-f-]{36}\.pdf$/);
-  const reportResponse = await fetch(`${appUrl}${new URL(body.report.download_url).pathname}`, { headers: { authorization: `Bearer ${apiKey}` } });
+  const reportResponse = await fetch(`${appUrl}${new URL(body.report.download_url).pathname}`);
   assert.equal(reportResponse.status, 200);
   assert.equal(reportResponse.headers.get('content-type'), 'application/pdf');
+  assert.equal(reportResponse.headers.get('x-robots-tag'), 'noindex, nofollow, noarchive');
+  assert.equal(reportResponse.headers.get('referrer-policy'), 'no-referrer');
   assert.equal(Buffer.from(await reportResponse.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
+  const missingReport = await fetch(`${appUrl}/service/adverse_media/reports/00000000-0000-4000-8000-000000000000.pdf`);
+  assert.equal(missingReport.status, 404);
   assert.equal(body.methodology, undefined);
   assert.equal(body.usage, undefined);
   assert.equal(body.transliterations, undefined);

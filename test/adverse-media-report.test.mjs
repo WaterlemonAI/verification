@@ -65,10 +65,12 @@ test('PDF includes a complete multi-page audit artifact and stable integrity met
   assert.match(parsed.getSubject(), new RegExp(response.screening_id));
 });
 
-test('permanent report store isolates objects by credential owner', async () => {
+test('permanent report store retains owner isolation and supports public capability lookup', async () => {
   const store = new MemoryAdverseMediaReportStore();
   const metadata = { report_id: 'rpt', transaction_id: 'txn', generated_at: new Date().toISOString(), sha256: 'a'.repeat(64), filename: 'report.pdf', retention: 'permanent' };
   await store.save({ ownerId: 'customer-a', reportId: 'rpt', bytes: Buffer.from('%PDF-test'), metadata });
   assert.equal((await store.get({ ownerId: 'customer-a', reportId: 'rpt' })).metadata.retention, 'permanent');
   assert.equal(await store.get({ ownerId: 'customer-b', reportId: 'rpt' }), null);
+  assert.equal((await store.getPublic({ reportId: 'rpt' })).metadata.filename, 'report.pdf');
+  assert.equal(await store.getPublic({ reportId: 'missing' }), null);
 });
