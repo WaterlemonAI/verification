@@ -11,3 +11,5 @@ The authoritative zone is hosted in Azure DNS. The registrar is GoDaddy.
 5. Verify delegation, mail records, HTTP, TLS, and the deployed revision after propagation.
 
 Do not remove the mail, SPF, DKIM, DMARC, Google verification, CAA, or autodiscover records during the migration.
+
+`infrastructure/dns.bicep` is the source definition for the migrated zone. The initial cutover was performed manually so the registrar delegation and managed-certificate validation could be observed before automation was granted access to shared DNS.

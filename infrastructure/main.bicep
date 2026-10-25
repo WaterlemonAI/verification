@@ -15,6 +15,12 @@ param runtimeIdentityResourceId string
 @description('Azure Container Registry login server.')
 param acrLoginServer string
 
+@description('Resource ID of the managed certificate for ai7uae.com.')
+param apexCertificateId string
+
+@description('Resource ID of the managed certificate for www.ai7uae.com.')
+param wwwCertificateId string
+
 @description('Name of the landing-page Container App.')
 param containerAppName string = 'ca-ai7uae-staging-web'
 
@@ -36,6 +42,18 @@ resource web 'Microsoft.App/containerApps@2024-03-01' = {
         allowInsecure: false
         targetPort: 8080
         transport: 'Auto'
+        customDomains: [
+          {
+            name: 'ai7uae.com'
+            bindingType: 'SniEnabled'
+            certificateId: apexCertificateId
+          }
+          {
+            name: 'www.ai7uae.com'
+            bindingType: 'SniEnabled'
+            certificateId: wwwCertificateId
+          }
+        ]
         traffic: [
           {
             latestRevision: true
