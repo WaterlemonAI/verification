@@ -25,9 +25,10 @@ The provider-neutral API portal and wrapper are served from `api.ai7uae.com`. Cu
 POST /service/uae_tlv
 POST /service/iban_verification
 POST /service/entity_search
+POST /service/adverse_media
 ```
 
-The services authenticate each AI7 customer with one Bearer API key and relay the upstream JSON body and HTTP status without exposing upstream hostnames, credentials, or identifying headers. The portal includes copyable cURL, JavaScript, and Python examples, an OpenAPI document, and live JSON response consoles. The comprehensive entity-search page also exposes a searchable response-field reference generated from every path in its official schema and response variants.
+The services authenticate each AI7 customer with one Bearer API key. Provider-backed wrappers relay their upstream JSON body and HTTP status without exposing upstream hostnames, credentials, or identifying headers. The native adverse-media service searches global news and open-web indexes in up to five languages, deduplicates evidence, classifies adverse-event categories and legal stage, and enforces a 12-query/$0.12 internal cost guardrail. The portal includes copyable cURL, JavaScript, and Python examples, an OpenAPI document, and live JSON response consoles. The comprehensive entity-search page also exposes a searchable response-field reference generated from every path in its official schema and response variants.
 
 Client keys are stored only as SHA-256 hashes. Upstream configuration and hashes are loaded from Azure Key Vault through the API app's dedicated managed identity. No provider secrets are committed to this repository or sent to the browser.
 
@@ -71,5 +72,7 @@ The API Engine manages these records inside the dedicated Key Vault:
 - `api-engine-integrations`: the private integration registry.
 - `client-<id>`: one customer record per key, containing only the hash plus non-secret lifecycle tags.
 - `integration-<id>-master-key`: one write-only upstream master key per integration.
+
+`adverse-media` is a runtime-managed integration. Its private search credential is stored as `integration-adverse-media-master-key` and can be set or rotated from the same protected administration console.
 
 Do not commit or place plaintext credentials in GitHub variables. Bootstrap the admin hash in the dedicated API vault, then manage integrations and customer credentials through the protected console.
