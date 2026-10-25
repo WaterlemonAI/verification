@@ -441,6 +441,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch } = {
       if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
         return json(res, 200, {
           supported_languages: adverseMediaConfig.supportedLanguages,
+          regions: adverseMediaConfig.regions,
           maximum_languages: adverseMediaConfig.maxLanguages,
           maximum_paid_queries: adverseMediaConfig.maxPaidQueries,
           maximum_ai_candidates: adverseMediaConfig.maxAiCandidates,
