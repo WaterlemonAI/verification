@@ -191,6 +191,13 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
       return await encryptedJsonRelay(res, integration, store, fetchImpl, body);
     }
 
+    if (integration.id === 'entity-search' && contentType.startsWith('application/json')) {
+      const parsedBody = parseJsonText(body.toString('utf8'));
+      if (parsedBody && typeof parsedBody === 'object' && !Array.isArray(parsedBody)) {
+        body = Buffer.from(JSON.stringify({ country: '', gender: '', dob: '', ...parsedBody }));
+      }
+    }
+
     const target = new URL(integration.upstreamUrl);
     target.search = url.search;
     const headers = forwardHeaders(req);
