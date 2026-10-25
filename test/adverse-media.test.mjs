@@ -179,6 +179,9 @@ test('adverse media endpoint authenticates, searches, deduplicates, classifies, 
   assert.ok(body.results[0].categories.includes('financial_crime'));
   assert.equal(body.results[0].url, 'https://publisher.example/news/john-example');
   assert.equal(body.results[0].review_required, true);
+  assert.equal(body.summary.risk_threshold, 0.65);
+  assert.equal(body.summary.results_at_or_above_threshold, 1);
+  assert.equal(body.summary.threshold_status, 'review_required');
   assert.equal(body.results[0].ai_classification.adverse, 'confirmed');
   assert.deepEqual(Object.keys(body.results[0].ai_classification).sort(), ['adverse', 'categories', 'confidence', 'entity_match', 'legal_stage', 'summary']);
   assert.equal(body.methodology.ai_classification.status, 'completed');
@@ -198,7 +201,7 @@ test('identical checks reuse cached evidence without paid search calls', async (
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       entity_type: 'individual', name: 'John Example', aliases: ['J Example'], countries: ['AE'],
-      languages: ['en'], date_from: '2025-01-01', max_results: 25
+      languages: ['en'], date_from: '2025-01-01', risk_threshold: 1, max_results: 25
     })
   });
   const body = await response.json();
@@ -207,6 +210,11 @@ test('identical checks reuse cached evidence without paid search calls', async (
   assert.equal(body.usage.paid_search_queries, 0);
   assert.equal(body.usage.free_search_queries, 0);
   assert.equal(body.usage.estimated_ai_cost_usd, 0);
+  assert.equal(body.summary.risk_threshold, 1);
+  assert.equal(body.summary.results_at_or_above_threshold, 0);
+  assert.equal(body.summary.human_review_required, false);
+  assert.equal(body.summary.threshold_status, 'within_acceptable_threshold');
+  assert.equal(body.results[0].review_required, false);
   assert.equal(requests.length, beforeCount);
 });
 
@@ -342,12 +350,21 @@ test('adverse media endpoint validates credentials and input', async () => {
   });
   assert.equal(invalid.status, 400);
   assert.match((await invalid.json()).error, /entity_type|name|languages/);
+
+  const invalidThreshold = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: 'Example LLC', risk_threshold: 1.1 })
+  });
+  assert.equal(invalidThreshold.status, 400);
+  assert.match((await invalidThreshold.json()).error, /risk_threshold/);
 });
 
 test('public documentation exposes the complete route without provider or key details', async () => {
   const config = await (await fetch(`${appUrl}/service/adverse_media/config`)).json();
   assert.equal(config.maximum_ai_candidates, 15);
   assert.equal(config.cost_guardrail_usd, 0.15);
+  assert.equal(config.default_risk_threshold, 0.65);
   assert.deepEqual(config.regions.gulf.countries, ['AE', 'SA', 'QA', 'KW', 'BH', 'OM']);
   assert.deepEqual(config.regions.anz.countries, ['AU', 'NZ']);
   const html = await (await fetch(`${appUrl}/adverse-media`)).text();
@@ -355,7 +372,7 @@ test('public documentation exposes the complete route without provider or key de
   const specText = await (await fetch(`${appUrl}/openapi.json`)).text();
   const spec = JSON.parse(specText);
   assert.ok(Object.hasOwn(spec.paths, '/service/adverse_media'));
-  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'max_results']) {
+  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'risk_threshold', 'max_results']) {
     assert.ok(Object.hasOwn(spec.components.schemas.AdverseMediaRequest.properties, field));
     assert.ok(html.includes(field));
   }

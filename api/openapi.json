@@ -2605,6 +2605,7 @@
           },
           "date_from": { "type": "string", "format": "date" },
           "date_to": { "type": "string", "format": "date" },
+          "risk_threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.65, "description": "Results at or above this score are flagged for review; all results remain in the response." },
           "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 }
         },
         "additionalProperties": false
@@ -2639,7 +2640,7 @@
               }
             }
           },
-          "review_required": { "type": "boolean", "const": true },
+          "review_required": { "type": "boolean", "description": "True when risk_score meets or exceeds the request risk_threshold." },
           "ai_classification": {
             "type": "object",
             "description": "Present when bounded AI review completed for this candidate.",

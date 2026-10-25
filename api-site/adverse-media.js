@@ -10,6 +10,7 @@ const samples = {
     "countries": ["AE"],
     "languages": ["en", "ar"],
     "date_from": "2023-01-01",
+    "risk_threshold": 0.65,
     "max_results": 25
   }'`,
   javascript: `const response = await fetch(
@@ -27,6 +28,7 @@ const samples = {
       countries: ['AE'],
       languages: ['en', 'ar'],
       date_from: '2023-01-01',
+      risk_threshold: 0.65,
       max_results: 25
     })
   }
@@ -45,6 +47,7 @@ response = requests.post(
         "countries": ["AE"],
         "languages": ["en", "ar"],
         "date_from": "2023-01-01",
+        "risk_threshold": 0.65,
         "max_results": 25,
     },
 )
@@ -132,6 +135,8 @@ function requestBody() {
   if (countries.length > 20) throw new Error('Select no more than 20 countries.');
   const maxResults = Number(byId('max-results').value);
   if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 50) throw new Error('Maximum results must be from 1 to 50.');
+  const thresholdPercent = Number(byId('risk-threshold').value);
+  if (!Number.isFinite(thresholdPercent) || thresholdPercent < 0 || thresholdPercent > 100) throw new Error('Review threshold must be from 0% to 100%.');
 
   const body = {
     entity_type: byId('entity-type').value,
@@ -141,6 +146,7 @@ function requestBody() {
     languages,
     date_from: byId('date-from').value,
     date_to: byId('date-to').value,
+    risk_threshold: thresholdPercent / 100,
     max_results: maxResults
   };
   return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== '' && (!Array.isArray(value) || value.length)));
