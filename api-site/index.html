@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071412" />
+    <meta name="description" content="AI7 UAE API documentation and live testing console." />
+    <title>AI7 UAE API — UAE Trade Licence Verification</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/api.css" />
+    <script src="/api.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#docs">Skip to documentation</a>
+    <header>
+      <a class="brand" href="https://ai7uae.com" aria-label="AI7 UAE home"><span>A7</span> AI7 <b>UAE</b></a>
+      <nav><a href="#docs">Documentation</a><a href="#tester">API tester</a><a href="/openapi.json">OpenAPI</a></nav>
+      <span class="status"><i></i> API available</span>
+    </header>
+
+    <main id="docs">
+      <section class="hero">
+        <p class="eyebrow">VERIFICATION API / UAE</p>
+        <h1>UAE Trade Licence<br /><em>All Emirates.</em></h1>
+        <p>Verify a UAE trade licence by licence number, company name, or document through one consistent AI7 UAE endpoint.</p>
+        <div class="meta"><span>POST</span><code>/service/uae_tlv</code><button class="copy" data-copy="https://api.ai7uae.com/service/uae_tlv">Copy endpoint</button></div>
+      </section>
+
+      <section class="layout">
+        <aside aria-label="On this page">
+          <p>ON THIS PAGE</p>
+          <a href="#authentication">Authentication</a>
+          <a href="#request">Request</a>
+          <a href="#responses">Responses</a>
+          <a href="#tester">Live tester</a>
+        </aside>
+
+        <div class="content">
+          <article id="authentication">
+            <p class="label">AUTHENTICATION</p>
+            <h2>One credential across every AI7 API</h2>
+            <p>Send your personal AI7 API key as an HTTP Bearer token. Keep it server-side and never place it in browser code or a public repository.</p>
+            <div class="code-block"><code>Authorization: Bearer YOUR_AI7_API_KEY</code><button class="copy" data-copy="Authorization: Bearer YOUR_AI7_API_KEY">Copy</button></div>
+          </article>
+
+          <article id="request">
+            <p class="label">REQUEST</p>
+            <h2>Submit a licence lookup</h2>
+            <p>Use <code>application/json</code> or <code>multipart/form-data</code>. Provide at least one primary lookup field.</p>
+            <div class="field-grid">
+              <div><strong>license_number</strong><span>string · optional*</span><p>Trade licence number.</p></div>
+              <div><strong>licence_number</strong><span>string · optional*</span><p>Alternate spelling of license number.</p></div>
+              <div><strong>company_name</strong><span>string · optional*</span><p>Company name in English or Arabic.</p></div>
+              <div><strong>license_document</strong><span>file/base64 · optional*</span><p>Licence document as a file, base64, or data URI.</p></div>
+              <div><strong>emirate</strong><span>enum · optional</span><p>Issuing emirate, such as <code>dubai</code>.</p></div>
+              <div><strong>authorising_body</strong><span>enum · optional</span><p>Authority that issued the licence.</p></div>
+            </div>
+            <p class="footnote">* At least one of the four primary lookup fields is required.</p>
+            <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
+            <div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div>
+          </article>
+
+          <article id="responses">
+            <p class="label">RESPONSES</p>
+            <h2>Status codes</h2>
+            <div class="responses">
+              <div><b class="ok">200</b><span>Verification completed</span></div>
+              <div><b>400</b><span>Invalid request format or parameters</span></div>
+              <div><b>401</b><span>Missing or invalid AI7 API key</span></div>
+              <div><b>422</b><span>Document invalid or not recognised</span></div>
+              <div><b>500</b><span>Service request failed</span></div>
+            </div>
+          </article>
+
+          <article id="tester" class="tester">
+            <p class="label">LIVE TESTER</p>
+            <h2>Run a request</h2>
+            <p>Your credential and request are sent only to <code>api.ai7uae.com</code>. The credential is kept in memory for this page and is not stored.</p>
+            <form id="api-form">
+              <label>AI7 API key<input id="api-key" type="password" autocomplete="off" placeholder="Paste your API key" required /></label>
+              <label>Licence number<input id="license-number" type="text" placeholder="e.g. 123456" required /></label>
+              <div class="form-row">
+                <label>Emirate<select id="emirate"><option value="">Any emirate</option><option value="abu_dhabi">Abu Dhabi</option><option value="ajman">Ajman</option><option value="dubai">Dubai</option><option value="fujairah">Fujairah</option><option value="ras_al_khaimah">Ras Al Khaimah</option><option value="sharjah">Sharjah</option><option value="umm_al_quwain">Umm Al Quwain</option></select></label>
+                <button type="submit" id="send-request">Send request <span>→</span></button>
+              </div>
+            </form>
+            <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
+            <pre id="response-json" aria-live="polite">{
+  "message": "Your JSON response will appear here."
+}</pre>
+          </article>
+        </div>
+      </section>
+    </main>
+    <footer><span>AI7 UAE Verification API</span><a href="https://ai7uae.com">ai7uae.com</a></footer>
+  </body>
+</html>

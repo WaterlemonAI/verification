@@ -3,6 +3,12 @@ name: Deploy AI7 UAE landing page
 on:
   push:
     branches: [main]
+    paths:
+      - site/**
+      - Dockerfile
+      - nginx.conf
+      - infrastructure/main.bicep
+      - .github/workflows/deploy-staging.yml
   workflow_dispatch:
 
 permissions:
