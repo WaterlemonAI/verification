@@ -41,4 +41,24 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
 
   await store.revokeClient(issued.client.id);
   assert.equal(await store.isClientKey(issued.apiKey), false);
+
+  const integration = {
+    id: 'uae-trade-licence',
+    name: 'UAE Trade Licence (All Emirates)',
+    publicPath: '/service/uae_tlv',
+    method: 'POST',
+    upstreamUrl: 'https://provider.test/service/uae_tlv',
+    authType: 'bearer',
+    authHeader: 'authorization',
+    authPrefix: 'Bearer ',
+    acceptedContentTypes: ['application/json'],
+    documentedStatuses: [200, 401],
+    enabled: true
+  };
+  await store.upsertIntegration(integration, '');
+  assert.equal((await store.listIntegrations())[0].masterAuthKeyConfigured, false);
+
+  await store.upsertIntegration(integration, 'upstream-master-key');
+  assert.equal((await store.listIntegrations())[0].masterAuthKeyConfigured, true);
+  assert.equal(secrets.get('integration-uae-trade-licence-master-key').value, 'upstream-master-key');
 });
