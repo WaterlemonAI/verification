@@ -108,9 +108,11 @@ export function entityRows(tsv) {
       ['organization', uniqueNames(fields[13])]
     ];
     for (const [kind, names] of groups) {
+      const normalizedInDocument = new Set();
       for (const matchedName of names) {
         const normalized = normalizeEntityName(matchedName);
-        if (normalized.length < 2) continue;
+        if (normalized.length < 2 || normalizedInDocument.has(normalized)) continue;
+        normalizedInDocument.add(normalized);
         const entityHash = sha256(normalized);
         const partitionKey = `${kind[0]}-${entityHash.slice(0, 1)}`;
         const rowKey = `${entityHash}_${recordId}`;
