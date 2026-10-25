@@ -8,6 +8,7 @@ on:
       - admin-site/**
       - api/**
       - lib/**
+      - scripts/**
       - test/**
       - server.mjs
       - package.json

@@ -66,6 +66,17 @@ API-specific Azure definitions are intentionally separate from the existing land
 - `infrastructure/api-dns.bicep` adds only the `api` and `asuid.api` records to the existing AI7 UAE DNS zone.
 - `.github/workflows/deploy-api.yml` builds and deploys a digest-pinned API image through the protected `ai7uae-api` GitHub environment.
 
+### Local GDELT archive
+
+The adverse-media service can use a dedicated, locally indexed GDELT Global Knowledge Graph archive instead of depending entirely on the shared hosted search API. The archive is isolated inside the AI7 UAE resource group:
+
+- `infrastructure/api-gdelt-platform.bicep` creates a dedicated storage account, private raw-data container, entity-index table, ingestion identity, and least-privilege data-plane assignments.
+- `infrastructure/api-gdelt-job.bicep` creates a single-replica scheduled Container Apps job.
+- `scripts/gdelt-ingest.mjs` performs a bounded 72-hour initial backfill, then retrieves a 36-hour overlap on each daily run, archives original compressed files, indexes person and organization mentions, and advances a durable watermark only after successful processing.
+- The API reads the local index with its existing managed identity. A local snapshot is treated as complete only when its retained coverage contains the requested date range and the watermark is no more than 48 hours old; otherwise the hosted archive remains a controlled fallback and the response is marked partial if that fallback fails.
+
+The default schedule is `01:30 UTC` daily. All raw files and index entries remain private. GDELT-derived data must retain attribution to the [GDELT Project](https://www.gdeltproject.org/).
+
 The API Engine manages these records inside the dedicated Key Vault:
 
 - `ai7-admin-key-hashes`: comma-separated SHA-256 hashes of authorized admin keys; bootstrapped outside the app.

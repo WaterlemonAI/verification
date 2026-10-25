@@ -12,7 +12,10 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@azure/data-tables": "^13.3.2",
+    "@azure/storage-blob": "^12.34.0",
     "@azure/storage-queue": "^12.32.0",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "unzipper": "^0.12.5"
   }
 }

@@ -30,6 +30,9 @@ param containerAppName string = 'ca-ai7uae-api'
 @description('Dedicated storage account for durable adverse-media deep-research jobs.')
 param deepResearchStorageName string = 'stai7uaejobsuaen001'
 
+@description('Dedicated storage account for the local GDELT archive and entity index.')
+param gdeltStorageName string = 'stai7uaegdeltuaen001'
+
 var deepResearchQueueName = 'adverse-media-deep-research'
 
 var customDomains = empty(apiCertificateId) ? [] : [
@@ -83,6 +86,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
             { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
+            { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
+            { name: 'GDELT_INDEX_TABLE', value: 'GdeltEntityMentions' }
           ]
           resources: {
             cpu: json('0.25')
