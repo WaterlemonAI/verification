@@ -81,13 +81,13 @@ before(async () => {
         if (mismatchCheck) result = {
           ...indexedResult,
           title: query.includes('"founder"')
-            ? 'Prabhpreet Singh Gill, also known as Harry Gill, leads Pay10'
+            ? 'About Us - Pay10 Global'
             : 'Prabhpreet Singh Gill named in fraud investigation',
           url: query.includes('"founder"')
             ? 'https://publisher.example/profile/prabhpreet-singh-gill'
             : 'https://publisher.example/news/prabhpreet-singh-gill',
           description: query.includes('"founder"')
-            ? 'Prabhpreet Singh Gill, also known as Harry Gill, is the founder and chairman of Pay10.'
+            ? 'Leadership includes Prabhpreet Singh Gill (Harry Gill).'
             : 'Authorities investigated Prabhpreet Singh Gill over alleged fraud.'
         };
         if (associationCheck) result = {
@@ -437,7 +437,10 @@ test('does not suppress exact-name adverse evidence using a zero-confidence AI n
     const query = url.searchParams.get('q');
     return query.includes('Prabhpreet Singh Gill') && query.includes('"founder"') && query.includes('"also known as"');
   }));
-  assert.ok(paidCalls.some(({ url }) => url.searchParams.get('q').includes('Pay10')));
+  assert.ok(paidCalls.some(({ url }) => {
+    const query = url.searchParams.get('q');
+    return query.includes('Pay10 Global') && query.includes('Harry Gill');
+  }));
 });
 
 test('rejects one-token individual-name noise before AI classification', async () => {
