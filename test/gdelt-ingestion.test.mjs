@@ -14,7 +14,7 @@ test('GDELT GKG rows become deterministic person and organization index entities
   fields[3] = 'example.test';
   fields[4] = 'https://example.test/article';
   fields[8] = 'CRIME_FRAUD,10;EPU_CATS_CORRUPTION,20';
-  fields[11] = 'Jane Doe;Jane Doe';
+  fields[11] = 'Jane Doe;jane doe;JANE DOE';
   fields[13] = 'Example Holdings';
   fields[25] = 'srclc:ara;eng:1';
   fields[26] = '<PAGE_TITLE>Jane Doe &amp; Example Holdings</PAGE_TITLE>';
