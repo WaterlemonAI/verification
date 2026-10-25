@@ -67,6 +67,12 @@ test('admin can register a provider-neutral API without exposing its upstream de
   assert.equal(body.integrations[0].upstreamUrl, undefined);
   assert.equal(JSON.stringify(body).includes('supplier.test'), false);
   assert.equal(JSON.stringify(body).includes('master-secret'), false);
+
+  const catalog = await (await fetch(`${appUrl}/catalog.json`)).text();
+  assert.equal(catalog.includes('supplier.test'), false);
+  assert.equal(catalog.includes('master-secret'), false);
+  assert.equal(catalog.includes('x-master-key'), false);
+  assert.equal(catalog.includes('/service/company_search'), true);
 });
 
 test('issued customer key works across the configured engine and can be revoked', async () => {
