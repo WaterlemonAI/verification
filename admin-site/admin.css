@@ -49,7 +49,7 @@ main header h1 { margin:.35rem 0 0; font-size:2.6rem; letter-spacing:-.055em; }
 .refresh { border:1px solid var(--line); padding:.55rem .8rem; color:var(--muted); background:transparent; font: .68rem "DM Mono",monospace; }
 .empty { padding:4rem 2rem; color:#8a9893; text-align:center; }
 .route,.client { display:grid; align-items:center; gap:1rem; padding:1.2rem 1.5rem; border-bottom:1px solid var(--line); }
-.route { grid-template-columns:100px minmax(180px,1fr) minmax(180px,1fr) 100px; }
+.route { grid-template-columns:90px minmax(170px,1fr) minmax(170px,1fr) 85px auto; }
 .client { grid-template-columns:minmax(180px,1fr) 120px 150px auto; }
 .route:last-child,.client:last-child { border:0; }
 .method { width:fit-content; padding:.3rem .5rem; color:var(--green); background:#eaf5ef; font: .66rem "DM Mono",monospace; }
@@ -59,6 +59,8 @@ main header h1 { margin:.35rem 0 0; font-size:2.6rem; letter-spacing:-.055em; }
 .pill { width:fit-content; padding:.25rem .55rem; border-radius:99px; color:var(--green); background:#ebf5ef; font-size:.67rem; }
 .pill.off { color:#8c5c4e; background:#f5ebe8; }
 .revoke { border:1px solid #ecc9be; padding:.5rem .7rem; color:var(--danger); background:#fff; }
+.set-credential { border:1px solid #bcd0c7; padding:.55rem .7rem; color:var(--green); background:#fff; white-space:nowrap; }
+.field-help { color:var(--muted); font-size:.72rem; line-height:1.5; }
 dialog { width:min(760px,calc(100% - 2rem)); max-height:90vh; padding:0; border:0; color:var(--ink); background:#fff; box-shadow:0 30px 90px #0006; }
 dialog::backdrop { background:#071412c9; backdrop-filter:blur(4px); }
 dialog form,dialog.credential-dialog { padding:2rem; }

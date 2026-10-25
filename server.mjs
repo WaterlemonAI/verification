@@ -74,6 +74,7 @@ function validateIntegration(body) {
   const authType = String(body.authType || 'bearer');
   const authHeader = String(body.authHeader || 'authorization').trim().toLowerCase();
   const authPrefix = String(body.authPrefix ?? (authType === 'bearer' ? 'Bearer ' : ''));
+  const adapter = String(body.adapter || 'passthrough');
   const acceptedContentTypes = Array.isArray(body.acceptedContentTypes) ? body.acceptedContentTypes.map(String).filter(Boolean) : [];
   const documentedStatuses = Array.isArray(body.documentedStatuses) ? body.documentedStatuses.map(Number).filter((value) => Number.isInteger(value) && value >= 100 && value <= 599) : [];
 
@@ -86,8 +87,12 @@ function validateIntegration(body) {
   if (parsedUpstream.protocol !== 'https:' && process.env.NODE_ENV !== 'test') throw new Error('Upstream URL must use HTTPS.');
   if (!['bearer', 'header', 'none'].includes(authType)) throw new Error('Authentication type is invalid.');
   if (authType !== 'none' && !/^[a-z0-9-]{2,64}$/.test(authHeader)) throw new Error('Authentication header is invalid.');
+  if (!['passthrough', 'encrypted-json-relay'].includes(adapter)) throw new Error('Protocol adapter is invalid.');
+  if (adapter === 'encrypted-json-relay' && (method !== 'POST' || !acceptedContentTypes.includes('application/json'))) {
+    throw new Error('Encrypted JSON relay integrations must accept JSON over POST.');
+  }
 
-  return { id, name, publicPath, method, upstreamUrl, authType, authHeader, authPrefix, acceptedContentTypes, documentedStatuses, enabled: body.enabled !== false };
+  return { id, name, publicPath, method, upstreamUrl, authType, authHeader, authPrefix, adapter, acceptedContentTypes, documentedStatuses, enabled: body.enabled !== false };
 }
 
 function forwardHeaders(req) {
@@ -97,6 +102,66 @@ function forwardHeaders(req) {
   }
   if (!headers.accept) headers.accept = 'application/json';
   return headers;
+}
+
+function providerUnavailable(res) {
+  return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });
+}
+
+function responseBytes(res, status, body, contentType = 'application/json; charset=utf-8') {
+  const payload = Buffer.isBuffer(body) ? body : Buffer.from(body);
+  res.writeHead(status, { 'content-type': contentType, 'content-length': payload.length, 'cache-control': 'no-store' });
+  res.end(payload);
+}
+
+function parseJsonText(text) {
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+function encryptedValue(text, field) {
+  const parsed = parseJsonText(text);
+  if (typeof parsed === 'string' && parsed) return parsed;
+  if (parsed && typeof parsed[field] === 'string' && parsed[field]) return parsed[field];
+  const trimmed = text.trim();
+  return trimmed && parsed === null ? trimmed : '';
+}
+
+async function encryptedJsonRelay(res, integration, store, fetchImpl, body) {
+  const credential = await store.getMasterKey(integration.id);
+  if (!credential) return providerUnavailable(res);
+
+  const headers = {
+    accept: 'application/json',
+    'content-type': 'application/json',
+    [integration.authHeader]: `${integration.authPrefix || ''}${credential}`
+  };
+  const timeout = Number(process.env.UPSTREAM_TIMEOUT_MS || 120000);
+  const verificationUrl = new URL(integration.upstreamUrl);
+  const encryptUrl = new URL('/v1/apicall/encrypt', verificationUrl.origin);
+  const decryptUrl = new URL('/v1/apicall/decrypt', verificationUrl.origin);
+
+  const encryptResponse = await fetchImpl(encryptUrl, {
+    method: 'POST', headers, body, signal: AbortSignal.timeout(timeout)
+  });
+  if (!encryptResponse.ok) return providerUnavailable(res);
+  const encryptedRequest = encryptedValue(await encryptResponse.text(), 'requestData');
+  if (!encryptedRequest) return providerUnavailable(res);
+
+  const verificationResponse = await fetchImpl(verificationUrl, {
+    method: 'POST', headers, body: JSON.stringify({ requestData: encryptedRequest }), signal: AbortSignal.timeout(timeout)
+  });
+  const verificationText = await verificationResponse.text();
+  const encryptedResponse = encryptedValue(verificationText, 'responseData');
+  if (!encryptedResponse) {
+    return responseBytes(res, verificationResponse.status, verificationText, verificationResponse.headers.get('content-type') || 'application/json; charset=utf-8');
+  }
+
+  const decryptResponse = await fetchImpl(decryptUrl, {
+    method: 'POST', headers, body: JSON.stringify({ responseData: encryptedResponse }), signal: AbortSignal.timeout(timeout)
+  });
+  if (!decryptResponse.ok) return providerUnavailable(res);
+  const decryptedBody = Buffer.from(await decryptResponse.arrayBuffer());
+  return responseBytes(res, verificationResponse.status, decryptedBody, decryptResponse.headers.get('content-type') || 'application/json; charset=utf-8');
 }
 
 async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
@@ -118,12 +183,18 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
   }
 
   try {
+    if (integration.adapter === 'encrypted-json-relay') {
+      if (!contentType.startsWith('application/json')) return json(res, 400, { status: 'Error', error: 'Content-Type must be application/json.' });
+      if (!parseJsonText(body.toString('utf8'))) return json(res, 400, { status: 'Error', error: 'The request body must contain valid JSON.' });
+      return await encryptedJsonRelay(res, integration, store, fetchImpl, body);
+    }
+
     const target = new URL(integration.upstreamUrl);
     target.search = url.search;
     const headers = forwardHeaders(req);
     if (integration.authType !== 'none') {
       const masterKey = await store.getMasterKey(integration.id);
-      if (!masterKey) return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });
+      if (!masterKey) return providerUnavailable(res);
       headers[integration.authHeader] = `${integration.authPrefix || ''}${masterKey}`;
     }
     const upstream = await fetchImpl(target, {
@@ -140,7 +211,7 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
     });
     res.end(responseBody);
   } catch {
-    json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });
+    providerUnavailable(res);
   }
 }
 
@@ -166,6 +237,19 @@ async function handleAdminApi(req, res, url, store) {
       return json(res, 200, { integration: saved });
     } catch (error) {
       return json(res, error.statusCode || 400, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : error.message });
+    }
+  }
+
+  if (req.method === 'PUT' && /^\/admin\/api\/integrations\/[a-z0-9-]+\/credential$/.test(url.pathname)) {
+    try {
+      const body = await readJson(req);
+      const integrationId = url.pathname.split('/')[4];
+      const credential = String(body.credential || '');
+      if (!credential) return json(res, 400, { status: 'Error', error: 'A private credential is required.' });
+      const saved = await store.setMasterKey(integrationId, credential);
+      return saved ? json(res, 200, { integration: saved }) : json(res, 404, { status: 'Error', error: 'Integration was not found.' });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : 'The private credential could not be saved.' });
     }
   }
 
@@ -235,6 +319,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch } = {
       if (url.pathname.startsWith('/service/')) return json(res, 404, { status: 'Error', error: 'Service was not found.' });
 
       const directory = apiHosts.has(host) || url.pathname.startsWith('/docs') ? join(root, 'api-site') : join(root, 'site');
+      if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
       return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
     } catch {
       return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });

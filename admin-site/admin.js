@@ -29,7 +29,7 @@ async function loadIntegrations() {
   data.integrations.forEach((item) => {
     const row = document.createElement('div');
     row.className = 'route';
-    row.innerHTML = `<span class="method"></span><div><strong></strong><small></small></div><code></code><span class="pill"></span>`;
+    row.innerHTML = `<span class="method"></span><div><strong></strong><small></small></div><code></code><span class="pill"></span><button class="set-credential"></button>`;
     row.querySelector('.method').textContent = item.method;
     row.querySelector('strong').textContent = item.name;
     row.querySelector('small').textContent = item.id;
@@ -37,6 +37,22 @@ async function loadIntegrations() {
     const pill = row.querySelector('.pill');
     pill.textContent = item.enabled ? 'Active' : 'Disabled';
     pill.classList.toggle('off', !item.enabled);
+    const credentialButton = row.querySelector('.set-credential');
+    credentialButton.textContent = item.masterAuthKeyConfigured ? 'Replace credential' : 'Set credential';
+    credentialButton.addEventListener('click', () => {
+      const form = byId('supplier-credential-form');
+      form.reset();
+      form.elements.id.value = item.id;
+      byId('supplier-credential-name').textContent = item.name;
+      byId('supplier-credential-error').textContent = '';
+      const isIban = item.id === 'iban-verification';
+      byId('supplier-credential-label').firstChild.textContent = isIban ? 'Supplier username' : 'Supplier credential';
+      form.elements.credential.placeholder = isIban ? 'Enter the supplier username' : 'Enter the private credential';
+      byId('supplier-credential-help').textContent = isIban
+        ? 'The supplied IBAN collection authenticates each internal request with this username header; it does not transmit a password.'
+        : 'The existing value cannot be viewed and will be replaced only after you save.';
+      byId('supplier-credential-dialog').showModal();
+    });
     list.append(row);
   });
 }
@@ -105,12 +121,28 @@ byId('integration-form').addEventListener('submit', async (event) => {
     form.elements.publicPath.value = '/service/';
     form.elements.authHeader.value = 'authorization';
     form.elements.authPrefix.value = 'Bearer ';
+    form.elements.adapter.value = 'passthrough';
     form.elements.acceptedContentTypes.value = 'application/json';
     form.elements.documentedStatuses.value = '200,400,401,422,500';
     form.elements.enabled.checked = true;
     byId('integration-dialog').close();
     await loadIntegrations();
   } catch (error) { byId('integration-error').textContent = error.message; }
+});
+
+byId('supplier-credential-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const id = form.elements.id.value;
+  byId('supplier-credential-error').textContent = '';
+  try {
+    await request(`/admin/api/integrations/${id}/credential`, {
+      method: 'PUT', body: JSON.stringify({ credential: form.elements.credential.value })
+    });
+    form.reset();
+    byId('supplier-credential-dialog').close();
+    await loadIntegrations();
+  } catch (error) { byId('supplier-credential-error').textContent = error.message; }
 });
 
 byId('client-form').addEventListener('submit', async (event) => {

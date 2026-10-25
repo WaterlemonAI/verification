@@ -61,4 +61,22 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
   await store.upsertIntegration(integration, 'upstream-master-key');
   assert.equal((await store.listIntegrations())[0].masterAuthKeyConfigured, true);
   assert.equal(secrets.get('integration-uae-trade-licence-master-key').value, 'upstream-master-key');
+
+  const ibanIntegration = {
+    ...integration,
+    id: 'iban-verification',
+    name: 'International Bank Account Verification',
+    publicPath: '/service/iban_verification',
+    upstreamUrl: 'https://provider.test/v1/apicall/bank/intl_bank_acc_verification',
+    authType: 'header',
+    authHeader: 'username',
+    authPrefix: '',
+    adapter: 'encrypted-json-relay'
+  };
+  await store.upsertIntegration(ibanIntegration, '');
+  const savedCredential = await store.setMasterKey('iban-verification', 'private-username');
+  assert.equal(savedCredential.masterAuthKeyConfigured, true);
+  assert.equal(secrets.get('integration-iban-verification-master-key').value, 'private-username');
+  assert.equal(secrets.get('integration-uae-trade-licence-master-key').value, 'upstream-master-key');
+  assert.equal(JSON.stringify(await store.listIntegrations()).includes('private-username'), false);
 });
