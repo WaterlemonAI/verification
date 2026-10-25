@@ -37,7 +37,9 @@ before(async () => {
         const query = url.searchParams.get('q');
         const failureCheck = query.includes('AI Failure Example');
         const schemaEscapeCheck = query.includes('Schema Escape Example');
-        assert.ok(query.includes('John Example') || failureCheck || schemaEscapeCheck);
+        const chinaCheck = query.includes('华信科技');
+        const russiaCheck = query.includes('ООО Ромашка');
+        assert.ok(query.includes('John Example') || failureCheck || schemaEscapeCheck || chinaCheck || russiaCheck);
         let result = url.searchParams.get('search_lang') === 'de' ? {
           ...indexedResult,
           title: 'John Example wegen Betrug angeklagt',
@@ -55,6 +57,20 @@ before(async () => {
           url: 'https://publisher.example/news/schema-escape',
           description: 'Prosecutors charged Schema Escape Example with fraud.'
         };
+        if (chinaCheck) result = {
+          ...indexedResult,
+          title: '华信科技因欺诈被立案调查',
+          url: 'https://news.example.cn/华信科技-调查',
+          description: '监管机构对华信科技涉嫌欺诈和非法集资立案调查。',
+          meta_url: { hostname: 'news.example.cn' }
+        };
+        if (russiaCheck) result = {
+          ...indexedResult,
+          title: 'ООО Ромашка: расследование мошенничества',
+          url: 'https://news.example.ru/romashka-investigation',
+          description: 'Начато расследование в отношении ООО Ромашка по делу о мошенничестве.',
+          meta_url: { hostname: 'news.example.ru' }
+        };
         if (url.pathname.includes('/news/')) return Response.json({ results: [result] });
         return Response.json({ web: { results: [result] } });
       }
@@ -64,12 +80,34 @@ before(async () => {
         assert.equal(url.searchParams.get('timespan'), '1y');
         const failureCheck = url.searchParams.get('query').includes('AI Failure Example');
         const schemaEscapeCheck = url.searchParams.get('query').includes('Schema Escape Example');
+        const chinaCheck = url.searchParams.get('query').includes('华信科技');
+        const russiaCheck = url.searchParams.get('query').includes('ООО Ромашка');
         return Response.json({ articles: [{
-          title: failureCheck ? 'AI Failure Example charged in fraud investigation' : schemaEscapeCheck ? 'Schema Escape Example charged in fraud investigation' : indexedResult.title,
-          url: failureCheck ? 'https://publisher.example/news/ai-failure' : schemaEscapeCheck ? 'https://publisher.example/news/schema-escape' : indexedResult.url,
-          domain: 'publisher.example',
+          title: failureCheck ? 'AI Failure Example charged in fraud investigation'
+            : schemaEscapeCheck ? 'Schema Escape Example charged in fraud investigation'
+              : chinaCheck ? '华信科技因欺诈被立案调查'
+                : russiaCheck ? 'ООО Ромашка: расследование мошенничества'
+                  : indexedResult.title,
+          url: failureCheck ? 'https://publisher.example/news/ai-failure'
+            : schemaEscapeCheck ? 'https://publisher.example/news/schema-escape'
+              : chinaCheck ? 'https://news.example.cn/华信科技-调查'
+                : russiaCheck ? 'https://news.example.ru/romashka-investigation'
+                  : indexedResult.url,
+          domain: chinaCheck ? 'news.example.cn' : russiaCheck ? 'news.example.ru' : 'publisher.example',
           seendate: '20261020T100000Z',
-          language: 'English'
+          language: chinaCheck ? 'Chinese' : russiaCheck ? 'Russian' : 'English'
+        }] });
+      }
+      if (url.hostname === 'www.cbr.ru') {
+        assert.equal(url.pathname, '/warninglistapi/Search');
+        assert.equal(url.searchParams.get('sphrase'), 'ООО Ромашка');
+        assert.equal(url.searchParams.get('page'), '0');
+        assert.equal(options.headers['x-subscription-token'], undefined);
+        return Response.json({ Data: [{
+          id: 41001,
+          dt: '2026-10-18',
+          nameOrg: 'ООО Ромашка',
+          comment: 'Признаки нелегальной деятельности на финансовом рынке'
         }] });
       }
       if (url.hostname === 'generativelanguage.googleapis.com') {
@@ -95,17 +133,16 @@ before(async () => {
           }] }) }] } }],
           usageMetadata: { promptTokenCount: 500, candidatesTokenCount: 100 }
         });
-        assert.equal(prompt.entity.name, 'John Example');
         return Response.json({
-          candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: [{
-            result_id: prompt.evidence[0].result_id,
+          candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: prompt.evidence.map((evidence) => ({
+            result_id: evidence.result_id,
             entity_match: 'confirmed',
             adverse: 'confirmed',
             categories: ['financial_crime'],
             legal_stage: 'charged',
             confidence: 0.94,
-            summary: 'The report describes a fraud charge involving the named individual.'
-          }] }) }] } }],
+            summary: 'The supplied evidence describes potentially adverse conduct involving the named entity.'
+          })) }) }] } }],
           usageMetadata: { promptTokenCount: 1000, candidatesTokenCount: 200 }
         });
       }
@@ -185,6 +222,54 @@ test('uses native adverse-event terms for a non-English language pack', async ()
   assert.equal(body.results[0].legal_stage, 'charged');
 });
 
+test('China pack uses native terms, official-domain targeting, and an archive language filter without extra paid queries', async () => {
+  const beforeCount = requests.length;
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: '华信科技', countries: ['CN'], languages: ['zh'], max_results: 5 })
+  });
+  const body = await response.json();
+  const callSet = requests.slice(beforeCount);
+  const paidCalls = callSet.filter(({ url }) => url.hostname === 'api.search.brave.com');
+  const archiveCall = callSet.find(({ url }) => url.hostname === 'api.gdeltproject.org');
+  const officialWebCall = paidCalls.find(({ url }) => url.pathname.includes('/web/'));
+  assert.equal(response.status, 200);
+  assert.equal(body.usage.paid_search_queries, 3);
+  assert.equal(body.usage.free_search_queries, 1);
+  assert.deepEqual(body.coverage.country_packs, ['china']);
+  assert.equal(paidCalls.length, 3);
+  assert.match(officialWebCall.url.searchParams.get('q'), /site:csrc\.gov\.cn/);
+  assert.match(officialWebCall.url.searchParams.get('q'), /立案调查/);
+  assert.match(archiveCall.url.searchParams.get('query'), /sourcelang:chinese/);
+  assert.ok(body.results[0].categories.includes('financial_crime'));
+});
+
+test('Russia business pack includes free structured regulatory evidence without extra paid queries', async () => {
+  const beforeCount = requests.length;
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: 'ООО Ромашка', countries: ['RU'], languages: ['ru'], max_results: 10 })
+  });
+  const body = await response.json();
+  const callSet = requests.slice(beforeCount);
+  const paidCalls = callSet.filter(({ url }) => url.hostname === 'api.search.brave.com');
+  const archiveCall = callSet.find(({ url }) => url.hostname === 'api.gdeltproject.org');
+  assert.equal(response.status, 200);
+  assert.equal(body.usage.paid_search_queries, 3);
+  assert.equal(body.usage.free_search_queries, 2);
+  assert.deepEqual(body.coverage.country_packs, ['russia']);
+  assert.equal(paidCalls.length, 3);
+  assert.match(archiveCall.url.searchParams.get('query'), /sourcelang:russian/);
+  const officialResult = body.results.find((result) => result.source_type === 'official_regulatory');
+  assert.ok(officialResult);
+  assert.equal(officialResult.publisher, 'cbr.ru');
+  assert.match(officialResult.url, /id=41001$/);
+  assert.equal(officialResult.source_reliability_score, 0.95);
+  assert.equal(officialResult.legal_stage, 'regulatory_action');
+});
+
 test('returns deterministic evidence when optional AI classification is unavailable', async () => {
   const response = await fetch(`${appUrl}/service/adverse_media`, {
     method: 'POST',
@@ -242,7 +327,7 @@ test('public documentation exposes the complete route without provider or key de
     assert.ok(html.includes(field));
   }
   for (const publicAsset of [html, script, specText]) {
-    for (const providerName of ['brave', 'gdelt', 'gemini']) assert.equal(publicAsset.toLowerCase().includes(providerName), false);
+    for (const providerName of ['brave', 'gdelt', 'gemini', 'cbr.ru']) assert.equal(publicAsset.toLowerCase().includes(providerName), false);
     assert.equal(publicAsset.includes('private-search-key'), false);
   }
 });
