@@ -15,13 +15,61 @@ let upstream;
 let app;
 let appUrl;
 
+const completeSuccess = {
+  status: 'Success',
+  client_id: '123e4567-e89b-12d3-a456-426614174000',
+  seconds: 1.234,
+  trade_licence_verification_api: {
+    uae_licence_number: 'FULL-123',
+    expiration_date: '2027-01-01',
+    registration_date: '2020-01-01',
+    licence_registration_name_arabic: 'شركة تجريبية',
+    licence_registration_name: 'Example Trading LLC',
+    licence_registration_address: 'Dubai, UAE',
+    governing_body_name: 'Dubai Department of Economy and Tourism',
+    emirate_name: 'Dubai',
+    lcn_renewal_date: '2026-01-01',
+    moec_status: 'Active',
+    legal_type_from_entity: 'Limited Liability Company',
+    unified_licence_number: 'ULN-123',
+    activity_start_time: '2020-01-01',
+    licence_registration_address_arabic: 'دبي، الإمارات العربية المتحدة',
+    license_status: 'Active',
+    trade_license_number: 123456
+  }
+};
+
 before(async () => {
   upstream = createServer(async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
-    const input = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     assert.equal(req.headers.authorization, `Bearer ${upstreamToken}`);
-    assert.equal(req.headers['content-type'], 'application/json');
+    const contentType = req.headers['content-type'];
+    const rawBody = Buffer.concat(chunks);
+
+    if (contentType.startsWith('multipart/form-data; boundary=')) {
+      const input = rawBody.toString('utf8');
+      for (const expected of ['name="company_name"', 'Example Trading LLC', 'name="emirate"', 'dubai', 'name="authorising_body"', 'dubai_department_of_economy_and_tourism', 'name="license_document"; filename="licence.txt"', 'document-binary-content']) {
+        assert.equal(input.includes(expected), true, `multipart body omitted ${expected}`);
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify(completeSuccess));
+    }
+
+    assert.equal(contentType, 'application/json');
+    const input = JSON.parse(rawBody.toString('utf8'));
+    if (input.license_number === 'FULL-123') {
+      assert.deepEqual(input, {
+        license_number: 'FULL-123',
+        licence_number: 'ALT-123',
+        company_name: 'Example Trading LLC',
+        license_document: 'data:application/pdf;base64,VEVTVA==',
+        emirate: 'dubai',
+        authorising_body: 'dubai_department_of_economy_and_tourism'
+      });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify(completeSuccess));
+    }
     if (input.license_number === 'SUCCESS-123') {
       res.writeHead(200, { 'content-type': 'application/json' });
       return res.end(JSON.stringify({ status: 'Success', client_id: '123e4567-e89b-12d3-a456-426614174000', seconds: 1.234, trade_licence_verification_api: { uae_licence_number: input.license_number } }));
@@ -50,6 +98,38 @@ test('relays a successful response without changing its shape', async () => {
     seconds: 1.234,
     trade_licence_verification_api: { uae_licence_number: 'SUCCESS-123' }
   });
+});
+
+test('relays every documented JSON input and complete output without changing names or values', async () => {
+  const response = await fetch(`${appUrl}/service/uae_tlv`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      license_number: 'FULL-123',
+      licence_number: 'ALT-123',
+      company_name: 'Example Trading LLC',
+      license_document: 'data:application/pdf;base64,VEVTVA==',
+      emirate: 'dubai',
+      authorising_body: 'dubai_department_of_economy_and_tourism'
+    })
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), completeSuccess);
+});
+
+test('relays multipart text fields and the original binary document', async () => {
+  const body = new FormData();
+  body.append('company_name', 'Example Trading LLC');
+  body.append('emirate', 'dubai');
+  body.append('authorising_body', 'dubai_department_of_economy_and_tourism');
+  body.append('license_document', new Blob(['document-binary-content'], { type: 'text/plain' }), 'licence.txt');
+  const response = await fetch(`${appUrl}/service/uae_tlv`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}` },
+    body
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), completeSuccess);
 });
 
 after(async () => {
@@ -88,4 +168,31 @@ test('serves provider-neutral API documentation', async () => {
   assert.equal(text.includes('kycdd'), false);
   assert.equal(text.includes('api.ai7uae.com'), true);
   assert.equal(text.includes('/service/uae_tlv'), true);
+});
+
+test('serves a complete live tester and response-field reference', async () => {
+  const html = await (await fetch(`${appUrl}/`)).text();
+  const spec = await (await fetch(`${appUrl}/openapi.json`)).json();
+  const inputs = spec.components.schemas.BaseRequest.properties;
+  const idByInput = {
+    license_number: 'license-number',
+    licence_number: 'licence-number',
+    company_name: 'company-name',
+    license_document: 'license-document',
+    emirate: 'emirate',
+    authorising_body: 'authorising-body'
+  };
+  for (const [name, input] of Object.entries(idByInput)) {
+    assert.equal(html.includes(`id="${input}"`), true, `tester omitted ${input}`);
+    assert.equal(Object.hasOwn(inputs, name), true, `OpenAPI omitted ${name}`);
+  }
+  for (const output of Object.keys(completeSuccess.trade_licence_verification_api)) {
+    assert.equal(html.includes(output), true, `response reference omitted ${output}`);
+  }
+
+  const script = await (await fetch(`${appUrl}/api.js`)).text();
+  for (const value of inputs.emirate.enum) assert.equal(html.includes(`value="${value}"`), true, `tester omitted emirate ${value}`);
+  for (const value of inputs.authorising_body.enum) assert.equal(script.includes(`'${value}'`), true, `tester omitted authority ${value}`);
+  assert.equal(script.includes("format === 'multipart/form-data'"), true);
+  assert.equal(script.includes('kycdd'), false);
 });
