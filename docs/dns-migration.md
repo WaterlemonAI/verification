@@ -12,4 +12,4 @@ The authoritative zone is hosted in Azure DNS. The registrar is GoDaddy.
 
 Do not remove the mail, SPF, DKIM, DMARC, Google verification, CAA, or autodiscover records during the migration.
 
-`infrastructure/dns.bicep` is the source definition for the migrated zone. The initial cutover was performed manually so the registrar delegation and managed-certificate validation could be observed before automation was granted access to shared DNS.
+`infrastructure/dns.bicep` is the source definition for the migrated zone. The authoritative zone is deployed inside `rg-ai7uae-web-uaen-001`; no shared KYCProbe or other-project DNS resource is used. Registrar delegation and managed-certificate validation are observed during cutover before the retired AI7-specific staging resources are removed.
