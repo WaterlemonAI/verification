@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
 import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
 import { adverseMediaConfig, screenAdverseMedia, validateAdverseMediaRequest } from './lib/adverse-media.mjs';
+import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, validatePublicCallbackUrl } from './lib/deep-research-queue.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -168,13 +169,31 @@ async function createEntitySearchReport(req, res, store) {
   }
 }
 
-async function createAdverseMediaScreening(req, res, store, fetchImpl) {
+async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue) {
   if (!(await store.isClientKey(bearerToken(req)))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
   try {
     const input = await readJson(req);
     const request = validateAdverseMediaRequest(input);
+    if (request.deep_research && request.callback_url) {
+      if (!deepResearchQueue) return json(res, 503, { status: 'Error', error: 'Deep research callback processing is temporarily unavailable.' });
+      await validatePublicCallbackUrl(request.callback_url);
+      const job = makeDeepResearchJob(request);
+      await deepResearchQueue.enqueue(job);
+      return json(res, 202, {
+        screening_id: job.screening_id,
+        status: 'queued',
+        deep_research: true,
+        callback: {
+          configured: true,
+          event: 'adverse_media.deep_research.completed',
+          signature_header: 'x-ai7-signature',
+          signing_secret: job.callback_secret
+        },
+        message: 'The completed, decision-eligible result will be posted to the callback URL. Store the signing secret now; it is not shown again.'
+      });
+    }
     const providerKey = await store.getMasterKey('adverse-media');
     if (!providerKey) return providerUnavailable(res);
     const aiApiKey = await store.getMasterKey('adverse-media-ai');
@@ -425,7 +444,8 @@ function serveStatic(res, directory, requestPath) {
   createReadStream(filePath).pipe(res);
 }
 
-export function createAppServer({ store = createStore(), fetchImpl = fetch } = {}) {
+export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+  if (startWorker && deepResearchQueue) startDeepResearchWorker({ queue: deepResearchQueue, store, screen: screenAdverseMedia, fetchImpl });
   return createServer(async (req, res) => {
     securityHeaders(res);
     const url = new URL(req.url || '/', 'http://localhost');
@@ -437,7 +457,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch } = {
         return res.end('ok\n');
       }
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
-      if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl);
+      if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue);
       if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
         return json(res, 200, {
           supported_languages: adverseMediaConfig.supportedLanguages,

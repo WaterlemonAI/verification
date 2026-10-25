@@ -58,6 +58,8 @@
               <div><strong>date_from / date_to</strong><span>date · optional</span><p>Inclusive publication-date search window.</p></div>
               <div><strong>risk_threshold</strong><span>number · optional</span><p>Scores at or above this 0–1 value require review. Default: <code>0.65</code>.</p></div>
               <div><strong>max_results</strong><span>integer · optional</span><p>One to 50 results. Default: 25.</p></div>
+              <div><strong>deep_research</strong><span>boolean · optional</span><p>Enables completion-gated research and the optional callback workflow.</p></div>
+              <div><strong>callback_url</strong><span>HTTPS URI · optional</span><p>Available only with deep research. A signed result is posted only after the screening is complete and decision-eligible.</p></div>
             </div>
             <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
             <div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div>
@@ -77,6 +79,7 @@
               <div><code>summary.decision_eligible</code><span>boolean</span><span>False whenever the run is partial and must not be treated as a completed compliance decision.</span></div>
               <div><code>coverage</code><span>object</span><span>Completeness, per-index attempt counts, languages, dates, and explicit limitations.</span></div>
               <div><code>usage</code><span>object</span><span>Paid-query usage, cache state, and cost guardrail.</span></div>
+              <div><code>transliterations</code><span>object</span><span>Two generated entity-name variants for each selected non-English language.</span></div>
               <div><code>results[].title</code><span>string</span><span>Article or page title.</span></div>
               <div><code>results[].url</code><span>URI</span><span>Original evidence URL.</span></div>
               <div><code>results[].source_type</code><span>string</span><span>News index, open web, global archive, or official regulatory evidence.</span></div>
@@ -92,6 +95,7 @@
             <h3>Status codes</h3>
             <div class="responses">
               <div><b class="ok">200</b><span>Screening returned; inspect <code>status</code> and <code>summary.decision_eligible</code> before use</span></div>
+              <div><b class="ok">202</b><span>Deep research durably queued for signed callback delivery</span></div>
               <div><b>400</b><span>Invalid request fields</span></div>
               <div><b>401</b><span>Missing or invalid AI7 API key</span></div>
               <div><b>502</b><span>Media indexes temporarily unavailable</span></div>
@@ -101,7 +105,7 @@
           <article id="methodology">
             <p class="label">METHODOLOGY</p>
             <h2>Designed for review, not automated guilt decisions</h2>
-            <p>The engine normalizes names and aliases, searches current and archived indexes with controlled retries, removes duplicate URLs, requires an entity-name match, classifies adverse-event terms, and ranks evidence. Regional selections add native-language and country-focused official-source searches inside the fixed 12-query guardrail; eligible Russia business searches also check a free structured regulatory source. High-confidence AI mismatch or non-adverse findings remain in the response for audit but cannot trigger review. Any exhausted source or AI failure makes the run <code>partial</code>, blocks decision eligibility, and requires manual review. A media result is a review lead—not proof of wrongdoing. Qualified human review remains required before taking action.</p>
+            <p>The engine normalizes names and aliases, generates two tightly constrained name transliterations for every selected non-English language, searches current and archived indexes with controlled retries, removes duplicate URLs, requires an entity-name match, classifies adverse-event terms, and ranks evidence. Regional selections add native-language and country-focused official-source searches inside the fixed 12-query guardrail. High-confidence AI mismatch or non-adverse findings remain in the response for audit but cannot trigger review. Any exhausted source or AI processing failure makes the run <code>partial</code>, blocks decision eligibility, and requires manual review. Deep research callbacks are sent only for completed, decision-eligible runs. A media result is a review lead—not proof of wrongdoing.</p>
           </article>
 
           <article id="tester" class="tester">
@@ -131,6 +135,8 @@
                 <label>To date <code>date_to</code><input id="date-to" type="date" /></label>
                 <label>Acceptable risk threshold <code>risk_threshold</code><input id="risk-threshold" type="number" min="0" max="100" step="1" value="65" /><small class="field-help">Percentage score at or above which review is required.</small></label>
                 <label>Maximum results <code>max_results</code><input id="max-results" type="number" min="1" max="50" value="25" /></label>
+                <label><span>Deep research <code>deep_research</code></span><span><input id="deep-research" type="checkbox" /> Wait for complete, decision-eligible coverage</span></label>
+                <label id="callback-field" hidden>Callback URL <code>callback_url</code><input id="callback-url" type="url" inputmode="url" placeholder="https://your-domain.example/webhooks/ai7" disabled /><small class="field-help">Optional. The queued response returns a one-time signing secret for verifying callbacks.</small></label>
               </div>
               <fieldset>
                 <legend>Search languages <span>Select up to five</span></legend>

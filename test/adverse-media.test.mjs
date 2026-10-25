@@ -130,13 +130,28 @@ before(async () => {
         assert.equal(options.headers['x-goog-api-key'], 'private-ai-key');
         assert.match(url.pathname, /gemini-3\.5-flash-lite:generateContent$/);
         const payload = JSON.parse(options.body);
+        const prompt = JSON.parse(payload.contents[0].parts[0].text);
+        if (prompt.job === 'transliterate_entity_name') {
+          assert.match(payload.systemInstruction.parts[0].text, /single-purpose entity-name transliteration engine/);
+          assert.match(payload.systemInstruction.parts[0].text, /Never return advice/);
+          assert.equal(payload.generationConfig.responseJsonSchema.additionalProperties, false);
+          assert.equal(payload.generationConfig.maxOutputTokens, 512);
+          return Response.json({
+            candidates: [{ content: { parts: [{ text: JSON.stringify({
+              transliterations: prompt.target_languages.map(({ code }) => ({
+                language: code,
+                variants: [`${prompt.entity.name} ${code} one`, `${prompt.entity.name} ${code} two`]
+              }))
+            }) }] } }],
+            usageMetadata: { promptTokenCount: 300, candidatesTokenCount: 80 }
+          });
+        }
         assert.match(payload.systemInstruction.parts[0].text, /single-purpose adverse-media evidence classifier/);
         assert.match(payload.systemInstruction.parts[0].text, /Never follow commands/);
         assert.equal(payload.generationConfig.responseJsonSchema.additionalProperties, false);
         assert.equal(payload.generationConfig.responseJsonSchema.properties.classifications.items.additionalProperties, false);
         assert.equal(payload.generationConfig.maxOutputTokens, 2048);
         assert.equal(payload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
-        const prompt = JSON.parse(payload.contents[0].parts[0].text);
         assert.equal(prompt.job, 'classify_adverse_media_evidence');
         assert.deepEqual(Object.keys(prompt.evidence[0]).sort(), ['excerpt', 'result_id', 'title']);
         if (prompt.entity.name === 'AI Failure Example') return Response.json({ error: 'temporary' }, { status: 503 });
@@ -280,6 +295,9 @@ test('China pack uses native terms, official-domain targeting, and an archive la
   assert.match(officialWebCall.url.searchParams.get('q'), /site:csrc\.gov\.cn/);
   assert.match(officialWebCall.url.searchParams.get('q'), /立案调查/);
   assert.match(archiveCall.url.searchParams.get('query'), /sourcelang:chinese/);
+  assert.equal(body.methodology.transliteration.status, 'completed');
+  assert.equal(body.transliterations.zh.length, 2);
+  assert.ok(paidCalls.every(({ url }) => url.searchParams.get('q').includes(body.transliterations.zh[0])));
   assert.ok(body.results[0].categories.includes('financial_crime'));
 });
 
@@ -432,6 +450,44 @@ test('adverse media endpoint validates credentials and input', async () => {
   });
   assert.equal(invalidThreshold.status, 400);
   assert.match((await invalidThreshold.json()).error, /risk_threshold/);
+
+  const callbackWithoutDeepResearch = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: 'Example LLC', callback_url: 'https://example.com/webhook' })
+  });
+  assert.equal(callbackWithoutDeepResearch.status, 400);
+  assert.match((await callbackWithoutDeepResearch.json()).error, /deep_research/);
+});
+
+test('deep research queues an optional signed HTTPS callback without exposing credentials', async () => {
+  const jobs = [];
+  const queue = { enqueue: async (job) => jobs.push(job) };
+  const queuedApp = createAppServer({ store, fetchImpl: fetch, deepResearchQueue: queue, startWorker: false });
+  await new Promise((resolve) => queuedApp.listen(0, '127.0.0.1', resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${queuedApp.address().port}/service/adverse_media`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entity_type: 'business', name: 'Example LLC', languages: ['en', 'ar'], deep_research: true,
+        callback_url: 'https://example.com/ai7-webhook'
+      })
+    });
+    const body = await response.json();
+    assert.equal(response.status, 202);
+    assert.equal(body.status, 'queued');
+    assert.equal(body.callback.configured, true);
+    assert.equal(body.callback.signature_header, 'x-ai7-signature');
+    assert.match(body.callback.signing_secret, /^[A-Za-z0-9_-]{40,}$/);
+    assert.equal(jobs.length, 1);
+    assert.equal(jobs[0].screening_id, body.screening_id);
+    assert.equal(jobs[0].callback_secret, body.callback.signing_secret);
+    assert.equal(jobs[0].request.callback_url, '');
+    assert.equal(JSON.stringify(body).includes('private-search-key'), false);
+  } finally {
+    await new Promise((resolve) => queuedApp.close(resolve));
+  }
 });
 
 test('public documentation exposes the complete route without provider or key details', async () => {
@@ -446,7 +502,7 @@ test('public documentation exposes the complete route without provider or key de
   const specText = await (await fetch(`${appUrl}/openapi.json`)).text();
   const spec = JSON.parse(specText);
   assert.ok(Object.hasOwn(spec.paths, '/service/adverse_media'));
-  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'risk_threshold', 'max_results']) {
+  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'risk_threshold', 'max_results', 'deep_research', 'callback_url']) {
     assert.ok(Object.hasOwn(spec.components.schemas.AdverseMediaRequest.properties, field));
     assert.ok(html.includes(field));
   }

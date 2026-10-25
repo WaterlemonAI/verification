@@ -268,6 +268,14 @@
               }
             }
           },
+          "202": {
+            "description": "Deep research was durably queued. The completed, decision-eligible result will be delivered to the supplied callback URL.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AdverseMediaQueuedResponse" }
+              }
+            }
+          },
           "400": {
             "description": "The request is invalid.",
             "content": {
@@ -2606,7 +2614,9 @@
           "date_from": { "type": "string", "format": "date" },
           "date_to": { "type": "string", "format": "date" },
           "risk_threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.65, "description": "Results at or above this score are flagged for review; all results remain in the response." },
-          "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 }
+          "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 },
+          "deep_research": { "type": "boolean", "default": false, "description": "Enables completion-gated research and optional asynchronous callback delivery." },
+          "callback_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS callback URL. Accepted only when deep_research is true." }
         },
         "additionalProperties": false
       },
@@ -2669,10 +2679,38 @@
           "coverage": { "type": "object", "additionalProperties": true },
           "methodology": { "type": "object", "additionalProperties": true },
           "usage": { "type": "object", "additionalProperties": true },
+          "transliterations": {
+            "type": "object",
+            "description": "Two strictly generated entity-name variants for each selected non-English language.",
+            "additionalProperties": {
+              "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "string" }
+            }
+          },
           "results": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/AdverseMediaResult" }
           }
+        },
+        "additionalProperties": false
+      },
+      "AdverseMediaQueuedResponse": {
+        "type": "object",
+        "required": ["screening_id", "status", "deep_research", "callback", "message"],
+        "properties": {
+          "screening_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "const": "queued" },
+          "deep_research": { "type": "boolean", "const": true },
+          "callback": {
+            "type": "object",
+            "properties": {
+              "configured": { "type": "boolean", "const": true },
+              "event": { "type": "string", "const": "adverse_media.deep_research.completed" },
+              "signature_header": { "type": "string", "const": "x-ai7-signature" },
+              "signing_secret": { "type": "string", "description": "One-time secret used to verify the HMAC-SHA256 callback signature." }
+            },
+            "additionalProperties": false
+          },
+          "message": { "type": "string" }
         },
         "additionalProperties": false
       },
