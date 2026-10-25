@@ -40,10 +40,6 @@ var customDomains = empty(apiCertificateId) ? [] : [
   }
 ]
 
-resource deepResearchStorage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
-  name: deepResearchStorageName
-}
-
 resource api 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName
   location: location
@@ -86,7 +82,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'API_HOSTS', value: 'api.ai7uae.com' }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
-            { name: 'ADVERSE_MEDIA_QUEUE_URL', value: '${deepResearchStorage.properties.primaryEndpoints.queue}${deepResearchQueueName}' }
+            { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
           ]
           resources: {
             cpu: json('0.25')
