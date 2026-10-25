@@ -48,14 +48,17 @@ async function loadIntegrations() {
       const isIban = item.id === 'iban-verification';
       const isEntitySearch = item.id === 'entity-search';
       const isAdverseMedia = item.id === 'adverse-media';
-      byId('supplier-credential-label').firstChild.textContent = isIban ? 'Supplier username' : (isEntitySearch || isAdverseMedia) ? 'Private API key' : 'Supplier credential';
-      form.elements.credential.placeholder = isIban ? 'Enter the supplier username' : (isEntitySearch || isAdverseMedia) ? 'Enter the private API key' : 'Enter the private credential';
+      const isAdverseMediaAi = item.id === 'adverse-media-ai';
+      byId('supplier-credential-label').firstChild.textContent = isIban ? 'Supplier username' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi) ? 'Private API key' : 'Supplier credential';
+      form.elements.credential.placeholder = isIban ? 'Enter the supplier username' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi) ? 'Enter the private API key' : 'Enter the private credential';
       byId('supplier-credential-help').textContent = isIban
         ? 'The supplied IBAN collection authenticates each internal request with this username header; it does not transmit a password.'
         : isEntitySearch
           ? 'This write-only API key is applied internally to comprehensive entity-search requests.'
           : isAdverseMedia
             ? 'This write-only search credential is applied only to adverse-media screening requests.'
+          : isAdverseMediaAi
+            ? 'This write-only Google AI API key enables bounded AI classification for adverse-media results. The key is never returned or shown again.'
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });

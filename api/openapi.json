@@ -240,7 +240,7 @@
     "/service/adverse_media": {
       "post": {
         "summary": "Screen an individual or business for adverse media",
-        "description": "Searches global news and open-web indexes in up to five languages, resolves the requested entity, classifies potentially adverse reporting, and returns evidence for human review.",
+        "description": "Searches current and archived global news plus open-web indexes in up to five languages, resolves the requested entity, applies deterministic and optional bounded AI classification, and returns evidence for human review.",
         "operationId": "screenAdverseMedia",
         "security": [
           {
@@ -2618,7 +2618,7 @@
           "publisher": { "type": "string" },
           "published_at": { "type": "string" },
           "language": { "type": "string" },
-          "source_type": { "type": "string", "enum": ["news_index", "open_web"] },
+          "source_type": { "type": "string", "enum": ["news_index", "open_web", "global_news_archive"] },
           "excerpt": { "type": "string" },
           "matched_name": { "type": "string" },
           "entity_match_score": { "type": "number", "minimum": 0, "maximum": 1 },
@@ -2639,7 +2639,21 @@
               }
             }
           },
-          "review_required": { "type": "boolean", "const": true }
+          "review_required": { "type": "boolean", "const": true },
+          "ai_classification": {
+            "type": "object",
+            "description": "Present when bounded AI review completed for this candidate.",
+            "properties": {
+              "entity_match": { "type": "string", "enum": ["confirmed", "possible", "unlikely"] },
+              "adverse": { "type": "string", "enum": ["confirmed", "possible", "not_adverse"] },
+              "categories": { "type": "array", "items": { "type": "string" } },
+              "legal_stage": { "type": "string" },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "summary": { "type": "string" },
+              "rationale": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
         },
         "additionalProperties": false
       },

@@ -28,7 +28,7 @@ POST /service/entity_search
 POST /service/adverse_media
 ```
 
-The services authenticate each AI7 customer with one Bearer API key. Provider-backed wrappers relay their upstream JSON body and HTTP status without exposing upstream hostnames, credentials, or identifying headers. The native adverse-media service searches global news and open-web indexes in up to five languages, deduplicates evidence, classifies adverse-event categories and legal stage, and enforces a 12-query/$0.12 internal cost guardrail. The portal includes copyable cURL, JavaScript, and Python examples, an OpenAPI document, and live JSON response consoles. The comprehensive entity-search page also exposes a searchable response-field reference generated from every path in its official schema and response variants.
+The services authenticate each AI7 customer with one Bearer API key. Provider-backed wrappers relay their upstream JSON body and HTTP status without exposing upstream hostnames, credentials, or identifying headers. The native adverse-media service searches current and archived global news plus open-web indexes in up to five languages, deduplicates evidence, classifies adverse-event categories and legal stage, and can enrich the highest-priority candidates with a bounded AI review. It enforces a 12-query/$0.15 internal cost guardrail. The portal includes copyable cURL, JavaScript, and Python examples, an OpenAPI document, and live JSON response consoles. The comprehensive entity-search page also exposes a searchable response-field reference generated from every path in its official schema and response variants.
 
 Client keys are stored only as SHA-256 hashes. Upstream configuration and hashes are loaded from Azure Key Vault through the API app's dedicated managed identity. No provider secrets are committed to this repository or sent to the browser.
 
@@ -73,6 +73,6 @@ The API Engine manages these records inside the dedicated Key Vault:
 - `client-<id>`: one customer record per key, containing only the hash plus non-secret lifecycle tags.
 - `integration-<id>-master-key`: one write-only upstream master key per integration.
 
-`adverse-media` is a runtime-managed integration. Its private search credential is stored as `integration-adverse-media-master-key` and can be set or rotated from the same protected administration console.
+`adverse-media` and `adverse-media-ai` are runtime-managed integrations. Their private credentials are stored separately as `integration-adverse-media-master-key` and `integration-adverse-media-ai-master-key`; either can be set or rotated from the protected administration console. The AI credential is optional and deterministic screening remains available without it.
 
 Do not commit or place plaintext credentials in GitHub variables. Bootstrap the admin hash in the dedicated API vault, then manage integrations and customer credentials through the protected console.

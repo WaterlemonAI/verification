@@ -177,7 +177,8 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl) {
     const request = validateAdverseMediaRequest(input);
     const providerKey = await store.getMasterKey('adverse-media');
     if (!providerKey) return providerUnavailable(res);
-    const result = await screenAdverseMedia({ request, apiKey: providerKey, fetchImpl });
+    const aiApiKey = await store.getMasterKey('adverse-media-ai');
+    const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, fetchImpl });
     return json(res, 200, result);
   } catch (error) {
     if (error.statusCode === 400 || (!error.statusCode && error.message !== 'search_provider_unavailable')) {
