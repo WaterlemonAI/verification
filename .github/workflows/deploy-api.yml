@@ -11,6 +11,7 @@ on:
       - test/**
       - server.mjs
       - package.json
+      - package-lock.json
       - Dockerfile.api
       - infrastructure/api.bicep
       - .github/workflows/deploy-api.yml
@@ -31,6 +32,9 @@ jobs:
     steps:
       - name: Check out reviewed source
         uses: actions/checkout@v4
+
+      - name: Install locked API dependencies
+        run: npm ci --omit=dev
 
       - name: Test API contract and isolation
         run: npm test
