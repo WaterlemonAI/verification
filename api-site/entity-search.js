@@ -7,6 +7,8 @@ const samples = {
     "type": "Individual",
     "alias": [],
     "country": "AE",
+    "gender": "",
+    "dob": "",
     "identifier": [],
     "search_type": ["pep", "sanction", "watchlist"],
     "fields_weightage": [
@@ -33,6 +35,8 @@ const samples = {
       type: 'Individual',
       alias: [],
       country: 'AE',
+      gender: '',
+      dob: '',
       identifier: [],
       search_type: ['pep', 'sanction', 'watchlist'],
       fields_weightage: [
@@ -60,6 +64,8 @@ response = requests.post(
         "type": "Individual",
         "alias": [],
         "country": "AE",
+        "gender": "",
+        "dob": "",
         "identifier": [],
         "search_type": ["pep", "sanction", "watchlist"],
         "fields_weightage": [
@@ -82,6 +88,7 @@ const byId = (id) => document.getElementById(id);
 const sampleCode = byId('sample-code');
 const responseJson = byId('response-json');
 const responseStatus = byId('response-status');
+const responseLabel = byId('response-label');
 const sendButton = byId('send-request');
 const formError = byId('form-error');
 const responseFields = globalThis.ENTITY_SEARCH_RESPONSE_FIELDS || [];
@@ -200,7 +207,11 @@ function requestBody() {
     apc_sort_by: byId('apc-sort-by').value
   };
 
-  return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== '' && value !== undefined && (!Array.isArray(value) || value.length > 0)));
+  const keysRequiredByTheLiveContract = new Set(['country', 'gender', 'dob']);
+  return Object.fromEntries(Object.entries(body).filter(([name, value]) => (
+    keysRequiredByTheLiveContract.has(name)
+    || (value !== '' && value !== undefined && (!Array.isArray(value) || value.length > 0))
+  )));
 }
 
 byId('entity-search-form').addEventListener('submit', async (event) => {
@@ -215,9 +226,11 @@ byId('entity-search-form').addEventListener('submit', async (event) => {
   catch (error) { formError.textContent = error.message; return; }
 
   sendButton.disabled = true;
+  responseLabel.textContent = 'REQUEST SENT · RESPONSE PENDING';
   responseStatus.className = '';
   responseStatus.textContent = 'Sending…';
-  responseJson.textContent = '{\n  "message": "Request in progress…"\n}';
+  responseJson.textContent = JSON.stringify({ status: 'pending', request: body }, null, 2);
+  responseJson.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   try {
     const response = await fetch('/service/entity_search', {
       method: 'POST',
@@ -227,10 +240,12 @@ byId('entity-search-form').addEventListener('submit', async (event) => {
     const text = await response.text();
     let formatted = text;
     try { formatted = JSON.stringify(JSON.parse(text), null, 2); } catch { /* retain exact non-JSON response */ }
+    responseLabel.textContent = 'API RESPONSE';
     responseJson.textContent = formatted;
     responseStatus.className = response.ok ? 'success' : 'error';
     responseStatus.textContent = `${response.status} ${response.statusText}`;
   } catch {
+    responseLabel.textContent = 'API RESPONSE';
     responseStatus.className = 'error';
     responseStatus.textContent = 'Request error';
     responseJson.textContent = JSON.stringify({ status: 'Error', error: 'The request could not be sent.' }, null, 2);
