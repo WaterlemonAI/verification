@@ -349,6 +349,26 @@ test('comprehensive entity search preserves every request field and the exact re
   assert.equal(receivedEntitySearch.headers['x-api-key'], 'private-screening-key');
   assert.equal(receivedEntitySearch.headers.authorization, undefined);
   assert.deepEqual(receivedEntitySearch.body, requestBody);
+
+  const requestWithoutBlankRequiredKeys = {
+    name: 'Test Person',
+    type: 'Individual',
+    search_type: ['pep'],
+    fields_weightage: [{ field: 'name', weightage: 1 }],
+    fuzziness: 0.8
+  };
+  const defaultedResponse = await fetch(`${appUrl}/service/entity_search`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify(requestWithoutBlankRequiredKeys)
+  });
+  assert.equal(defaultedResponse.status, 200);
+  assert.deepEqual(receivedEntitySearch.body, {
+    country: '',
+    gender: '',
+    dob: '',
+    ...requestWithoutBlankRequiredKeys
+  });
 });
 
 test('entity search docs expose every official response path and no supplier details', async () => {
@@ -408,6 +428,7 @@ test('entity search docs expose every official response path and no supplier det
   assert.equal(script.includes("new Set(['country', 'gender', 'dob'])"), true);
   assert.equal(script.includes("status: 'pending', request: body"), true);
   assert.equal(html.includes('id="response-label"'), true);
+  assert.equal(html.includes('/entity-search.js?v=2'), true);
   assert.equal(Object.hasOwn(spec.paths, '/service/entity_search'), true);
   for (const publicAsset of [html, script, fieldsScript, specText]) {
     assert.equal(publicAsset.toLowerCase().includes('rzolut'), false);
