@@ -34,8 +34,13 @@ before(async () => {
       assert.equal(url.hostname, 'api.search.brave.com');
       assert.equal(options.headers['x-subscription-token'], 'private-search-key');
       assert.ok(url.searchParams.get('q').includes('John Example'));
-      if (url.pathname.includes('/news/')) return Response.json({ results: [indexedResult] });
-      return Response.json({ web: { results: [indexedResult] } });
+      const result = url.searchParams.get('search_lang') === 'de' ? {
+        ...indexedResult,
+        title: 'John Example wegen Betrug angeklagt',
+        description: 'Die Ermittlungen wegen Geldwäsche und Korruption dauern an.'
+      } : indexedResult;
+      if (url.pathname.includes('/news/')) return Response.json({ results: [result] });
+      return Response.json({ web: { results: [result] } });
     }
   });
   await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
@@ -88,6 +93,19 @@ test('identical checks reuse cached evidence without paid search calls', async (
   assert.equal(body.usage.cache_hit, true);
   assert.equal(body.usage.paid_search_queries, 0);
   assert.equal(requests.length, beforeCount);
+});
+
+test('uses native adverse-event terms for a non-English language pack', async () => {
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'individual', name: 'John Example', languages: ['de'], max_results: 5 })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.coverage.languages_searched[0].code, 'de');
+  assert.ok(body.results[0].categories.includes('financial_crime'));
+  assert.equal(body.results[0].legal_stage, 'charged');
 });
 
 test('adverse media endpoint validates credentials and input', async () => {
