@@ -7,7 +7,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
 import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
-import { adverseMediaConfig, screenAdverseMedia, validateAdverseMediaRequest } from './lib/adverse-media.mjs';
+import { adverseMediaConfig, presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from './lib/adverse-media.mjs';
 import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, validatePublicCallbackUrl } from './lib/deep-research-queue.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -198,7 +198,7 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     if (!providerKey) return providerUnavailable(res);
     const aiApiKey = await store.getMasterKey('adverse-media-ai');
     const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, fetchImpl });
-    return json(res, 200, result);
+    return json(res, 200, presentAdverseMediaResponse(result));
   } catch (error) {
     if (error.statusCode === 400 || (!error.statusCode && error.message !== 'search_provider_unavailable')) {
       return json(res, 400, { status: 'Error', error: error.message || 'The request is invalid.' });
@@ -445,7 +445,15 @@ function serveStatic(res, directory, requestPath) {
 }
 
 export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), startWorker = process.env.NODE_ENV !== 'test' } = {}) {
-  if (startWorker && deepResearchQueue) startDeepResearchWorker({ queue: deepResearchQueue, store, screen: screenAdverseMedia, fetchImpl });
+  if (startWorker && deepResearchQueue) {
+    startDeepResearchWorker({
+      queue: deepResearchQueue,
+      store,
+      screen: screenAdverseMedia,
+      present: presentAdverseMediaResponse,
+      fetchImpl
+    });
+  }
   return createServer(async (req, res) => {
     securityHeaders(res);
     const url = new URL(req.url || '/', 'http://localhost');

@@ -171,7 +171,7 @@ before(async () => {
             adverse: 'not_adverse',
             categories: [],
             legal_stage: 'media_mention',
-            confidence: 0.97,
+            confidence: 0,
             summary: 'The evidence concerns a different person with a partially matching name.'
           })) }) }] } }],
           usageMetadata: { promptTokenCount: 800, candidatesTokenCount: 120 }
@@ -198,7 +198,7 @@ before(async () => {
 
 after(async () => new Promise((resolve) => app.close(resolve)));
 
-test('adverse media endpoint authenticates, searches, deduplicates, classifies, and reports cost usage', async () => {
+test('adverse media endpoint returns a customer-safe evidence response', async () => {
   const response = await fetch(`${appUrl}/service/adverse_media`, {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -224,16 +224,13 @@ test('adverse media endpoint authenticates, searches, deduplicates, classifies, 
   assert.equal(body.summary.risk_threshold, 0.65);
   assert.equal(body.summary.results_at_or_above_threshold, 1);
   assert.equal(body.summary.threshold_status, 'review_required');
-  assert.equal(body.results[0].ai_classification.adverse, 'confirmed');
-  assert.deepEqual(Object.keys(body.results[0].ai_classification).sort(), ['adverse', 'categories', 'confidence', 'entity_match', 'legal_stage', 'summary']);
-  assert.equal(body.methodology.ai_classification.status, 'completed');
-  assert.equal(body.usage.paid_search_queries, 3);
-  assert.equal(body.usage.paid_search_attempts, 3);
-  assert.equal(body.usage.free_search_queries, 1);
-  assert.equal(body.usage.estimated_search_cost_usd, 0.015);
-  assert.equal(body.usage.estimated_ai_cost_usd, 0.0008);
-  assert.equal(body.usage.estimated_total_variable_cost_usd, 0.0158);
-  assert.equal(body.usage.cost_guardrail_usd, 0.15);
+  assert.deepEqual(Object.keys(body).sort(), ['completed_at', 'coverage', 'entity', 'results', 'screening_id', 'status', 'summary']);
+  assert.equal(body.methodology, undefined);
+  assert.equal(body.usage, undefined);
+  assert.equal(body.transliterations, undefined);
+  for (const field of ['ai_classification', 'matched_terms', 'entity_match_score', 'adverse_relevance_score', 'source_reliability_score', 'severity_score', 'final_disposition']) {
+    assert.equal(body.results[0][field], undefined);
+  }
   assert.equal(requests.length, 5);
 });
 
@@ -249,10 +246,6 @@ test('identical checks reuse cached evidence without paid search calls', async (
   });
   const body = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(body.usage.cache_hit, true);
-  assert.equal(body.usage.paid_search_queries, 0);
-  assert.equal(body.usage.free_search_queries, 0);
-  assert.equal(body.usage.estimated_ai_cost_usd, 0);
   assert.equal(body.summary.risk_threshold, 1);
   assert.equal(body.summary.results_at_or_above_threshold, 0);
   assert.equal(body.summary.human_review_required, false);
@@ -287,17 +280,12 @@ test('China pack uses native terms, official-domain targeting, and an archive la
   const archiveCall = callSet.find(({ url }) => url.hostname === 'api.gdeltproject.org');
   const officialWebCall = paidCalls.find(({ url }) => url.pathname.includes('/web/'));
   assert.equal(response.status, 200);
-  assert.equal(body.usage.paid_search_queries, 3);
-  assert.equal(body.usage.free_search_queries, 1);
-  assert.deepEqual(body.coverage.country_packs, ['china']);
   assert.equal(paidCalls.length, 3);
   assert.ok(paidCalls.every(({ url }) => url.searchParams.get('search_lang') === 'zh-hans'));
   assert.match(officialWebCall.url.searchParams.get('q'), /site:csrc\.gov\.cn/);
   assert.match(officialWebCall.url.searchParams.get('q'), /立案调查/);
   assert.match(archiveCall.url.searchParams.get('query'), /sourcelang:chinese/);
-  assert.equal(body.methodology.transliteration.status, 'completed');
-  assert.equal(body.transliterations.zh.length, 2);
-  assert.ok(paidCalls.every(({ url }) => url.searchParams.get('q').includes(body.transliterations.zh[0])));
+  assert.ok(paidCalls.every(({ url }) => url.searchParams.get('q').includes('华信科技 zh one')));
   assert.ok(body.results[0].categories.includes('financial_crime'));
 });
 
@@ -313,16 +301,12 @@ test('Russia business pack includes free structured regulatory evidence without 
   const paidCalls = callSet.filter(({ url }) => url.hostname === 'api.search.brave.com');
   const archiveCall = callSet.find(({ url }) => url.hostname === 'api.gdeltproject.org');
   assert.equal(response.status, 200);
-  assert.equal(body.usage.paid_search_queries, 3);
-  assert.equal(body.usage.free_search_queries, 2);
-  assert.deepEqual(body.coverage.country_packs, ['russia']);
   assert.equal(paidCalls.length, 3);
   assert.match(archiveCall.url.searchParams.get('query'), /sourcelang:russian/);
   const officialResult = body.results.find((result) => result.source_type === 'official_regulatory');
   assert.ok(officialResult);
   assert.equal(officialResult.publisher, 'cbr.ru');
   assert.match(officialResult.url, /id=41001$/);
-  assert.equal(officialResult.source_reliability_score, 0.95);
   assert.equal(officialResult.legal_stage, 'regulatory_action');
 });
 
@@ -349,8 +333,6 @@ test('Gulf, India, USA, and ANZ packs target regional official domains without e
     const paidCalls = callSet.filter(({ url }) => url.hostname === 'api.search.brave.com');
     const officialWebCall = paidCalls.find(({ url }) => url.pathname.includes('/web/'));
     assert.equal(response.status, 200);
-    assert.equal(body.usage.paid_search_queries, 3);
-    assert.deepEqual(body.coverage.country_packs, [regionalCase.id]);
     assert.equal(paidCalls.length, 3);
     assert.ok(officialWebCall.url.searchParams.get('q').includes(regionalCase.domain));
   }
@@ -369,11 +351,11 @@ test('returns deterministic evidence when optional AI classification is unavaila
   assert.equal(body.status, 'partial');
   assert.equal(body.summary.decision_eligible, false);
   assert.equal(body.summary.threshold_status, 'incomplete_coverage');
-  assert.equal(body.methodology.ai_classification.status, 'failed');
-  assert.equal(body.usage.ai_classification_used, false);
+  assert.equal(body.methodology, undefined);
+  assert.equal(body.usage, undefined);
 });
 
-test('retains AI-confirmed name mismatches for audit without creating false review hits', async () => {
+test('removes AI-confirmed name mismatches from the customer response', async () => {
   const response = await fetch(`${appUrl}/service/adverse_media`, {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -382,12 +364,10 @@ test('retains AI-confirmed name mismatches for audit without creating false revi
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.equal(body.status, 'completed');
-  assert.equal(body.results.length, 1);
-  assert.equal(body.results[0].review_required, false);
-  assert.equal(body.results[0].final_disposition, 'excluded_by_ai_evidence_review');
-  assert.equal(body.summary.raw_candidate_results, 1);
+  assert.equal(body.results.length, 0);
   assert.equal(body.summary.potentially_relevant_results, 0);
-  assert.equal(body.summary.ai_excluded_results, 1);
+  assert.equal(body.summary.raw_candidate_results, undefined);
+  assert.equal(body.summary.ai_excluded_results, undefined);
   assert.equal(body.summary.results_at_or_above_threshold, 0);
   assert.equal(body.summary.risk_level, 'no_material_results');
   assert.equal(body.summary.human_review_required, false);
@@ -407,9 +387,8 @@ test('retries transient provider failures and reports partial coverage instead o
   assert.equal(paidCalls.length, 6);
   assert.equal(body.status, 'partial');
   assert.equal(body.coverage.complete, false);
-  assert.equal(body.coverage.source_status.global_news.failed, 2);
-  assert.equal(body.coverage.source_status.open_web.failed, 1);
-  assert.equal(body.coverage.source_status.global_news_archive.completed, 1);
+  assert.equal(body.coverage.source_status, undefined);
+  assert.equal(body.coverage.indexes_attempted, undefined);
   assert.equal(body.summary.decision_eligible, false);
   assert.equal(body.summary.threshold_status, 'incomplete_coverage');
   assert.equal(body.summary.human_review_required, true);
@@ -424,7 +403,7 @@ test('rejects model output containing fields outside the strict classification c
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.equal(body.results[0].ai_classification, undefined);
-  assert.equal(body.methodology.ai_classification.status, 'failed');
+  assert.equal(body.methodology, undefined);
   assert.equal(JSON.stringify(body).includes('unwanted_field'), false);
   assert.equal(JSON.stringify(body).includes('This must never reach'), false);
 });

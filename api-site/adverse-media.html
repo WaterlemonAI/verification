@@ -67,8 +67,8 @@
 
           <article id="responses">
             <p class="label">RESPONSE</p>
-            <h2>Evidence and explainable scores</h2>
-            <p>Every result includes its original URL and separate entity-match, adverse-relevance, source-reliability, severity, and combined risk scores.</p>
+            <h2>Customer-ready evidence</h2>
+            <p>Every retained result includes its original URL, evidence excerpt, risk category, legal stage, and combined risk score. Internal search, model, cost, and scoring diagnostics are never returned.</p>
             <div class="schema-table" aria-label="Adverse media response fields">
               <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
               <div><code>screening_id</code><span>UUID</span><span>Unique screening reference.</span></div>
@@ -77,20 +77,15 @@
               <div><code>status</code><span>string</span><span><code>completed</code> only when every configured search and AI review stage succeeds; otherwise <code>partial</code>.</span></div>
               <div><code>summary.threshold_status</code><span>string</span><span>Review required, within threshold, or incomplete coverage.</span></div>
               <div><code>summary.decision_eligible</code><span>boolean</span><span>False whenever the run is partial and must not be treated as a completed compliance decision.</span></div>
-              <div><code>coverage</code><span>object</span><span>Completeness, per-index attempt counts, languages, dates, and explicit limitations.</span></div>
-              <div><code>usage</code><span>object</span><span>Paid-query usage, cache state, and cost guardrail.</span></div>
-              <div><code>transliterations</code><span>object</span><span>Two generated entity-name variants for each selected non-English language.</span></div>
+              <div><code>coverage</code><span>object</span><span>Completeness, languages, dates, search time, archive window, and explicit limitations.</span></div>
               <div><code>results[].title</code><span>string</span><span>Article or page title.</span></div>
               <div><code>results[].url</code><span>URI</span><span>Original evidence URL.</span></div>
               <div><code>results[].source_type</code><span>string</span><span>News index, open web, global archive, or official regulatory evidence.</span></div>
               <div><code>results[].excerpt</code><span>string</span><span>Relevant indexed excerpt.</span></div>
               <div><code>results[].categories</code><span>string[]</span><span>Detected risk categories.</span></div>
               <div><code>results[].legal_stage</code><span>string</span><span>Media mention, allegation, investigation, charge, arrest, conviction, or regulatory action.</span></div>
-              <div><code>results[].entity_match_score</code><span>number</span><span>How strongly the article matches the requested entity.</span></div>
               <div><code>results[].risk_score</code><span>number</span><span>Combined, explainable prioritisation score.</span></div>
-              <div><code>results[].review_required</code><span>boolean</span><span>True when the result meets the threshold and has not been excluded by high-confidence AI evidence review.</span></div>
-              <div><code>results[].final_disposition</code><span>string</span><span>Review required, below threshold, or retained for audit but excluded by AI evidence review.</span></div>
-              <div><code>results[].ai_classification</code><span>object</span><span>Optional bounded AI review containing only entity match, adverse status, categories, legal stage, confidence, and a concise evidence summary.</span></div>
+              <div><code>results[].review_required</code><span>boolean</span><span>True when the retained result meets the configured review threshold.</span></div>
             </div>
             <h3>Status codes</h3>
             <div class="responses">
@@ -105,7 +100,7 @@
           <article id="methodology">
             <p class="label">METHODOLOGY</p>
             <h2>Designed for review, not automated guilt decisions</h2>
-            <p>The engine normalizes names and aliases, generates two tightly constrained name transliterations for every selected non-English language, searches current and archived indexes with controlled retries, removes duplicate URLs, requires an entity-name match, classifies adverse-event terms, and ranks evidence. Regional selections add native-language and country-focused official-source searches inside the fixed 12-query guardrail. High-confidence AI mismatch or non-adverse findings remain in the response for audit but cannot trigger review. Any exhausted source or AI processing failure makes the run <code>partial</code>, blocks decision eligibility, and requires manual review. Deep research callbacks are sent only for completed, decision-eligible runs. A media result is a review lead—not proof of wrongdoing.</p>
+            <p>The engine normalizes names and aliases, generates tightly constrained name transliterations for selected non-English languages, searches current and archived indexes with controlled retries, removes duplicate URLs, resolves the requested entity, classifies adverse-event terms, and ranks evidence. Regional selections add native-language and country-focused official-source searches inside the fixed guardrail. Entity mismatches and non-adverse candidates are removed from customer responses. Any exhausted source or required classification failure makes the run <code>partial</code>, blocks decision eligibility, and requires manual review. Deep research callbacks are sent only for completed, decision-eligible runs. A media result is a review lead—not proof of wrongdoing.</p>
           </article>
 
           <article id="tester" class="tester">

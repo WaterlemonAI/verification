@@ -54,11 +54,13 @@ test('deep research worker delivers and removes only a completed decision-eligib
     controller = startDeepResearchWorker({
       queue,
       store: { getMasterKey: async () => 'configured' },
-      screen: async () => ({ status: 'completed', summary: { decision_eligible: true } }),
+      screen: async () => ({ status: 'completed', summary: { decision_eligible: true }, usage: { paid_search_queries: 3 } }),
+      present: (result) => ({ status: result.status, screening_id: result.screening_id }),
       deliver: async (_job, result) => { deliveredResult = result; }
     });
   });
   await done;
   assert.equal(released, false);
   assert.equal(deliveredResult.screening_id, job.screening_id);
+  assert.equal(deliveredResult.usage, undefined);
 });
