@@ -158,7 +158,7 @@ test('encrypted IBAN adapter privately encrypts, verifies and decrypts without c
   })).json();
   relayRequests = [];
   const requestBody = {
-    source: 'API', transID: 'CLIENT-001', docType: 610, requestCategory: 'business', country: 'AE',
+    source: 'API', transID: 'CLIENT-001', docType: 999, requestCategory: 'business', country: 'AE',
     firstName: 'FIRST', lastName: 'LAST', completeName: 'FIRST LAST', bankCode: 'BANKCODE',
     bankAccountNumber: '1234567890', bic: 'BICCODE', iban: 'AE000000000000000000000', id: 'ID-1', idType: 'PASSPORT'
   };
@@ -176,7 +176,7 @@ test('encrypted IBAN adapter privately encrypts, verifies and decrypts without c
   assert.deepEqual(relayRequests.map((item) => new URL(item.url).pathname), [
     '/v1/apicall/encrypt', '/v1/apicall/bank/intl_bank_acc_verification', '/v1/apicall/decrypt'
   ]);
-  assert.deepEqual(relayRequests[0].body, requestBody);
+  assert.deepEqual(relayRequests[0].body, { ...requestBody, docType: 610 });
   assert.deepEqual(relayRequests[1].body, { requestData: 'encrypted-request-payload' });
   assert.deepEqual(relayRequests[2].body, { responseData: 'encrypted-response-payload' });
   for (const request of relayRequests) {
@@ -230,7 +230,19 @@ test('IBAN public docs include every input and response field without provider d
   for (const field of responseFields) assert.equal(html.includes(field), true, `IBAN page omitted response field ${field}`);
   assert.equal(spec.components.schemas.IbanVerificationRequest.required.includes('requestCategory'), true);
   assert.deepEqual(spec.components.schemas.IbanVerificationRequest.properties.requestCategory.enum, ['business']);
-  assert.equal(html.includes('id="request-category" type="text" value="business" required'), true);
+  assert.equal(html.includes('id="trans-id"'), false);
+  assert.equal(html.includes('id="doc-type"'), false);
+  assert.equal(html.includes('id="country" required'), true);
+  assert.equal(html.includes('id="request-category" required'), true);
+  assert.equal(spec.components.schemas.IbanVerificationRequest.required.includes('docType'), false);
+  assert.equal(spec.components.schemas.IbanVerificationRequest.properties.docType.const, 610);
+  assert.equal(script.includes("globalThis.crypto.randomUUID()"), true);
+  assert.equal(script.includes('docType: 610'), true);
+  assert.equal(script.includes('AE AF AG'), true);
+  const countryCodes = script.match(/const countryCodes = `([\s\S]*?)`\.trim/)[1].trim().split(/\s+/);
+  assert.equal(countryCodes.length, 249);
+  assert.equal(new Set(countryCodes).size, 249);
+  for (const code of ['AE', 'GB', 'IN', 'PK', 'US', 'ZA']) assert.equal(countryCodes.includes(code), true);
   assert.equal(script.includes("requestCategory: 'business'"), true);
   assert.equal(Object.hasOwn(spec.paths, '/service/iban_verification'), true);
   for (const publicAsset of [html, script, specText]) {

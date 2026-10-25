@@ -50,8 +50,8 @@
             <h2>Submit an account verification</h2>
             <p>Send <code>application/json</code>. Field names and values are passed through exactly as documented.</p>
             <div class="field-grid">
-              <div><strong>transID</strong><span>string · required</span><p>Your unique transaction ID.</p></div>
-              <div><strong>docType</strong><span>string/number · required</span><p>Document type to search; <code>610</code> for IBAN verification.</p></div>
+              <div><strong>transID</strong><span>string · required</span><p>Your unique transaction ID. The live tester generates a fresh value for every run.</p></div>
+              <div><strong>docType</strong><span>number · server enforced</span><p>Always <code>610</code>. AI7 enforces this value before forwarding the request.</p></div>
               <div><strong>country</strong><span>string · required</span><p>ISO country code, such as <code>AE</code>.</p></div>
               <div><strong>source</strong><span>string · optional</span><p>Request source; normally <code>API</code>.</p></div>
               <div><strong>firstName</strong><span>string · optional</span><p>Account owner's first name.</p></div>
@@ -107,10 +107,8 @@
               <fieldset>
                 <legend>Required fields</legend>
                 <div class="input-grid">
-                  <label>Transaction ID <code>transID</code><input id="trans-id" type="text" placeholder="Unique transaction ID" required /></label>
-                  <label>Document type <code>docType</code><input id="doc-type" type="text" value="610" required /></label>
-                  <label>Country <code>country</code><input id="country" type="text" placeholder="AE" maxlength="3" required /></label>
-                  <label>Request category <code>requestCategory</code><input id="request-category" type="text" value="business" required /></label>
+                  <label>Country <code>country</code><select id="country" required><option value="AE">United Arab Emirates (AE)</option></select></label>
+                  <label>Request category <code>requestCategory</code><select id="request-category" required><option value="business">Business</option></select></label>
                   <label>Source <code>source</code><input id="source" type="text" value="API" /></label>
                 </div>
               </fieldset>
