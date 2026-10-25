@@ -41,8 +41,10 @@ before(async () => {
         const russiaCheck = query.includes('ООО Ромашка');
         const regionalCheck = query.includes('Region Example');
         const mismatchCheck = query.includes('Prabhpreet Singh Gill');
+        const highConfidenceMismatchCheck = query.includes('Query Person Mismatch');
+        const partialNameCheck = query.includes('Ansh Bodele');
         const coverageFailureCheck = query.includes('Coverage Failure Example');
-        assert.ok(query.includes('John Example') || failureCheck || schemaEscapeCheck || chinaCheck || russiaCheck || regionalCheck || mismatchCheck || coverageFailureCheck);
+        assert.ok(query.includes('John Example') || failureCheck || schemaEscapeCheck || chinaCheck || russiaCheck || regionalCheck || mismatchCheck || highConfidenceMismatchCheck || partialNameCheck || coverageFailureCheck);
         if (coverageFailureCheck) return Response.json({ error: 'temporary' }, { status: 503 });
         let result = url.searchParams.get('search_lang') === 'de' ? {
           ...indexedResult,
@@ -77,9 +79,21 @@ before(async () => {
         };
         if (mismatchCheck) result = {
           ...indexedResult,
-          title: 'Search for Prabhpreet Singh Gill surfaces case concerning Harprit Singh Gill',
-          url: 'https://publisher.example/news/harprit-singh-gill',
-          description: 'Authorities investigated Harprit Singh Gill over alleged fraud; Prabhpreet Singh Gill was not the subject.'
+          title: 'Prabhpreet Singh Gill named in fraud investigation',
+          url: 'https://publisher.example/news/prabhpreet-singh-gill',
+          description: 'Authorities investigated Prabhpreet Singh Gill over alleged fraud.'
+        };
+        if (partialNameCheck) result = {
+          ...indexedResult,
+          title: 'Ansh mentioned in unrelated community report',
+          url: 'https://publisher.example/news/unrelated-ansh',
+          description: 'The report concerns another individual with a different family name.'
+        };
+        if (highConfidenceMismatchCheck) result = {
+          ...indexedResult,
+          title: 'Search for Query Person Mismatch surfaces case concerning another person',
+          url: 'https://publisher.example/news/another-person',
+          description: 'Authorities investigated another person over alleged fraud; Query Person Mismatch was not the subject.'
         };
         if (url.pathname.includes('/news/')) return Response.json({ results: [result] });
         return Response.json({ web: { results: [result] } });
@@ -93,21 +107,27 @@ before(async () => {
         const chinaCheck = url.searchParams.get('query').includes('华信科技');
         const russiaCheck = url.searchParams.get('query').includes('ООО Ромашка');
         const mismatchCheck = url.searchParams.get('query').includes('Prabhpreet Singh Gill');
+        const highConfidenceMismatchCheck = url.searchParams.get('query').includes('Query Person Mismatch');
+        const partialNameCheck = url.searchParams.get('query').includes('Ansh Bodele');
         const coverageFailureCheck = url.searchParams.get('query').includes('Coverage Failure Example');
         return Response.json({ articles: [{
           title: failureCheck ? 'AI Failure Example charged in fraud investigation'
             : schemaEscapeCheck ? 'Schema Escape Example charged in fraud investigation'
               : chinaCheck ? '华信科技因欺诈被立案调查'
                 : russiaCheck ? 'ООО Ромашка: расследование мошенничества'
-                  : mismatchCheck ? 'Search for Prabhpreet Singh Gill surfaces case concerning Harprit Singh Gill'
-                    : coverageFailureCheck ? 'Coverage Failure Example charged in fraud investigation'
+                  : mismatchCheck ? 'Prabhpreet Singh Gill named in fraud investigation'
+                    : highConfidenceMismatchCheck ? 'Search for Query Person Mismatch surfaces case concerning another person'
+                      : partialNameCheck ? 'Ansh mentioned in unrelated community report'
+                        : coverageFailureCheck ? 'Coverage Failure Example charged in fraud investigation'
                   : indexedResult.title,
           url: failureCheck ? 'https://publisher.example/news/ai-failure'
             : schemaEscapeCheck ? 'https://publisher.example/news/schema-escape'
               : chinaCheck ? 'https://news.example.cn/华信科技-调查'
                 : russiaCheck ? 'https://news.example.ru/romashka-investigation'
-                  : mismatchCheck ? 'https://publisher.example/news/harprit-singh-gill'
-                    : coverageFailureCheck ? 'https://publisher.example/news/coverage-failure'
+                  : mismatchCheck ? 'https://publisher.example/news/prabhpreet-singh-gill'
+                    : highConfidenceMismatchCheck ? 'https://publisher.example/news/another-person'
+                      : partialNameCheck ? 'https://publisher.example/news/unrelated-ansh'
+                        : coverageFailureCheck ? 'https://publisher.example/news/coverage-failure'
                   : indexedResult.url,
           domain: chinaCheck ? 'news.example.cn' : russiaCheck ? 'news.example.ru' : 'publisher.example',
           seendate: '20261020T100000Z',
@@ -173,6 +193,18 @@ before(async () => {
             legal_stage: 'media_mention',
             confidence: 0,
             summary: 'The evidence concerns a different person with a partially matching name.'
+          })) }) }] } }],
+          usageMetadata: { promptTokenCount: 800, candidatesTokenCount: 120 }
+        });
+        if (prompt.entity.name === 'Query Person Mismatch') return Response.json({
+          candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: prompt.evidence.map((evidence) => ({
+            result_id: evidence.result_id,
+            entity_match: 'unlikely',
+            adverse: 'not_adverse',
+            categories: [],
+            legal_stage: 'media_mention',
+            confidence: 0.97,
+            summary: 'The evidence concerns a different person.'
           })) }) }] } }],
           usageMetadata: { promptTokenCount: 800, candidatesTokenCount: 120 }
         });
@@ -355,7 +387,7 @@ test('returns deterministic evidence when optional AI classification is unavaila
   assert.equal(body.usage, undefined);
 });
 
-test('removes AI-confirmed name mismatches from the customer response', async () => {
+test('does not suppress exact-name adverse evidence using a zero-confidence AI negative', async () => {
   const response = await fetch(`${appUrl}/service/adverse_media`, {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -364,14 +396,42 @@ test('removes AI-confirmed name mismatches from the customer response', async ()
   const body = await response.json();
   assert.equal(response.status, 200);
   assert.equal(body.status, 'completed');
-  assert.equal(body.results.length, 0);
-  assert.equal(body.summary.potentially_relevant_results, 0);
+  assert.equal(body.results.length, 1);
+  assert.match(body.results[0].title, /Prabhpreet Singh Gill/);
+  assert.equal(body.summary.potentially_relevant_results, 1);
   assert.equal(body.summary.raw_candidate_results, undefined);
   assert.equal(body.summary.ai_excluded_results, undefined);
-  assert.equal(body.summary.results_at_or_above_threshold, 0);
-  assert.equal(body.summary.risk_level, 'no_material_results');
-  assert.equal(body.summary.human_review_required, false);
+  assert.equal(body.summary.results_at_or_above_threshold, 1);
+  assert.equal(body.summary.risk_level, 'high');
+  assert.equal(body.summary.human_review_required, true);
   assert.equal(body.summary.decision_eligible, true);
+});
+
+test('rejects one-token individual-name noise before AI classification', async () => {
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'individual', name: 'Ansh Bodele', languages: ['en'], max_results: 5 })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.status, 'completed');
+  assert.equal(body.results.length, 0);
+  assert.equal(body.summary.outcome, 'no_material_results');
+  assert.equal(body.summary.risk_level, 'no_material_results');
+});
+
+test('suppresses only high-confidence AI-confirmed mismatches', async () => {
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'individual', name: 'Query Person Mismatch', languages: ['en'], max_results: 5 })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.status, 'completed');
+  assert.equal(body.results.length, 0);
+  assert.equal(body.summary.outcome, 'no_material_results');
 });
 
 test('retries transient provider failures and reports partial coverage instead of completed', async () => {
@@ -387,6 +447,16 @@ test('retries transient provider failures and reports partial coverage instead o
   assert.equal(paidCalls.length, 6);
   assert.equal(body.status, 'partial');
   assert.equal(body.coverage.complete, false);
+  assert.equal(body.summary.outcome, 'inconclusive');
+  assert.equal(body.summary.risk_level, 'indeterminate');
+  assert.deepEqual(body.coverage.sources, [
+    { source: 'current_news', status: 'unavailable' },
+    { source: 'open_web', status: 'unavailable' },
+    { source: 'archive', status: 'complete' },
+    { source: 'official_records', status: 'not_requested' }
+  ]);
+  assert.deepEqual(body.coverage.reason_codes, ['current_news_unavailable', 'open_web_unavailable']);
+  assert.equal(body.coverage.retryable, true);
   assert.equal(body.coverage.source_status, undefined);
   assert.equal(body.coverage.indexes_attempted, undefined);
   assert.equal(body.summary.decision_eligible, false);
