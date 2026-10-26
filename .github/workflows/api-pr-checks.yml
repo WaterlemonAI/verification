@@ -1,0 +1,32 @@
+name: Review AI7 UAE API changes
+
+on:
+  pull_request:
+    paths:
+      - api-site/**
+      - admin-site/**
+      - api/**
+      - lib/**
+      - server.mjs
+      - test/**
+      - package.json
+      - package-lock.json
+      - infrastructure/api.bicep
+      - .github/workflows/api-pr-checks.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify JavaScript syntax
+        run: |
+          node --check server.mjs
+          find lib test -name '*.mjs' -print0 | xargs -0 -n1 node --check
+      - name: Run API contract and queue tests
+        run: npm test
