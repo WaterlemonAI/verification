@@ -956,7 +956,8 @@ async function executeSingleFormService({ service, data, submissionId, store, fe
   }
 }
 
-export async function executeFormsJob({ job, store, fetchImpl, merchantScreener = configuredMerchantScreener, reportStore }) {
+export async function executeFormsJob({ job, store, fetchImpl, merchantScreener = configuredMerchantScreener,
+  reportStore, requestCapacity = null }) {
   let saved = null;
   try {
     saved = await reportStore.getFormResult({ ownerId: job.owner_id, submissionId: job.submission_id });
@@ -966,11 +967,33 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
   if (saved?.stage === 'final') return saved.result;
   if (saved?.submission_id === job.submission_id && saved.report) return saved;
   const startedAt = saved?.started_at || new Date().toISOString();
-  const services = saved?.stage === 'services_complete' ? saved.services
-    : await Promise.all(job.form.services.map((service) => executeSingleFormService({
-      service, data: job.data, submissionId: job.submission_id, store, fetchImpl, merchantScreener
-    })));
-  if (!saved) await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
+  const services = Array.isArray(saved?.services) ? [...saved.services] : [];
+  for (let index = services.length; index < job.form.services.length; index += 1) {
+    const service = job.form.services[index];
+    let release;
+    let serviceResult;
+    try {
+      if (requestCapacity) release = await requestCapacity.acquire(service.service_id);
+      serviceResult = await executeSingleFormService({
+        service, data: job.data, submissionId: job.submission_id, store, fetchImpl, merchantScreener
+      });
+    } catch (error) {
+      if (!(error instanceof CapacityError) || Number(job.stage_attempts?.execution || 0) < 2) throw error;
+      const qualification = evaluateFormServiceQualification({ httpStatus: null, response: null });
+      serviceResult = {
+        service_id: service.service_id, name: service.service_id, status: 'failed', http_status: null,
+        started_at: new Date().toISOString(), completed_at: new Date().toISOString(), duration_ms: 0,
+        error: 'API capacity remained unavailable after controlled retries.', response: null,
+        ...qualification,
+        coverage: { ...qualification.coverage, reason_codes: [...qualification.coverage.reason_codes, 'capacity_unavailable'] },
+        eligibility: { ...qualification.eligibility, reason_codes: [...qualification.eligibility.reason_codes, 'capacity_unavailable'] }
+      };
+    } finally { release?.(); }
+    services.push(serviceResult);
+    await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
+      result: { stage: 'services_partial', services, started_at: startedAt } });
+  }
+  if (saved?.stage !== 'services_complete') await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
     result: { stage: 'services_complete', services, started_at: startedAt } });
   const { status, summary } = consolidateFormServiceResults(services);
   const completedAt = new Date().toISOString();
@@ -1840,7 +1863,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   if (startWorker && formsQueue) {
     startFormsWorker({
       queue: formsQueue,
-      execute: (job) => executeFormsJob({ job, store, fetchImpl, merchantScreener, reportStore }),
+      execute: (job) => executeFormsJob({ job, store, fetchImpl, merchantScreener, reportStore, requestCapacity }),
       onResult: async (job, result) => {
         if (job.idempotency) await formSubmissionStore.accept(job.idempotency);
         if (job.billing?.workspace_id && job.billing?.log_key)

@@ -11,6 +11,7 @@ const { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } = await imp
 const { MemoryAdverseMediaReportStore } = await import('../lib/adverse-media-report-store.mjs');
 const { resolveFormServiceInput, validateFormDefinition } = await import('../lib/forms.mjs');
 const { startFormsWorker } = await import('../lib/forms-queue.mjs');
+const { CapacityError } = await import('../lib/request-capacity.mjs');
 
 const adminKey = 'forms_admin_test_key';
 process.env.AI7_ADMIN_KEY_HASHES = createHash('sha256').update(adminKey).digest('hex');
@@ -261,6 +262,71 @@ test('Forms execution returns exact nested responses and creates one permanent t
   const downloaded = await fetch(`${baseUrl}/service/forms/reports/${result.report.report_id}.pdf`);
   assert.equal(downloaded.status, 200);
   assert.equal(downloaded.headers.get('content-type'), 'application/pdf');
+});
+
+test('Form capacity retries only missing checks after each completed supplier checkpoint', async () => {
+  const isolatedStore = new EnvironmentStore();
+  for (const id of ['first-check', 'second-check']) await isolatedStore.upsertIntegration({
+    id, name: id, publicPath: `/service/${id}`, method: 'POST', upstreamUrl: `https://supplier.test/${id}`,
+    authType: 'none', acceptedContentTypes: ['application/json'], enabled: true
+  }, '');
+  const isolatedReports = new MemoryAdverseMediaReportStore();
+  const calls = [];
+  let blockSecond = true;
+  let releases = 0;
+  const capacity = { async acquire(lane) {
+    if (lane === 'second-check' && blockSecond) throw new CapacityError('capacity_queue_full');
+    return () => { releases += 1; };
+  } };
+  const job = { ...primaryJob, submission_id: 'd038504b-aeb4-4f6f-86e5-d33ce32e5b78',
+    report_id: 'cc5704f0-88db-43f5-b60c-9204a2d5355d', owner_id: 'checkpoint-owner',
+    customer_logo_url: '', stage_attempts: {},
+    form: { ...primaryJob.form, services: [
+      { service_id: 'first-check', input_template: { name: '{{company_name}}' } },
+      { service_id: 'second-check', input_template: { name: '{{company_name}}' } }
+    ] } };
+  const options = { job, store: isolatedStore, reportStore: isolatedReports, requestCapacity: capacity,
+    fetchImpl: async (url) => { calls.push(url.pathname); return new Response('{"ok":true}', { status: 200,
+      headers: { 'content-type': 'application/json' } }); } };
+  await assert.rejects(executeFormsJob(options), (error) => error instanceof CapacityError);
+  assert.deepEqual(calls, ['/first-check']);
+  const checkpoint = await isolatedReports.getFormResult({ ownerId: job.owner_id, submissionId: job.submission_id });
+  assert.equal(checkpoint.stage, 'services_partial');
+  assert.equal(checkpoint.services.length, 1);
+  blockSecond = false;
+  job.stage_attempts.execution = 1;
+  const result = await executeFormsJob(options);
+  assert.equal(result.summary.decision_eligible, true);
+  assert.deepEqual(calls, ['/first-check', '/second-check']);
+  assert.equal(releases, 2);
+});
+
+test('exhausted Form capacity reports an ineligible partial result and preserves completed checks', async () => {
+  const isolatedStore = new EnvironmentStore();
+  await isolatedStore.upsertIntegration({ id: 'first-check', name: 'First check', publicPath: '/service/first-check',
+    method: 'POST', upstreamUrl: 'https://supplier.test/first', authType: 'none',
+    acceptedContentTypes: ['application/json'], enabled: true }, '');
+  const isolatedReports = new MemoryAdverseMediaReportStore();
+  let calls = 0;
+  const job = { ...primaryJob, submission_id: 'a86075dc-5d2f-4fdf-9329-ad02bec3b946',
+    report_id: '7d84a397-772f-4d24-ab5d-2d4abaf2893e', owner_id: 'capacity-exhausted-owner',
+    customer_logo_url: '', stage_attempts: { execution: 2 },
+    form: { ...primaryJob.form, services: [
+      { service_id: 'first-check', input_template: { name: '{{company_name}}' } },
+      { service_id: 'blocked-check', input_template: { name: '{{company_name}}' } }
+    ] } };
+  const result = await executeFormsJob({ job, store: isolatedStore, reportStore: isolatedReports,
+    requestCapacity: { async acquire(lane) {
+      if (lane === 'blocked-check') throw new CapacityError('capacity_wait_timeout');
+      return () => {};
+    } },
+    fetchImpl: async () => { calls += 1; return new Response('{"ok":true}', { status: 200 }); } });
+  assert.equal(calls, 1);
+  assert.equal(result.status, 'partial');
+  assert.equal(result.summary.decision_eligible, false);
+  assert.ok(result.services[1].eligibility.reason_codes.includes('capacity_unavailable'));
+  assert.ok(result.summary.reason_codes.includes('capacity_unavailable'));
+  assert.equal(result.report.transaction_id, job.submission_id);
 });
 
 test('Forms decision is eligible only when every selected check affirmatively qualifies', () => {
