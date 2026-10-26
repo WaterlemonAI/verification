@@ -268,7 +268,7 @@ function reportFilename(name) {
 }
 
 async function createEntitySearchReport(req, res, store) {
-  if (!(await store.isClientKey(bearerToken(req)))) {
+  if (!req.ai7Client && !(await store.isClientKey(bearerToken(req)))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
   try {
@@ -325,7 +325,7 @@ async function finalizeAdverseMediaReport({ request, response, ownerId, origin, 
 
 async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore) {
   const token = bearerToken(req);
-  if (!(await store.isClientKey(token))) {
+  if (!req.ai7Client && !(await store.isClientKey(token))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
   try {
@@ -400,7 +400,7 @@ async function finalizeMerchantScreeningReport({ request, response, ownerId, ori
 
 async function createMerchantScreening(req, res, store, merchantScreener, reportStore) {
   const token = bearerToken(req);
-  if (!(await store.isClientKey(token))) {
+  if (!req.ai7Client && !(await store.isClientKey(token))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
   try {
@@ -632,7 +632,7 @@ async function encryptedJsonRelay(res, integration, store, fetchImpl, body) {
 }
 
 async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
-  if (!(await store.isClientKey(bearerToken(req)))) {
+  if (!req.ai7Client && !(await store.isClientKey(bearerToken(req)))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
 
@@ -938,7 +938,7 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
 
 async function submitForm(req, res, formId, store, formsQueue) {
   const token = bearerToken(req);
-  if (!(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  if (!req.ai7Client && !(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   if (!formsQueue) return json(res, 503, { status: 'Error', error: 'Forms processing is temporarily unavailable.' });
   const form = await store.getForm(formId);
   if (!form || !form.enabled) return json(res, 404, { status: 'Error', error: 'Form was not found.' });
@@ -1565,7 +1565,7 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
   if (!/^[0-9a-fA-F]{64}$/.test(process.env.BSA_DATA_KEY_HEX || '')) return json(res, 503, { status: 'Error', reasonCode: 'BSA_ENCRYPTION_UNAVAILABLE' });
   const admin = Boolean(adminAccount);
   const token = admin ? null : bearerToken(req);
-  if (!admin && !(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  if (!admin && !req.ai7Client && !(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   const ownerId = reportOwnerId(admin ? `admin:${adminAccount.email}` : token);
   const rootPath = admin ? '/admin/api/bsa' : '/service/bank_statement_analysis';
   if (admin && req.method === 'GET' && url.pathname === `${rootPath}/config`) {
@@ -1761,11 +1761,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return res.end('ok\n');
       }
       if (req.method === 'GET' && url.pathname === '/service/health') {
-        if (!(await store.isClientKey(bearerToken(req)))) return json(res, 401, { status: 'Error', error: 'An active API key is required.' });
+        if (!req.ai7Client && !(await store.isClientKey(bearerToken(req)))) return json(res, 401, { status: 'Error', error: 'An active API key is required.' });
         return json(res, 200, await serviceHealth(store));
       }
       if (req.method === 'POST' && url.pathname === '/service/keys/self/rotate') {
-        const client = await store.getClientForKey(bearerToken(req));
+        const client = req.ai7Client || await store.getClientForKey(bearerToken(req));
         if (!client?.key_id) return json(res, 401, { status: 'Error', error: 'An active managed API key is required.' });
         const rotated = await store.rotateClient(client.key_id, client.id);
         return rotated ? json(res, 200, { key: rotated.client, api_key: rotated.apiKey, notice: 'The previous key is invalid. Copy this replacement now.' })
