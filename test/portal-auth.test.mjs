@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { createInvitation } from '../lib/customer-invitation.mjs';
+import { MemoryCustomerUsageStore, validateUsagePolicy } from '../lib/customer-usage.mjs';
 
 process.env.NODE_ENV = 'test';
 const { createAppServer } = await import('../server.mjs');
@@ -12,10 +13,12 @@ function sessionCookie(response) {
 
 test('one-time customer invitation creates a portal account and initial workspace key', async (t) => {
   const store = new EnvironmentStore();
+  const usageStore = new MemoryCustomerUsageStore();
   const customerId = 'abcdef0123456789';
   const invitation = createInvitation(customerId);
-  await store.setCustomer({ id: customerId, name: 'Regulated Institution', adminEmail: 'user@example.com', status: 'pending', invitationHash: invitation.tokenHash, invitationExpiresAt: invitation.expiresAt });
-  const server = createAppServer({ store, startWorker: false, deepResearchQueue: null, formsQueue: null });
+  await store.setCustomer({ id: customerId, name: 'Regulated Institution', adminEmail: 'user@example.com', status: 'pending', usagePolicyVersion: 1,
+    invitationHash: invitation.tokenHash, invitationExpiresAt: invitation.expiresAt });
+  const server = createAppServer({ store, usageStore, startWorker: false, deepResearchQueue: null, formsQueue: null });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -71,6 +74,18 @@ test('one-time customer invitation creates a portal account and initial workspac
   const entitlements = await (await fetch(`${baseUrl}/portal/api/entitlements`, { headers: { cookie } })).json();
   assert.equal(entitlements.allowed_modules.includes('bank-statement-analysis'), false);
   assert.equal(entitlements.available_modules.includes('bank-statement-analysis'), false);
+  const portalHealth = await fetch(`${baseUrl}/portal/api/health`, { headers: { cookie } });
+  assert.equal(portalHealth.status, 200);
+  assert.deepEqual((await portalHealth.json()).checks, []);
+  const keyHealth = await fetch(`${baseUrl}/service/health`, { headers: { authorization: `Bearer ${signupBody.api_key}` } });
+  assert.equal(keyHealth.status, 200);
+  assert.deepEqual((await keyHealth.json()).checks, []);
+  await usageStore.configure(customerId, validateUsagePolicy({ mode: 'prepaid', currency: 'USD',
+    allowed_modules: ['adverse-media'], rates: {} }, new Set(['adverse-media'])), true);
+  const allowedHealth = await fetch(`${baseUrl}/portal/api/health`, { headers: { cookie } });
+  assert.deepEqual((await allowedHealth.json()).checks.map((check) => check.id), ['adverse-media']);
+  const allowedKeyHealth = await fetch(`${baseUrl}/service/health`, { headers: { authorization: `Bearer ${signupBody.api_key}` } });
+  assert.deepEqual((await allowedKeyHealth.json()).checks.map((check) => check.id), ['adverse-media']);
 
   const page = await fetch(`${baseUrl}/adverse-media`, { headers: { accept: 'text/html', cookie } });
   assert.equal(page.status, 200);

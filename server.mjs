@@ -1309,9 +1309,9 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
   }
 
   if (req.method === 'GET' && url.pathname === '/portal/api/health') {
-    const { session } = await currentPortalSession(req, store);
+    const { account, session } = await currentPortalSession(req, store);
     if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
-    return json(res, 200, await serviceHealth(store));
+    return json(res, 200, await customerServiceHealth(store, usageStore, account.client_id));
   }
 
   if (req.method === 'GET' && (url.pathname === '/portal/api/usage' || url.pathname === '/portal/api/entitlements')) {
@@ -1352,6 +1352,14 @@ async function serviceHealth(store) {
     checks,
     upstream_probe: 'not_performed'
   };
+}
+
+async function customerServiceHealth(store, usageStore, workspaceId) {
+  const managed = Boolean((await store.getCustomer?.(workspaceId))?.usagePolicyVersion);
+  const usage = await usageStore.account(workspaceId, managed);
+  const health = await serviceHealth(store);
+  const allowed = new Set(usage.allowed_modules);
+  return { ...health, checks: health.checks.filter((check) => allowed.has('*') || allowed.has(check.id)) };
 }
 
 function portalLoginRedirect(res, pathname, search = '') {
@@ -1917,8 +1925,10 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return res.end('ok\n');
       }
       if (req.method === 'GET' && url.pathname === '/service/health') {
-        if (!req.ai7Client && !(await store.isClientKey(bearerToken(req)))) return json(res, 401, { status: 'Error', error: 'An active API key is required.' });
-        return json(res, 200, { ...await serviceHealth(store), request_capacity: {
+        const client = req.ai7Client || await store.getClientForKey?.(bearerToken(req));
+        if (!client && !(await store.isClientKey(bearerToken(req)))) return json(res, 401, { status: 'Error', error: 'An active API key is required.' });
+        const health = client ? await customerServiceHealth(store, usageStore, client.id) : await serviceHealth(store);
+        return json(res, 200, { ...health, request_capacity: {
           scope: 'current_replica', ...requestCapacity.snapshot?.()
         } });
       }
