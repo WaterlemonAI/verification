@@ -63,7 +63,14 @@ test('portal signup verifies an AI7 key and creates an email/password session', 
 
   const page = await fetch(`${baseUrl}/adverse-media`, { headers: { accept: 'text/html', cookie } });
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /portal-auth\.js/);
+  const pageHtml = await page.text();
+  assert.match(pageHtml, /portal-auth\.js/);
+  assert.match(pageHtml, /kycprobe-logo-white\.png/);
+
+  const loginPage = await fetch(`${baseUrl}/login`);
+  const loginHtml = await loginPage.text();
+  assert.match(loginHtml, /kycprobe-logo-white\.png/);
+  assert.match(loginHtml, /kycprobe-logo-dark\.png/);
 
   const badLogin = await fetch(`${baseUrl}/portal/api/auth/login`, {
     method: 'POST', headers: { 'content-type': 'application/json' },

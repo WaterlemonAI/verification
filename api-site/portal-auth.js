@@ -1,6 +1,14 @@
 (() => {
   const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/forms']);
   const normalizedPath = location.pathname.length > 1 ? location.pathname.replace(/\/$/, '') : '/';
+  const pageContext = {
+    '/': ['Verification API', 'UAE Trade Licence'],
+    '/iban': ['Verification API', 'IBAN Verification'],
+    '/entity-search': ['Verification API', 'Entity Search'],
+    '/adverse-media': ['Verification API', 'Adverse Media'],
+    '/merchant-screening': ['Verification API', 'Merchant Screening'],
+    '/forms': ['Forms', 'Forms Module']
+  };
 
   function escapeHtml(value) {
     return String(value || '').replace(/[&<>"']/g, (character) => ({
@@ -24,7 +32,7 @@
     sidebar.id = 'portal-sidebar';
     sidebar.setAttribute('aria-label', 'Portal navigation');
     sidebar.innerHTML = `
-      <a class="portal-brand" href="/" aria-label="AI7 UAE developer portal"><span>A7</span><strong>AI7 <b>UAE</b></strong></a>
+      <a class="portal-brand" href="/" aria-label="KYCProbe developer portal"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a>
       <div class="portal-nav-group">
         <p>VERIFICATION API</p>
         <a href="/" data-path="/"><span>01</span> UAE Trade Licence</a>
@@ -50,6 +58,7 @@
     if (header) {
       header.classList.add('portal-header');
       header.querySelector('nav')?.remove();
+      header.querySelector('.brand')?.remove();
       const menu = document.createElement('button');
       menu.type = 'button';
       menu.id = 'portal-menu';
@@ -59,6 +68,11 @@
       menu.setAttribute('aria-label', 'Open navigation');
       menu.textContent = '☰';
       header.prepend(menu);
+      const context = document.createElement('div');
+      context.className = 'portal-context';
+      const [section, page] = pageContext[normalizedPath] || ['Developer Portal', 'Workspace'];
+      context.innerHTML = `<span>${section}</span><strong>${page}</strong>`;
+      menu.after(context);
       menu.addEventListener('click', () => {
         const open = document.body.classList.toggle('portal-menu-open');
         menu.setAttribute('aria-expanded', String(open));
