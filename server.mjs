@@ -138,7 +138,7 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
   }
   const formMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
   if (formMatch && route.billable) {
-    const prepared = await prepareFormSubmission(req, formMatch[1], store, formsQueue);
+    const prepared = await prepareFormSubmission(req, formMatch[1], store, formsQueue, transactionId);
     if (prepared.status) {
       await usageStore.record(workspaceId, details, prepared.status);
       json(res, prepared.status, { status: 'Error', error: prepared.error });
@@ -1018,7 +1018,7 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
   return result;
 }
 
-async function prepareFormSubmission(req, formId, store, formsQueue) {
+async function prepareFormSubmission(req, formId, store, formsQueue, transactionId = '') {
   if (!formsQueue) return { status: 503, error: 'Forms processing is temporarily unavailable.' };
   const form = await store.getForm(formId);
   if (!form || !form.enabled) return { status: 404, error: 'Form was not found.' };
@@ -1028,6 +1028,7 @@ async function prepareFormSubmission(req, formId, store, formsQueue) {
     if (submission.customer_logo_url) await validateFormsCallbackUrl(submission.customer_logo_url);
     const job = makeFormsJob({ form, submission, ownerId: reportOwnerId(bearerToken(req)), origin: requestOrigin(req),
       billing: { workspace_id: req.ai7Client?.id || '', log_key: '0'.repeat(80) } });
+    if (transactionId) job.submission_id = transactionId;
     return { form, submission, job };
   } catch (error) {
     const reason = String(error.message || '');
@@ -1038,10 +1039,10 @@ async function prepareFormSubmission(req, formId, store, formsQueue) {
   }
 }
 
-async function submitForm(req, res, formId, store, formsQueue, formSubmissionStore) {
+async function submitForm(req, res, formId, store, formsQueue, formSubmissionStore, transactionId = '') {
   const token = bearerToken(req);
   if (!req.ai7Client && !(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
-  const prepared = req.ai7PreparedForm || await prepareFormSubmission(req, formId, store, formsQueue);
+  const prepared = req.ai7PreparedForm || await prepareFormSubmission(req, formId, store, formsQueue, transactionId);
   if (prepared.status) return json(res, prepared.status, { status: 'Error', error: prepared.error });
   const { job, claim } = prepared;
   try {
@@ -1910,7 +1911,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return await handleBsa(req, res, url, store);
       const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
-      if (req.method === 'POST' && formSubmissionMatch) return await submitForm(req, res, formSubmissionMatch[1], store, formsQueue, formSubmissionStore);
+      if (req.method === 'POST' && formSubmissionMatch) return await submitForm(req, res, formSubmissionMatch[1], store, formsQueue, formSubmissionStore, transactionId);
       const formSchemaMatch = /^\/forms\/([a-z0-9-]+)\/schema$/.exec(url.pathname);
       if (req.method === 'GET' && formSchemaMatch) {
         const form = await store.getForm(formSchemaMatch[1]);

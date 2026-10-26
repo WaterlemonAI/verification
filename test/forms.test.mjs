@@ -120,6 +120,7 @@ test('one customer credential queues one signed multi-API submission', async () 
   assert.equal(response.status, 202);
   const body = await response.json();
   assert.equal(body.status, 'queued');
+  assert.equal(body.submission_id, response.headers.get('x-ai7-transaction-id'));
   assert.equal(body.callback.event, 'forms.submission.completed');
   assert.match(body.callback.signing_secret, /^[A-Za-z0-9_-]+$/);
   assert.equal(queuedJob.data.country, 'AE');
@@ -250,6 +251,7 @@ test('Forms execution returns exact nested responses and creates one permanent t
     received: { company_name: 'Acme LLC', country: 'AE', confirmed: true, source: 'AI7 Form - Acme LLC' }
   });
   assert.equal(result.report.retention, 'permanent');
+  assert.equal(result.report.transaction_id, primaryJob.submission_id);
   assert.match(result.report.download_url, /^https:\/\/api\.ai7uae\.com\/service\/forms\/reports\/[0-9a-f-]{36}\.pdf$/);
   const stored = await reportStore.getPublic({ reportId: result.report.report_id });
   assert.equal(stored.metadata.report_type, 'forms');
