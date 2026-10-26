@@ -33,11 +33,25 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
   const store = new KeyVaultStore({ vaultUri: 'https://vault.test/', managedIdentityClientId: 'runtime-client-id', fetchImpl });
   const issued = await store.createClient('Production Customer');
   assert.equal(await store.isClientKey(issued.apiKey), true);
+  assert.deepEqual(await store.getClientForKey(issued.apiKey), { id: issued.client.id, name: 'Production Customer', status: 'active' });
 
   const stored = secrets.get(`client-${issued.client.id}`);
   assert.notEqual(stored.value, issued.apiKey);
   assert.match(stored.value, /^[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(await store.listClients()).includes(stored.value), false);
+
+  const portalAccount = {
+    email: 'user@example.com', client_id: issued.client.id, client_name: issued.client.name,
+    password_algorithm: 'scrypt-v1', password_salt: 'salt', password_hash: 'hash', version: 1,
+    created_at: '2026-10-26T00:00:00.000Z', updated_at: '2026-10-26T00:00:00.000Z'
+  };
+  await store.setPortalUser(portalAccount);
+  await store.setPortalSessionKey('portal-signing-key');
+  assert.deepEqual(await store.getPortalUser('USER@example.com'), portalAccount);
+  assert.equal(await store.getPortalSessionKey(), 'portal-signing-key');
+  const storedPortalUser = [...secrets.values()].find((item) => item.tags.kind === 'portal-user');
+  assert.equal(storedPortalUser.value.includes(issued.apiKey), false);
+  assert.equal(storedPortalUser.tags.clientId, issued.client.id);
 
   await store.revokeClient(issued.client.id);
   assert.equal(await store.isClientKey(issued.apiKey), false);
