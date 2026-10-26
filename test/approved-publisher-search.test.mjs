@@ -210,6 +210,30 @@ test('Signzy data-leak coverage targets MediaNama and retains the exact cyber in
   assert.ok(queries.some((query) => query.includes('"data breach"') || query.includes('"data leak"')));
 });
 
+test('standard screening searches the open web for older Signzy data-leak articles', async () => {
+  const articleUrl = 'https://www.medianama.com/2024/12/223-signzy-customer-data-leak-exposes-growing-cybersecurity-gaps-in-india/';
+  const request = validateAdverseMediaRequest({
+    entity_type: 'business', name: 'Signzy', countries: ['IN'], languages: ['en'], search_plus: false
+  });
+  let broadWebQuery = '';
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      const query = url.searchParams.get('q');
+      const broad = url.pathname.includes('/web/') && !query.includes('site:') && query.includes('"data leak"');
+      if (broad) broadWebQuery = query;
+      const results = broad ? [{ url: articleUrl, title: 'Signzy Customer Data Leak Exposes Growing Cybersecurity Gaps',
+        description: 'Signzy suffered a cyberattack that exposed customer data online.', page_age: '2024-12-04T08:00:00Z' }] : [];
+      return Response.json(url.pathname.includes('/news/') ? { results } : { web: { results } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+  const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
+  assert.ok(broadWebQuery.includes('Signzy'));
+  assert.ok(response.results.some((item) => item.url === articleUrl.replace(/\/$/, '') && item.source_type === 'open_web'));
+});
+
 test('corporate event vocabulary detects misconduct, founder disputes, layoffs, and financial distress', async () => {
   const queries = [];
   const request = validateAdverseMediaRequest({

@@ -307,7 +307,7 @@ test('adverse media endpoint returns a customer-safe evidence response', async (
   for (const field of ['ai_classification', 'matched_terms', 'entity_match_score', 'adverse_relevance_score', 'source_reliability_score', 'severity_score', 'final_disposition']) {
     assert.equal(body.results[0][field], undefined);
   }
-  assert.equal(requests.length, 6);
+  assert.equal(requests.length, 7);
 });
 
 test('identical checks reuse cached evidence without paid search calls', async () => {
@@ -376,9 +376,9 @@ test('China pack uses native terms, official-domain targeting, and an archive la
   const callSet = requests.slice(beforeCount);
   const paidCalls = callSet.filter(({ url }) => url.hostname === 'api.search.brave.com');
   const archiveCall = callSet.find(({ url }) => url.hostname === 'api.gdeltproject.org');
-  const officialWebCall = paidCalls.find(({ url }) => url.pathname.includes('/web/'));
+  const officialWebCall = paidCalls.find(({ url }) => url.pathname.includes('/web/') && url.searchParams.get('q').includes('site:csrc.gov.cn'));
   assert.equal(response.status, 200);
-  assert.equal(paidCalls.length, 3);
+  assert.equal(paidCalls.length, 4);
   assert.ok(paidCalls.every(({ url }) => url.searchParams.get('search_lang') === 'zh-hans'));
   assert.match(officialWebCall.url.searchParams.get('q'), /site:csrc\.gov\.cn/);
   assert.match(officialWebCall.url.searchParams.get('q'), /立案调查/);
@@ -399,7 +399,7 @@ test('Russia business pack includes free structured regulatory evidence without 
   const paidCalls = callSet.filter(({ url }) => url.hostname === 'api.search.brave.com');
   const archiveCall = callSet.find(({ url }) => url.hostname === 'api.gdeltproject.org');
   assert.equal(response.status, 200);
-  assert.equal(paidCalls.length, 3);
+  assert.equal(paidCalls.length, 4);
   assert.match(archiveCall.url.searchParams.get('query'), /sourcelang:russian/);
   const officialResult = body.results.find((result) => result.source_type === 'official_regulatory');
   assert.ok(officialResult);
@@ -429,9 +429,9 @@ test('Gulf, India, USA, and ANZ packs target regional official domains without e
     const body = await response.json();
     const callSet = requests.slice(beforeCount);
     const paidCalls = callSet.filter(({ url }) => url.hostname === 'api.search.brave.com');
-    const officialWebCall = paidCalls.find(({ url }) => url.pathname.includes('/web/'));
+    const officialWebCall = paidCalls.find(({ url }) => url.pathname.includes('/web/') && url.searchParams.get('q').includes(regionalCase.domain));
     assert.equal(response.status, 200);
-    assert.equal(paidCalls.length, 3);
+    assert.equal(paidCalls.length, 4);
     assert.ok(officialWebCall.url.searchParams.get('q').includes(regionalCase.domain));
   }
 });
@@ -522,7 +522,7 @@ test('retries transient provider failures and reports partial coverage instead o
   const body = await response.json();
   const paidCalls = requests.slice(beforeCount).filter(({ url }) => url.hostname === 'api.search.brave.com');
   assert.equal(response.status, 200);
-  assert.equal(paidCalls.length, 6);
+  assert.equal(paidCalls.length, 8);
   assert.equal(body.status, 'partial');
   assert.equal(body.coverage.complete, false);
   assert.equal(body.summary.outcome, 'inconclusive');
