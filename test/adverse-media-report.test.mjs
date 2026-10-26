@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PDFDocument } from 'pdf-lib';
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from '../lib/adverse-media-report.mjs';
-import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
+import { AzureAdverseMediaReportStore, MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 
 const request = {
   entity_type: 'individual', name: 'Example Person', aliases: [], countries: ['AE'], languages: ['en'],
@@ -85,4 +85,45 @@ test('permanent report store retains owner isolation and supports public capabil
   assert.equal(await store.get({ ownerId: 'customer-b', reportId: 'rpt' }), null);
   assert.equal((await store.getPublic({ reportId: 'rpt' })).metadata.filename, 'report.pdf');
   assert.equal(await store.getPublic({ reportId: 'missing' }), null);
+});
+
+test('Azure Table reserves one lifetime provider budget across concurrent worker replicas', async () => {
+  const entities = new Map();
+  let version = 0;
+  const key = (partitionKey, rowKey) => `${partitionKey}/${rowKey}`;
+  const conflict = (statusCode) => Object.assign(new Error('table_conflict'), { statusCode });
+  const table = {
+    async getEntity(partitionKey, rowKey) {
+      const row = entities.get(key(partitionKey, rowKey));
+      if (!row) throw conflict(404);
+      return { ...row };
+    },
+    async createEntity(row) {
+      const id = key(row.partitionKey, row.rowKey);
+      if (entities.has(id)) throw conflict(409);
+      entities.set(id, { ...row, etag: String(++version) });
+    },
+    async updateEntity(row, _mode, { etag }) {
+      const id = key(row.partitionKey, row.rowKey);
+      if (entities.get(id)?.etag !== etag) throw conflict(412);
+      entities.set(id, { ...row, etag: String(++version) });
+    }
+  };
+  const makeStore = () => {
+    const store = new AzureAdverseMediaReportStore({
+      blobServiceUrl: 'https://synthetic.blob.core.windows.net',
+      tableServiceUrl: 'https://synthetic.table.core.windows.net',
+      credential: { getToken: async () => ({ token: 'synthetic', expiresOnTimestamp: Date.now() + 60000 }) }
+    });
+    store.table = table;
+    return store;
+  };
+  const stores = [makeStore(), makeStore()];
+  const details = { ownerId: 'synthetic-owner', screeningId: 'synthetic-job', costMicroUsd: 5000,
+    provider: 'brave', maxMicroUsd: 5000 };
+  const outcomes = await Promise.allSettled(stores.map((store) => store.reserveDeepResearchCost(details)));
+  assert.equal(outcomes.filter((item) => item.status === 'fulfilled').length, 1);
+  assert.equal(outcomes.filter((item) => item.status === 'rejected' && item.reason.message === 'screening_cost_limit').length, 1);
+  assert.deepEqual(await stores[1].getDeepResearchUsage(details),
+    { reservedMicroUsd: 5000, providerCalls: { brave: 1, gemini: 0 } });
 });

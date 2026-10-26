@@ -1722,14 +1722,18 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
   }
 }
 
-export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), usageStore = createCustomerUsageStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
+  deepResearchQueue = process.env.ADVERSE_MEDIA_WORKER_ENABLED === 'false' ? null : createDeepResearchQueue(),
+  formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), usageStore = createCustomerUsageStore(),
+  merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
   const portalLoginThrottle = createLoginThrottle();
   const resetThrottle = createLoginThrottle();
-  if (startWorker && deepResearchQueue) {
+  if (startWorker && deepResearchQueue && process.env.ADVERSE_MEDIA_WORKER_ENABLED !== 'false') {
     startDeepResearchWorker({
       queue: deepResearchQueue,
       store,
+      resultStore: reportStore,
       screen: screenAdverseMedia,
       present: presentAdverseMediaResponse,
       finalize: async ({ job, response, aiApiKey, costGuard }) => finalizeAdverseMediaReport({

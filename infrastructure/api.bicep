@@ -54,6 +54,9 @@ param bankStatementWorkerName string = 'ca-ai7uae-bsa-worker'
 @description('Dedicated storage account for durable adverse-media deep-research jobs.')
 param deepResearchStorageName string = 'stai7uaejobsuaen001'
 
+@description('Keep deep-research submissions and worker paused until queued legacy jobs are inspected.')
+param enableDeepResearchWorker bool = false
+
 @description('Dedicated storage account for the local GDELT archive and entity index.')
 param gdeltStorageName string = 'stai7uaegdeltuaen001'
 
@@ -61,7 +64,22 @@ param gdeltStorageName string = 'stai7uaegdeltuaen001'
 param reportStorageName string = 'stai7uaereportsuaen001'
 
 var deepResearchQueueName = 'adverse-media-deep-research'
+var deepResearchDeadLetterQueueName = 'adverse-media-deep-research-deadletter'
 var formsQueueName = 'forms-submissions'
+
+resource deepResearchStorage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
+  name: deepResearchStorageName
+}
+
+resource deepResearchQueueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' existing = {
+  parent: deepResearchStorage
+  name: 'default'
+}
+
+resource deepResearchDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: deepResearchQueueService
+  name: deepResearchDeadLetterQueueName
+}
 // Cisco Talos ClamAV 1.4.6 LTS, mirrored into the private ACR and pinned to the amd64 manifest.
 var bankStatementClamavImage = '${acrLoginServer}/ai7uae-clamav@sha256:6ba4e78b29853b2fc7e3c111389596e2cad5ec4ed5f0fd2cb663d29ab6b0e6a3'
 var customDomains = concat(
@@ -318,6 +336,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
             { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
+            { name: 'ADVERSE_MEDIA_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchDeadLetterQueueName}' }
+            { name: 'ADVERSE_MEDIA_WORKER_ENABLED', value: enableDeepResearchWorker ? 'true' : 'false' }
             { name: 'FORMS_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsQueueName}' }
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }

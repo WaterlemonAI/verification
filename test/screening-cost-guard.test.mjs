@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createScreeningCostGuard, MAX_PROVIDER_COST_USD, MAX_SCREENING_COST_USD } from '../lib/screening-cost-guard.mjs';
 import { createAdverseMediaNarrative } from '../lib/adverse-media-report.mjs';
+import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 
 test('each paid search attempt, including retries, is admitted before dialing', async () => {
   let dialed = 0;
@@ -12,6 +13,24 @@ test('each paid search attempt, including retries, is admitted before dialing', 
   await assert.rejects(guard.fetch(url), /screening_cost_limit/);
   assert.equal(dialed, 28);
   assert.equal(Math.round((MAX_SCREENING_COST_USD - MAX_PROVIDER_COST_USD) * 100), 1);
+});
+
+test('a restarted job cannot reset its lifetime provider allowance', async () => {
+  const resultStore = new MemoryAdverseMediaReportStore();
+  const job = { ownerId: 'synthetic-owner', screeningId: 'synthetic-screening' };
+  let dialed = 0;
+  const reserve = ({ costMicroUsd, provider, maxMicroUsd }) =>
+    resultStore.reserveDeepResearchCost({ ...job, costMicroUsd, provider, maxMicroUsd });
+  const url = 'https://api.search.brave.com/res/v1/news/search?q=synthetic';
+  const firstAttempt = createScreeningCostGuard(async () => { dialed += 1; return Response.json({}); }, { reserve });
+  for (let index = 0; index < 20; index++) await firstAttempt.fetch(url);
+  const retryAttempt = createScreeningCostGuard(async () => { dialed += 1; return Response.json({}); }, { reserve });
+  for (let index = 0; index < 8; index++) await retryAttempt.fetch(url);
+  await assert.rejects(retryAttempt.fetch(url), /screening_cost_limit/);
+  assert.equal(dialed, 28);
+  const usage = await resultStore.getDeepResearchUsage(job);
+  assert.equal(usage.reservedMicroUsd, 140_000);
+  assert.equal(usage.providerCalls.brave, 28);
 });
 
 test('model input and maximum output are reserved before a paid call', async () => {
