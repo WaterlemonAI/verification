@@ -3,7 +3,8 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { analyzeMerchantWebsite, screenMerchantWebsite, validateMerchantScreeningRequest } from '../lib/merchant-screening.mjs';
+import { analyzeMerchantWebsite, merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from '../lib/merchant-screening.mjs';
+import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { collectMerchantWebsite, isPublicIpAddress, validatePublicHttpsUrl } from '../lib/merchant-screening-network.mjs';
 import { captureMerchantScreenshots, selectScreenshotTargets } from '../lib/merchant-screenshot.mjs';
 
@@ -19,8 +20,20 @@ test('merchant URL validation rejects SSRF-prone destinations and invalid reques
   assert.throws(() => validatePublicHttpsUrl('http://example.com'), /public_https/);
   assert.throws(() => validatePublicHttpsUrl('https://127.0.0.1'), /public_hostname/);
   assert.equal(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'ae' }).value.country_code, 'AE');
+  const reportRequest = validateMerchantScreeningRequest({
+    website_url: 'https://shop.example.com', country_code: 'AE', get_pdf: true,
+    customer_logo_url: 'https://assets.example.com/logo.png'
+  });
+  assert.equal(reportRequest.value.get_pdf, true);
+  assert.equal(reportRequest.value.customer_logo_url, 'https://assets.example.com/logo.png');
+  assert.equal(reportRequest.value.high_risk_threshold_percent, 60);
+  assert.equal(reportRequest.value.review_threshold_percent, 25);
   assert.match(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'AE', max_pages: 21 }).error, /between 1 and 20/);
   assert.match(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'AE', declared_mcc: '123' }).error, /four digits/);
+  assert.match(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'AE', get_pdf: 'yes' }).error, /boolean/);
+  assert.match(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'AE', high_risk_threshold_percent: 101 }).error, /up to 100/);
+  assert.match(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'AE', high_risk_threshold_percent: 40, review_threshold_percent: 50 }).error, /must not be higher/);
+  assert.match(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'AE', customer_logo_url: 'http://assets.example.com/logo.png' }).error, /public HTTPS/);
   assert.match(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'AE', unexpected: true }).error, /Unsupported field/);
 });
 
@@ -177,6 +190,45 @@ test('optional provider failures produce explicit partial coverage instead of fa
   assert.equal(result.summary.decision_eligible, false);
 });
 
+test('customer thresholds control the risk band without hiding partial coverage', () => {
+  const request = {
+    website_url: 'https://shop.example.com/', country_code: 'AE', declared_merchant_name: null,
+    declared_mcc: null, max_pages: 1, high_risk_threshold_percent: 100, review_threshold_percent: 99
+  };
+  const result = analyzeMerchantWebsite(request, {
+    pages: [{ url: request.website_url, status: 200, headers: { 'content-type': 'text/html' }, body: '<html><title>Shop</title></html>', tls: {} }],
+    robots: { status: 'respected' }, errors: [], limits: { maximum_pages: 1 }
+  }, { status: 'available', domain: 'example.com', age_days: 1000 });
+  assert.equal(result.summary.risk_level, 'safe');
+  assert.deepEqual(result.summary.thresholds, { high_risk_percent: 100, review_percent: 99, safe_below_percent: 99 });
+  assert.equal(result.status, 'partial');
+  assert.equal(result.summary.decision_eligible, false);
+  assert.equal(result.summary.human_review_required, true);
+  assert.equal(result.summary.threshold_status, 'safe');
+});
+
+test('screenshot bytes stay private while report assets remain available to the API process', async () => {
+  const screenshotBytes = Buffer.from('private-image-bytes');
+  const request = { website_url: 'https://shop.example.com/', country_code: 'AE', declared_merchant_name: null, declared_mcc: null, max_pages: 1, get_pdf: true, customer_logo_url: null };
+  const result = await screenMerchantWebsite(request, {
+    collectWebsite: async () => ({
+      pages: [{ url: request.website_url, status: 200, headers: { 'content-type': 'text/html' }, body: '<html><title>Shop</title></html>', tls: {} }],
+      robots: { status: 'respected' }, errors: [], limits: { maximum_pages: 1 }
+    }),
+    collectDomain: async () => ({ status: 'available', domain: 'example.com' }),
+    screenshotProvider: async () => ({
+      status: 'completed', provider: 'ai7_rendered_capture', items: [{
+        page_type: 'homepage', source_url: request.website_url, final_url: request.website_url,
+        viewport: { name: 'desktop', width: 1440, height: 900 }, content_type: 'image/png',
+        captured_at: '2026-10-26T10:00:00.000Z', sha256: 'a'.repeat(64), __image_bytes: screenshotBytes
+      }]
+    })
+  });
+  assert.equal(JSON.stringify(result).includes('private-image-bytes'), false);
+  assert.equal(Object.hasOwn(result.screenshots.items[0], '__image_bytes'), false);
+  assert.deepEqual(result[merchantScreenshotAssets][0].bytes, screenshotBytes);
+});
+
 test('merchant screening route preserves API-key auth and supports an injected local screener', async (context) => {
   const calls = [];
   const app = createAppServer({
@@ -216,15 +268,64 @@ test('merchant screening route preserves API-key auth and supports an injected l
   assert.equal(calls.length, 1);
   assert.equal(calls[0].country_code, 'AE');
   assert.equal(calls[0].max_pages, 5);
+  assert.equal(calls[0].high_risk_threshold_percent, 60);
+  assert.equal(calls[0].review_threshold_percent, 25);
 
   const portal = await fetch(`${baseUrl}/merchant-screening`, { headers: { host: 'api.ai7uae.com' } });
   const html = await portal.text();
   assert.equal(portal.status, 200);
   assert.match(html, /Merchant Website Screening/);
-  assert.match(html, /merchant-screening\.js\?v=1/);
+  assert.match(html, /merchant-screening\.js\?v=2/);
   assert.match(html, /Copy JSON/);
+  assert.match(html, /id="get-pdf"/);
+  assert.match(html, /id="customer-logo-url"/);
+  assert.match(html, /id="download-report"/);
+  assert.match(html, /id="high-risk-threshold"/);
+  assert.match(html, /id="review-threshold"/);
 
   const script = await (await fetch(`${baseUrl}/merchant-screening.js`, { headers: { host: 'api.ai7uae.com' } })).text();
   assert.match(script, /fetch\('\/service\/merchant_screening'/);
   assert.match(script, /navigator\.clipboard\.writeText/);
+  assert.match(script, /get_pdf: getPdf\.checked/);
+  assert.match(script, /report\?\.download_url/);
+  assert.match(script, /high_risk_threshold_percent: highRiskThresholdPercent/);
+});
+
+test('merchant screening can create and publicly download a permanent typed PDF report', async (context) => {
+  const reportStore = new MemoryAdverseMediaReportStore();
+  const merchantScreener = async (request) => ({
+    screening_id: '8f5f868e-4894-4ef5-80fd-4728910ce3e3', status: 'partial', completed_at: '2026-10-26T10:05:00.000Z',
+    request, merchant_identity: { names: ['Example Merchant LLC'], addresses: [], phones: [], emails: [], social_profiles: [], founders: [], senior_leadership: [], partnership_and_sponsorship_claims: [] },
+    domain: { status: 'available', domain: 'example.com' },
+    policies: { country_pack: { name: 'United Arab Emirates' }, missing_expected_items: [], privacy: { status: 'found', url: 'https://example.com/privacy' } },
+    products: [], outgoing_links: [], security: { tls: { protocol: 'TLSv1.3', authorized: true }, missing_recommended_headers: [] },
+    screenshots: { status: 'completed', items: [] }, social_mentions: { x: { status: 'not_configured' } }, destination_reputation: { status: 'not_configured' },
+    crawl: { robots: { status: 'respected' }, pages_collected: 1, page_errors: [], limits: { maximum_pages: request.max_pages } },
+    findings: [], summary: { risk_score: 0, risk_level: 'low', outcome: 'manual_review', confidence: 'low', decision_eligible: false, coverage: { website: 'available', screenshots: 'completed', x_mentions: 'not_configured', destination_reputation: 'not_configured' } },
+    evidence: [], methodology: { version: 'merchant-screening-foundation-1', cost_ceiling_usd: 0.05 }
+  });
+  const app = createAppServer({
+    store: { isClientKey: async (value) => value === 'test-key', getIntegration: async () => null },
+    reportStore, merchantScreener, startWorker: false
+  });
+  await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
+  context.after(() => new Promise((resolve) => app.close(resolve)));
+  const baseUrl = `http://127.0.0.1:${app.address().port}`;
+  const created = await fetch(`${baseUrl}/service/merchant_screening`, {
+    method: 'POST', headers: { authorization: 'Bearer test-key', 'content-type': 'application/json' },
+    body: JSON.stringify({ website_url: 'https://example.com', country_code: 'AE', declared_merchant_name: 'Example Merchant LLC', get_pdf: true })
+  });
+  assert.equal(created.status, 200);
+  const body = await created.json();
+  assert.match(body.report.report_id, /^[0-9a-f-]{36}$/);
+  assert.match(body.report.sha256, /^[0-9a-f]{64}$/);
+  assert.equal(body.report.retention, 'permanent');
+
+  const downloaded = await fetch(new URL(body.report.download_url, baseUrl));
+  assert.equal(downloaded.status, 200);
+  assert.equal(downloaded.headers.get('content-type'), 'application/pdf');
+  assert.match(downloaded.headers.get('content-disposition'), /ai7-merchant-screening-example-merchant-llc/);
+  assert.equal(downloaded.headers.get('x-robots-tag'), 'noindex, nofollow, noarchive');
+  assert.equal(Buffer.from(await downloaded.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
+  assert.equal((await fetch(`${baseUrl}/service/adverse_media/reports/${body.report.report_id}.pdf`)).status, 404);
 });

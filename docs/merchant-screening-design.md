@@ -1,6 +1,6 @@
 # Merchant website screening API — implementation and production design
 
-Status: local foundation implemented; no Azure deployment or production data migration has been performed.
+Status: production API foundation implemented. A separate internal-only Chromium worker provides bounded rendered captures; licensed X and destination-reputation providers remain future coverage gates.
 
 ## API contract
 
@@ -13,14 +13,18 @@ Status: local foundation implemented; no Azure deployment or production data mig
 }
 ```
 
-Optional inputs are `declared_merchant_name`, `declared_mcc`, and `max_pages` (1–20, default 12). A response separates:
+Optional inputs are `declared_merchant_name`, `declared_mcc`, `max_pages` (1–20, default 12), `high_risk_threshold_percent` (default 60), `review_threshold_percent` (default 25), `get_pdf` (default false), and `customer_logo_url` (public HTTPS PNG/JPEG, used only when a PDF is requested). A response separates:
 
 - observed merchant data and evidence;
 - risk findings and candidate MCC mappings;
 - confidence and source coverage; and
 - missing provider coverage that prevents an automated decision.
 
+When `get_pdf` is true, the response also contains a permanent, unguessable public capability URL and integrity metadata. The PDF contains a service description, a customer-safe processing log, actual rendered screenshot images and their hashes, all result sections, and machine-readable request/response attachments.
+
 `status: "partial"` and `summary.decision_eligible: false` are intentional when a required enrichment provider is unavailable. A missing result must never be interpreted as a negative match.
+
+Top-level status is a coverage state, not a risk band. Its expected values are `completed` and `partial`. Risk bands are `high_risk`, `review`, and `safe`: scores at or above the customer High Risk threshold are High Risk; scores from the Review threshold up to that boundary require Review; lower scores are Safe. A critical finding overrides the numeric boundary and remains High Risk. Incomplete coverage always requires human review regardless of the numeric band.
 
 ## Locally implemented foundation
 
@@ -40,13 +44,13 @@ Optional inputs are `declared_merchant_name`, `declared_mcc`, and `max_pages` (1
 - Product-level candidate MCC and risk mapping, explicitly labelled low-confidence and human-review-only.
 - AE and generic policy baselines. These check evidence presence; they do not make legal-compliance claims.
 
-The local foundation is synchronous and does not persist request or response data. The complete API has a hard USD 0.05 cost ceiling per screening. Screenshots receive at most USD 0.02 of that budget, preserving USD 0.03 for other optional provider calls.
+The API is synchronous. Request/response data is not persisted unless the customer explicitly requests a PDF; requested reports are permanently retained in the existing private, non-listable report store and exposed only through their UUID capability URL. The complete API has a hard USD 0.05 cost ceiling per screening. Screenshots receive at most USD 0.02 of that budget, preserving USD 0.03 for other optional provider calls.
 
 ## Provider coverage still required
 
-The production API currently reports these areas as `not_configured` or `heuristic_only`. Local development has a guarded Chromium implementation for the first item, but the isolated production worker remains a gate:
+The production API currently reports the last four areas as `not_configured` or `heuristic_only`; rendered screenshots are supplied by the isolated worker:
 
-1. **Rendered website screenshots** — use a separate, disposable Chromium/Playwright worker. Capture the landing page, one contact/support page, and a bounded sample of product pages at fixed desktop and mobile viewports. Store the image, final URL, timestamp, viewport, DOM hash, and image hash together.
+1. **Rendered website screenshots** — implemented in a separate Chromium/Playwright Container App. It captures the landing page at desktop and mobile sizes, then a bounded contact/product sample up to four images total. The worker returns image bytes only to the API for immediate PDF embedding and deletes its temporary batch. The customer response retains final URL, timestamp, viewport, DOM hash, and image hash without exposing raw bytes.
 2. **Latest 20 X mentions** — use an approved X API or licensed social-data provider. Save only fields permitted by its current licence and retention terms. Make recency, pagination, deleted-post handling, and rate-limit coverage explicit.
 3. **Destination reputation and prohibited-site confirmation** — connect at least one malware/phishing/reputation feed and a separately governed prohibited-business taxonomy. Keyword matching alone must not cause an automatic decline.
 4. **MCC reference governance** — replace the starter mapping with an acquirer-approved, versioned card-network/MCC reference plus country and scheme overrides. Preserve the mapping version with each decision.
@@ -75,33 +79,29 @@ Authoritative company-registry enrichment and independent partnership verificati
 
 #### Rendered screenshots
 
-- Dedicated Chromium/Playwright image and a separate Container Apps Job; do not install or run a browser in the public API container.
-- Queue one render job per screening. Capture the landing page, one contact/support page, and a bounded set of product-detail pages at fixed desktop and mobile viewports, with a strict page/time/pixel limit.
+- Dedicated Chromium/Playwright image and a separate internal-only Container App; the public API container does not contain or run a browser.
+- Process one render request per worker replica. Capture the landing page at desktop and mobile sizes, then a bounded contact/product sample, with strict page/time/pixel/byte limits.
 - Fresh non-persistent browser context per page, service workers blocked, downloads disabled, no saved credentials/cookies, and deterministic animation/font settling before capture.
 - Apply private/reserved/metadata IP blocking to every browser request and redirect, including scripts, images, frames, WebSockets, and DNS changes. Enforce the restriction at both the Playwright request layer and the worker network boundary.
-- Store PNG/WebP bytes in a private Blob container and store metadata separately: source URL, final URL, HTTP status, viewport, capture time, image SHA-256, rendered DOM hash, and evidence ID.
-- Return screenshots only through an authenticated endpoint or short-lived delegated URL. Configure tenant isolation, retention/purge rules, maximum object size, malware scanning of downloaded content if downloads are ever enabled, and operational metrics for timeouts or blocked subresources.
+- Delete temporary PNG bytes after the API response. If `get_pdf` is true, embed those exact bytes into the permanently retained report; otherwise retain only response metadata. Record source URL, final URL, HTTP status, viewport, capture time, image SHA-256, and rendered DOM hash.
+- Do not expose screenshot bytes or worker addresses in the public JSON. The permanent PDF is available through the report's unguessable capability URL and the underlying container remains private and non-listable.
 - Enforce the render-cost estimate before launching a browser. The screenshot subtotal must remain at or below USD 0.02 and the complete screening subtotal must remain at or below USD 0.05; skip excess captures and report the coverage gap instead of overspending.
 
 ## Recommended Azure runtime
 
-The design reuses the existing API app, managed identity, Key Vault pattern, Container Apps environment, queue/blob/table libraries, and report-storage conventions. Add the smallest isolated components needed for asynchronous, hostile-content processing:
+The design reuses the existing API app, Container Apps environment, report storage, and report metadata conventions. The screenshot worker is deliberately separated from the API identity and secrets:
 
 ```text
 api.ai7uae.com
     |
     +-- existing API container: validate, authenticate, create job, read result
             |
-            +-- private Storage Queue: merchant-screening jobs
-                    |
-                    +-- Container Apps Job: fetch/analyse HTML
-                    +-- isolated browser Job: render/screenshots
-                    +-- provider adapters: X and destination reputation
-                            |
-                            +-- private Blob: raw evidence and screenshots
-                            +-- Table storage: job/result/evidence metadata
-                            +-- Key Vault: provider credentials
-                            +-- Log Analytics/App Insights: operational telemetry
+            +-- internal-only screenshot Container App: render temporary evidence
+            |       +-- ACR-pull-only identity; no Key Vault or storage access
+            |
+            +-- future provider adapters: X and destination reputation
+            +-- existing private Blob/Table report store: requested PDFs only
+            +-- existing Log Analytics: operational telemetry without page bodies
 ```
 
 The browser worker should not share the API container. It needs a non-root user, read-only filesystem, dropped Linux capabilities, strict CPU/memory/time limits, disabled downloads, no cloud metadata access, public-internet-only egress, and fresh browser context per page. Provider adapters should receive scoped secrets independently so a website-rendering compromise cannot reach social, registry, or storage credentials.

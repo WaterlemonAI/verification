@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=7" />
-    <script src="/merchant-screening.js?v=1" defer></script>
+    <script src="/merchant-screening.js?v=2" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#docs">Skip to documentation</a>
@@ -55,6 +55,10 @@
               <div><strong>declared_merchant_name</strong><span>string · optional</span><p>Merchant name supplied by the applicant or onboarding system.</p></div>
               <div><strong>declared_mcc</strong><span>four digits · optional</span><p>Declared merchant category code for comparison with product evidence.</p></div>
               <div><strong>max_pages</strong><span>integer · optional</span><p>Maximum same-origin pages to collect, from 1 to 20. Default: <code>12</code>.</p></div>
+              <div><strong>high_risk_threshold_percent</strong><span>number · optional</span><p>Scores at or above this percentage are High Risk. Default: <code>60</code>.</p></div>
+              <div><strong>review_threshold_percent</strong><span>number · optional</span><p>Scores from this percentage up to the High Risk boundary require Review. Lower scores are Safe. Default: <code>25</code>.</p></div>
+              <div><strong>get_pdf</strong><span>boolean · optional</span><p>When true, creates a permanent audit PDF with actual rendered screenshots, service description, processing log, findings, evidence, and the full result attachments.</p></div>
+              <div><strong>customer_logo_url</strong><span>HTTPS URI · optional</span><p>Public PNG or JPEG placed on the requested PDF report.</p></div>
             </div>
             <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
             <div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div>
@@ -82,7 +86,9 @@
               <div><code>summary</code><span>object</span><span>Risk score, level, dimensions, confidence, outcome, coverage, and decision eligibility.</span></div>
               <div><code>evidence</code><span>object[]</span><span>Source URL, retrieval time, HTTP status, evidence ID, and SHA-256 content digest.</span></div>
               <div><code>methodology</code><span>object</span><span>Versioned limits and interpretation notes.</span></div>
+              <div><code>report</code><span>object</span><span>Returned when <code>get_pdf</code> is true: permanent report ID, transaction ID, SHA-256 digest, filename, and public capability URL.</span></div>
             </div>
+            <p><code>status</code> reports execution coverage: <code>completed</code> means every required source completed and <code>partial</code> means at least one required source is unavailable or incomplete. It is separate from <code>summary.risk_level</code>, whose values are <code>high_risk</code>, <code>review</code>, and <code>safe</code>. A partial result always requires human review even when its score is below the Review threshold.</p>
             <h3>Status codes</h3>
             <div class="responses">
               <div><b class="ok">200</b><span>Screening returned; inspect coverage and decision eligibility</span></div>
@@ -111,12 +117,16 @@
                 <label>Declared merchant name <code>declared_merchant_name</code><input id="declared-merchant-name" type="text" maxlength="200" placeholder="Merchant legal or trading name" /></label>
                 <label>Declared MCC <code>declared_mcc</code><input id="declared-mcc" type="text" inputmode="numeric" maxlength="4" placeholder="e.g. 5734" /></label>
                 <label>Maximum pages <code>max_pages</code><input id="max-pages" type="number" min="1" max="20" step="1" value="12" /></label>
+                <label>High Risk threshold % <code>high_risk_threshold_percent</code><input id="high-risk-threshold" type="number" min="0.01" max="100" step="0.01" value="60" /><small class="field-help">Score at or above this value is High Risk.</small></label>
+                <label>Review threshold % <code>review_threshold_percent</code><input id="review-threshold" type="number" min="0" max="100" step="0.01" value="25" /><small class="field-help">Score at or above this value requires Review; lower scores are Safe.</small></label>
+                <label class="inline-toggle"><span>PDF audit report <code>get_pdf</code></span><span><input id="get-pdf" type="checkbox" /> Generate a permanent PDF report</span><small class="field-help">Includes actual browser screenshots when the isolated capture stage completes, service description, processing log, detailed results, integrity hashes, and JSON attachments.</small></label>
+                <label id="customer-logo-field">Customer logo URL <code>customer_logo_url</code><input id="customer-logo-url" type="url" inputmode="url" placeholder="https://your-domain.example/logo.png" disabled /><small class="field-help">Optional public HTTPS PNG or JPEG shown on the PDF.</small></label>
               </div>
               <p class="form-error" id="form-error" role="alert"></p>
               <button type="submit" id="send-request">Run screening <span>→</span></button>
             </form>
             <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
-            <div class="response-actions"><button class="copy" id="copy-response" disabled>Copy JSON</button></div>
+            <div class="response-actions"><button class="copy" id="copy-response" disabled>Copy JSON</button><button class="copy" id="download-report" disabled>Download PDF</button></div>
             <pre id="response-json" aria-live="polite">{
   "message": "Your JSON response will appear here."
 }</pre>

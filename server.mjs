@@ -12,7 +12,8 @@ import { adverseMediaConfig, presentAdverseMediaResponse, screenAdverseMedia, va
 import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, validatePublicCallbackUrl } from './lib/deep-research-queue.mjs';
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
-import { screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
+import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
+import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -202,7 +203,7 @@ async function finalizeAdverseMediaReport({ request, response, ownerId, origin, 
       filename: report.filename,
       retention: 'permanent'
     };
-    await reportStore.save({ ownerId, reportId: report.reportId, bytes: report.bytes, metadata });
+    await reportStore.save({ ownerId, reportId: report.reportId, bytes: report.bytes, metadata: { ...metadata, report_type: 'adverse_media' } });
     return { ...response, report: metadata };
   } catch {
     const error = new Error('report_service_unavailable');
@@ -263,8 +264,32 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
   }
 }
 
-async function createMerchantScreening(req, res, store, merchantScreener) {
-  if (!(await store.isClientKey(bearerToken(req)))) {
+async function finalizeMerchantScreeningReport({ request, response, ownerId, origin, reportStore, screenshots }) {
+  try {
+    const logo = await fetchPublicLogo(request.customer_logo_url);
+    const report = await createMerchantScreeningAuditPdf({ request, response, origin, screenshots, ...logo });
+    const reportPath = `/service/merchant_screening/reports/${report.reportId}.pdf`;
+    const metadata = {
+      report_id: report.reportId,
+      transaction_id: response.screening_id,
+      generated_at: report.generatedAt,
+      download_url: process.env.API_PUBLIC_BASE_URL ? new URL(reportPath, process.env.API_PUBLIC_BASE_URL).href : reportPath,
+      sha256: report.sha256,
+      filename: report.filename,
+      retention: 'permanent'
+    };
+    await reportStore.save({ ownerId, reportId: report.reportId, bytes: report.bytes, metadata: { ...metadata, report_type: 'merchant_screening' } });
+    return { ...response, report: metadata };
+  } catch {
+    const error = new Error('merchant_report_service_unavailable');
+    error.statusCode = 503;
+    throw error;
+  }
+}
+
+async function createMerchantScreening(req, res, store, merchantScreener, reportStore) {
+  const token = bearerToken(req);
+  if (!(await store.isClientKey(token))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
   try {
@@ -272,7 +297,17 @@ async function createMerchantScreening(req, res, store, merchantScreener) {
     const validation = validateMerchantScreeningRequest(input);
     if (validation.error) return json(res, 400, { status: 'Error', error: validation.error });
     const result = await merchantScreener(validation.value);
-    return json(res, 200, result);
+    const response = validation.value.get_pdf
+      ? await finalizeMerchantScreeningReport({
+        request: validation.value,
+        response: result,
+        ownerId: reportOwnerId(token),
+        origin: requestOrigin(req),
+        reportStore,
+        screenshots: result[merchantScreenshotAssets] || []
+      })
+      : result;
+    return json(res, 200, response);
   } catch (error) {
     if (error.statusCode === 400 || ['json_required', 'invalid_json', 'request_too_large'].includes(error.message)) {
       return json(res, 400, { status: 'Error', error: 'The request body must contain a valid JSON object.' });
@@ -281,11 +316,40 @@ async function createMerchantScreening(req, res, store, merchantScreener) {
       || String(error.message || '').startsWith('http_')) {
       return json(res, 502, { status: 'Error', error: 'The merchant website could not be collected safely.' });
     }
+    if (String(error.message || '').startsWith('merchant_report_') || /Blob|Table|storage/i.test(String(error.message || ''))) {
+      return json(res, 503, { status: 'Error', error: 'The merchant screening report service is temporarily unavailable. Please try again shortly.' });
+    }
     return json(res, 503, { status: 'Error', error: 'Merchant screening is temporarily unavailable.' });
   }
 }
 
 async function configuredMerchantScreener(request) {
+  if (process.env.MERCHANT_SCREENSHOT_WORKER_URL) {
+    const screenshotProvider = async (screeningRequest, collection) => {
+      const endpoint = new URL('/capture', process.env.MERCHANT_SCREENSHOT_WORKER_URL);
+      const upstream = await fetch(endpoint, {
+        method: 'POST',
+        signal: AbortSignal.timeout(90_000),
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          request: screeningRequest,
+          pages: collection.pages.slice(0, screeningRequest.max_pages).map((page) => ({
+            url: page.url,
+            body: String(page.body || '').slice(0, 20_000)
+          }))
+        })
+      });
+      if (!upstream.ok) throw new Error('screenshot_worker_unavailable');
+      const result = await upstream.json();
+      return {
+        ...result,
+        provider: 'ai7_rendered_capture',
+        local_only: false,
+        items: (result.items || []).map(({ image_base64, ...item }) => ({ ...item, __image_base64: image_base64 }))
+      };
+    };
+    return screenMerchantWebsite(request, { screenshotProvider });
+  }
   if (process.env.MERCHANT_SCREENSHOT_MODE !== 'local') return screenMerchantWebsite(request);
   if (process.env.NODE_ENV === 'production') throw new Error('local_screenshot_provider_disabled_in_production');
   const { captureMerchantScreenshots } = await import('./lib/merchant-screenshot.mjs');
@@ -314,11 +378,17 @@ async function downloadLocalMerchantScreenshot(req, res, store, batchId, filenam
   return createReadStream(screenshotPath).pipe(res);
 }
 
-async function downloadAdverseMediaReport(res, reportStore, reportId) {
+async function downloadPublicScreeningReport(res, reportStore, reportId, expectedType) {
   try {
     const report = await reportStore.getPublic({ reportId });
     if (!report) return json(res, 404, { status: 'Error', error: 'The report was not found.' });
-    const filename = String(report.metadata.filename || `ai7-adverse-media-${reportId}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '-');
+    const actualType = report.metadata.report_type;
+    const typeMatches = expectedType === 'adverse_media'
+      ? !actualType || actualType === expectedType
+      : actualType === expectedType;
+    if (!typeMatches) return json(res, 404, { status: 'Error', error: 'The report was not found.' });
+    const fallback = expectedType === 'merchant_screening' ? 'ai7-merchant-screening' : 'ai7-adverse-media';
+    const filename = String(report.metadata.filename || `${fallback}-${reportId}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '-');
     res.writeHead(200, {
       'content-type': 'application/pdf', 'content-length': report.bytes.length,
       'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'private, no-store',
@@ -595,13 +665,15 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       }
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
-      if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return createMerchantScreening(req, res, store, merchantScreener);
+      if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return createMerchantScreening(req, res, store, merchantScreener, reportStore);
       const merchantScreenshotMatch = /^\/service\/merchant_screening\/screenshots\/([0-9a-f-]{36})\/([a-z0-9-]{1,128}\.png)$/i.exec(url.pathname);
       if (req.method === 'GET' && merchantScreenshotMatch) {
         return downloadLocalMerchantScreenshot(req, res, store, merchantScreenshotMatch[1], merchantScreenshotMatch[2]);
       }
       const adverseReportMatch = /^\/service\/adverse_media\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
-      if (req.method === 'GET' && adverseReportMatch) return downloadAdverseMediaReport(res, reportStore, adverseReportMatch[1]);
+      if (req.method === 'GET' && adverseReportMatch) return downloadPublicScreeningReport(res, reportStore, adverseReportMatch[1], 'adverse_media');
+      const merchantReportMatch = /^\/service\/merchant_screening\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
+      if (req.method === 'GET' && merchantReportMatch) return downloadPublicScreeningReport(res, reportStore, merchantReportMatch[1], 'merchant_screening');
       if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
         return json(res, 200, {
           supported_languages: adverseMediaConfig.supportedLanguages,

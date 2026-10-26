@@ -3,7 +3,7 @@
   "info": {
     "title": "AI7 UAE Verification API",
     "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, and merchant-website risk screening. Responses are JSON.",
-    "version": "1.4.0"
+    "version": "1.5.0"
   },
   "servers": [
     {
@@ -320,7 +320,7 @@
     "/service/merchant_screening": {
       "post": {
         "summary": "Screen a merchant website",
-        "description": "Performs a bounded, robots-aware HTTPS crawl and returns evidence-backed identity, policy, product, candidate MCC, outgoing-link, security, and risk findings. Coverage fields explicitly identify enrichment that is unavailable until a licensed or authoritative provider is configured. Candidate MCCs and prohibited-link keywords require human review.",
+        "description": "Performs a bounded, robots-aware HTTPS crawl and returns evidence-backed identity, policy, product, candidate MCC, outgoing-link, security, and risk findings. Top-level status is a coverage state: completed or partial. summary.risk_level is separately assigned as high_risk, review, or safe using customer-configurable percentage thresholds; partial coverage always requires human review. Candidate MCCs and prohibited-link keywords require human review. Set get_pdf to true to create a permanently retained audit PDF and return its public capability URL; customer_logo_url optionally places a customer logo on that report.",
         "operationId": "screenMerchantWebsite",
         "security": [{ "ApiKey": [] }],
         "requestBody": {
@@ -339,7 +339,29 @@
           "400": { "description": "The request is invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "401": { "description": "The AI7 API key is missing or invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "502": { "description": "The merchant site could not be collected safely.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-          "503": { "description": "Merchant screening is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+          "503": { "description": "Merchant screening or permanent PDF generation/storage is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/service/merchant_screening/reports/{reportId}.pdf": {
+      "get": {
+        "summary": "Download a permanent merchant-screening audit report",
+        "operationId": "downloadMerchantScreeningReport",
+        "description": "Downloads a permanently retained merchant-screening PDF without an API key. The UUID is an unguessable capability identifier; anyone with the URL can download the report.",
+        "security": [],
+        "parameters": [{
+          "name": "reportId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "format": "uuid" }
+        }],
+        "responses": {
+          "200": {
+            "description": "The merchant-screening PDF identified by the capability URL.",
+            "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "404": { "description": "No merchant-screening report has that capability ID.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "The report store is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     },
@@ -383,7 +405,11 @@
           "country_code": { "type": "string", "pattern": "^[A-Za-z]{2}$", "description": "Two-letter ISO country code used to select the policy baseline." },
           "declared_merchant_name": { "type": "string", "maxLength": 200 },
           "declared_mcc": { "type": "string", "pattern": "^[0-9]{4}$" },
-          "max_pages": { "type": "integer", "minimum": 1, "maximum": 20, "default": 12 }
+          "max_pages": { "type": "integer", "minimum": 1, "maximum": 20, "default": 12 },
+          "high_risk_threshold_percent": { "type": "number", "exclusiveMinimum": 0, "maximum": 100, "default": 60, "description": "Scores at or above this percentage are assigned to the High Risk band. It must not be lower than review_threshold_percent." },
+          "review_threshold_percent": { "type": "number", "minimum": 0, "maximum": 100, "default": 25, "description": "Scores from this percentage up to the High Risk boundary require Review. Lower scores are Safe." },
+          "get_pdf": { "type": "boolean", "default": false, "description": "When true, creates a permanently retained merchant-screening PDF and includes report metadata in the response." },
+          "customer_logo_url": { "type": ["string", "null"], "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS PNG or JPEG placed on the PDF when get_pdf is true." }
         },
         "additionalProperties": false
       },
@@ -418,7 +444,22 @@
           "findings": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
           "summary": { "type": "object", "additionalProperties": true },
           "evidence": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-          "methodology": { "type": "object", "additionalProperties": true }
+          "methodology": { "type": "object", "additionalProperties": true },
+          "report": { "$ref": "#/components/schemas/MerchantScreeningReport" }
+        },
+        "additionalProperties": false
+      },
+      "MerchantScreeningReport": {
+        "type": "object",
+        "required": ["report_id", "transaction_id", "generated_at", "download_url", "sha256", "filename", "retention"],
+        "properties": {
+          "report_id": { "type": "string", "format": "uuid" },
+          "transaction_id": { "type": "string", "format": "uuid" },
+          "generated_at": { "type": "string", "format": "date-time" },
+          "download_url": { "type": "string", "format": "uri", "description": "Absolute public capability URL for the permanently stored PDF. Anyone with the unguessable URL can download it without an API key." },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "filename": { "type": "string" },
+          "retention": { "type": "string", "const": "permanent" }
         },
         "additionalProperties": false
       },
