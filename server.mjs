@@ -23,6 +23,7 @@ import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
 import { publicFormDefinition, resolveFormServiceInput, validateFormDefinition, validateFormSubmission } from './lib/forms.mjs';
 import { createFormsQueue, makeFormsJob, startFormsWorker, validateFormsCallbackUrl } from './lib/forms-queue.mjs';
 import { createFormsAuditPdf } from './lib/forms-report.mjs';
+import { CapacityError, createRequestCapacity } from './lib/request-capacity.mjs';
 import {
   ADMIN_COOKIE, adminCookie, clearAdminCookie, createAdminAccount, createAdminSession,
   newSigningKey, normalizeAdminEmail, parseCookies, safeAdminAccount, verifyAdminPassword, verifyAdminSession
@@ -58,7 +59,7 @@ function securityHeaders(res) {
   res.setHeader('x-content-type-options', 'nosniff');
   res.setHeader('x-frame-options', 'DENY');
   res.setHeader('permissions-policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('access-control-expose-headers', 'x-ai7-transaction-id');
+  res.setHeader('access-control-expose-headers', 'x-ai7-transaction-id, x-ai7-queue-wait-ms, retry-after');
 }
 
 function moduleCatalog(integrations) {
@@ -163,6 +164,7 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, tra
     }
     completeUsageBeforeResponse(res, usageStore, workspaceId, '', transactionId, details, false);
   }
+  req.ai7CapacityLane = route.billable ? (route.moduleIds[0] || 'other') : '';
   return true;
 }
 
@@ -1775,7 +1777,8 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
   deepResearchQueue = process.env.ADVERSE_MEDIA_WORKER_ENABLED === 'false' ? null : createDeepResearchQueue(),
   formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), usageStore = createCustomerUsageStore(),
-  merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+  merchantScreener = configuredMerchantScreener, requestCapacity = createRequestCapacity(),
+  startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
   const portalLoginThrottle = createLoginThrottle();
   const resetThrottle = createLoginThrottle();
@@ -1813,13 +1816,41 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
 
     try {
       if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, transactionId))) return;
+      if (req.ai7CapacityLane) {
+        const queuedAt = Date.now();
+        const cancelled = new AbortController();
+        const onClose = () => cancelled.abort();
+        res.once('close', onClose);
+        let release;
+        try {
+          release = await requestCapacity.acquire(req.ai7CapacityLane, { signal: cancelled.signal });
+        } catch (error) {
+          res.off('close', onClose);
+          if (error instanceof CapacityError) {
+            console.warn('api_capacity_rejected', JSON.stringify({ transaction_id: transactionId,
+              lane: req.ai7CapacityLane, reason: error.reason,
+              waiting_ms: Date.now() - queuedAt, capacity: requestCapacity.snapshot?.() || null }));
+            if (!res.destroyed) return json(res, 503, {
+              status: 'Error', reasonCode: 'CAPACITY_BUSY',
+              error: 'Request capacity is temporarily full. Retry with the same input.'
+            }, { 'retry-after': '5' });
+          }
+          throw error;
+        }
+        res.off('close', onClose);
+        res.setHeader('x-ai7-queue-wait-ms', String(Date.now() - queuedAt));
+        res.once('finish', release);
+        res.once('close', release);
+      }
       if (url.pathname === '/healthz') {
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
         return res.end('ok\n');
       }
       if (req.method === 'GET' && url.pathname === '/service/health') {
         if (!req.ai7Client && !(await store.isClientKey(bearerToken(req)))) return json(res, 401, { status: 'Error', error: 'An active API key is required.' });
-        return json(res, 200, await serviceHealth(store));
+        return json(res, 200, { ...await serviceHealth(store), request_capacity: {
+          scope: 'current_replica', ...requestCapacity.snapshot?.()
+        } });
       }
       if (req.method === 'POST' && url.pathname === '/service/keys/self/rotate') {
         const client = req.ai7Client || await store.getClientForKey(bearerToken(req));
