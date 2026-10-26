@@ -1,15 +1,50 @@
-let adminKey = '';
+let csrfToken = '';
 let integrationCatalog = [];
 const byId = (id) => document.getElementById(id);
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
     ...options,
-    headers: { Authorization: `Bearer ${adminKey}`, ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) }
+    credentials: 'same-origin',
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(!['GET', 'HEAD'].includes(options.method || 'GET') && csrfToken ? { 'x-ai7-csrf': csrfToken } : {}),
+      ...(options.headers || {})
+    }
   });
   const body = await response.json().catch(() => ({ status: 'Error', error: 'Invalid server response.' }));
+  if (response.status === 401 && !path.includes('/auth/')) showSignedOut();
   if (!response.ok) throw new Error(body.error || `Request failed with ${response.status}.`);
   return body;
+}
+
+function showSignedOut() {
+  csrfToken = '';
+  byId('app-view').hidden = true;
+  byId('login-view').hidden = false;
+  byId('signin-card').hidden = false;
+  byId('setup-card').hidden = true;
+}
+
+async function showApp(auth) {
+  csrfToken = auth.csrf_token;
+  byId('account-email').textContent = auth.account.email;
+  byId('login-view').hidden = true;
+  byId('app-view').hidden = false;
+  await loadIntegrations();
+}
+
+async function bootstrapAuth() {
+  try {
+    const status = await request('/admin/api/auth/status');
+    byId('setup-card').hidden = status.configured;
+    byId('signin-card').hidden = !status.configured;
+    if (!status.configured) return;
+    const session = await request('/admin/api/auth/session');
+    if (session.account) await showApp(session);
+  } catch {
+    showSignedOut();
+  }
 }
 
 function setView(name) {
@@ -162,15 +197,36 @@ async function loadClients() {
 byId('login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   byId('login-error').textContent = '';
-  adminKey = byId('admin-key').value.trim();
   try {
-    await loadIntegrations();
-    byId('admin-key').value = '';
-    byId('login-view').hidden = true;
-    byId('app-view').hidden = false;
-  } catch {
-    adminKey = '';
-    byId('login-error').textContent = 'The admin key is missing or incorrect.';
+    const auth = await request('/admin/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: byId('admin-email').value, password: byId('admin-password').value })
+    });
+    byId('admin-password').value = '';
+    await showApp(auth);
+  } catch (error) {
+    byId('login-error').textContent = error.message;
+  }
+});
+
+byId('setup-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  byId('setup-error').textContent = '';
+  const password = byId('setup-password').value;
+  if (password !== byId('setup-password-confirm').value) {
+    byId('setup-error').textContent = 'Passwords do not match.';
+    return;
+  }
+  try {
+    const auth = await request('/admin/api/auth/setup', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${byId('setup-key').value.trim()}` },
+      body: JSON.stringify({ email: byId('setup-email').value, password })
+    });
+    event.currentTarget.reset();
+    await showApp(auth);
+  } catch (error) {
+    byId('setup-error').textContent = error.message;
   }
 });
 
@@ -180,7 +236,15 @@ document.querySelectorAll('[data-close]').forEach((button) => button.addEventLis
 byId('new-integration').addEventListener('click', () => byId('integration-dialog').showModal());
 byId('new-form').addEventListener('click', () => openFormDialog());
 byId('new-client').addEventListener('click', () => byId('client-dialog').showModal());
-byId('sign-out').addEventListener('click', () => { adminKey = ''; byId('app-view').hidden = true; byId('login-view').hidden = false; });
+byId('sign-out').addEventListener('click', async () => {
+  try { await request('/admin/api/auth/logout', { method: 'POST' }); } catch {}
+  showSignedOut();
+});
+byId('change-password').addEventListener('click', () => {
+  byId('password-form').reset();
+  byId('password-error').textContent = '';
+  byId('password-dialog').showModal();
+});
 
 byId('integration-form').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -260,3 +324,26 @@ byId('copy-credential').addEventListener('click', async () => {
   byId('copy-credential').textContent = 'Copied';
 });
 byId('close-credential').addEventListener('click', () => { byId('new-credential').textContent = ''; byId('copy-credential').textContent = 'Copy'; byId('credential-dialog').close(); });
+
+byId('password-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  byId('password-error').textContent = '';
+  if (form.elements.new_password.value !== form.elements.confirm_password.value) {
+    byId('password-error').textContent = 'New passwords do not match.';
+    return;
+  }
+  try {
+    const auth = await request('/admin/api/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: form.elements.current_password.value, new_password: form.elements.new_password.value })
+    });
+    csrfToken = auth.csrf_token;
+    form.reset();
+    byId('password-dialog').close();
+  } catch (error) {
+    byId('password-error').textContent = error.message;
+  }
+});
+
+bootstrapAuth();
