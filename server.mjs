@@ -3,6 +3,7 @@ import { lookup } from 'node:dns/promises';
 import { createServer } from 'node:http';
 import { get as httpsGet } from 'node:https';
 import { isIP } from 'node:net';
+import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
@@ -11,6 +12,7 @@ import { adverseMediaConfig, presentAdverseMediaResponse, screenAdverseMedia, va
 import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, validatePublicCallbackUrl } from './lib/deep-research-queue.mjs';
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
+import { screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -259,6 +261,57 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     }
     return json(res, 502, { status: 'Error', error: 'The media search service is temporarily unavailable. Please try again shortly.' });
   }
+}
+
+async function createMerchantScreening(req, res, store, merchantScreener) {
+  if (!(await store.isClientKey(bearerToken(req)))) {
+    return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  }
+  try {
+    const input = await readJson(req);
+    const validation = validateMerchantScreeningRequest(input);
+    if (validation.error) return json(res, 400, { status: 'Error', error: validation.error });
+    const result = await merchantScreener(validation.value);
+    return json(res, 200, result);
+  } catch (error) {
+    if (error.statusCode === 400 || ['json_required', 'invalid_json', 'request_too_large'].includes(error.message)) {
+      return json(res, 400, { status: 'Error', error: 'The request body must contain a valid JSON object.' });
+    }
+    if (['crawl_disallowed_by_robots', 'website_unavailable', 'request_timeout', 'destination_is_not_public'].includes(error.message)
+      || String(error.message || '').startsWith('http_')) {
+      return json(res, 502, { status: 'Error', error: 'The merchant website could not be collected safely.' });
+    }
+    return json(res, 503, { status: 'Error', error: 'Merchant screening is temporarily unavailable.' });
+  }
+}
+
+async function configuredMerchantScreener(request) {
+  if (process.env.MERCHANT_SCREENSHOT_MODE !== 'local') return screenMerchantWebsite(request);
+  if (process.env.NODE_ENV === 'production') throw new Error('local_screenshot_provider_disabled_in_production');
+  const { captureMerchantScreenshots } = await import('./lib/merchant-screenshot.mjs');
+  return screenMerchantWebsite(request, { screenshotProvider: captureMerchantScreenshots });
+}
+
+async function downloadLocalMerchantScreenshot(req, res, store, batchId, filename) {
+  if (process.env.MERCHANT_SCREENSHOT_MODE !== 'local' || process.env.NODE_ENV === 'production') {
+    return json(res, 404, { status: 'Error', error: 'Screenshot was not found.' });
+  }
+  if (!(await store.isClientKey(bearerToken(req)))) {
+    return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  }
+  const outputRoot = process.env.MERCHANT_SCREENSHOT_OUTPUT_DIR || join(tmpdir(), 'ai7-merchant-screenshots');
+  const screenshotPath = join(outputRoot, batchId, filename);
+  if (!existsSync(screenshotPath) || !statSync(screenshotPath).isFile()) {
+    return json(res, 404, { status: 'Error', error: 'Screenshot was not found.' });
+  }
+  const stat = statSync(screenshotPath);
+  res.writeHead(200, {
+    'content-type': 'image/png',
+    'content-length': stat.size,
+    'content-disposition': `inline; filename="${filename}"`,
+    'cache-control': 'private, no-store'
+  });
+  return createReadStream(screenshotPath).pipe(res);
 }
 
 async function downloadAdverseMediaReport(res, reportStore, reportId) {
@@ -516,7 +569,7 @@ function serveStatic(res, directory, requestPath) {
   createReadStream(filePath).pipe(res);
 }
 
-export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), reportStore = createAdverseMediaReportStore(), startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), reportStore = createAdverseMediaReportStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   if (startWorker && deepResearchQueue) {
     startDeepResearchWorker({
       queue: deepResearchQueue,
@@ -542,6 +595,11 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       }
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
+      if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return createMerchantScreening(req, res, store, merchantScreener);
+      const merchantScreenshotMatch = /^\/service\/merchant_screening\/screenshots\/([0-9a-f-]{36})\/([a-z0-9-]{1,128}\.png)$/i.exec(url.pathname);
+      if (req.method === 'GET' && merchantScreenshotMatch) {
+        return downloadLocalMerchantScreenshot(req, res, store, merchantScreenshotMatch[1], merchantScreenshotMatch[2]);
+      }
       const adverseReportMatch = /^\/service\/adverse_media\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
       if (req.method === 'GET' && adverseReportMatch) return downloadAdverseMediaReport(res, reportStore, adverseReportMatch[1]);
       if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
@@ -575,6 +633,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/merchant-screening' || url.pathname === '/merchant-screening/')) return serveStatic(res, directory, '/merchant-screening.html');
       return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
     } catch {
       return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });

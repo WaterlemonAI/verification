@@ -122,6 +122,10 @@ article > p:not(.label,.footnote) { color: var(--muted); line-height: 1.75; }
 .response-schema .schema-table > div { grid-template-columns: minmax(320px, 1.6fr) 100px 1fr; }
 footer { display: flex; justify-content: space-between; padding: 2rem clamp(1.25rem, 5vw, 5rem); color: #afbeb9; background: var(--dark); font-size: .75rem; }
 
+@media (max-width: 1180px) {
+  header nav { gap: .8rem; font-size: .7rem; }
+}
+
 @media (max-width: 760px) {
   header nav { display: none; }
   .status { display: none; }

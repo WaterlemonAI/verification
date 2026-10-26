@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071412" />
+    <meta name="description" content="AI7 UAE Merchant Website Screening API documentation and live tester." />
+    <title>AI7 UAE API — Merchant Website Screening</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/api.css?v=7" />
+    <script src="/merchant-screening.js?v=1" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#docs">Skip to documentation</a>
+    <header>
+      <a class="brand" href="https://ai7uae.com" aria-label="AI7 UAE home"><span>A7</span> AI7 <b>UAE</b></a>
+      <nav><a href="/">Trade licence</a><a href="/iban">IBAN verification</a><a href="/entity-search">Entity search</a><a href="/adverse-media">Adverse media</a><a href="#docs">Merchant screening</a><a href="#tester">API tester</a><a href="/openapi.json">OpenAPI</a></nav>
+      <span class="status"><i></i> API available</span>
+    </header>
+
+    <main id="docs">
+      <section class="hero">
+        <p class="eyebrow">MERCHANT DUE DILIGENCE / GLOBAL</p>
+        <h1>Merchant website<br /><em>screening.</em></h1>
+        <p>Collect bounded website evidence for merchant identity, policies, products, candidate MCCs, outgoing destinations, domain age, and transport security through one authenticated API.</p>
+        <div class="meta"><span>POST</span><code>/service/merchant_screening</code><button class="copy" data-copy="https://api.ai7uae.com/service/merchant_screening">Copy endpoint</button></div>
+      </section>
+
+      <section class="layout">
+        <aside aria-label="On this page">
+          <p>ON THIS PAGE</p>
+          <a href="#authentication">Authentication</a>
+          <a href="#request">Request</a>
+          <a href="#responses">Responses</a>
+          <a href="#methodology">Methodology</a>
+          <a href="#tester">Live tester</a>
+        </aside>
+
+        <div class="content">
+          <article id="authentication">
+            <p class="label">AUTHENTICATION</p>
+            <h2>Use your existing AI7 credential</h2>
+            <p>Send your personal AI7 API key as a Bearer token. Keep it server-side and never embed it in public client code.</p>
+            <div class="code-block"><code>Authorization: Bearer YOUR_AI7_API_KEY</code><button class="copy" data-copy="Authorization: Bearer YOUR_AI7_API_KEY">Copy</button></div>
+          </article>
+
+          <article id="request">
+            <p class="label">REQUEST</p>
+            <h2>Screen a public merchant website</h2>
+            <div class="field-grid">
+              <div><strong>website_url</strong><span>HTTPS URI · required</span><p>Public merchant website. Credentials, IP literals, private addresses, non-HTTPS URLs, and non-standard ports are rejected.</p></div>
+              <div><strong>country_code</strong><span>ISO alpha-2 · required</span><p>Two-letter country code used to select the merchant policy baseline.</p></div>
+              <div><strong>declared_merchant_name</strong><span>string · optional</span><p>Merchant name supplied by the applicant or onboarding system.</p></div>
+              <div><strong>declared_mcc</strong><span>four digits · optional</span><p>Declared merchant category code for comparison with product evidence.</p></div>
+              <div><strong>max_pages</strong><span>integer · optional</span><p>Maximum same-origin pages to collect, from 1 to 20. Default: <code>12</code>.</p></div>
+            </div>
+            <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
+            <div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div>
+          </article>
+
+          <article id="responses">
+            <p class="label">RESPONSE</p>
+            <h2>Evidence, risk, and coverage</h2>
+            <p>A successful request returns the full assessment even when optional enrichment is unavailable. Always inspect <code>status</code>, <code>summary.decision_eligible</code>, and the coverage fields before using the result.</p>
+            <div class="schema-table" aria-label="Merchant screening response fields">
+              <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
+              <div><code>screening_id</code><span>UUID</span><span>Unique screening reference.</span></div>
+              <div><code>status</code><span>string</span><span><code>completed</code> or <code>partial</code> when required coverage is unavailable.</span></div>
+              <div><code>merchant_identity</code><span>object</span><span>Observed names, addresses, contacts, social profiles, founders, leadership, and source-scoped public claims.</span></div>
+              <div><code>domain</code><span>object</span><span>RDAP creation date, calculated domain age, and lookup status.</span></div>
+              <div><code>policies</code><span>object</span><span>Privacy, terms, returns, shipping, support, and retention-language evidence.</span></div>
+              <div><code>products</code><span>object[]</span><span>Observed products, prices, candidate MCC mapping, evidence IDs, and review signals.</span></div>
+              <div><code>outgoing_links</code><span>object[]</span><span>External destinations grouped by purpose with source pages and risk signals.</span></div>
+              <div><code>security</code><span>object</span><span>Negotiated TLS and recommended HTTP security-header observations.</span></div>
+              <div><code>screenshots</code><span>object</span><span>Rendered evidence coverage. Unavailable production providers are reported explicitly.</span></div>
+              <div><code>social_mentions</code><span>object</span><span>Social-source coverage and items when an approved source is configured.</span></div>
+              <div><code>destination_reputation</code><span>object</span><span>External-destination reputation coverage and findings.</span></div>
+              <div><code>crawl</code><span>object</span><span>Robots status, pages collected, bounded limits, and page-level errors.</span></div>
+              <div><code>findings</code><span>object[]</span><span>Explainable policy, security, domain, product, and destination observations.</span></div>
+              <div><code>summary</code><span>object</span><span>Risk score, level, dimensions, confidence, outcome, coverage, and decision eligibility.</span></div>
+              <div><code>evidence</code><span>object[]</span><span>Source URL, retrieval time, HTTP status, evidence ID, and SHA-256 content digest.</span></div>
+              <div><code>methodology</code><span>object</span><span>Versioned limits and interpretation notes.</span></div>
+            </div>
+            <h3>Status codes</h3>
+            <div class="responses">
+              <div><b class="ok">200</b><span>Screening returned; inspect coverage and decision eligibility</span></div>
+              <div><b>400</b><span>Invalid URL, country, MCC, page limit, or request field</span></div>
+              <div><b>401</b><span>Missing or invalid AI7 API key</span></div>
+              <div><b>502</b><span>The website could not be collected safely</span></div>
+              <div><b>503</b><span>Merchant screening is temporarily unavailable</span></div>
+            </div>
+          </article>
+
+          <article id="methodology">
+            <p class="label">METHODOLOGY</p>
+            <h2>Bounded collection with explicit limits</h2>
+            <p>The collector follows only public HTTPS destinations, validates DNS before each request, pins the validated address, rechecks every redirect, respects <code>robots.txt</code>, stays on the final merchant origin, and caps pages, bytes, redirects, and time. Candidate MCCs and keyword signals are review aids—not card-network classifications or automatic decline decisions. A missing enrichment result is shown as unavailable and never converted into a negative match.</p>
+          </article>
+
+          <article id="tester" class="tester">
+            <p class="label">LIVE TESTER</p>
+            <h2>Run a merchant website check</h2>
+            <p>Your credential is kept in memory for this page and sent only to <code>api.ai7uae.com</code>.</p>
+            <form id="merchant-screening-form" novalidate>
+              <label>AI7 API key<input id="api-key" type="password" autocomplete="off" placeholder="Paste your API key" required /></label>
+              <div class="input-grid">
+                <label>Website URL <code>website_url</code><input id="website-url" type="url" inputmode="url" placeholder="https://merchant.example" required /></label>
+                <label>Country code <code>country_code</code><input id="country-code" type="text" maxlength="2" value="AE" placeholder="AE" required /></label>
+                <label>Declared merchant name <code>declared_merchant_name</code><input id="declared-merchant-name" type="text" maxlength="200" placeholder="Merchant legal or trading name" /></label>
+                <label>Declared MCC <code>declared_mcc</code><input id="declared-mcc" type="text" inputmode="numeric" maxlength="4" placeholder="e.g. 5734" /></label>
+                <label>Maximum pages <code>max_pages</code><input id="max-pages" type="number" min="1" max="20" step="1" value="12" /></label>
+              </div>
+              <p class="form-error" id="form-error" role="alert"></p>
+              <button type="submit" id="send-request">Run screening <span>→</span></button>
+            </form>
+            <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
+            <div class="response-actions"><button class="copy" id="copy-response" disabled>Copy JSON</button></div>
+            <pre id="response-json" aria-live="polite">{
+  "message": "Your JSON response will appear here."
+}</pre>
+          </article>
+        </div>
+      </section>
+    </main>
+    <footer><span>AI7 UAE Verification API</span><a href="https://ai7uae.com">ai7uae.com</a></footer>
+  </body>
+</html>

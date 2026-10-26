@@ -26,12 +26,38 @@ POST /service/uae_tlv
 POST /service/iban_verification
 POST /service/entity_search
 POST /service/adverse_media
+POST /service/merchant_screening
 GET  /service/adverse_media/reports/{reportId}.pdf
 ```
 
 The services authenticate each AI7 customer with one Bearer API key. Provider-backed wrappers relay their upstream JSON body and HTTP status without exposing upstream hostnames, credentials, or identifying headers. The native adverse-media service searches current and archived global news plus open-web indexes in up to five languages, deduplicates evidence, classifies adverse-event categories and legal stage, and can enrich the highest-priority candidates with a bounded AI review. For multi-part individual names it can resolve explicit aliases and associated organizations from neutral evidence before running one bounded association search. It enforces a 12-query/$0.15 internal cost guardrail. Customers can set `high_risk_threshold_percent` and `review_threshold_percent`; retained scores at or above the first are High Risk, scores from the second up to the first require Review, and lower scores are Safe. The legacy decimal `risk_threshold` remains supported as a review-boundary alias. The adverse-media public contract exposes only customer-ready evidence and provider-neutral coverage fields; internal model output, transliterations, query/cost telemetry, component scores, and high-confidence rejected mismatches remain private. Low-confidence AI output cannot suppress evidence, and incomplete runs return an inconclusive outcome with safe reason codes. Every synchronous screening automatically creates a PDF audit report. The only report-specific request field is the optional `customer_logo_url`; the response contains the permanent report ID, transaction ID, integrity hash, and an absolute public capability URL. Anyone with that unguessable URL can download the report without an API key, while the underlying Azure container remains private and non-listable. Deep-research callbacks contain the same report metadata and always post the final result after the engine's controlled retries. A callback can therefore contain either a completed, decision-eligible result or a partial, explicitly inconclusive result that requires manual review. The portal includes copyable cURL, JavaScript, and Python examples, an OpenAPI document, live JSON response consoles, and direct PDF download. The comprehensive entity-search page also exposes a searchable response-field reference generated from every path in its official schema and response variants.
 
 Client keys are stored only as SHA-256 hashes. Upstream configuration and hashes are loaded from Azure Key Vault through the API app's dedicated managed identity. No provider secrets are committed to this repository or sent to the browser.
+
+### Merchant website screening foundation
+
+`POST /service/merchant_screening` accepts a public HTTPS `website_url`, a two-letter `country_code`, and optional declared merchant name/MCC fields. It reuses the API's Bearer-key authentication and returns an evidence-backed, bounded website assessment covering merchant identity, linked social profiles, addresses and contacts, JSON-LD products, candidate product MCC mappings, policy discovery, data-retention language, outgoing destinations, negotiated TLS, and security headers. The crawler observes `robots.txt`, remains on the submitted origin, limits pages and bytes, pins validated public DNS results, and rejects private, reserved, metadata, credential-bearing, non-HTTPS, and non-standard-port destinations on every redirect.
+
+The foundation reports `not_configured` coverage for rendered screenshots by default, and always does so for the latest 20 X mentions and destination-reputation confirmation until approved providers are connected. Local development can enable the guarded Chromium renderer described below. Candidate MCCs and prohibited-destination keyword matches are review signals rather than payment-network classifications or automatic decline decisions. Public partnership and sponsorship references are retained as source-scoped website claims; independent partnership verification and company-registry enrichment are outside this API's requirements. A partial response has `summary.decision_eligible: false` and must be manually reviewed.
+
+The end-to-end worker, provider, evidence-storage, privacy, and production-gate design is in [`docs/merchant-screening-design.md`](docs/merchant-screening-design.md).
+
+Local example:
+
+```bash
+curl http://127.0.0.1:8080/service/merchant_screening \
+  -H 'Authorization: Bearer YOUR_LOCAL_AI7_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"website_url":"https://merchant.example","country_code":"AE","max_pages":12}'
+```
+
+For local screenshot testing, install dependencies and set `MERCHANT_SCREENSHOT_MODE=local`. The local provider uses the system Chrome path on macOS by default; set `MERCHANT_SCREENSHOT_BROWSER_PATH` on other systems. It captures the homepage, one contact/support page, and at most two product pages at desktop and mobile viewports, writes private temporary PNGs under the operating-system temp directory, and returns authenticated local-only `download_path` values. It is hard-disabled when `NODE_ENV=production`.
+
+```bash
+MERCHANT_SCREENSHOT_MODE=local npm start
+```
+
+The full merchant-screening ceiling is `$0.05` per request. Screenshots are allocated at most `$0.02`, leaving `$0.03` for all other optional providers. The local Chromium provider has no external per-render supplier fee. Set `MERCHANT_SCREENSHOT_ESTIMATED_COST_PER_CAPTURE_USD` to exercise the pre-render budget gate; captures beyond the screenshot allocation are skipped. The future queued Azure worker must use measured Container Apps compute and storage rates before it can be enabled.
 
 ### API Engine administration
 

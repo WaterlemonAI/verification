@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AI7 UAE Verification API",
-    "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, and multilingual adverse media. Responses are JSON.",
-    "version": "1.3.0"
+    "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, and merchant-website risk screening. Responses are JSON.",
+    "version": "1.4.0"
   },
   "servers": [
     {
@@ -317,6 +317,32 @@
         }
       }
     },
+    "/service/merchant_screening": {
+      "post": {
+        "summary": "Screen a merchant website",
+        "description": "Performs a bounded, robots-aware HTTPS crawl and returns evidence-backed identity, policy, product, candidate MCC, outgoing-link, security, and risk findings. Coverage fields explicitly identify enrichment that is unavailable until a licensed or authoritative provider is configured. Candidate MCCs and prohibited-link keywords require human review.",
+        "operationId": "screenMerchantWebsite",
+        "security": [{ "ApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/MerchantScreeningRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Website screening completed or completed with explicit coverage gaps.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/MerchantScreeningResponse" } } }
+          },
+          "400": { "description": "The request is invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "The AI7 API key is missing or invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "502": { "description": "The merchant site could not be collected safely.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Merchant screening is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
     "/service/adverse_media/reports/{reportId}.pdf": {
       "get": {
         "summary": "Download a permanent adverse-media audit report",
@@ -349,6 +375,53 @@
       }
     },
     "schemas": {
+      "MerchantScreeningRequest": {
+        "type": "object",
+        "required": ["website_url", "country_code"],
+        "properties": {
+          "website_url": { "type": "string", "format": "uri", "pattern": "^https://", "description": "Public HTTPS merchant website. IP literals, credentials, non-443 ports, and private/reserved destinations are rejected." },
+          "country_code": { "type": "string", "pattern": "^[A-Za-z]{2}$", "description": "Two-letter ISO country code used to select the policy baseline." },
+          "declared_merchant_name": { "type": "string", "maxLength": 200 },
+          "declared_mcc": { "type": "string", "pattern": "^[0-9]{4}$" },
+          "max_pages": { "type": "integer", "minimum": 1, "maximum": 20, "default": 12 }
+        },
+        "additionalProperties": false
+      },
+      "MerchantCoverageStatus": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": { "type": "string", "enum": ["available", "completed", "partial", "unavailable", "not_configured"] },
+          "reason": { "type": "string" },
+          "items": { "type": "array", "items": {} }
+        },
+        "additionalProperties": true
+      },
+      "MerchantScreeningResponse": {
+        "type": "object",
+        "required": ["screening_id", "status", "completed_at", "request", "merchant_identity", "domain", "policies", "products", "outgoing_links", "security", "screenshots", "social_mentions", "destination_reputation", "findings", "summary", "evidence", "methodology"],
+        "properties": {
+          "screening_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["completed", "partial"] },
+          "completed_at": { "type": "string", "format": "date-time" },
+          "request": { "$ref": "#/components/schemas/MerchantScreeningRequest" },
+          "merchant_identity": { "type": "object", "additionalProperties": true },
+          "domain": { "$ref": "#/components/schemas/MerchantCoverageStatus" },
+          "policies": { "type": "object", "additionalProperties": true },
+          "products": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "outgoing_links": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "security": { "type": "object", "additionalProperties": true },
+          "screenshots": { "$ref": "#/components/schemas/MerchantCoverageStatus" },
+          "social_mentions": { "type": "object", "additionalProperties": true },
+          "destination_reputation": { "$ref": "#/components/schemas/MerchantCoverageStatus" },
+          "crawl": { "type": "object", "additionalProperties": true },
+          "findings": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "summary": { "type": "object", "additionalProperties": true },
+          "evidence": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+          "methodology": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": false
+      },
       "BaseRequest": {
         "type": "object",
         "anyOf": [
