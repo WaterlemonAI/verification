@@ -6,6 +6,9 @@ param location string = 'uaenorth'
 @description('Digest-pinned API image reference.')
 param image string
 
+@description('Digest-pinned isolated merchant screenshot worker image reference.')
+param merchantScreenshotWorkerImage string
+
 @description('Resource ID of the existing AI7 UAE Container Apps environment.')
 param environmentId string
 
@@ -27,6 +30,9 @@ param apiCertificateId string = ''
 @description('Name of the API Container App.')
 param containerAppName string = 'ca-ai7uae-api'
 
+@description('Name of the isolated merchant screenshot worker Container App.')
+param merchantScreenshotWorkerName string = 'ca-ai7uae-merchant-screenshot'
+
 @description('Dedicated storage account for durable adverse-media deep-research jobs.')
 param deepResearchStorageName string = 'stai7uaejobsuaen001'
 
@@ -37,7 +43,6 @@ param gdeltStorageName string = 'stai7uaegdeltuaen001'
 param reportStorageName string = 'stai7uaereportsuaen001'
 
 var deepResearchQueueName = 'adverse-media-deep-research'
-
 var customDomains = empty(apiCertificateId) ? [] : [
   {
     name: 'api.ai7uae.com'
@@ -45,6 +50,95 @@ var customDomains = empty(apiCertificateId) ? [] : [
     certificateId: apiCertificateId
   }
 ]
+
+resource merchantScreenshotWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  name: 'id-ai7uae-merchant-screenshot-uaen-001'
+}
+
+resource merchantScreenshotWorker 'Microsoft.App/containerApps@2024-03-01' = {
+  name: merchantScreenshotWorkerName
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${merchantScreenshotWorkerIdentity.id}': {}
+    }
+  }
+  properties: {
+    managedEnvironmentId: environmentId
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: false
+        allowInsecure: false
+        targetPort: 8081
+        transport: 'Auto'
+        traffic: [
+          {
+            latestRevision: true
+            weight: 100
+          }
+        ]
+      }
+      registries: [
+        {
+          server: acrLoginServer
+          identity: merchantScreenshotWorkerIdentity.id
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'merchant-screenshot-worker'
+          image: merchantScreenshotWorkerImage
+          env: [
+            { name: 'NODE_ENV', value: 'production' }
+            { name: 'PORT', value: '8081' }
+            { name: 'MERCHANT_SCREENSHOT_ISOLATED_WORKER', value: 'true' }
+            { name: 'MERCHANT_SCREENSHOT_ESTIMATED_COST_PER_CAPTURE_USD', value: '0.001' }
+            { name: 'MERCHANT_SCREENSHOT_MAXIMUM_CAPTURES', value: '4' }
+            { name: 'MERCHANT_SCREENSHOT_NAVIGATION_TIMEOUT_MS', value: '12000' }
+            { name: 'MERCHANT_SCREENSHOT_MAXIMUM_HEIGHT', value: '900' }
+            { name: 'MERCHANT_SCREENSHOT_MAXIMUM_BYTES', value: '4194304' }
+          ]
+          resources: {
+            cpu: json('1.0')
+            memory: '2Gi'
+          }
+          probes: [
+            {
+              type: 'Liveness'
+              httpGet: { path: '/healthz', port: 8081, scheme: 'HTTP' }
+              initialDelaySeconds: 20
+              periodSeconds: 30
+              timeoutSeconds: 3
+              failureThreshold: 3
+            }
+            {
+              type: 'Readiness'
+              httpGet: { path: '/healthz', port: 8081, scheme: 'HTTP' }
+              initialDelaySeconds: 5
+              periodSeconds: 10
+              timeoutSeconds: 3
+              failureThreshold: 6
+            }
+          ]
+        }
+      ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 2
+        rules: [
+          {
+            name: 'single-capture-per-replica'
+            http: { metadata: { concurrentRequests: '1' } }
+          }
+        ]
+      }
+    }
+  }
+}
 
 resource api 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName
@@ -98,6 +192,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
             { name: 'AZURE_REGION_DISPLAY', value: 'Microsoft Azure UAE North' }
             { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
+            { name: 'MERCHANT_SCREENSHOT_WORKER_URL', value: 'https://${merchantScreenshotWorker.properties.configuration.ingress.fqdn}' }
           ]
           resources: {
             cpu: json('0.25')
@@ -131,3 +226,5 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
 output fqdn string = api.properties.configuration.ingress.fqdn
 output customDomainVerificationId string = api.properties.customDomainVerificationId
 output latestRevisionName string = api.properties.latestRevisionName
+output merchantScreenshotWorkerFqdn string = merchantScreenshotWorker.properties.configuration.ingress.fqdn
+output merchantScreenshotWorkerLatestRevisionName string = merchantScreenshotWorker.properties.latestRevisionName

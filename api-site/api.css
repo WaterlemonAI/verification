@@ -83,6 +83,8 @@ article > p:not(.label,.footnote) { color: var(--muted); line-height: 1.75; }
 .tester form { display: grid; gap: 1rem; margin: 2rem 0; }
 .tester label { display: grid; gap: .5rem; font-size: .76rem; font-weight: 700; }
 .tester label code { color: var(--green); font-size: .65rem; font-weight: 400; }
+.tester label.inline-toggle > span:nth-child(2) { display: flex; align-items: center; gap: .6rem; }
+.tester label.inline-toggle input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--green); }
 .tester input, .tester select, .tester textarea { width: 100%; border: 1px solid #cad5d1; padding: .85rem 1rem; color: var(--ink); background: #fbfcfa; border-radius: 3px; outline: none; }
 .tester input:focus, .tester select:focus, .tester textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px #1d6f5012; }
 .tester textarea { min-height: 90px; resize: vertical; font-family: "DM Mono", monospace; font-size: .72rem; line-height: 1.5; }

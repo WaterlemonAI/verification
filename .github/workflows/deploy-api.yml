@@ -14,7 +14,10 @@ on:
       - package.json
       - package-lock.json
       - Dockerfile.api
+      - Dockerfile.merchant-screenshot
+      - merchant-screenshot-worker.mjs
       - infrastructure/api.bicep
+      - infrastructure/merchant-screenshot-platform.bicep
       - .github/workflows/deploy-api.yml
   workflow_dispatch:
 
@@ -66,6 +69,25 @@ jobs:
             "${repository}" "${GITHUB_SHA}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" "${digest}" "${image}" \
             > api-deployment-evidence.json
 
+      - name: Build and publish immutable merchant screenshot worker image
+        id: merchant_screenshot_image
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="ai7uae-merchant-screenshot"
+          tag="${GITHUB_SHA}"
+          tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
+          docker build --pull --file Dockerfile.merchant-screenshot --tag "${tagged_image}" .
+          docker push "${tagged_image}"
+          digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}:${tag}" --query digest --output tsv)"
+          test -n "${digest}"
+          image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          jq --arg repository "${repository}" --arg digest "${digest}" --arg image "${image}" \
+            '.merchant_screenshot_worker = {repository: $repository, digest: $digest, image: $image}' \
+            api-deployment-evidence.json > api-deployment-evidence.next.json
+          mv api-deployment-evidence.next.json api-deployment-evidence.json
+
       - name: Validate API Bicep
         run: az bicep build --file infrastructure/api.bicep
 
@@ -77,6 +99,7 @@ jobs:
             --template-file infrastructure/api.bicep \
             --parameters \
               image="${{ steps.image.outputs.image }}" \
+              merchantScreenshotWorkerImage="${{ steps.merchant_screenshot_image.outputs.image }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
@@ -92,6 +115,7 @@ jobs:
             --template-file infrastructure/api.bicep \
             --parameters \
               image="${{ steps.image.outputs.image }}" \
+              merchantScreenshotWorkerImage="${{ steps.merchant_screenshot_image.outputs.image }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
