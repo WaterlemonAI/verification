@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=10" />
-    <script src="/portal-login.js?v=2" defer></script>
+    <script src="/portal-login.js?v=3" defer></script>
   </head>
   <body class="login-page">
     <main class="login-shell">
@@ -30,10 +30,6 @@
           <p class="eyebrow">AI7 DEVELOPER PORTAL</p>
           <h2 id="auth-title">Welcome back</h2>
           <p class="login-intro" id="auth-intro">Sign in with your workspace email and password.</p>
-          <div class="auth-tabs" role="tablist" aria-label="Account access">
-            <button type="button" class="active" id="show-login" role="tab" aria-selected="true">Sign in</button>
-            <button type="button" id="show-signup" role="tab" aria-selected="false">First-time setup</button>
-          </div>
 
           <form class="auth-form" id="login-form" novalidate>
             <label>Email address<input id="login-email" type="email" autocomplete="email" required /></label>
@@ -43,13 +39,13 @@
           </form>
           <button class="auth-link" type="button" id="show-forgot">Forgot password?</button>
 
-          <form class="auth-form" id="signup-form" novalidate hidden>
-            <label>AI7 API key<input id="signup-key" type="password" autocomplete="off" placeholder="ai7_live_…" required /><small>Your active key is verified once to connect this account to its workspace. It is not stored on your user account.</small></label>
-            <label>Email address<input id="signup-email" type="email" autocomplete="email" required /></label>
-            <label>Create password<input id="signup-password" type="password" autocomplete="new-password" minlength="12" required /><small>12–128 characters with uppercase, lowercase, number, and symbol.</small></label>
-            <label>Confirm password<input id="signup-confirm" type="password" autocomplete="new-password" minlength="12" required /></label>
-            <p class="auth-error" id="signup-error" role="alert"></p>
-            <button type="submit">Create portal account →</button>
+          <form class="auth-form" id="invite-form" novalidate hidden>
+            <p id="invite-workspace"></p>
+            <label>Administrator email<input id="invite-email" type="email" readonly /></label>
+            <label>Create password<input id="invite-password" type="password" autocomplete="new-password" minlength="12" required /><small>12–128 characters with uppercase, lowercase, number, and symbol.</small></label>
+            <label>Confirm password<input id="invite-confirm" type="password" autocomplete="new-password" minlength="12" required /></label>
+            <p class="auth-error" id="invite-error" role="alert"></p>
+            <button type="submit">Set password and open workspace →</button>
           </form>
           <form class="auth-form" id="forgot-form" novalidate hidden>
             <label>Account email<input id="forgot-email" type="email" autocomplete="email" required /></label>
@@ -63,7 +59,7 @@
             <button type="submit">Update password →</button>
           </form>
           <button class="auth-link" type="button" id="back-to-login" hidden>Back to sign in</button>
-          <p class="login-security">Protected by signed, HttpOnly sessions. API credentials continue to be required for live API requests and are never placed in the portal session.</p>
+          <p class="login-security">New users receive a private setup link from their workspace administrator. API keys are created and managed after sign in.</p>
         </div>
       </section>
     </main>

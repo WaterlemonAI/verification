@@ -33,12 +33,33 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
   const store = new KeyVaultStore({ vaultUri: 'https://vault.test/', managedIdentityClientId: 'runtime-client-id', fetchImpl });
   const issued = await store.createClient('Production Customer');
   assert.equal(await store.isClientKey(issued.apiKey), true);
-  assert.deepEqual(await store.getClientForKey(issued.apiKey), { id: issued.client.id, name: 'Production Customer', status: 'active' });
+  assert.deepEqual(await store.getClientForKey(issued.apiKey), { id: issued.client.id, key_id: issued.client.id, name: 'Production Customer', status: 'active' });
 
   const stored = secrets.get(`client-${issued.client.id}`);
   assert.notEqual(stored.value, issued.apiKey);
   assert.match(stored.value, /^[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(await store.listClients()).includes(stored.value), false);
+
+  const workspaceId = 'abcdef0123456789';
+  const second = await store.createClient('Production Customer', { workspaceId, label: 'Automation' });
+  assert.equal((await store.getClientForKey(second.apiKey)).id, workspaceId);
+  assert.equal((await store.listClients()).find((item) => item.id === second.client.id).label, 'Automation');
+  const rotated = await store.rotateClient(second.client.id, workspaceId);
+  assert.equal(await store.isClientKey(second.apiKey), false);
+  assert.equal(await store.isClientKey(rotated.apiKey), true);
+  assert.equal(await store.rotateClient(second.client.id, 'wrong-workspace'), null);
+  await store.setCustomer({ id: workspaceId, name: 'Production Customer', adminEmail: 'owner@example.com', status: 'pending', invitationHash: 'hash', invitationExpiresAt: '2026-10-30T00:00:00Z' });
+  assert.equal((await store.getCustomer(workspaceId)).adminEmail, 'owner@example.com');
+  assert.equal((await store.listCustomers()).length, 1);
+  process.env.ADVERSE_MEDIA_REPORT_TABLE_URL = 'https://table.test';
+  const claims = new Set();
+  store.invitationTable = { createEntity: async (item) => {
+    assert.equal(item.partitionKey, 'customer-invitations');
+    if (claims.has(item.rowKey)) throw Object.assign(new Error('exists'), { statusCode: 409 });
+    claims.add(item.rowKey);
+  } };
+  assert.equal(await store.claimInvitation('a'.repeat(64)), true);
+  assert.equal(await store.claimInvitation('a'.repeat(64)), false);
 
   const portalAccount = {
     email: 'user@example.com', client_id: issued.client.id, client_name: issued.client.name,

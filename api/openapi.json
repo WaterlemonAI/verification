@@ -3,7 +3,7 @@
   "info": {
     "title": "AI7 UAE Verification API",
     "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, merchant-website risk screening, Forms orchestration, and asynchronous bank statement analysis.",
-    "version": "1.6.0"
+    "version": "1.7.0"
   },
   "servers": [
     {
@@ -12,6 +12,31 @@
     }
   ],
   "paths": {
+    "/service/health": {
+      "get": {
+        "summary": "Check API transport and enabled routes",
+        "operationId": "checkAi7ServiceHealth",
+        "description": "Returns server transport and route configuration status. It does not execute or guarantee an upstream provider probe.",
+        "security": [{ "ApiKey": [] }],
+        "responses": {
+          "200": { "description": "Status and enabled-route snapshot.", "content": { "application/json": { "schema": { "type": "object", "required": ["status", "checked_at", "checks", "upstream_probe"], "properties": { "status": { "type": "string", "const": "api_reachable" }, "checked_at": { "type": "string", "format": "date-time" }, "upstream_probe": { "type": "string", "const": "not_performed" }, "checks": { "type": "array", "items": { "type": "object", "required": ["id", "name", "path", "status"], "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "path": { "type": "string" }, "status": { "type": "string", "enum": ["enabled", "disabled"] } } } } } } } } },
+          "401": { "description": "An active AI7 key is required." }
+        }
+      }
+    },
+    "/service/keys/self/rotate": {
+      "post": {
+        "summary": "Rotate the API key used to authenticate this request",
+        "operationId": "rotateOwnAi7ApiKey",
+        "description": "Returns the replacement key once and immediately invalidates the old key. Store the new value before using this operation again. Other keys in the workspace remain active.",
+        "security": [{ "ApiKey": [] }],
+        "responses": {
+          "200": { "description": "The new API key and its non-secret metadata.", "content": { "application/json": { "schema": { "type": "object", "required": ["key", "api_key", "notice"], "properties": { "key": { "type": "object" }, "api_key": { "type": "string", "writeOnly": true }, "notice": { "type": "string" } } } } } },
+          "401": { "description": "An active managed AI7 key is required." },
+          "409": { "description": "The key could not be rotated." }
+        }
+      }
+    },
     "/service/uae_tlv": {
       "post": {
         "summary": "Verify a UAE trade licence",

@@ -341,18 +341,41 @@ async function loadForms() {
 }
 
 async function loadClients() {
-  const data = await request('/admin/api/clients');
+  const data = await request('/admin/api/customers');
   const list = byId('client-list');
   list.replaceChildren();
-  byId('client-empty').hidden = data.clients.length > 0;
-  byId('client-count').textContent = data.clients.length;
-  byId('active-client-count').textContent = data.clients.filter((item) => item.status === 'active').length;
-  data.clients.forEach((item) => {
+  byId('client-empty').hidden = data.customers.length > 0;
+  byId('client-count').textContent = data.keys.length;
+  byId('active-client-count').textContent = data.keys.filter((item) => item.status === 'active').length;
+  data.customers.forEach((customer) => {
+    const heading = document.createElement('div');
+    heading.className = 'client';
+    heading.innerHTML = '<div><strong></strong><small></small></div><span class="pill"></span><button class="resend" type="button"></button>';
+    heading.querySelector('strong').textContent = customer.name;
+    heading.querySelector('small').textContent = customer.adminEmail || 'Existing workspace';
+    heading.querySelector('.pill').textContent = customer.status;
+    const resend = heading.querySelector('.resend');
+    resend.hidden = !['pending', 'legacy'].includes(customer.status);
+    resend.textContent = customer.status === 'legacy' ? 'Invite admin' : 'Resend invite';
+    resend.addEventListener('click', async () => {
+      if (customer.status === 'legacy') {
+        const form = byId('client-form');
+        form.reset(); form.elements.workspace_id.value = customer.id;
+        form.elements.name.value = customer.name; form.elements.name.readOnly = true;
+        byId('client-dialog').showModal();
+        return;
+      }
+      resend.disabled = true;
+      try { await request(`/admin/api/customers/${customer.id}/resend`, { method: 'POST' }); await loadClients(); byId('client-notice').hidden = false; byId('client-notice').textContent = 'A new invitation link was sent. The previous link is invalid.'; }
+      catch (error) { resend.disabled = false; window.alert(error.message); }
+    });
+    list.append(heading);
+    data.keys.filter((item) => item.workspaceId === customer.id).forEach((item) => {
     const row = document.createElement('div');
     row.className = 'client';
     row.innerHTML = `<div><strong></strong><small></small></div><span class="pill"></span><small></small><button class="revoke">Revoke</button>`;
-    row.querySelector('strong').textContent = item.name;
-    row.querySelector('div small').textContent = `•••• ${item.lastFour}`;
+    row.querySelector('strong').textContent = item.label || 'Default key';
+    row.querySelector('div small').textContent = `•••• ${item.lastFour} · ${item.id}${item.ownerEmail ? ` · ${item.ownerEmail}` : ''}`;
     const pill = row.querySelector('.pill');
     pill.textContent = item.status;
     pill.classList.toggle('off', item.status !== 'active');
@@ -365,6 +388,7 @@ async function loadClients() {
       catch (error) { revoke.disabled = false; window.alert(error.message); }
     });
     list.append(row);
+    });
   });
 }
 
@@ -449,7 +473,7 @@ document.querySelectorAll('[data-refresh]').forEach((button) => button.addEventL
 document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => byId(button.dataset.close).close()));
 byId('new-integration').addEventListener('click', () => byId('integration-dialog').showModal());
 byId('new-form').addEventListener('click', () => openFormDialog());
-byId('new-client').addEventListener('click', () => byId('client-dialog').showModal());
+byId('new-client').addEventListener('click', () => { const form = byId('client-form'); form.reset(); form.elements.name.readOnly = false; byId('client-dialog').showModal(); });
 byId('sign-out').addEventListener('click', async () => {
   try { await request('/admin/api/auth/logout', { method: 'POST' }); } catch {}
   showSignedOut();
@@ -572,13 +596,14 @@ byId('client-form').addEventListener('submit', async (event) => {
   const form = event.currentTarget;
   byId('client-error').textContent = '';
   try {
-    const result = await request('/admin/api/clients', { method: 'POST', body: JSON.stringify({ name: form.elements.name.value, recipient_email: form.elements.recipient_email.value.trim() }) });
+    const path = form.elements.workspace_id.value ? `/admin/api/customers/${form.elements.workspace_id.value}/invite` : '/admin/api/customers';
+    const result = await request(path, { method: 'POST', body: JSON.stringify({ name: form.elements.name.value, admin_email: form.elements.admin_email.value.trim() }) });
     form.reset();
+    form.elements.name.readOnly = false;
     byId('client-dialog').close();
-    byId('new-credential').textContent = result.apiKey;
-    byId('credential-delivery').textContent = result.delivery === 'sent' ? 'Credential emailed to the recipient.' : result.delivery === 'failed' ? 'Email delivery failed. Copy the key now and deliver it securely.' : '';
-    byId('credential-dialog').showModal();
     await loadClients();
+    byId('client-notice').hidden = false;
+    byId('client-notice').textContent = result.delivery === 'sent' ? 'Invitation sent. The administrator can set a password and create API keys.' : 'Workspace created, but email delivery failed. Use Resend invite.';
   } catch (error) { byId('client-error').textContent = error.message; }
 });
 
@@ -603,11 +628,6 @@ byId('form-form').addEventListener('submit', async (event) => {
   }
 });
 
-byId('copy-credential').addEventListener('click', async () => {
-  await navigator.clipboard.writeText(byId('new-credential').textContent);
-  byId('copy-credential').textContent = 'Copied';
-});
-byId('close-credential').addEventListener('click', () => { byId('new-credential').textContent = ''; byId('copy-credential').textContent = 'Copy'; byId('credential-dialog').close(); });
 
 byId('password-form').addEventListener('submit', async (event) => {
   event.preventDefault();

@@ -9,6 +9,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
 import { createPlatformMailer } from './lib/platform-mail.mjs';
+import { createInvitation, invitationCustomerId, validInvitation, publicCustomer, INVITATION_HOURS } from './lib/customer-invitation.mjs';
 import { createPasswordResetToken, parsePasswordResetToken, RESET_MINUTES } from './lib/password-reset.mjs';
 import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
 import { adverseMediaConfig, presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from './lib/adverse-media.mjs';
@@ -999,33 +1000,40 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
     return completePasswordReset(req, res, { kind: 'portal', store, mailer });
   }
 
-  if (req.method === 'POST' && url.pathname === '/portal/api/auth/signup') {
+  if (req.method === 'POST' && (url.pathname === '/portal/api/invitations/preview' || url.pathname === '/portal/api/invitations/accept')) {
     try {
+      if (!sameOrigin(req)) return json(res, 403, { status: 'Error', error: 'Request origin is invalid.' });
       const body = await readJson(req);
-      const email = normalizeAdminEmail(body.email);
-      const throttleKey = loginThrottleKey(req, email);
-      if (loginThrottle.blocked(throttleKey)) return json(res, 429, { status: 'Error', error: 'Too many account attempts. Try again later.' });
-      const client = await store.getClientForKey(String(body.api_key || ''));
-      if (!client) {
+      const token = String(body.token || '');
+      const throttleKey = loginThrottleKey(req, invitationCustomerId(token));
+      if (loginThrottle.blocked(throttleKey)) return json(res, 429, { status: 'Error', error: 'Too many attempts. Try again later.' });
+      const customer = invitationCustomerId(token) ? await store.getCustomer(invitationCustomerId(token)) : null;
+      if (!validInvitation(customer, token)) {
         loginThrottle.failed(throttleKey);
-        return json(res, 401, { status: 'Error', error: 'AI7 API key is invalid or inactive.' });
+        return json(res, 400, { status: 'Error', error: 'This setup link is invalid or has expired.' });
       }
-      if (await store.getPortalUser(email)) return json(res, 409, { status: 'Error', error: 'An account already exists for this email. Sign in instead.' });
-      const account = createPortalAccount(email, body.password, client);
+      if (await store.getPortalUser(customer.adminEmail)) return json(res, 409, { status: 'Error', error: 'An account already exists for this email.' });
+      if (url.pathname.endsWith('/preview')) return json(res, 200, { customer: { name: customer.name, admin_email: customer.adminEmail, expires_at: customer.invitationExpiresAt } });
+      const account = createPortalAccount(customer.adminEmail, body.password, { id: customer.id, name: customer.name });
+      if (!(await store.claimInvitation(customer.invitationHash))) return json(res, 409, { status: 'Error', error: 'This setup link has already been used.' });
       let signingKey = await store.getPortalSessionKey();
-      if (!signingKey) {
-        signingKey = newSigningKey();
-        await store.setPortalSessionKey(signingKey);
-      }
+      if (!signingKey) { signingKey = newSigningKey(); await store.setPortalSessionKey(signingKey); }
       await store.setPortalUser(account);
+      await store.setCustomer({ ...customer, status: 'active', invitationHash: '', invitationExpiresAt: '', updatedAt: new Date().toISOString() });
+      const issued = await store.createClient(customer.name, { workspaceId: customer.id, label: 'Initial key', ownerEmail: account.email });
       loginThrottle.clear(throttleKey);
-      const created = createPortalSession(account, signingKey);
-      return json(res, 201, { account: safePortalAccount(account), csrf_token: created.csrfToken, expires_in: created.expiresIn }, {
-        'set-cookie': portalCookie(created.token, { secure: secureRequest(req) })
+      const session = createPortalSession(account, signingKey);
+      return json(res, 201, { account: safePortalAccount(account), api_key: issued.apiKey, key: issued.client, csrf_token: session.csrfToken }, {
+        'set-cookie': portalCookie(session.token, { secure: secureRequest(req) })
       });
     } catch (error) {
-      return json(res, error.statusCode || 400, { status: 'Error', error: error.statusCode ? 'The signup request is invalid.' : error.message });
+      if (error.message === 'invitation_claim_store_unavailable') return json(res, 503, { status: 'Error', error: 'Account setup is temporarily unavailable. Try again later.' });
+      return json(res, error.statusCode || 400, { status: 'Error', error: error.statusCode ? 'The setup request is invalid.' : error.message });
     }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/portal/api/auth/signup') {
+    return json(res, 410, { status: 'Error', error: 'Account setup now requires a customer administrator invitation.' });
   }
 
   if (req.method === 'POST' && url.pathname === '/portal/api/auth/login') {
@@ -1065,6 +1073,43 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
     return json(res, 200, { signed_out: true }, { 'set-cookie': clearPortalCookie({ secure: secureRequest(req) }) });
   }
 
+  if (url.pathname === '/portal/api/keys' || /^\/portal\/api\/keys\/[a-f0-9]{16}\/(rotate|revoke)$/.test(url.pathname)) {
+    const { account, session } = await currentPortalSession(req, store);
+    if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
+    if (req.method !== 'GET' && (!sameOrigin(req) || String(req.headers['x-ai7-csrf'] || '') !== session.csrf)) {
+      return json(res, 403, { status: 'Error', error: 'The security token is missing or invalid.' });
+    }
+    const keys = (await store.listClients()).filter((item) => item.workspaceId === account.client_id);
+    if (req.method === 'GET' && url.pathname === '/portal/api/keys') return json(res, 200, { keys });
+    if (req.method === 'POST' && url.pathname === '/portal/api/keys') {
+      try {
+        const body = await readJson(req);
+        const label = String(body.label || '').trim();
+        if (!label || label.length > 60) return json(res, 400, { status: 'Error', error: 'Key label must be 1–60 characters.' });
+        if (keys.filter((item) => item.status === 'active').length >= 20) return json(res, 409, { status: 'Error', error: 'This workspace has reached its active key limit.' });
+        const issued = await store.createClient(account.client_name, { workspaceId: account.client_id, label, ownerEmail: account.email });
+        return json(res, 201, { key: issued.client, api_key: issued.apiKey, notice: 'Copy this key now. It cannot be retrieved later.' });
+      } catch (error) { return json(res, error.statusCode || 400, { status: 'Error', error: error.message }); }
+    }
+    const keyId = url.pathname.split('/')[4];
+    if (req.method === 'POST' && url.pathname.endsWith('/rotate')) {
+      const rotated = await store.rotateClient(keyId, account.client_id);
+      return rotated ? json(res, 200, { key: rotated.client, api_key: rotated.apiKey, notice: 'The previous key is invalid. Copy this replacement now.' })
+        : json(res, 404, { status: 'Error', error: 'Active key was not found in this workspace.' });
+    }
+    if (req.method === 'POST' && url.pathname.endsWith('/revoke')) {
+      if (!keys.some((item) => item.id === keyId)) return json(res, 404, { status: 'Error', error: 'Key was not found in this workspace.' });
+      const revoked = await store.revokeClient(keyId);
+      return json(res, 200, { key: revoked });
+    }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/portal/api/health') {
+    const { session } = await currentPortalSession(req, store);
+    if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
+    return json(res, 200, await serviceHealth(store));
+  }
+
   return json(res, 404, { status: 'Error', error: 'Portal operation was not found.' });
 }
 
@@ -1073,7 +1118,18 @@ function wantsHtml(req) {
 }
 
 function protectedPortalPath(pathname) {
-  return ['/', '/iban', '/iban/', '/entity-search', '/entity-search/', '/adverse-media', '/adverse-media/', '/merchant-screening', '/merchant-screening/', '/bank-statement-analysis', '/bank-statement-analysis/', '/forms', '/forms/'].includes(pathname);
+  return ['/', '/iban', '/iban/', '/entity-search', '/entity-search/', '/adverse-media', '/adverse-media/', '/merchant-screening', '/merchant-screening/', '/bank-statement-analysis', '/bank-statement-analysis/', '/forms', '/forms/', '/account', '/account/'].includes(pathname);
+}
+
+async function serviceHealth(store) {
+  const integrations = await store.listIntegrations({ publicOnly: true });
+  const checks = integrations.map((item) => ({ id: item.id, name: item.name, path: item.publicPath, status: item.enabled ? 'enabled' : 'disabled' }));
+  checks.push({ id: 'bank-statement-analysis', name: 'Bank Statement Analysis', path: '/service/bank_statement_analysis', status: bsaEnabled() ? 'enabled' : 'disabled' });
+  return {
+    status: 'api_reachable', checked_at: new Date().toISOString(),
+    checks,
+    upstream_probe: 'not_performed'
+  };
 }
 
 function portalLoginRedirect(res, pathname, search = '') {
@@ -1243,21 +1299,98 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
     return json(res, 200, { clients: await store.listClients() });
   }
 
+  if (req.method === 'GET' && url.pathname === '/admin/api/customers') {
+    const [customers, keys] = await Promise.all([store.listCustomers(), store.listClients()]);
+    const known = new Set(customers.map((item) => item.id));
+    const legacy = [...new Map(keys.filter((item) => !known.has(item.workspaceId)).map((item) => [item.workspaceId, {
+      id: item.workspaceId, name: item.name, adminEmail: '', status: 'legacy', createdAt: item.createdAt
+    }])).values()];
+    return json(res, 200, { customers: [...customers.map(publicCustomer), ...legacy], keys });
+  }
+
+  if (req.method === 'POST' && /^\/admin\/api\/customers\/[a-f0-9]{16}\/invite$/.test(url.pathname)) {
+    try {
+      const id = url.pathname.split('/')[4];
+      const legacy = await store.getClient(id);
+      if (!legacy || legacy.workspaceId !== id || legacy.status !== 'active' || await store.getCustomer(id)) {
+        return json(res, 404, { status: 'Error', error: 'Existing customer workspace was not found.' });
+      }
+      const body = await readJson(req);
+      const adminEmail = validEmail(body.admin_email);
+      if (!adminEmail) return json(res, 400, { status: 'Error', error: 'Enter a valid administrator email.' });
+      if (!mailer.configured) return json(res, 503, { status: 'Error', error: 'Invitation email is temporarily unavailable.' });
+      if (await store.getPortalUser(adminEmail) || (await store.listCustomers()).some((item) => item.adminEmail === adminEmail)) {
+        return json(res, 409, { status: 'Error', error: 'This email already has a workspace invitation or account.' });
+      }
+      const invitation = createInvitation(id);
+      const timestamp = new Date().toISOString();
+      const customer = { id, name: legacy.name, adminEmail, status: 'pending', invitationHash: invitation.tokenHash,
+        invitationExpiresAt: invitation.expiresAt, createdAt: timestamp, updatedAt: timestamp };
+      await store.setCustomer(customer);
+      let delivery = 'sent';
+      try {
+        await mailer.sendInvitation({ to: adminEmail, customerName: legacy.name,
+          url: `${process.env.APP_PUBLIC_BASE_URL || 'https://app.kycprobe.com'}/login#invite=${encodeURIComponent(invitation.token)}`,
+          hours: INVITATION_HOURS });
+      } catch { delivery = 'failed'; console.warn('platform_invitation_email_failed'); }
+      return json(res, 201, { customer: publicCustomer(customer), delivery });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : 'The invitation could not be created.' });
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/admin/api/customers') {
+    try {
+      const body = await readJson(req);
+      const name = String(body.name || '').trim();
+      const adminEmail = validEmail(body.admin_email);
+      if (name.length < 2 || name.length > 100 || !adminEmail) return json(res, 400, { status: 'Error', error: 'Enter a customer name and valid administrator email.' });
+      if (!mailer.configured) return json(res, 503, { status: 'Error', error: 'Invitation email is temporarily unavailable.' });
+      if (await store.getPortalUser(adminEmail) || (await store.listCustomers()).some((item) => item.adminEmail === adminEmail)) {
+        return json(res, 409, { status: 'Error', error: 'This email already has a workspace invitation or account.' });
+      }
+      const id = randomBytes(8).toString('hex');
+      const invitation = createInvitation(id);
+      const timestamp = new Date().toISOString();
+      const customer = { id, name, adminEmail, status: 'pending', invitationHash: invitation.tokenHash,
+        invitationExpiresAt: invitation.expiresAt, createdAt: timestamp, updatedAt: timestamp };
+      await store.setCustomer(customer);
+      let delivery = 'sent';
+      try {
+        await mailer.sendInvitation({ to: adminEmail, customerName: name,
+          url: `${process.env.APP_PUBLIC_BASE_URL || 'https://app.kycprobe.com'}/login#invite=${encodeURIComponent(invitation.token)}`,
+          hours: INVITATION_HOURS });
+      } catch { delivery = 'failed'; console.warn('platform_invitation_email_failed'); }
+      return json(res, 201, { customer: publicCustomer(customer), delivery });
+    } catch (error) {
+      return json(res, error.statusCode || 500, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : 'The invitation could not be created.' });
+    }
+  }
+
+  if (req.method === 'POST' && /^\/admin\/api\/customers\/[a-f0-9]{16}\/resend$/.test(url.pathname)) {
+    const id = url.pathname.split('/')[4];
+    const customer = await store.getCustomer(id);
+    if (!customer || customer.status !== 'pending') return json(res, 404, { status: 'Error', error: 'Pending invitation was not found.' });
+    if (!mailer.configured) return json(res, 503, { status: 'Error', error: 'Invitation email is temporarily unavailable.' });
+    const invitation = createInvitation(id);
+    const updated = { ...customer, invitationHash: invitation.tokenHash, invitationExpiresAt: invitation.expiresAt, updatedAt: new Date().toISOString() };
+    await store.setCustomer(updated);
+    try {
+      await mailer.sendInvitation({ to: customer.adminEmail, customerName: customer.name,
+        url: `${process.env.APP_PUBLIC_BASE_URL || 'https://app.kycprobe.com'}/login#invite=${encodeURIComponent(invitation.token)}`,
+        hours: INVITATION_HOURS });
+      return json(res, 200, { customer: publicCustomer(updated), delivery: 'sent' });
+    } catch { console.warn('platform_invitation_email_failed'); return json(res, 503, { customer: publicCustomer(updated), delivery: 'failed', error: 'Invitation email could not be sent.' }); }
+  }
+
   if (req.method === 'POST' && url.pathname === '/admin/api/clients') {
     try {
       const body = await readJson(req);
       const name = String(body.name || '').trim();
       if (name.length < 2 || name.length > 100) return json(res, 400, { status: 'Error', error: 'Client name must be between 2 and 100 characters.' });
-      const recipient = body.recipient_email ? validEmail(body.recipient_email) : '';
-      if (body.recipient_email && !recipient) return json(res, 400, { status: 'Error', error: 'Enter a valid delivery email address.' });
-      if (recipient && !mailer.configured) return json(res, 503, { status: 'Error', error: 'Credential email is temporarily unavailable.' });
+      if (body.recipient_email) return json(res, 400, { status: 'Error', error: 'API keys cannot be emailed. Invite the customer administrator instead.' });
       const created = await store.createClient(name);
-      let delivery = 'not_requested';
-      if (recipient) {
-        try { await mailer.sendCredential({ to: recipient, clientName: name, apiKey: created.apiKey }); delivery = 'sent'; }
-        catch { delivery = 'failed'; console.warn('platform_credential_email_failed'); }
-      }
-      return json(res, 201, { ...created, delivery, notice: 'Copy this API key now. It will not be shown again.' });
+      return json(res, 201, { ...created, delivery: 'not_requested', notice: 'Copy this API key now. It will not be shown again.' });
     } catch (error) {
       return json(res, error.statusCode || 500, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : 'The client credential could not be created.' });
     }
@@ -1483,6 +1616,17 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
         return res.end('ok\n');
       }
+      if (req.method === 'GET' && url.pathname === '/service/health') {
+        if (!(await store.isClientKey(bearerToken(req)))) return json(res, 401, { status: 'Error', error: 'An active API key is required.' });
+        return json(res, 200, await serviceHealth(store));
+      }
+      if (req.method === 'POST' && url.pathname === '/service/keys/self/rotate') {
+        const client = await store.getClientForKey(bearerToken(req));
+        if (!client?.key_id) return json(res, 401, { status: 'Error', error: 'An active managed API key is required.' });
+        const rotated = await store.rotateClient(client.key_id, client.id);
+        return rotated ? json(res, 200, { key: rotated.client, api_key: rotated.apiKey, notice: 'The previous key is invalid. Copy this replacement now.' })
+          : json(res, 409, { status: 'Error', error: 'The key could not be rotated.' });
+      }
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return createMerchantScreening(req, res, store, merchantScreener, reportStore);
@@ -1561,6 +1705,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }
       if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/account' || url.pathname === '/account/')) return serveStatic(res, directory, '/account.html');
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
       if (directory.endsWith('api-site') && (url.pathname === '/merchant-screening' || url.pathname === '/merchant-screening/')) return serveStatic(res, directory, '/merchant-screening.html');

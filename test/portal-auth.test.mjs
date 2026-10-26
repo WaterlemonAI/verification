@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EnvironmentStore } from '../lib/api-store.mjs';
+import { createInvitation } from '../lib/customer-invitation.mjs';
 
 process.env.NODE_ENV = 'test';
 const { createAppServer } = await import('../server.mjs');
@@ -9,9 +10,11 @@ function sessionCookie(response) {
   return String(response.headers.get('set-cookie') || '').split(';')[0];
 }
 
-test('portal signup verifies an AI7 key and creates an email/password session', async (t) => {
+test('one-time customer invitation creates a portal account and initial workspace key', async (t) => {
   const store = new EnvironmentStore();
-  const createdClient = await store.createClient('Regulated Institution');
+  const customerId = 'abcdef0123456789';
+  const invitation = createInvitation(customerId);
+  await store.setCustomer({ id: customerId, name: 'Regulated Institution', adminEmail: 'user@example.com', status: 'pending', invitationHash: invitation.tokenHash, invitationExpiresAt: invitation.expiresAt });
   const server = createAppServer({ store, startWorker: false, deepResearchQueue: null, formsQueue: null });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
@@ -27,20 +30,20 @@ test('portal signup verifies an AI7 key and creates an email/password session', 
   assert.equal(publicForm.status, 200);
   assert.match(await publicForm.text(), /LIVE FORM/);
 
-  const invalid = await fetch(`${baseUrl}/portal/api/auth/signup`, {
+  const invalid = await fetch(`${baseUrl}/portal/api/invitations/accept`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ api_key: 'invalid', email: 'user@example.com', password: 'PortalPass!234' })
+    body: JSON.stringify({ token: 'invalid', password: 'PortalPass!234' })
   });
-  assert.equal(invalid.status, 401);
+  assert.equal(invalid.status, 400);
 
-  const signup = await fetch(`${baseUrl}/portal/api/auth/signup`, {
+  const signup = await fetch(`${baseUrl}/portal/api/invitations/accept`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ api_key: createdClient.apiKey, email: 'User@Example.com', password: 'PortalPass!234' })
+    body: JSON.stringify({ token: invitation.token, password: 'PortalPass!234' })
   });
   assert.equal(signup.status, 201);
   const signupBody = await signup.json();
   assert.equal(signupBody.account.email, 'user@example.com');
-  assert.equal(signupBody.account.client_id, createdClient.client.id);
+  assert.equal(signupBody.account.client_id, customerId);
   assert.equal(signupBody.account.client_name, 'Regulated Institution');
   assert.ok(signupBody.csrf_token);
   const cookie = sessionCookie(signup);
@@ -48,15 +51,19 @@ test('portal signup verifies an AI7 key and creates an email/password session', 
   assert.equal(signup.headers.get('set-cookie').toLowerCase().includes('domain='), false);
 
   const stored = await store.getPortalUser('user@example.com');
-  assert.equal(stored.client_id, createdClient.client.id);
+  assert.equal(stored.client_id, customerId);
   assert.notEqual(stored.password_hash, 'PortalPass!234');
-  assert.equal(JSON.stringify(stored).includes(createdClient.apiKey), false);
+  assert.equal(JSON.stringify(stored).includes(signupBody.api_key), false);
+  assert.equal(await store.isClientKey(signupBody.api_key), true);
 
-  const duplicate = await fetch(`${baseUrl}/portal/api/auth/signup`, {
+  const duplicate = await fetch(`${baseUrl}/portal/api/invitations/accept`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ api_key: createdClient.apiKey, email: 'user@example.com', password: 'AnotherPass!234' })
+    body: JSON.stringify({ token: invitation.token, password: 'AnotherPass!234' })
   });
-  assert.equal(duplicate.status, 409);
+  assert.equal(duplicate.status, 400);
+
+  const legacySignup = await fetch(`${baseUrl}/portal/api/auth/signup`, { method: 'POST' });
+  assert.equal(legacySignup.status, 410);
 
   const session = await fetch(`${baseUrl}/portal/api/auth/session`, { headers: { cookie } });
   assert.equal(session.status, 200);
@@ -67,6 +74,9 @@ test('portal signup verifies an AI7 key and creates an email/password session', 
   const pageHtml = await page.text();
   assert.match(pageHtml, /portal-auth\.js/);
   assert.match(pageHtml, /kycprobe-logo-white\.png/);
+  const accountPage = await fetch(`${baseUrl}/account`, { headers: { accept: 'text/html', cookie } });
+  assert.equal(accountPage.status, 200);
+  assert.match(await accountPage.text(), /Your API keys/);
 
   const loginPage = await fetch(`${baseUrl}/login`);
   const loginHtml = await loginPage.text();
