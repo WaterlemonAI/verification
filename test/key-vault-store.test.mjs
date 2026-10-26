@@ -70,6 +70,25 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
   await store.setPortalSessionKey('portal-signing-key');
   assert.deepEqual(await store.getPortalUser('USER@example.com'), portalAccount);
   assert.equal(await store.getPortalSessionKey(), 'portal-signing-key');
+  let lockTail = Promise.resolve();
+  store.keyCreationLock = (_workspaceId, operation) => {
+    const result = lockTail.then(() => operation(() => true));
+    lockTail = result.catch(() => {});
+    return result;
+  };
+  const freshWorkspace = 'new-customer-workspace';
+  const options = { workspaceId: freshWorkspace, label: 'Primary', ownerEmail: 'user@example.com' };
+  const idempotent = await store.createClientIdempotent('New Customer', options, 'create-primary-key-0001');
+  const repeated = await store.createClientIdempotent('New Customer', options, 'create-primary-key-0001');
+  assert.equal(repeated.reused, true);
+  assert.equal(repeated.apiKey, idempotent.apiKey);
+  assert.equal((await store.listClients()).filter((item) => item.workspaceId === freshWorkspace).length, 1);
+  await assert.rejects(store.createClientIdempotent('New Customer', { ...options, label: 'Changed' }, 'create-primary-key-0001'), /idempotency_conflict/);
+  const concurrent = await Promise.allSettled(Array.from({ length: 20 }, (_, index) =>
+    store.createClientIdempotent('New Customer', { ...options, label: `Automation ${index}` }, `create-automation-key-${index}-0001`)));
+  assert.equal(concurrent.filter((item) => item.status === 'fulfilled').length, 19);
+  assert.equal(concurrent.filter((item) => item.status === 'rejected' && item.reason.message === 'workspace_key_limit_reached').length, 1);
+  assert.equal((await store.listClients()).filter((item) => item.workspaceId === freshWorkspace && item.status === 'active').length, 20);
   const storedPortalUser = [...secrets.values()].find((item) => item.tags.kind === 'portal-user');
   assert.equal(storedPortalUser.value.includes(issued.apiKey), false);
   assert.equal(storedPortalUser.tags.clientId, issued.client.id);

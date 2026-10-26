@@ -106,7 +106,8 @@ test('one-time customer invitation creates a portal account and initial workspac
   const keyHeaders = { cookie: loginCookie, 'content-type': 'application/json', 'x-ai7-csrf': loginBody.csrf_token };
   const noCsrfKey = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST', headers: { cookie: loginCookie, 'content-type': 'application/json' }, body: JSON.stringify({ label: 'Denied' }) });
   assert.equal(noCsrfKey.status, 403);
-  const newKeyResponse = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST', headers: keyHeaders, body: JSON.stringify({ label: 'Integration test' }) });
+  const newKeyResponse = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST',
+    headers: { ...keyHeaders, 'idempotency-key': 'integration-key-request-0001' }, body: JSON.stringify({ label: 'Integration test' }) });
   assert.equal(newKeyResponse.status, 201);
   const newKey = await newKeyResponse.json();
   assert.equal(newKey.key.workspaceId, customerId);
@@ -131,10 +132,13 @@ test('one-time customer invitation creates a portal account and initial workspac
   assert.equal(await store.isClientKey(otherKey.apiKey), true);
 
   for (let index = 0; index < 19; index++) {
-    const response = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST', headers: keyHeaders, body: JSON.stringify({ label: `Limit test ${index}` }) });
+    const response = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST',
+      headers: { ...keyHeaders, 'idempotency-key': `limit-key-request-${String(index).padStart(4, '0')}` },
+      body: JSON.stringify({ label: `Limit test ${index}` }) });
     assert.equal(response.status, 201);
   }
-  const atLimit = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST', headers: keyHeaders, body: JSON.stringify({ label: 'Should be denied' }) });
+  const atLimit = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST',
+    headers: { ...keyHeaders, 'idempotency-key': 'limit-key-request-overflow' }, body: JSON.stringify({ label: 'Should be denied' }) });
   assert.equal(atLimit.status, 409);
   assert.equal((await store.listClients()).filter((item) => item.workspaceId === customerId && item.status === 'active').length, 20);
 

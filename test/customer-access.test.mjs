@@ -49,9 +49,14 @@ test('invited customer manages multiple workspace keys, rotation and service hea
   const initialList = await fetch(`${base}/portal/api/keys`, { headers: { cookie: portalCookie } });
   assert.equal((await initialList.json()).keys.length, 1);
   assert.equal((await post(base, '/portal/api/keys', { label: 'Production' }, { cookie: portalCookie })).status, 403);
-  const second = await post(base, '/portal/api/keys', { label: 'Production' }, portalHeaders);
+  const second = await post(base, '/portal/api/keys', { label: 'Production' },
+    { ...portalHeaders, 'idempotency-key': 'production-key-request-0001' });
   assert.equal(second.status, 201);
   const secondBody = await second.json();
+  const repeated = await post(base, '/portal/api/keys', { label: 'Production' },
+    { ...portalHeaders, 'idempotency-key': 'production-key-request-0001' });
+  assert.equal(repeated.status, 200);
+  assert.equal((await repeated.json()).api_key, secondBody.api_key);
   assert.equal(secondBody.key.workspaceId, invited.customer.id);
   assert.equal(await store.isClientKey(secondBody.api_key), true);
   const oldKey = secondBody.api_key;

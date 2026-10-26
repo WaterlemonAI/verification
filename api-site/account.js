@@ -89,8 +89,16 @@
     const button = form.querySelector('button');
     button.disabled = true;
     byId('account-message').textContent = '';
-    try { const result = await request('/portal/api/keys', { method: 'POST', body: JSON.stringify({ label: byId('key-label').value }) });
-      showNewKey(result.api_key); form.reset();
+    const label = byId('key-label').value.trim();
+    let pending = null;
+    try { pending = JSON.parse(sessionStorage.getItem('ai7_pending_create_key') || 'null'); } catch { /* replace malformed local state */ }
+    if (!pending || pending.label !== label) {
+      pending = { label, idempotencyKey: crypto.randomUUID() };
+      sessionStorage.setItem('ai7_pending_create_key', JSON.stringify(pending));
+    }
+    try { const result = await request('/portal/api/keys', { method: 'POST',
+      headers: { 'idempotency-key': pending.idempotencyKey }, body: JSON.stringify({ label }) });
+      showNewKey(result.api_key); sessionStorage.removeItem('ai7_pending_create_key'); form.reset();
       try { await loadKeys(); }
       catch { byId('account-message').textContent = 'Key created. The list could not refresh; reload this page after storing the new key.'; }
     }

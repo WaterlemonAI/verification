@@ -1240,10 +1240,20 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
         const body = await readJson(req);
         const label = String(body.label || '').trim();
         if (!label || label.length > 60) return json(res, 400, { status: 'Error', error: 'Key label must be 1–60 characters.' });
-        if (keys.filter((item) => item.status === 'active').length >= 20) return json(res, 409, { status: 'Error', error: 'This workspace has reached its active key limit.' });
-        const issued = await store.createClient(account.client_name, { workspaceId: account.client_id, label, ownerEmail: account.email });
-        return json(res, 201, { key: issued.client, api_key: issued.apiKey, notice: 'Copy this key now. It cannot be retrieved later.' });
-      } catch (error) { return json(res, error.statusCode || 400, { status: 'Error', error: error.message }); }
+        const idempotencyKey = String(req.headers['idempotency-key'] || '');
+        if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) return json(res, 400, {
+          status: 'Error', error: 'A unique Idempotency-Key header is required to create an API key.'
+        });
+        const issued = await store.createClientIdempotent(account.client_name,
+          { workspaceId: account.client_id, label, ownerEmail: account.email }, idempotencyKey);
+        return json(res, issued.reused ? 200 : 201, { key: issued.client, api_key: issued.apiKey,
+          notice: issued.reused ? 'The existing key for this request is shown again. Copy it now.' : 'Copy this key now. It cannot be retrieved later.' });
+      } catch (error) {
+        if (error.message === 'idempotency_conflict') return json(res, 409, { status: 'Error', error: 'This request ID was already used for a changed or inactive key.' });
+        if (error.message === 'workspace_key_limit_reached') return json(res, 409, { status: 'Error', error: 'This workspace has reached its active key limit.' });
+        if (error.message === 'workspace_key_lock_busy') return json(res, 503, { status: 'Error', error: 'Key creation is busy. Retry with the same request ID.' }, { 'retry-after': '2' });
+        return json(res, error.statusCode || 503, { status: 'Error', error: 'Key creation is temporarily unavailable. Retry with the same request ID.' });
+      }
     }
     const keyId = url.pathname.split('/')[4];
     if (req.method === 'POST' && url.pathname.endsWith('/rotate')) {
