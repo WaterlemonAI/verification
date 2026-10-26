@@ -137,6 +137,56 @@ test('Forms execution returns exact nested responses and creates one permanent t
   assert.equal(downloaded.headers.get('content-type'), 'application/pdf');
 });
 
+test('Forms IBAN execution generates and locks supplier control fields server-side', async () => {
+  const ibanStore = new EnvironmentStore();
+  await ibanStore.upsertIntegration({
+    id: 'iban-verification', name: 'International Bank Account Verification', publicPath: '/service/iban_verification', method: 'POST',
+    upstreamUrl: 'https://bank.test/v1/apicall/bank/intl_bank_acc_verification', authType: 'header', authHeader: 'username', authPrefix: '',
+    adapter: 'encrypted-json-relay', acceptedContentTypes: ['application/json'], documentedStatuses: [200, 500], enabled: true
+  }, 'private-username');
+  let plainRequest;
+  const result = await executeFormsJob({
+    job: {
+      submission_id: '6f070795-bc43-4d1e-87b5-82460398fdc2', owner_id: 'owner-iban', queued_at: new Date().toISOString(),
+      callback_url: 'https://8.8.8.8/callback', customer_logo_url: '',
+      request_origin: { network_origin: '203.0.113.1', processing_location: 'UAE North' },
+      data: { company_name: 'Example Trading LLC', country_code: 'AE', iban: 'AE070331234567890123456' },
+      form: {
+        id: 'iban-form', name: 'IBAN Form', version: 1,
+        fields: [
+          { key: 'company_name', label: 'Company name', type: 'text', required: true },
+          { key: 'country_code', label: 'Country', type: 'country', required: true },
+          { key: 'iban', label: 'IBAN', type: 'text', required: true }
+        ],
+        services: [{
+          service_id: 'iban-verification', content_type: 'application/json',
+          input_template: { country: '{{country_code}}', completeName: '{{company_name}}', iban: '{{iban}}', transID: 'CUSTOMER-CANNOT-OVERRIDE', docType: 999, requestCategory: 'other' }
+        }]
+      }
+    },
+    store: ibanStore,
+    reportStore: new MemoryAdverseMediaReportStore(),
+    fetchImpl: async (url, options) => {
+      const path = new URL(url).pathname;
+      if (path.endsWith('/encrypt')) {
+        plainRequest = JSON.parse(options.body);
+        return new Response(JSON.stringify({ requestData: 'encrypted-request' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (path.endsWith('/decrypt')) {
+        return new Response(JSON.stringify({ msg: 'success', received: plainRequest }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ responseData: 'encrypted-response' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+  });
+  assert.equal(result.status, 'completed');
+  assert.equal(plainRequest.source, 'API');
+  assert.equal(plainRequest.docType, 610);
+  assert.equal(plainRequest.requestCategory, 'business');
+  assert.equal(plainRequest.transID, 'AI7F-6f070795bc434d1e87b582460398fdc2');
+  assert.equal(plainRequest.iban, 'AE070331234567890123456');
+  assert.equal(result.services[0].response.received.transID, plainRequest.transID);
+});
+
 test('Forms worker durably retries callback delivery without re-running completed APIs', async () => {
   let available = true;
   let executions = 0;
