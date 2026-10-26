@@ -106,6 +106,8 @@ api.ai7uae.com
 
 The browser worker should not share the API container. It needs a non-root user, read-only filesystem, dropped Linux capabilities, strict CPU/memory/time limits, disabled downloads, no cloud metadata access, public-internet-only egress, and fresh browser context per page. Provider adapters should receive scoped secrets independently so a website-rendering compromise cannot reach social, registry, or storage credentials.
 
+Azure Container Apps does not expose the unprivileged user namespace required by Chromium's inner Linux sandbox. The worker therefore launches Chromium with that browser-level sandbox disabled and treats the Container App as the isolation boundary. Compensating controls are mandatory: an unprivileged container user, internal-only ingress, a dedicated identity with only ACR pull, no application or storage secrets, fresh browser contexts, disabled downloads/service workers, per-request public-address checks, strict capture limits, and immediate temporary-file deletion. A future runtime that supports Chromium's sandbox plus network-level public-egress enforcement should replace this fallback.
+
 For the current scale, Azure Queue + Blob + Table is the least disruptive fit because those dependencies and operational patterns already exist. Reassess PostgreSQL/Cosmos DB and Azure AI Search only when query, relationship, or analyst-search requirements exceed that model.
 
 ## Evidence and storage policy

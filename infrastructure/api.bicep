@@ -96,6 +96,7 @@ resource merchantScreenshotWorker 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'NODE_ENV', value: 'production' }
             { name: 'PORT', value: '8081' }
             { name: 'MERCHANT_SCREENSHOT_ISOLATED_WORKER', value: 'true' }
+            { name: 'MERCHANT_SCREENSHOT_CHROMIUM_SANDBOX', value: 'false' }
             { name: 'MERCHANT_SCREENSHOT_ESTIMATED_COST_PER_CAPTURE_USD', value: '0.001' }
             { name: 'MERCHANT_SCREENSHOT_MAXIMUM_CAPTURES', value: '4' }
             { name: 'MERCHANT_SCREENSHOT_NAVIGATION_TIMEOUT_MS', value: '12000' }
