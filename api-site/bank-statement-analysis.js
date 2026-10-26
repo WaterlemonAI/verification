@@ -7,11 +7,13 @@ const samples = {
   --form 'statement_file=@statement.pdf;type=application/pdf' \\
   --form 'country_code=AE' \\
   --form 'entity_type=company' \\
+  --form 'callback_url=https://your-system.example/webhooks/ai7' \\
   --form 'get_pdf=true'`,
   javascript: `const form = new FormData();
 form.append('statement_file', file);
 form.append('country_code', 'AE');
 form.append('entity_type', 'company');
+form.append('callback_url', 'https://your-system.example/webhooks/ai7');
 form.append('get_pdf', 'true');
 
 const accepted = await fetch('${endpoint}', {
@@ -34,7 +36,8 @@ with open("statement.pdf", "rb") as statement:
             "Idempotency-Key": str(uuid.uuid4()),
         },
         files={"statement_file": ("statement.pdf", statement, "application/pdf")},
-        data={"country_code": "AE", "entity_type": "company", "get_pdf": "true"},
+        data={"country_code": "AE", "entity_type": "company", "get_pdf": "true",
+              "callback_url": "https://your-system.example/webhooks/ai7"},
         timeout=60,
     )
 print(response.status_code, response.json())`
@@ -47,6 +50,8 @@ const copyResponse = byId('copy-response');
 const sendButton = byId('send-request');
 const formError = byId('form-error');
 const artifactActions = byId('artifact-actions');
+const callbackReceipt = byId('callback-receipt');
+const callbackSecret = byId('callback-secret');
 let currentKey = '';
 
 function showSample(name) {
@@ -65,6 +70,7 @@ document.querySelectorAll('[data-sample]').forEach((button) => button.addEventLi
 document.querySelectorAll('[data-copy]').forEach((button) => button.addEventListener('click', () => copyText(button.dataset.copy, button)));
 byId('copy-sample').addEventListener('click', () => copyText(byId('sample-code').textContent, byId('copy-sample')));
 copyResponse.addEventListener('click', () => copyText(responseJson.textContent, copyResponse));
+byId('copy-callback-secret').addEventListener('click', () => copyText(callbackSecret.textContent, byId('copy-callback-secret')));
 showSample('curl');
 
 function fields() {
@@ -94,6 +100,7 @@ function formData(values) {
     body.append('declared_income_currency', values.currency);
   }
   if (byId('customer-reference').value.trim()) body.append('customer_reference', byId('customer-reference').value.trim());
+  if (byId('callback-url').value.trim()) body.append('callback_url', byId('callback-url').value.trim());
   body.append('get_pdf', String(byId('get-pdf').checked));
   body.append('get_xlsx', String(byId('get-xlsx').checked));
   body.append('credit_models', JSON.stringify(Array.from(document.querySelectorAll('[name="credit-model"]:checked'), (input) => input.value)));
@@ -158,6 +165,7 @@ byId('bsa-form').addEventListener('submit', async (event) => {
   currentKey = byId('api-key').value.trim();
   formError.textContent = '';
   artifactActions.replaceChildren();
+  callbackReceipt.hidden = true;
   if (!currentKey) { formError.textContent = 'Enter your AI7 API key.'; return; }
   let values;
   try { values = fields(); } catch (error) { formError.textContent = error.message; return; }
@@ -176,6 +184,10 @@ byId('bsa-form').addEventListener('submit', async (event) => {
     copyResponse.disabled = false;
     responseStatus.textContent = `${response.status} ${result.status || response.statusText}`;
     if (!response.ok) { responseStatus.className = 'error'; return; }
+    if (result.callback?.signing_secret) {
+      callbackSecret.textContent = result.callback.signing_secret;
+      callbackReceipt.hidden = false;
+    }
     await poll(result.resultUrl);
   } catch (error) {
     responseStatus.className = 'error';

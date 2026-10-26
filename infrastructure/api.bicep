@@ -128,6 +128,9 @@ resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = {
             { name: 'BSA_CLAMD_PORT', value: '3310' }
             { name: 'BSA_CLAMD_STARTUP_TIMEOUT_SECONDS', value: '180' }
             { name: 'BSA_WORKER_VISIBILITY_SECONDS', value: '900' }
+            { name: 'BSA_PUBLIC_API_ORIGIN', value: 'https://api.ai7uae.com' }
+            { name: 'BSA_CALLBACK_TIMEOUT_SECONDS', value: '20' }
+            { name: 'BSA_CALLBACK_MAX_ATTEMPTS', value: '8' }
           ]
           resources: {
             cpu: json('2.0')

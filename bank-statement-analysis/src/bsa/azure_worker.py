@@ -14,7 +14,8 @@ from azure.identity import ManagedIdentityCredential
 from azure.storage.blob import BlobServiceClient, ContentSettings
 from azure.storage.queue import QueueClient
 
-from .crypto import encrypt, encrypted_json
+from .callback import CallbackDeliveryError, post_signed_callback
+from .crypto import decrypt, encrypt, encrypted_json
 from .malware import scan_inputs
 from .run_analysis import run as analyze_directory
 
@@ -56,6 +57,78 @@ def _failure_result(analysis_id: str, reason: str) -> dict:
             "reasonCodes": [reason], "segments": [], "features": {}, "schemaVersion": "bsa-v1.0.0"}
 
 
+def _encrypted_blob_json(container, name: str) -> dict:
+    return json.loads(decrypt(container.download_blob(name).readall()))
+
+
+def _save_callback_state(table, entity: dict, job: dict, state: dict) -> None:
+    job["callback"] = state
+    table.update_entity({
+        "PartitionKey": entity["PartitionKey"],
+        "RowKey": entity["RowKey"],
+        "callbackStatus": state["status"],
+        "callbackAttempts": int(state.get("attempts", 0)),
+        "jobJson": json.dumps(job),
+    }, mode=UpdateMode.MERGE)
+
+
+def deliver_terminal_callback(payload: dict, container, table) -> None:
+    analysis_id = str(payload["analysisId"])
+    partition = str(payload["partitionKey"])
+    entity = table.get_entity(partition, f"job_{analysis_id}")
+    if entity.get("status") not in {"completed", "partial", "failed"}:
+        return
+    job = json.loads(entity["jobJson"])
+    state = job.get("callback") or {"requested": False, "status": "not_requested"}
+    if not state.get("requested") or state.get("status") in {"delivered", "failed"}:
+        return
+    prefix = entity["blobPrefix"]
+    fields = _encrypted_blob_json(container, f"{prefix}/fields.bin")
+    callback = fields.get("callback")
+    if not callback:
+        _save_callback_state(table, entity, job, {"requested": False, "status": "not_requested"})
+        return
+    result = _encrypted_blob_json(container, f"{prefix}/result.bin")
+    attempted_at = datetime.now(timezone.utc).isoformat()
+    attempts = int(state.get("attempts", 0)) + 1
+    try:
+        post_signed_callback(callback, result, str(job.get("completedAt") or attempted_at))
+    except (CallbackDeliveryError, ValueError) as error:
+        max_attempts = max(1, int(os.getenv("BSA_CALLBACK_MAX_ATTEMPTS", "8")))
+        exhausted = attempts >= max_attempts or isinstance(error, ValueError)
+        next_state = {
+            "requested": True,
+            "status": "failed" if exhausted else "retrying",
+            "deliveryId": callback["deliveryId"],
+            "attempts": attempts,
+            "lastAttemptAt": attempted_at,
+            "reasonCode": str(error),
+        }
+        _save_callback_state(table, entity, job, next_state)
+        if not exhausted:
+            raise CallbackDeliveryError(str(error)) from error
+        return
+    _save_callback_state(table, entity, job, {
+        "requested": True,
+        "status": "delivered",
+        "deliveryId": callback["deliveryId"],
+        "attempts": attempts,
+        "lastAttemptAt": attempted_at,
+        "deliveredAt": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+def _deliver_terminal_safely(payload: dict, container, table) -> None:
+    try:
+        deliver_terminal_callback(payload, container, table)
+    except CallbackDeliveryError:
+        raise
+    except Exception as error:
+        # Once an analysis is terminal, callback infrastructure can never rewrite
+        # the analysis outcome. Transient storage/state faults stay on the queue.
+        raise CallbackDeliveryError("CALLBACK_STATE_UNAVAILABLE") from error
+
+
 def wait_for_malware_scanner() -> None:
     timeout = max(1, int(os.getenv("BSA_CLAMD_STARTUP_TIMEOUT_SECONDS", "180")))
     deadline = time.monotonic() + timeout
@@ -74,6 +147,7 @@ def process(payload: dict, container, table) -> None:
     row_key = f"job_{analysis_id}"
     entity = table.get_entity(partition, row_key)
     if entity.get("status") in {"completed", "partial", "failed"}:
+        _deliver_terminal_safely(payload, container, table)
         return
     job = json.loads(entity["jobJson"])
     prefix = entity["blobPrefix"]
@@ -98,6 +172,7 @@ def process(payload: dict, container, table) -> None:
         table.update_entity({"PartitionKey": partition, "RowKey": row_key, "status": result["status"],
                              "completedAt": completed, "reasonCodesJson": json.dumps(result.get("reasonCodes", [])),
                              "jobJson": json.dumps(job)}, mode=UpdateMode.MERGE)
+    _deliver_terminal_safely(payload, container, table)
 
 
 def mark_failed(payload: dict, container, table, reason: str) -> None:
@@ -135,10 +210,17 @@ def run() -> None:
             payload = _decode_message(message.content)
             process(payload, container, table)
             queue.delete_message(message)
+        except CallbackDeliveryError:
+            retry_seconds = min(3600, 60 * (2 ** min(max(message.dequeue_count - 1, 0), 6)))
+            queue.update_message(message, visibility_timeout=retry_seconds)
         except Exception:
             if message.dequeue_count >= 3 and payload:
                 mark_failed(payload, container, table, "ANALYSIS_FAILED")
-                queue.delete_message(message)
+                try:
+                    process(payload, container, table)
+                    queue.delete_message(message)
+                except CallbackDeliveryError:
+                    queue.update_message(message, visibility_timeout=60)
             else:
                 queue.update_message(message, visibility_timeout=30)
 

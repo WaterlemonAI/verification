@@ -1,4 +1,5 @@
 import { createReadStream, readFileSync, existsSync, statSync } from 'node:fs';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { createServer } from 'node:http';
 import { get as httpsGet } from 'node:https';
@@ -1241,12 +1242,13 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
     if (!record?.job) return json(res, 404, { status: 'Error', error: 'Analysis was not found.' });
     if (match[2]) {
       if (!record.result) return json(res, 202, { analysisId: match[1], status: record.job.status });
-      return json(res, 200, { ...record.result,
+      return json(res, 200, { ...record.result, callback: record.job.callback || { requested: false, status: 'not_requested' },
         artifacts: (record.result.artifacts || []).map((item) => ({ ...item,
           downloadUrl: `${rootPath}/${match[1]}/artifacts/${item.filename}` })) });
     }
     return json(res, 200, { analysisId: match[1], status: record.job.status, receivedAt: record.job.receivedAt,
-      completedAt: record.job.completedAt || null, reasonCodes: record.job.reasonCodes || [] });
+      completedAt: record.job.completedAt || null, reasonCodes: record.job.reasonCodes || [],
+      callback: record.job.callback || { requested: false, status: 'not_requested' } });
   }
   if (req.method !== 'POST' || url.pathname !== rootPath) return json(res, 404, { status: 'Error', error: 'Service was not found.' });
   const idempotencyKey = String(req.headers['idempotency-key'] || '');
@@ -1303,7 +1305,24 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
       if (typeof customerReference !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(customerReference)) throw new Error('invalid_fields');
       fields.customerReference = customerReference;
     }
-    if (form.has('callback_url')) return json(res, 400, { status: 'Error', reasonCode: 'CALLBACKS_NOT_ENABLED' });
+    const callbackUrl = form.get('callback_url');
+    if (callbackUrl !== null) {
+      if (typeof callbackUrl !== 'string' || !callbackUrl || callbackUrl.length > 2048) throw new Error('invalid_callback_url');
+      let normalizedCallbackUrl;
+      try {
+        const parsedCallbackUrl = new URL(callbackUrl);
+        if (parsedCallbackUrl.hash) throw new Error('callback_fragment_not_allowed');
+        normalizedCallbackUrl = parsedCallbackUrl.toString();
+        await validatePublicCallbackUrl(normalizedCallbackUrl);
+      }
+      catch { throw new Error('invalid_callback_url'); }
+      fields.callback = {
+        url: normalizedCallbackUrl,
+        signingSecret: randomBytes(32).toString('base64url'),
+        deliveryId: randomUUID(),
+        apiRoot: rootPath
+      };
+    }
     if (form.has('reporting_currency')) return json(res, 400, { status: 'Error', reasonCode: 'FX_REPORTING_NOT_ENABLED' });
     const getPdf = form.get('get_pdf');
     if (getPdf !== null && getPdf !== 'true' && getPdf !== 'false') throw new Error('invalid_fields');
@@ -1323,11 +1342,26 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
     } else fields.creditModels = [];
     const created = await createBsaJob({ ownerId, idempotencyKey, files, fields });
     const path = `${rootPath}/${created.job.id}`;
+    const callback = created.job.callback?.requested ? {
+      configured: true,
+      event: 'bank_statement_analysis.completed',
+      delivery_id: created.job.callback.deliveryId,
+      signature_header: 'x-ai7-signature',
+      signing_secret: created.reused ? undefined : fields.callback.signingSecret,
+      signing_secret_returned: !created.reused
+    } : { configured: false };
     return json(res, 202, { analysisId: created.job.id, status: created.job.status, receivedAt: created.job.receivedAt,
-      statusUrl: path, resultUrl: `${path}/result`, reused: created.reused });
+      statusUrl: path, resultUrl: `${path}/result`, callback, reused: created.reused,
+      message: created.job.callback?.requested
+        ? (created.reused
+          ? 'The existing analysis will use its original callback signing secret; the secret is not shown again.'
+          : 'The terminal result will be posted to the callback URL. Store the signing secret now; it is not shown again.')
+        : undefined });
   } catch (error) {
     if (error.message === 'idempotency_conflict') return json(res, 409, { status: 'Error', reasonCode: 'IDEMPOTENCY_CONFLICT' });
     if (error.message === 'request_too_large') return json(res, 413, { status: 'Error', reasonCode: 'FILE_TOO_LARGE' });
+    if (error.message === 'invalid_callback_url') return json(res, 400, { status: 'Error', reasonCode: 'INVALID_CALLBACK_URL',
+      error: 'callback_url must be a public HTTPS URL without embedded credentials.' });
     if (error.message === 'invalid_fields' || error instanceof SyntaxError || error instanceof TypeError) return json(res, 400, { status: 'Error', reasonCode: 'INVALID_REQUEST_FIELDS' });
     return json(res, 503, { status: 'Error', reasonCode: 'ANALYSIS_UNAVAILABLE' });
   }

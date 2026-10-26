@@ -80,6 +80,43 @@ test('authenticated upload, idempotency, tenant isolation and result retrieval',
   assert.equal((await result.json()).status, 'completed');
 });
 
+test('accepts an optional signed callback and never redisplays its signing secret', async () => {
+  const headers = { authorization: `Bearer ${key}`, 'idempotency-key': 'bsa-callback-key-001' };
+  const callbackForm = () => {
+    const body = form();
+    body.append('callback_url', 'https://8.8.8.8/ai7-callback');
+    return body;
+  };
+  const first = await fetch(`${url}/service/bank_statement_analysis`, { method: 'POST', headers, body: callbackForm() });
+  assert.equal(first.status, 202);
+  const accepted = await first.json();
+  assert.equal(accepted.callback.configured, true);
+  assert.equal(accepted.callback.event, 'bank_statement_analysis.completed');
+  assert.equal(accepted.callback.signature_header, 'x-ai7-signature');
+  assert.match(accepted.callback.signing_secret, /^[A-Za-z0-9_-]{40,}$/);
+  assert.equal(accepted.callback.signing_secret_returned, true);
+
+  const repeated = await fetch(`${url}/service/bank_statement_analysis`, { method: 'POST', headers, body: callbackForm() });
+  assert.equal(repeated.status, 202);
+  const reused = await repeated.json();
+  assert.equal(reused.analysisId, accepted.analysisId);
+  assert.equal(reused.callback.delivery_id, accepted.callback.delivery_id);
+  assert.equal(reused.callback.signing_secret, undefined);
+  assert.equal(reused.callback.signing_secret_returned, false);
+
+  const status = await (await fetch(`${url}${accepted.statusUrl}`, { headers })).json();
+  assert.deepEqual(status.callback, {
+    requested: true, status: 'pending', deliveryId: accepted.callback.delivery_id, attempts: 0
+  });
+
+  const invalid = form();
+  invalid.append('callback_url', 'http://127.0.0.1/private');
+  const rejected = await fetch(`${url}/service/bank_statement_analysis`, { method: 'POST',
+    headers: { ...headers, 'idempotency-key': 'bsa-callback-key-002' }, body: invalid });
+  assert.equal(rejected.status, 400);
+  assert.equal((await rejected.json()).reasonCode, 'INVALID_CALLBACK_URL');
+});
+
 test('rejects unauthenticated, invalid, oversized and conflicting uploads', async () => {
   assert.equal((await fetch(`${url}/service/bank_statement_analysis`, { method: 'POST', body: form(), headers: { 'idempotency-key': 'bsa-demo-key-002' } })).status, 401);
   const headers = { authorization: `Bearer ${key}`, 'idempotency-key': 'bsa-demo-key-003' };
