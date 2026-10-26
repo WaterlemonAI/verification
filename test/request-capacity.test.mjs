@@ -81,3 +81,46 @@ test('over-capacity API calls return a transaction ID and refund reserved credit
   assert.equal(row.cost, '0.000000');
   assert.equal(row.refund_amount, '0.100000');
 });
+
+test('a caller disconnecting while queued releases its credit reservation', async (t) => {
+  const store = new EnvironmentStore();
+  const usageStore = new MemoryCustomerUsageStore();
+  await store.upsertIntegration({ id: 'company-search', name: 'Company Search', publicPath: '/service/company_search',
+    method: 'POST', upstreamUrl: 'https://supplier.test/check', authType: 'none',
+    acceptedContentTypes: ['application/json'], enabled: true }, '');
+  const issued = await store.createClient('Capacity customer');
+  const ownerId = issued.client.workspaceId;
+  await store.setCustomer({ id: ownerId, name: 'Capacity customer', status: 'active', usagePolicyVersion: 1 });
+  await usageStore.configure(ownerId, validateUsagePolicy({ mode: 'prepaid', currency: 'USD', allowed_modules: ['company-search'],
+    rates: { 'company-search': [{ up_to: null, price: '0.10' }] } }, new Set(['company-search'])), true);
+  await usageStore.addCredit(ownerId, 200_000, true);
+  let supplierCalls = 0;
+  let releaseSupplier;
+  const supplierGate = new Promise((resolve) => { releaseSupplier = resolve; });
+  const capacity = createRequestCapacity({ globalLimit: 1, defaultLaneLimit: 1, maximumWaitMs: 1_000 });
+  const server = createAppServer({ store, usageStore, requestCapacity: capacity, startWorker: false,
+    fetchImpl: async () => { supplierCalls += 1; await supplierGate; return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }); } });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const url = `http://127.0.0.1:${server.address().port}/service/company_search`;
+  const headers = { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' };
+  const first = fetch(url, { method: 'POST', headers, body: '{}' });
+  for (let attempt = 0; attempt < 30 && supplierCalls === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(supplierCalls, 1);
+  const controller = new AbortController();
+  const second = fetch(url, { method: 'POST', headers, body: '{}', signal: controller.signal });
+  for (let attempt = 0; attempt < 30 && capacity.snapshot().waiting === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(capacity.snapshot().waiting, 1);
+  controller.abort();
+  await assert.rejects(second, /abort/i);
+  for (let attempt = 0; attempt < 30 && !(await usageStore.logs(ownerId)).some((row) => row.response_code === 499); attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.equal(capacity.snapshot().waiting, 0);
+  assert.equal(supplierCalls, 1);
+  const cancelled = (await usageStore.logs(ownerId)).find((row) => row.response_code === 499);
+  assert.equal(cancelled.cost, '0.000000');
+  assert.equal(cancelled.refund_amount, '0.100000');
+  releaseSupplier();
+  assert.equal((await first).status, 200);
+});

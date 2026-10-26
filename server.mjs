@@ -1830,6 +1830,10 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
             console.warn('api_capacity_rejected', JSON.stringify({ transaction_id: transactionId,
               lane: req.ai7CapacityLane, reason: error.reason,
               waiting_ms: Date.now() - queuedAt, capacity: requestCapacity.snapshot?.() || null }));
+            if (res.destroyed && req.ai7Usage) {
+              await usageStore.complete(req.ai7Usage.workspaceId, req.ai7Usage.logKey, 499, 'request_cancelled');
+              return;
+            }
             if (!res.destroyed) return json(res, 503, {
               status: 'Error', reasonCode: 'CAPACITY_BUSY',
               error: 'Request capacity is temporarily full. Retry with the same input.'
