@@ -21,10 +21,16 @@ param apexCertificateId string = ''
 @description('Resource ID of the managed certificate for www.ai7uae.com.')
 param wwwCertificateId string = ''
 
+@description('Resource ID of the managed certificate for kycprobe.com.')
+param kycprobeApexCertificateId string = ''
+
+@description('Resource ID of the managed certificate for www.kycprobe.com.')
+param kycprobeWwwCertificateId string = ''
+
 @description('Name of the landing-page Container App.')
 param containerAppName string = 'ca-ai7uae-web'
 
-var customDomains = empty(apexCertificateId) || empty(wwwCertificateId) ? [] : [
+var legacyDomains = empty(apexCertificateId) || empty(wwwCertificateId) ? [] : [
   {
     name: 'ai7uae.com'
     bindingType: 'SniEnabled'
@@ -36,6 +42,25 @@ var customDomains = empty(apexCertificateId) || empty(wwwCertificateId) ? [] : [
     certificateId: wwwCertificateId
   }
 ]
+
+var kycprobeDomains = concat(
+  empty(kycprobeApexCertificateId) ? [] : [
+    {
+      name: 'kycprobe.com'
+      bindingType: 'SniEnabled'
+      certificateId: kycprobeApexCertificateId
+    }
+  ],
+  empty(kycprobeWwwCertificateId) ? [] : [
+    {
+      name: 'www.kycprobe.com'
+      bindingType: 'SniEnabled'
+      certificateId: kycprobeWwwCertificateId
+    }
+  ]
+)
+
+var customDomains = concat(legacyDomains, kycprobeDomains)
 
 resource web 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName

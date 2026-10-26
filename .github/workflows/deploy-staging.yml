@@ -75,7 +75,9 @@ jobs:
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
               apexCertificateId="${{ vars.APEX_CERTIFICATE_RESOURCE_ID }}" \
-              wwwCertificateId="${{ vars.WWW_CERTIFICATE_RESOURCE_ID }}"
+              wwwCertificateId="${{ vars.WWW_CERTIFICATE_RESOURCE_ID }}" \
+              kycprobeApexCertificateId="${{ vars.KYCPROBE_APEX_CERTIFICATE_RESOURCE_ID }}" \
+              kycprobeWwwCertificateId="${{ vars.KYCPROBE_WWW_CERTIFICATE_RESOURCE_ID }}"
 
       - name: Deploy digest-pinned revision
         id: deploy
@@ -91,6 +93,8 @@ jobs:
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
               apexCertificateId="${{ vars.APEX_CERTIFICATE_RESOURCE_ID }}" \
               wwwCertificateId="${{ vars.WWW_CERTIFICATE_RESOURCE_ID }}" \
+              kycprobeApexCertificateId="${{ vars.KYCPROBE_APEX_CERTIFICATE_RESOURCE_ID }}" \
+              kycprobeWwwCertificateId="${{ vars.KYCPROBE_WWW_CERTIFICATE_RESOURCE_ID }}" \
             --query properties.outputs \
             --output json > deployment-outputs.json
 

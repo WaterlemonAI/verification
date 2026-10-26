@@ -32,7 +32,7 @@ import { bsaEnabled, bsaMode, bsaCapabilities, createBsaJob, getBsaJob, getBsaRe
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
 const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 15 * 1024 * 1024);
-const apiHosts = new Set((process.env.API_HOSTS || 'api.ai7uae.com,localhost,127.0.0.1').split(',').map((v) => v.trim().toLowerCase()));
+const apiHosts = new Set((process.env.API_HOSTS || 'api.ai7uae.com,app.kycprobe.com,localhost,127.0.0.1').split(',').map((v) => v.trim().toLowerCase()));
 
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon',

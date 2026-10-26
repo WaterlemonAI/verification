@@ -45,6 +45,7 @@ test('portal signup verifies an AI7 key and creates an email/password session', 
   assert.ok(signupBody.csrf_token);
   const cookie = sessionCookie(signup);
   assert.match(cookie, /^ai7_portal_session=/);
+  assert.equal(signup.headers.get('set-cookie').toLowerCase().includes('domain='), false);
 
   const stored = await store.getPortalUser('user@example.com');
   assert.equal(stored.client_id, createdClient.client.id);

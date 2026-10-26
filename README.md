@@ -1,8 +1,10 @@
 # AI7 UAE Vendor Verification and API
 
-Public landing page and Azure deployment configuration for `ai7uae.com`.
+Public landing page and Azure deployment configuration for `kycprobe.com`, the signed-in portal and administration console at `app.kycprobe.com`, and the unchanged API at `api.ai7uae.com`.
 
-The site is deployed as a static Nginx container in a dedicated UAE North resource group. Its Container Apps environment, registry, logging workspace, managed identities, and DNS zone are isolated from all KYCProbe and other project infrastructure. It contains no customer data and has no access to KYC application services or databases.
+The site is deployed as a static Nginx container in a dedicated UAE North resource group. The portal and API share the existing dedicated API Container App; host-only browser sessions work on the app hostname, while published API endpoints, report links, and callbacks retain `api.ai7uae.com`. The platform is isolated from other project infrastructure.
+
+For the domain migration, GoDaddy remains authoritative for `kycprobe.com`. Preserve its mail records. Point the apex A record to the dedicated Container Apps environment IP, and point `www` and `app` CNAME records directly to the generated web and API app hostnames. Add the three `asuid` TXT validation records, bind free managed certificates for each hostname, then set the corresponding GitHub environment certificate resource ID variables before rerunning both deployment workflows. The old `ai7uae.com` landing hostname remains available during the cutover; `api.ai7uae.com` remains unchanged for API clients.
 
 ## Azure resources
 

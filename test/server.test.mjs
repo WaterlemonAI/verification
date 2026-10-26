@@ -183,8 +183,8 @@ test('serves provider-neutral API documentation', async () => {
   assert.equal(text.includes('/service/uae_tlv'), true);
 });
 
-test('serves the public KYCProbe marketplace homepage and terms on the apex host', async () => {
-  const homepage = await getWithHost('/', 'ai7uae.com');
+test('serves the public KYCProbe marketplace homepage and terms on the new apex host', async () => {
+  const homepage = await getWithHost('/', 'kycprobe.com');
   const html = homepage.body.toString('utf8');
   assert.equal(homepage.status, 200);
   assert.match(html, /UAE-native KYC marketplace/i);
@@ -195,16 +195,30 @@ test('serves the public KYCProbe marketplace homepage and terms on the apex host
   assert.match(html, /kycprobe-logo-dark\.png/);
   assert.match(html, /kycprobe-logo-white\.png/);
 
-  const terms = await getWithHost('/terms.html', 'ai7uae.com');
+  const terms = await getWithHost('/terms.html', 'kycprobe.com');
   const termsHtml = terms.body.toString('utf8');
   assert.equal(terms.status, 200);
   assert.match(termsHtml, /Terms of Use/);
   assert.match(termsHtml, /AI7LAB Tech Innovation Limited/);
 
-  const vendoreyeLogo = await getWithHost('/assets/vendoreye-logo.png', 'ai7uae.com');
+  const vendoreyeLogo = await getWithHost('/assets/vendoreye-logo.png', 'kycprobe.com');
   assert.equal(vendoreyeLogo.status, 200);
   assert.equal(vendoreyeLogo.headers['content-type'], 'image/png');
   assert.ok(vendoreyeLogo.body.byteLength > 0);
+});
+
+test('routes app.kycprobe.com to the portal and admin while preserving the API host', async () => {
+  const portal = await getWithHost('/login', 'app.kycprobe.com');
+  assert.equal(portal.status, 200);
+  assert.match(portal.body.toString('utf8'), /KYCProbe — Developer Portal/);
+
+  const admin = await getWithHost('/admin', 'app.kycprobe.com');
+  assert.equal(admin.status, 200);
+  assert.match(admin.body.toString('utf8'), /KYCProbe — Administration/);
+
+  const api = await getWithHost('/openapi.json', 'api.ai7uae.com');
+  assert.equal(api.status, 200);
+  assert.match(api.body.toString('utf8'), /api\.ai7uae\.com/);
 });
 
 test('serves a complete live tester and response-field reference', async () => {

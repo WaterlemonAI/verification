@@ -39,6 +39,9 @@ param bankStatementDocumentEndpoint string = 'https://doc-ai7uae-bsa-uaen-001.co
 @description('Resource ID of the managed certificate for api.ai7uae.com. Leave blank until DNS validation is complete.')
 param apiCertificateId string = ''
 
+@description('Resource ID of the managed certificate for app.kycprobe.com.')
+param appCertificateId string = ''
+
 @description('Name of the API Container App.')
 param containerAppName string = 'ca-ai7uae-api'
 
@@ -61,13 +64,22 @@ var deepResearchQueueName = 'adverse-media-deep-research'
 var formsQueueName = 'forms-submissions'
 // Cisco Talos ClamAV 1.4.6 LTS, mirrored into the private ACR and pinned to the amd64 manifest.
 var bankStatementClamavImage = '${acrLoginServer}/ai7uae-clamav@sha256:6ba4e78b29853b2fc7e3c111389596e2cad5ec4ed5f0fd2cb663d29ab6b0e6a3'
-var customDomains = empty(apiCertificateId) ? [] : [
-  {
-    name: 'api.ai7uae.com'
-    bindingType: 'SniEnabled'
-    certificateId: apiCertificateId
-  }
-]
+var customDomains = concat(
+  empty(apiCertificateId) ? [] : [
+    {
+      name: 'api.ai7uae.com'
+      bindingType: 'SniEnabled'
+      certificateId: apiCertificateId
+    }
+  ],
+  empty(appCertificateId) ? [] : [
+    {
+      name: 'app.kycprobe.com'
+      bindingType: 'SniEnabled'
+      certificateId: appCertificateId
+    }
+  ]
+)
 
 resource merchantScreenshotWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: 'id-ai7uae-merchant-screenshot-uaen-001'
@@ -297,7 +309,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'api'
           image: image
           env: [
-            { name: 'API_HOSTS', value: 'api.ai7uae.com' }
+            { name: 'API_HOSTS', value: 'api.ai7uae.com,app.kycprobe.com' }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
             { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
