@@ -127,7 +127,8 @@ jobs:
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
-              apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}"
+              apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
+              appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}"
 
       - name: Deploy digest-pinned API revision
         run: |
@@ -145,6 +146,7 @@ jobs:
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
+              appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}" \
             --query properties.outputs \
             --output json > api-deployment-outputs.json
 
