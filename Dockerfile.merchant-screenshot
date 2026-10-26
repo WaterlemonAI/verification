@@ -14,6 +14,7 @@ COPY lib/merchant-screening.mjs lib/merchant-screening-network.mjs lib/merchant-
 USER node
 ENV NODE_ENV=production
 ENV MERCHANT_SCREENSHOT_ISOLATED_WORKER=true
+ENV MERCHANT_SCREENSHOT_CHROMIUM_SANDBOX=false
 ENV PORT=8081
 
 EXPOSE 8081

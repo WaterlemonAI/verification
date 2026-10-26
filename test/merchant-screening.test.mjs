@@ -97,6 +97,37 @@ test('screenshot cost guard refuses to launch a browser above its USD 0.02 alloc
   assert.equal(result.cost.budget_enforced, true);
 });
 
+test('isolated worker can explicitly use the Container App as its Chromium isolation boundary', async (context) => {
+  const outputRoot = await mkdtemp(join(tmpdir(), 'ai7-screenshot-sandbox-test-'));
+  context.after(() => rm(outputRoot, { recursive: true, force: true }));
+  let launchOptions;
+  let evaluateCalls = 0;
+  const page = {
+    setDefaultNavigationTimeout() {}, setDefaultTimeout() {}, on() {},
+    goto: async () => ({ status: () => 200 }),
+    waitForLoadState: async () => {}, waitForTimeout: async () => {},
+    evaluate: async () => (++evaluateCalls === 1 ? undefined : { width: 1440, height: 900 }),
+    screenshot: async () => Buffer.from('rendered-image'), content: async () => '<html></html>',
+    url: () => 'https://shop.example.com/'
+  };
+  const browser = {
+    newContext: async () => ({ route: async () => {}, newPage: async () => page, close: async () => {} }),
+    close: async () => {}
+  };
+  const result = await captureMerchantScreenshots(
+    { website_url: 'https://shop.example.com/' },
+    { pages: [{ url: 'https://shop.example.com/', body: '<html></html>' }] },
+    {
+      outputRoot, maximumCaptures: 1, chromiumSandbox: false,
+      resolver: async () => [{ address: '1.1.1.1', family: 4 }],
+      launchBrowser: async (options) => { launchOptions = options; return browser; }
+    }
+  );
+  assert.equal(launchOptions.chromiumSandbox, false);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.items.length, 1);
+});
+
 test('local screenshot download is authenticated and disabled outside local mode', async (context) => {
   const previousMode = process.env.MERCHANT_SCREENSHOT_MODE;
   const previousOutput = process.env.MERCHANT_SCREENSHOT_OUTPUT_DIR;
