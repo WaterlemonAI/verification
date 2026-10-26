@@ -46,6 +46,32 @@ test('timed out or cancelled requests leave no active reservation', async () => 
   assert.deepEqual(capacity.snapshot(), { active: 0, waiting: 0, activeByLane: {} });
 });
 
+test('one-minute target mix can arrive as a burst without exceeding service lanes', async () => {
+  const capacity = createRequestCapacity({ maximumWaitMs: 5_000 });
+  const lanes = [
+    ...Array(10).fill('entity-search'), ...Array(10).fill('uae-trade-licence'),
+    ...Array(20).fill('iban-verification'), ...Array(30).fill('adverse-media'),
+    ...Array(30).fill('bank-statement-analysis')
+  ];
+  let highestGlobal = 0;
+  const highestByLane = new Map();
+  await Promise.all(lanes.map(async (lane) => {
+    const release = await capacity.acquire(lane);
+    const snapshot = capacity.snapshot();
+    highestGlobal = Math.max(highestGlobal, snapshot.active);
+    highestByLane.set(lane, Math.max(highestByLane.get(lane) || 0, snapshot.activeByLane[lane] || 0));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    release();
+  }));
+  assert.ok(highestGlobal <= 16);
+  assert.ok(highestByLane.get('entity-search') <= 2);
+  assert.ok(highestByLane.get('uae-trade-licence') <= 2);
+  assert.ok(highestByLane.get('iban-verification') <= 4);
+  assert.ok(highestByLane.get('adverse-media') <= 2);
+  assert.ok(highestByLane.get('bank-statement-analysis') <= 4);
+  assert.deepEqual(capacity.snapshot(), { active: 0, waiting: 0, activeByLane: {} });
+});
+
 test('over-capacity API calls return a transaction ID and refund reserved credit without calling the supplier', async (t) => {
   const store = new EnvironmentStore();
   const usageStore = new MemoryCustomerUsageStore();
