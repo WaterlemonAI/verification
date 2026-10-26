@@ -1,12 +1,12 @@
 :root {
-  --ink: #071412;
-  --muted: #5f6e69;
-  --line: #dfe7e3;
-  --paper: #f4f7f3;
+  --ink: #10243e;
+  --muted: #63758a;
+  --line: #d9e1e9;
+  --paper: #f8f6ef;
   --white: #fff;
-  --mint: #b8ff65;
-  --green: #1d6f50;
-  --dark: #091b17;
+  --mint: #ffc629;
+  --green: #0062ad;
+  --dark: #071f43;
 }
 
 * { box-sizing: border-box; }
@@ -19,16 +19,17 @@ code, pre, .label, .eyebrow, aside p { font-family: "DM Mono", monospace; }
 
 .skip-link { position: fixed; left: 1rem; top: -4rem; z-index: 10; padding: .75rem 1rem; background: var(--mint); }
 .skip-link:focus { top: 1rem; }
-header { height: 74px; padding: 0 clamp(1.25rem, 5vw, 5rem); display: flex; align-items: center; justify-content: space-between; gap: 2rem; background: var(--dark); color: var(--white); position: sticky; top: 0; z-index: 5; }
+header { height: 74px; padding: 0 clamp(1.25rem, 5vw, 5rem); display: flex; align-items: center; justify-content: space-between; gap: 2rem; background: var(--dark); color: var(--white); position: sticky; top: 30px; z-index: 5; box-shadow:0 10px 28px #071f4320; }
 .brand { display: flex; align-items: center; gap: .65rem; font-weight: 600; letter-spacing: -.02em; }
-.brand > span { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #536c63; border-radius: 50%; font-family: "DM Mono", monospace; font-size: .7rem; }
+.brand > span { width: 34px; height: 34px; display: grid; place-items: center; color:var(--dark); background:var(--mint); font-family: "DM Mono", monospace; font-size: .7rem; font-weight:700; }
 .brand b { color: var(--mint); }
 header nav { display: flex; gap: 1.75rem; color: #b9c7c2; font-size: .82rem; }
 header nav a:hover { color: var(--white); }
 .status { color: #cdd7d4; font: .72rem "DM Mono", monospace; }
 .status i { display: inline-block; width: 7px; height: 7px; margin-right: .5rem; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px #b8ff6522; }
 
-.hero { padding: clamp(5rem, 10vw, 8.5rem) clamp(1.25rem, 8vw, 8rem) 5rem; background: var(--dark); color: var(--white); border-top: 1px solid #253a34; }
+.hero { position:relative; overflow:hidden; padding: clamp(5rem, 10vw, 8.5rem) clamp(1.25rem, 8vw, 8rem) 5rem; background: linear-gradient(135deg,var(--dark),#0a3c74); color: var(--white); border-top: 1px solid #ffffff18; }
+.hero::after{content:"";position:absolute;right:-12rem;top:-17rem;width:38rem;height:38rem;border:1px solid #ffffff20;border-radius:50%;box-shadow:0 0 0 7rem #ffffff07,0 0 0 14rem #ffffff04;pointer-events:none}
 .eyebrow, .label { color: var(--green); letter-spacing: .12em; font-size: .7rem; }
 .hero .eyebrow { color: var(--mint); }
 .hero h1 { margin: 1.1rem 0 1.5rem; font-size: clamp(3rem, 7vw, 6.5rem); letter-spacing: -.065em; line-height: .93; font-weight: 650; }
@@ -54,7 +55,7 @@ article > p:not(.label,.footnote) { color: var(--muted); line-height: 1.75; }
 .code-block .copy { position: absolute; top: 0; right: 0; border-left-color: #31433e; }
 .code-block code, .code-block pre { font-size: .78rem; line-height: 1.75; white-space: pre; }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; margin-top: 2rem; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
-.field-grid > div { padding: 1.4rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #f8faf7; }
+.field-grid > div { padding: 1.4rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #fff; }
 .field-grid strong { display: block; font: .82rem "DM Mono", monospace; }
 .field-grid span { color: var(--green); font: .67rem "DM Mono", monospace; }
 .field-grid p { min-height: 2.6em; margin: .7rem 0 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
@@ -80,7 +81,7 @@ article > p:not(.label,.footnote) { color: var(--muted); line-height: 1.75; }
 .schema-table span { color: var(--muted); background: #f8faf7; font-size: .76rem; }
 .schema-table .schema-head span { color: var(--ink); background: #e8efeb; font: 600 .65rem "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
 .content h3 { margin: 2rem 0 1rem; font-size: 1.15rem; }
-.tester { padding: clamp(1.5rem, 4vw, 3rem); border: 1px solid #cbd7d2; background: var(--white); }
+.tester { padding: clamp(1.5rem, 4vw, 3rem); border: 1px solid #cad6e2; background: var(--white); box-shadow:0 22px 55px #102b4810; }
 .tester form { display: grid; gap: 1rem; margin: 2rem 0; }
 .tester label { display: grid; gap: .5rem; font-size: .76rem; font-weight: 700; }
 .tester label code { color: var(--green); font-size: .65rem; font-weight: 400; }
@@ -123,7 +124,9 @@ article > p:not(.label,.footnote) { color: var(--muted); line-height: 1.75; }
 .response-schema { max-height: 720px; overflow: auto; border-bottom: 1px solid var(--line); }
 .response-schema .schema-table { margin: 0; }
 .response-schema .schema-table > div { grid-template-columns: minmax(320px, 1.6fr) 100px 1fr; }
-footer { display: flex; justify-content: space-between; padding: 2rem clamp(1.25rem, 5vw, 5rem); color: #afbeb9; background: var(--dark); font-size: .75rem; }
+footer { display: flex; justify-content: space-between; gap:2rem; padding: 2.4rem clamp(1.25rem, 5vw, 5rem); color: #afc3d7; background: var(--dark); font-size: .72rem; }
+footer>div{display:flex;gap:.7rem}footer>div:first-child{flex-direction:column}footer strong{color:#fff}footer>div:last-child{align-items:center;gap:1.4rem}footer a:hover{color:var(--mint)}
+.utility-bar{position:sticky;top:0;z-index:7;height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(1.25rem,5vw,5rem);color:#526980;background:#e8f1f7;font:600 .6rem "DM Mono",monospace;letter-spacing:.05em}.utility-bar a{color:var(--blue,#0057a8)}
 .forms-shell { max-width: 1050px; margin: 0 auto; padding: 5rem 2rem 8rem; }
 .forms-shell h2 { margin: .7rem 0 1rem; font-size: clamp(1.8rem,4vw,2.8rem); letter-spacing: -.045em; }
 .forms-shell > div > p:not(.label) { color: var(--muted); }
@@ -146,6 +149,7 @@ footer { display: flex; justify-content: space-between; padding: 2rem clamp(1.25
 }
 
 @media (max-width: 760px) {
+  .utility-bar span{display:none}.utility-bar{justify-content:flex-end}
   header nav { display: none; }
   .status { display: none; }
   .layout { display: block; padding-inline: 1.25rem; }
@@ -161,4 +165,5 @@ footer { display: flex; justify-content: space-between; padding: 2rem clamp(1.25
   .meta { max-width: 100%; }
   .meta code { overflow: hidden; text-overflow: ellipsis; }
   .meta .copy { display: none; }
+  footer,footer>div:last-child{align-items:flex-start;flex-direction:column}
 }

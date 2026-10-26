@@ -18,6 +18,10 @@ import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
 import { publicFormDefinition, resolveFormServiceInput, validateFormDefinition, validateFormSubmission } from './lib/forms.mjs';
 import { createFormsQueue, makeFormsJob, startFormsWorker, validateFormsCallbackUrl } from './lib/forms-queue.mjs';
 import { createFormsAuditPdf } from './lib/forms-report.mjs';
+import {
+  ADMIN_COOKIE, adminCookie, clearAdminCookie, createAdminAccount, createAdminSession,
+  newSigningKey, parseCookies, safeAdminAccount, verifyAdminPassword, verifyAdminSession
+} from './lib/admin-auth.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -773,14 +777,135 @@ async function submitForm(req, res, formId, store, formsQueue) {
   });
 }
 
-async function requireAdmin(req, res, store) {
-  if (await store.isAdminKey(bearerToken(req))) return true;
-  json(res, 401, { status: 'Error', error: 'Admin key is missing or incorrect.' });
-  return false;
+function secureRequest(req) {
+  const forwarded = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  const host = String(req.headers.host || '').split(':')[0].toLowerCase();
+  return forwarded === 'https' || !['localhost', '127.0.0.1', '::1'].includes(host);
 }
 
-async function handleAdminApi(req, res, url, store) {
-  if (!(await requireAdmin(req, res, store))) return;
+function sameOrigin(req) {
+  const origin = String(req.headers.origin || '');
+  if (!origin) return true;
+  try { return new URL(origin).host === String(req.headers.host || ''); } catch { return false; }
+}
+
+function createLoginThrottle() {
+  const attempts = new Map();
+  return {
+    blocked(key) {
+      const record = attempts.get(key);
+      if (!record || record.until <= Date.now()) { attempts.delete(key); return false; }
+      return record.count >= 5;
+    },
+    failed(key) {
+      const record = attempts.get(key);
+      attempts.set(key, record?.until > Date.now() ? { ...record, count: record.count + 1 } : { count: 1, until: Date.now() + 15 * 60 * 1000 });
+    },
+    clear(key) { attempts.delete(key); }
+  };
+}
+
+function loginThrottleKey(req, email) {
+  return `${requestOrigin(req).network_origin}:${String(email || '').trim().toLowerCase()}`;
+}
+
+async function currentAdminSession(req, store) {
+  const account = await store.getAdminAccount();
+  if (!account) return { account: null, session: null };
+  const signingKey = await store.getAdminSessionKey();
+  const token = parseCookies(req.headers.cookie)[ADMIN_COOKIE];
+  return { account, session: verifyAdminSession(token, account, signingKey) };
+}
+
+async function requireAdmin(req, res, store, { csrf = false } = {}) {
+  const { account, session } = await currentAdminSession(req, store);
+  if (!account) {
+    if (await store.isAdminKey(bearerToken(req))) return { legacy: true };
+    json(res, 401, { status: 'Error', error: 'Admin key is missing or incorrect.' });
+    return null;
+  }
+  if (!session) {
+    json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
+    return null;
+  }
+  if (csrf && (!sameOrigin(req) || String(req.headers['x-ai7-csrf'] || '') !== session.csrf)) {
+    json(res, 403, { status: 'Error', error: 'The security token is missing or invalid. Sign in again.' });
+    return null;
+  }
+  return { account, session };
+}
+
+async function handleAdminApi(req, res, url, store, loginThrottle) {
+  if (req.method === 'GET' && url.pathname === '/admin/api/auth/status') {
+    const account = await store.getAdminAccount();
+    return json(res, 200, { configured: Boolean(account) });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/admin/api/auth/setup') {
+    if (await store.getAdminAccount()) return json(res, 409, { status: 'Error', error: 'The administrator account is already configured.' });
+    if (!(await store.isAdminKey(bearerToken(req)))) return json(res, 401, { status: 'Error', error: 'The one-time setup key is missing or incorrect.' });
+    try {
+      const body = await readJson(req);
+      const account = createAdminAccount(body.email, body.password);
+      const signingKey = newSigningKey();
+      await store.setAdminSessionKey(signingKey);
+      await store.setAdminAccount(account);
+      const created = createAdminSession(account, signingKey);
+      return json(res, 201, { account: safeAdminAccount(account), csrf_token: created.csrfToken, expires_in: created.expiresIn }, { 'set-cookie': adminCookie(created.token, { secure: secureRequest(req) }) });
+    } catch (error) {
+      return json(res, error.statusCode || 400, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : error.message });
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/admin/api/auth/login') {
+    try {
+      const body = await readJson(req);
+      const key = loginThrottleKey(req, body.email);
+      if (loginThrottle.blocked(key)) return json(res, 429, { status: 'Error', error: 'Too many sign-in attempts. Try again later.' });
+      const account = await store.getAdminAccount();
+      if (!verifyAdminPassword(account, body.email, body.password)) {
+        loginThrottle.failed(key);
+        return json(res, 401, { status: 'Error', error: 'Email or password is incorrect.' });
+      }
+      loginThrottle.clear(key);
+      const signingKey = await store.getAdminSessionKey();
+      const created = createAdminSession(account, signingKey);
+      return json(res, 200, { account: safeAdminAccount(account), csrf_token: created.csrfToken, expires_in: created.expiresIn }, { 'set-cookie': adminCookie(created.token, { secure: secureRequest(req) }) });
+    } catch (error) {
+      return json(res, error.statusCode || 400, { status: 'Error', error: 'The sign-in request is invalid.' });
+    }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/admin/api/auth/session') {
+    const access = await requireAdmin(req, res, store);
+    if (!access || access.legacy) return access ? json(res, 200, { legacy_setup_required: true }) : undefined;
+    return json(res, 200, { account: safeAdminAccount(access.account), csrf_token: access.session.csrf, expires_at: access.session.expires_at });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/admin/api/auth/logout') {
+    const access = await requireAdmin(req, res, store, { csrf: true });
+    if (!access) return;
+    return json(res, 200, { signed_out: true }, { 'set-cookie': clearAdminCookie({ secure: secureRequest(req) }) });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/admin/api/auth/password') {
+    const access = await requireAdmin(req, res, store, { csrf: true });
+    if (!access || access.legacy) return access ? json(res, 409, { status: 'Error', error: 'Complete account setup first.' }) : undefined;
+    try {
+      const body = await readJson(req);
+      if (!verifyAdminPassword(access.account, access.account.email, body.current_password)) return json(res, 401, { status: 'Error', error: 'Current password is incorrect.' });
+      const account = createAdminAccount(access.account.email, body.new_password, access.account);
+      await store.setAdminAccount(account);
+      const signingKey = await store.getAdminSessionKey();
+      const created = createAdminSession(account, signingKey);
+      return json(res, 200, { account: safeAdminAccount(account), csrf_token: created.csrfToken, expires_in: created.expiresIn }, { 'set-cookie': adminCookie(created.token, { secure: secureRequest(req) }) });
+    } catch (error) {
+      return json(res, 400, { status: 'Error', error: error.message });
+    }
+  }
+
+  const access = await requireAdmin(req, res, store, { csrf: !['GET', 'HEAD'].includes(req.method || 'GET') });
+  if (!access) return;
 
   if (req.method === 'GET' && url.pathname === '/admin/api/integrations') {
     return json(res, 200, { integrations: await store.listIntegrations() });
@@ -868,6 +993,7 @@ function serveStatic(res, directory, requestPath) {
 }
 
 export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+  const loginThrottle = createLoginThrottle();
   if (startWorker && deepResearchQueue) {
     startDeepResearchWorker({
       queue: deepResearchQueue,
@@ -932,7 +1058,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
           cost_guardrail_usd: adverseMediaConfig.costGuardrailUsd
         }, { 'cache-control': 'public, max-age=3600' });
       }
-      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store);
+      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle);
       if (url.pathname === '/admin' || url.pathname === '/admin/') return serveStatic(res, join(root, 'admin-site'), '/');
       if (url.pathname.startsWith('/admin/')) return serveStatic(res, join(root, 'admin-site'), url.pathname.replace(/^\/admin/, '') || '/');
       if (url.pathname === '/catalog.json') return json(res, 200, { integrations: await store.listIntegrations({ publicOnly: true }) }, { 'cache-control': 'public, max-age=60' });

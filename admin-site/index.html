@@ -3,34 +3,62 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#071412" />
+    <meta name="theme-color" content="#071f43" />
     <meta name="robots" content="noindex,nofollow" />
     <title>AI7 API Engine — Administration</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/admin.css?v=4" />
-    <script src="/admin/admin.js?v=5" defer></script>
+    <link rel="stylesheet" href="/admin/admin.css?v=6" />
+    <script src="/admin/admin.js?v=6" defer></script>
   </head>
   <body>
     <div class="login" id="login-view">
-      <div class="login-card">
-        <a class="brand" href="https://ai7uae.com"><span>A7</span> AI7 <b>UAE</b></a>
-        <p class="eyebrow">RESTRICTED ADMINISTRATION</p>
-        <h1>API Engine</h1>
-        <p>Configure provider-neutral APIs, secure upstream authentication, and customer access.</p>
-        <form id="login-form">
-          <label>Admin API key<input id="admin-key" type="password" autocomplete="off" placeholder="Enter admin key" required /></label>
-          <button type="submit">Unlock engine <span>→</span></button>
-        </form>
-        <p class="error" id="login-error" aria-live="polite"></p>
-        <small>Your key stays in memory for this browser tab and is never stored.</small>
-      </div>
+      <section class="login-story">
+        <a class="parent-brand" href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company <span>↗</span></a>
+        <a class="brand" href="https://ai7uae.com"><span>A7</span><strong>AI7 UAE</strong></a>
+        <div class="login-copy">
+          <p class="eyebrow">CONTROL CENTRE · UAE NORTH</p>
+          <h1>Verification operations, under control.</h1>
+          <p>Manage integrations, orchestration forms, customer credentials, and protected supplier access from one secure workspace.</p>
+        </div>
+        <div class="login-proof"><span>Azure Key Vault</span><span>Signed sessions</span><span>Audit-ready controls</span></div>
+      </section>
+      <section class="login-panel">
+        <div class="login-card" id="signin-card">
+          <p class="eyebrow">ADMINISTRATION</p>
+          <h2>Welcome back</h2>
+          <p>Sign in to the AI7 UAE API Engine.</p>
+          <form id="login-form">
+            <label>Email address<input id="admin-email" type="email" autocomplete="username" placeholder="name@company.com" required /></label>
+            <label>Password<input id="admin-password" type="password" autocomplete="current-password" placeholder="Enter your password" required /></label>
+            <button type="submit">Sign in securely <span>→</span></button>
+          </form>
+          <p class="error" id="login-error" aria-live="polite"></p>
+          <small>Protected by an encrypted, HttpOnly session. MFA is not enabled.</small>
+        </div>
+        <div class="login-card" id="setup-card" hidden>
+          <p class="eyebrow">ONE-TIME SETUP</p>
+          <h2>Create administrator account</h2>
+          <p>Use the existing setup key once, then choose the email and password you will use from now on.</p>
+          <form id="setup-form">
+            <label>Existing setup key<input id="setup-key" type="password" autocomplete="off" required /></label>
+            <label>Administrator email<input id="setup-email" type="email" autocomplete="username" placeholder="name@company.com" required /></label>
+            <label>Password<input id="setup-password" type="password" autocomplete="new-password" minlength="12" placeholder="12+ characters" required /></label>
+            <label>Confirm password<input id="setup-password-confirm" type="password" autocomplete="new-password" minlength="12" required /></label>
+            <button type="submit">Create secure account <span>→</span></button>
+          </form>
+          <p class="error" id="setup-error" aria-live="polite"></p>
+          <small>Use uppercase, lowercase, a number, and a symbol. The setup key will stop working for console access.</small>
+        </div>
+        <footer class="login-footer"><span>AI7LAB Tech Innovation Limited</span><span>DIFC · Dubai · UAE</span></footer>
+      </section>
     </div>
 
     <div class="app" id="app-view" hidden>
       <aside>
-        <a class="brand" href="https://ai7uae.com"><span>A7</span> AI7 <b>UAE</b></a>
+        <a class="brand" href="https://ai7uae.com"><span>A7</span><strong>AI7 UAE</strong></a>
+        <a class="parent-link" href="https://www.ai7lab.net" target="_blank" rel="noopener">by AI7Lab ↗</a>
         <p class="nav-label">API ENGINE</p>
         <nav>
           <button class="active" data-view="integrations"><i>⌁</i> Integrations</button>
@@ -38,13 +66,14 @@
           <button data-view="clients"><i>◇</i> Customer keys</button>
         </nav>
         <div class="secure-note"><i></i><span>Secrets protected<br />by Azure Key Vault</span></div>
-        <button class="sign-out" id="sign-out">Lock console</button>
+        <div class="admin-profile"><span class="avatar">AD</span><div><strong id="account-email">Administrator</strong><button id="change-password" type="button">Change password</button></div></div>
+        <button class="sign-out" id="sign-out">Sign out</button>
       </aside>
 
       <main>
         <header>
           <div><p class="eyebrow">ADMINISTRATION</p><h1 id="page-title">Integrations</h1></div>
-          <span class="environment"><i></i> UAE North</span>
+          <span class="environment"><i></i> Production · UAE North</span>
         </header>
 
         <section id="integrations-view">
@@ -165,6 +194,18 @@
       <p>Copy this key now. It cannot be recovered after this window closes.</p>
       <div class="credential"><code id="new-credential"></code><button id="copy-credential">Copy</button></div>
       <div class="actions"><button id="close-credential">I have stored it securely</button></div>
+    </dialog>
+
+    <dialog id="password-dialog">
+      <form id="password-form">
+        <div class="dialog-head"><div><p class="eyebrow">ACCOUNT SECURITY</p><h2>Change password</h2></div><button type="button" class="close" data-close="password-dialog">×</button></div>
+        <label>Current password<input name="current_password" type="password" autocomplete="current-password" required /></label>
+        <label>New password<input name="new_password" type="password" autocomplete="new-password" minlength="12" required /></label>
+        <label>Confirm new password<input name="confirm_password" type="password" autocomplete="new-password" minlength="12" required /></label>
+        <p class="field-help">Use 12–128 characters with uppercase, lowercase, a number, and a symbol.</p>
+        <p class="error" id="password-error" aria-live="polite"></p>
+        <div class="actions"><button type="button" class="secondary" data-close="password-dialog">Cancel</button><button type="submit">Update password</button></div>
+      </form>
     </dialog>
   </body>
 </html>
