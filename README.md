@@ -81,7 +81,7 @@ The default schedule is `01:30 UTC` daily. All raw files and index entries remai
 
 ### Approved publisher search
 
-The owner-approved [publisher catalog](top_50_media_publishers_30_largest_economies_2026.json) contains 1,499 unique domains across 30 economies. Set `search_plus: true` per request to reserve bounded search capacity for explicit site-restricted publisher batches, prioritising requested countries and high-value news/finance outlets, then consolidate those results with the normal evidence set. The response and PDF record every publisher included in a successfully completed batch and every publisher in an incomplete batch. Search+ does not crawl publisher websites or claim that an index contains every article. See the [current design and cost gate](docs/dynamic-adverse-media-publisher-search.md).
+The owner-approved [publisher catalog](top_50_media_publishers_30_largest_economies_2026.json) contains 1,500 unique domains across 30 economies, including curated specialist outlets. Set `search_plus: true` per request to reserve bounded search capacity for explicit site-restricted publisher batches, prioritising requested countries, curated sources, and high-value news/finance outlets, then consolidate those results with the normal evidence set. The response and PDF record every publisher included in a successfully completed batch and every publisher in an incomplete batch. Search+ does not crawl publisher websites or claim that an index contains every article. See the [current design and cost gate](docs/dynamic-adverse-media-publisher-search.md).
 
 The API Engine manages these records inside the dedicated Key Vault:
 

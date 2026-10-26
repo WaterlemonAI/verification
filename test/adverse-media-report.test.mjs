@@ -23,7 +23,7 @@ const response = {
     languages_searched: [{ code: 'en', name: 'English' }], date_from: null, date_to: null,
     searched_at: '2026-10-26T09:31:00.000Z', archive_window: 'up to one year',
     search_plus: {
-      requested: true, publisher_catalog_size: 1499, publishers_attempted: 2,
+      requested: true, publisher_catalog_size: 1500, publishers_attempted: 2,
       publishers_screened: [
         { name: 'Example News', domain: 'news.example', country: 'United Arab Emirates', country_code: 'AE', category: 'general' },
         { name: 'Example Finance', domain: 'finance.example', country: 'United Arab Emirates', country_code: 'AE', category: 'finance' }
