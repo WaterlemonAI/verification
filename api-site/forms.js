@@ -93,9 +93,10 @@ async function loadForm() {
     chip.textContent = service.name;
     services.append(chip);
   });
-  const sampleData = Object.fromEntries(formDefinition.fields.map((field) => [field.key,
-    field.type === 'number' ? 1 : field.type === 'boolean' ? true : field.type === 'country' ? 'AE' : field.options?.[0] || `YOUR_${field.key.toUpperCase()}`
-  ]));
+  const sampleData = Object.fromEntries(formDefinition.fields.filter((field) => field.required).map((field) => {
+    const example = field.placeholder || field.options?.[0] || (field.type === 'country' ? 'AE' : `YOUR_${field.key.toUpperCase()}`);
+    return [field.key, field.type === 'number' ? Number(example) : field.type === 'boolean' ? true : example];
+  }));
   const sampleBody = JSON.stringify({ data: sampleData, callback_url: 'https://your-system.example/webhooks/ai7', customer_logo_url: 'https://your-domain.example/logo.png' }, null, 2);
   byId('form-curl').textContent = `curl -X POST '${endpoint}' \\\n  -H 'Authorization: Bearer YOUR_AI7_API_KEY' \\\n  -H 'Content-Type: application/json' \\\n  --data '${sampleBody}'`;
   byId('copy-form-curl').addEventListener('click', async () => {
