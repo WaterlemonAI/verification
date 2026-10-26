@@ -2678,7 +2678,7 @@
           "search_plus_match": { "type": "boolean", "description": "True when the evidence URL belongs to the approved Search+ publisher catalog." },
           "risk_score": { "type": "number", "minimum": 0, "maximum": 1 },
           "risk_level": { "type": "string", "enum": ["low", "intermediate", "high"] },
-          "categories": { "type": "array", "items": { "type": "string" } },
+          "categories": { "type": "array", "items": { "type": "string", "enum": ["financial_crime", "crime_and_enforcement", "sanctions_and_security", "regulatory_and_governance", "cybersecurity_and_data_protection"] } },
           "legal_stage": { "type": "string" },
           "review_required": { "type": "boolean", "description": "True when the retained result meets or exceeds risk_threshold." }
         },

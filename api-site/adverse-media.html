@@ -94,7 +94,7 @@
               <div><code>results[].excerpt</code><span>string</span><span>Relevant indexed excerpt.</span></div>
               <div><code>results[].identity_match</code><span>object</span><span>Deterministic identity score, match type, matched input, and customer-readable explanation.</span></div>
               <div><code>results[].search_plus_match</code><span>boolean</span><span>True when the evidence URL belongs to the approved Search+ publisher catalog.</span></div>
-              <div><code>results[].categories</code><span>string[]</span><span>Detected risk categories.</span></div>
+              <div><code>results[].categories</code><span>string[]</span><span>Detected risk categories, including financial crime, enforcement, sanctions, governance, and cybersecurity/data-protection incidents.</span></div>
               <div><code>results[].legal_stage</code><span>string</span><span>Media mention, allegation, investigation, charge, arrest, conviction, or regulatory action.</span></div>
               <div><code>results[].risk_score</code><span>number</span><span>Combined, explainable prioritisation score.</span></div>
               <div><code>results[].review_required</code><span>boolean</span><span>True when the retained result meets the configured review threshold.</span></div>
@@ -144,7 +144,7 @@
                 <label>To date <code>date_to</code><input id="date-to" type="date" /></label>
                 <label>Acceptable risk threshold <code>risk_threshold</code><input id="risk-threshold" type="number" min="0" max="100" step="1" value="65" /><small class="field-help">Percentage score at or above which review is required.</small></label>
                 <label>Maximum results <code>max_results</code><input id="max-results" type="number" min="1" max="50" value="25" /></label>
-                <label><span>Search+ <code>search_plus</code></span><span><input id="search-plus" type="checkbox" /> Run publisher-targeted searches</span><small class="field-help">Prioritises requested countries and records the exact publishers searched. Provider indexes can omit articles, so this is not a direct crawl of all 1,499 publishers.</small></label>
+                <label><span>Search+ <code>search_plus</code></span><span><input id="search-plus" type="checkbox" /> Run publisher-targeted searches</span><small class="field-help">Prioritises requested countries and curated specialist sources, and records the exact publishers searched. Provider indexes can omit articles, so this is not a direct crawl of all 1,500 publishers.</small></label>
                 <label><span>Deep research <code>deep_research</code></span><span><input id="deep-research" type="checkbox" /> Queue an asynchronous signed callback</span></label>
                 <label id="callback-field" hidden>Callback URL <code>callback_url</code><input id="callback-url" type="url" inputmode="url" placeholder="https://your-domain.example/webhooks/ai7" disabled /><small class="field-help">Optional. The queued response returns a one-time signing secret for verifying callbacks.</small></label>
                 <label>Customer logo URL <code>customer_logo_url</code><input id="customer-logo-url" type="url" inputmode="url" placeholder="https://your-domain.example/logo.png" /><small class="field-help">Optional PNG/JPEG. Every completed check creates a permanently stored PDF with an unguessable public download link.</small></label>

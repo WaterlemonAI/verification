@@ -2792,6 +2792,16 @@
           "global_rank": 1245,
           "score": 51.25,
           "country_rank": 50
+    },
+    {
+      "name": "MediaNama",
+      "domain": "medianama.com",
+      "category": "online_news",
+      "source": "owner_curated_2026_10_26",
+      "global_rank": null,
+      "score": null,
+      "country_rank": 51,
+      "curated_priority": true
         }
       ]
     },

@@ -4,8 +4,9 @@ import { approvedPublisherCount, approvedPublisherForUrl, selectApprovedPublishe
 import { presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from '../lib/adverse-media.mjs';
 
 test('approved catalog matches direct publisher article URLs only', () => {
-  assert.equal(approvedPublisherCount, 1499);
+  assert.equal(approvedPublisherCount, 1500);
   assert.equal(approvedPublisherForUrl('https://www.nytimes.com/2026/10/20/business/story.html')?.name, 'The New York Times');
+  assert.equal(approvedPublisherForUrl('https://www.medianama.com/2024/12/signzy-data-leak/')?.name, 'MediaNama');
   for (const url of [
     'https://nytimes.com.evil.example/article',
     'http://nytimes.com/article',
@@ -52,7 +53,7 @@ test('request-time search returns adverse article URLs about an alias from appro
   assert.equal(response.results.find((item) => item.search_plus_match).publisher, 'The New York Times');
   assert.equal(response.results.find((item) => item.search_plus_match).identity_match.type, 'exact_alias');
   assert.equal(response.results.find((item) => item.search_plus_match).risk_level, 'high');
-  assert.equal(response.coverage.search_plus.publisher_catalog_size, 1499);
+  assert.equal(response.coverage.search_plus.publisher_catalog_size, 1500);
   assert.ok(response.coverage.search_plus.publishers_screened.length >= 30);
   assert.equal(response.coverage.search_plus.publishers_attempted, response.coverage.search_plus.publishers_screened.length);
   assert.deepEqual(response.coverage.search_plus.publishers_not_completed, []);
@@ -99,6 +100,43 @@ test('results found only by a publisher-targeted query retain their publisher-se
   assert.equal(response.results[0].source_type, 'publisher_search');
   assert.equal(response.results[0].publisher, 'The New York Times');
   assert.ok(response.coverage.search_plus.matched_publishers.some((publisher) => publisher.domain === 'nytimes.com'));
+});
+
+test('Signzy data-leak coverage targets MediaNama and retains the exact cyber incident', async () => {
+  const articleUrl = 'https://www.medianama.com/2024/12/223-signzy-customer-data-leak-exposes-growing-cybersecurity-gaps-in-india/';
+  const queries = [];
+  const request = validateAdverseMediaRequest({
+    entity_type: 'business', name: 'Signzy', countries: ['IN'], languages: ['en', 'hi'], search_plus: true, max_results: 50
+  });
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      const query = url.searchParams.get('q');
+      queries.push(query);
+      const results = query.includes('site:medianama.com') && query.includes('"data leak"')
+        ? [{
+            url: articleUrl,
+            title: 'Signzy Customer Data Leak Exposes Growing Cybersecurity Gaps',
+            description: 'Online ID verification services provider Signzy suffered a cyberattack that exposed customer data online.',
+            page_age: '2024-12-04T08:00:00Z'
+          }]
+        : [];
+      return Response.json(url.pathname.includes('/news/') ? { results } : { web: { results } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+
+  const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
+  assert.equal(response.results.length, 1);
+  assert.equal(response.results[0].url, articleUrl.replace(/\/$/, ''));
+  assert.equal(response.results[0].publisher, 'MediaNama');
+  assert.equal(response.results[0].source_type, 'publisher_search');
+  assert.equal(response.results[0].risk_level, 'high');
+  assert.ok(response.results[0].categories.includes('cybersecurity_and_data_protection'));
+  assert.ok(response.coverage.search_plus.publishers_screened.some((publisher) => publisher.domain === 'medianama.com'));
+  assert.ok(response.coverage.search_plus.matched_publishers.some((publisher) => publisher.domain === 'medianama.com'));
+  assert.ok(queries.some((query) => query.includes('"data breach"') || query.includes('"data leak"')));
 });
 
 test('association discovery runs when a supplied alias contains the full name', async () => {

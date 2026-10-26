@@ -4,13 +4,13 @@ Owner direction, 26 October 2026: search dynamically for the given entity name a
 
 ## Current local implementation
 
-- The approved source file has 50 placements in each of 30 economies. One domain appears in two economies, yielding 1,499 unique approved domains. The source file is copied into the API image; no publisher manifests, crawler jobs, queues, tables, or dedicated news storage are needed.
+- The approved source file has 50 ranked placements in each of 30 economies plus an owner-curated specialist outlet, yielding 1,500 unique approved domains. The source file is copied into the API image; no publisher manifests, crawler jobs, queues, tables, or dedicated news storage are needed.
 - A request with `search_plus: true` reserves up to six calls inside the existing twelve-call ceiling for explicit site-restricted publisher batches. The selector first round-robins high-value publishers from the requested countries, excludes sports/music/culture-only outlets, and then fills unused capacity with a GDP-country-diversified global ranking. The remaining calls continue broader multilingual current-news, open-web, association, archive, and official-record coverage.
 - Each publisher batch searches the primary name, supplied aliases, relevant generated transliterations, and a compact multilingual adverse-term set. Domain batches are packed below the provider's 400-character query boundary. No publisher website is fetched.
 - `coverage.search_plus.publishers_screened` contains only publishers assigned to successfully completed site-restricted index queries. `publishers_not_completed` contains publishers whose batch failed after controlled retries. Batch counts and the selection strategy are also returned. Approved publishers represented in retained results appear in `matched_publishers`.
 - The engine still validates every result URL against the catalog, rejects lookalike domains and homepages, and consolidates targeted publisher results with other relevant evidence. The existing direct official-record lookup remains separate.
 - The existing deterministic entity and adverse-term check runs on titles and provider snippets. Bounded model review may reject high-confidence mismatches. The API returns candidate URLs with source metadata for human review. The feature does not fetch article pages or claim to verify the full article text.
-- Search-provider results are not a guarantee that every article from a listed publisher was indexed. A no-result response is limited to the publishers named in `publishers_screened`, the broader sources, and the queries actually completed. The full 1,499-domain catalog is not claimed as screened on every request.
+- Search-provider results are not a guarantee that every article from a listed publisher was indexed. A no-result response is limited to the publishers named in `publishers_screened`, the broader sources, and the queries actually completed. The full 1,500-domain catalog is not claimed as screened on every request.
 
 ## Cost gate
 
