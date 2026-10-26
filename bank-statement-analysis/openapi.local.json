@@ -90,6 +90,12 @@
                     "type": "string",
                     "maxLength": 128
                   },
+                  "callback_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "maxLength": 2048,
+                    "description": "Optional public HTTPS endpoint that receives the HMAC-SHA256 signed terminal result. The endpoint must not contain credentials or a fragment."
+                  },
                   "get_pdf": {
                     "type": "boolean",
                     "default": false
@@ -121,7 +127,7 @@
             }
           },
           "400": {
-            "description": "Invalid fields or an unsupported option.",
+            "description": "Invalid fields, callback URL, or an unsupported option.",
             "content": {
               "application/json": {
                 "schema": {
@@ -226,6 +232,46 @@
       }
     }
   },
+  "webhooks": {
+    "bankStatementAnalysisCompleted": {
+      "post": {
+        "summary": "Terminal bank statement analysis callback",
+        "description": "At-least-once callback for completed, partial, and failed analyses. Verify HMAC-SHA256 over the exact request bytes using the one-time signing secret returned by the initial 202 response. The signature header is x-ai7-signature and the stable de-duplication key is x-ai7-delivery-id.",
+        "parameters": [
+          {
+            "name": "x-ai7-signature",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^sha256=[a-f0-9]{64}$" }
+          },
+          {
+            "name": "x-ai7-delivery-id",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          },
+          {
+            "name": "x-ai7-analysis-id",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CallbackEvent" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Event durably accepted." },
+          "204": { "description": "Event durably accepted without a response body." }
+        }
+      }
+    }
+  },
   "components": {
     "securitySchemes": {
       "BearerKey": {
@@ -274,6 +320,39 @@
           },
           "reused": {
             "type": "boolean"
+          },
+          "callback": {
+            "$ref": "#/components/schemas/CallbackReceipt"
+          }
+        }
+      },
+      "CallbackReceipt": {
+        "type": "object",
+        "required": ["configured"],
+        "properties": {
+          "configured": { "type": "boolean" },
+          "event": { "type": "string", "const": "bank_statement_analysis.completed" },
+          "delivery_id": { "type": "string", "format": "uuid" },
+          "signature_header": { "type": "string", "const": "x-ai7-signature" },
+          "signing_secret": {
+            "type": "string",
+            "description": "Returned once for a new idempotent request and never redisplayed."
+          },
+          "signing_secret_returned": { "type": "boolean" }
+        }
+      },
+      "CallbackEvent": {
+        "type": "object",
+        "required": ["event", "delivery_id", "analysis_id", "completed_at", "result_url", "data"],
+        "properties": {
+          "event": { "type": "string", "const": "bank_statement_analysis.completed" },
+          "delivery_id": { "type": "string", "format": "uuid" },
+          "analysis_id": { "type": "string" },
+          "completed_at": { "type": "string", "format": "date-time" },
+          "result_url": { "type": "string", "format": "uri" },
+          "data": {
+            "type": "object",
+            "description": "The complete terminal analysis result. Its status remains completed, partial, or failed and decisionEligible is preserved. Artifact download URLs still require the tenant Bearer key."
           }
         }
       },

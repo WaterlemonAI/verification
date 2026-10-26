@@ -56,7 +56,9 @@ before(() => {
 test('Azure BSA store encrypts tenant jobs, preserves idempotency and isolates results', async () => {
   const request = { ownerId: 'tenant-one', idempotencyKey: 'unique-request-001',
     files: [{ bytes: Buffer.from('%PDF-private'), mediaType: 'application/pdf' }],
-    fields: { countryCode: 'AE', entityType: 'company', getPdf: true } };
+    fields: { countryCode: 'AE', entityType: 'company', getPdf: true,
+      callback: { url: 'https://hooks.example.test/ai7', signingSecret: 'first-private-secret',
+        deliveryId: 'delivery-one', apiRoot: '/service/bank_statement_analysis' } } };
   const created = await store.createJob(request);
   assert.equal(created.reused, false);
   assert.match(created.job.id, /^bsa_[0-9a-f-]{36}$/);
@@ -65,15 +67,20 @@ test('Azure BSA store encrypts tenant jobs, preserves idempotency and isolates r
   assert.equal(encryptedInput.subarray(0, 4).toString(), 'BSA1');
   assert.notEqual(encryptedInput.subarray(0, 5).toString(), '%PDF-');
 
-  const repeated = await store.createJob(request);
+  const repeated = await store.createJob({ ...request, fields: { ...request.fields,
+    callback: { ...request.fields.callback, signingSecret: 'new-secret-that-must-not-replace-the-first',
+      deliveryId: 'delivery-two' } } });
   assert.equal(repeated.reused, true);
   assert.equal(repeated.job.id, created.job.id);
+  assert.equal(repeated.job.callback.deliveryId, 'delivery-one');
   assert.equal(queue.messages.length, 1);
   assert.equal(await store.getJob(created.job.id, 'tenant-two'), null);
 
   const ownerPartition = [...table.entities.values()].find((entity) => entity.analysisId === created.job.id && entity.rowKey.startsWith('job_')).partitionKey;
   const jobKey = table.key(ownerPartition, `job_${created.job.id}`);
   const jobEntity = table.entities.get(jobKey);
+  assert.equal(jobEntity.jobJson.includes('hooks.example.test'), false);
+  assert.equal(jobEntity.jobJson.includes('first-private-secret'), false);
   table.entities.set(jobKey, { ...jobEntity, status: 'completed', completedAt: new Date().toISOString() });
   container.blobs.set(`${ownerPartition}/${created.job.id}/result.bin`, encryptBsa(Buffer.from(JSON.stringify({
     analysisId: created.job.id, status: 'completed', artifacts: [{ filename: 'ledger.json' }]

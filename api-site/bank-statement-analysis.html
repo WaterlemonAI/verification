@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=7" />
     <script src="/portal-auth.js?v=2" defer></script>
-    <script src="/bank-statement-analysis.js?v=1" defer></script>
+    <script src="/bank-statement-analysis.js?v=2" defer></script>
   </head>
   <body>
     <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
@@ -60,6 +60,7 @@
               <div><strong>declared_monthly_income</strong><span>decimal string · optional</span><p>Declared income with a three-letter currency.</p></div>
               <div><strong>credit_models</strong><span>JSON array · optional</span><p>Selected transparent review models; no automatic credit decision is returned.</p></div>
               <div><strong>get_pdf / get_xlsx</strong><span>boolean · optional</span><p>Create authenticated audit-report and workbook artifacts.</p></div>
+              <div><strong>callback_url</strong><span>HTTPS URI · optional</span><p>Receive the terminal completed, partial, or failed result as a signed JSON callback.</p></div>
             </div>
             <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
             <div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div>
@@ -68,8 +69,9 @@
 
           <article id="workflow">
             <p class="label">ASYNC WORKFLOW</p>
-            <h2>Submit, poll, then download</h2>
-            <p>The submit endpoint returns <code>202 Accepted</code> with an <code>analysisId</code>, <code>statusUrl</code>, and <code>resultUrl</code>. Poll the result URL until it returns <code>200</code>. A <code>202</code> response means processing is still in progress.</p>
+            <h2>Submit, receive a callback, or poll</h2>
+            <p>The submit endpoint returns <code>202 Accepted</code> with an <code>analysisId</code>, <code>statusUrl</code>, and <code>resultUrl</code>. When <code>callback_url</code> is supplied, AI7 also returns a one-time signing secret and posts the terminal result to that public HTTPS endpoint. Polling remains available as a fallback.</p>
+            <p>Verify the exact callback body with HMAC-SHA256 from <code>x-ai7-signature</code>, and de-duplicate retries using <code>x-ai7-delivery-id</code>. Callbacks are at-least-once: your endpoint should return HTTP 2xx only after safely accepting the event. Partial and failed results remain ineligible regardless of callback delivery.</p>
             <p>Source documents, job state, and artifacts are tenant-isolated and encrypted. Azure Document Intelligence uses managed identity; no supplier access key is exposed to clients or stored in the application.</p>
           </article>
 
@@ -88,6 +90,7 @@
               <div><code>quality.malwareGate</code><span>string</span><span><code>passed</code> confirms every uploaded file cleared the production ClamAV gate before extraction. Detection or scanner failure stops the job.</span></div>
               <div><code>artifacts</code><span>object[]</span><span>Authenticated ledger, Parquet, PDF, and XLSX downloads when generated.</span></div>
               <div><code>reasonCodes</code><span>string[]</span><span>Explicit quality, coverage, or processing limitations.</span></div>
+              <div><code>callback</code><span>object</span><span>Delivery state: <code>pending</code>, <code>retrying</code>, <code>delivered</code>, <code>failed</code>, or <code>not_requested</code>.</span></div>
             </div>
             <h3>Status codes</h3>
             <div class="responses">
@@ -115,6 +118,7 @@
                 <label>Declared monthly income <code>declared_monthly_income</code><input id="declared-income" inputmode="decimal" placeholder="25000.00" /></label>
                 <label>Income currency <code>declared_income_currency</code><input id="income-currency" value="AED" maxlength="3" /></label>
                 <label>Customer reference <code>customer_reference</code><input id="customer-reference" maxlength="128" /></label>
+                <label>Callback URL <code>callback_url</code><input id="callback-url" type="url" maxlength="2048" placeholder="https://your-system.example/webhooks/ai7" /><small class="field-help">Optional public HTTPS endpoint. The terminal JSON result is signed and retried.</small></label>
                 <label class="inline-toggle"><span>Audit PDF <code>get_pdf</code></span><span><input id="get-pdf" type="checkbox" checked /> Generate PDF</span></label>
                 <label class="inline-toggle"><span>Review workbook <code>get_xlsx</code></span><span><input id="get-xlsx" type="checkbox" /> Generate XLSX</span></label>
               </div>
@@ -131,6 +135,7 @@
               <p class="form-error" id="form-error" role="alert"></p>
               <button type="submit" id="send-request">Start analysis <span>→</span></button>
             </form>
+            <div id="callback-receipt" class="code-block" hidden><code id="callback-secret"></code><button class="copy" id="copy-callback-secret">Copy callback signing secret</button></div>
             <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
             <div class="response-actions"><button class="copy" id="copy-response" disabled>Copy JSON</button><span id="artifact-actions"></span></div>
             <pre id="response-json" aria-live="polite">{
