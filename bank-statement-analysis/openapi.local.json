@@ -1,0 +1,297 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AI7 Bank Statement Analysis API",
+    "version": "1.0.0",
+    "description": "Asynchronous, tenant-isolated bank statement extraction and analysis in Microsoft Azure UAE North. Results are decision support and require human review."
+  },
+  "servers": [
+    {
+      "url": "https://api.ai7uae.com"
+    }
+  ],
+  "security": [
+    {
+      "BearerKey": []
+    }
+  ],
+  "paths": {
+    "/service/bank_statement_analysis": {
+      "post": {
+        "summary": "Queue a bank statement analysis",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "statement_file",
+                  "country_code",
+                  "entity_type"
+                ],
+                "properties": {
+                  "statement_file": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "format": "binary"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "binary"
+                        }
+                      }
+                    ],
+                    "description": "One PDF or an ordered PNG/JPEG/TIFF image bundle."
+                  },
+                  "country_code": {
+                    "type": "string",
+                    "const": "AE"
+                  },
+                  "entity_type": {
+                    "type": "string",
+                    "enum": [
+                      "individual",
+                      "sole_proprietor",
+                      "company"
+                    ]
+                  },
+                  "declared_names": {
+                    "type": "string",
+                    "description": "JSON array of declared names; declarations are not verified facts."
+                  },
+                  "declared_employer": {
+                    "type": "string"
+                  },
+                  "declared_monthly_income": {
+                    "type": "string",
+                    "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,3})?$"
+                  },
+                  "declared_income_currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  },
+                  "customer_reference": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "get_pdf": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "get_xlsx": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Create an encrypted XLSX for authenticated tenant download."
+                  },
+                  "credit_models": {
+                    "type": "string",
+                    "description": "JSON array of selected review model IDs. No credit decision is returned.",
+                    "example": "[\"residual_cash_flow\",\"income_variability\",\"uae_dbr\"]"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted for asynchronous processing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid fields or an unsupported option.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid Bearer key."
+          },
+          "409": {
+            "description": "Idempotency key reused with a different request."
+          },
+          "413": {
+            "description": "Upload exceeds the configured safety limit."
+          },
+          "415": {
+            "description": "Unsupported file signature or MIME mismatch."
+          }
+        }
+      }
+    },
+    "/service/bank_statement_analysis/{analysisId}": {
+      "get": {
+        "summary": "Read tenant-scoped status",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AnalysisId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current state."
+          },
+          "401": {
+            "description": "Invalid key."
+          },
+          "404": {
+            "description": "Unknown analysis in this tenant."
+          }
+        }
+      }
+    },
+    "/service/bank_statement_analysis/{analysisId}/result": {
+      "get": {
+        "summary": "Read tenant-scoped analysis result",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AnalysisId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete, partial, or failed result with reason codes, creditAssessment model observations and review highlights, and private artifact metadata."
+          },
+          "202": {
+            "description": "Still processing."
+          },
+          "401": {
+            "description": "Invalid key."
+          },
+          "404": {
+            "description": "Unknown analysis in this tenant."
+          }
+        }
+      }
+    },
+    "/service/bank_statement_analysis/{analysisId}/artifacts/{filename}": {
+      "get": {
+        "summary": "Download a tenant-authenticated JSON, Parquet, PDF, or XLSX artifact",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AnalysisId"
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ledger.json",
+                "transactions.parquet",
+                "audit.pdf",
+                "analysis.xlsx"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authenticated artifact bytes."
+          },
+          "401": {
+            "description": "Invalid key."
+          },
+          "404": {
+            "description": "Artifact not present in this tenant."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerKey": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "parameters": {
+      "AnalysisId": {
+        "name": "analysisId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^bsa_[0-9a-f-]{36}$"
+        }
+      }
+    },
+    "schemas": {
+      "Accepted": {
+        "type": "object",
+        "required": [
+          "analysisId",
+          "status",
+          "receivedAt",
+          "statusUrl",
+          "resultUrl"
+        ],
+        "properties": {
+          "analysisId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "const": "queued"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "statusUrl": {
+            "type": "string"
+          },
+          "resultUrl": {
+            "type": "string"
+          },
+          "reused": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "Error"
+          },
+          "reasonCode": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

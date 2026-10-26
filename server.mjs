@@ -26,6 +26,7 @@ import {
   PORTAL_COOKIE, clearPortalCookie, createPortalAccount, createPortalSession,
   portalCookie, safePortalAccount, verifyPortalPassword, verifyPortalSession
 } from './lib/portal-auth.mjs';
+import { bsaEnabled, bsaMode, bsaCapabilities, createBsaJob, getBsaJob, getBsaResult, getBsaArtifact } from './lib/bsa-store.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -35,7 +36,7 @@ const apiHosts = new Set((process.env.API_HOSTS || 'api.ai7uae.com,localhost,127
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon',
   '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp'
+  '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.pdf': 'application/pdf'
 };
 
 const hopByHopHeaders = new Set(['authorization', 'connection', 'content-length', 'host', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']);
@@ -907,7 +908,7 @@ function wantsHtml(req) {
 }
 
 function protectedPortalPath(pathname) {
-  return ['/', '/iban', '/iban/', '/entity-search', '/entity-search/', '/adverse-media', '/adverse-media/', '/merchant-screening', '/merchant-screening/', '/forms', '/forms/'].includes(pathname);
+  return ['/', '/iban', '/iban/', '/entity-search', '/entity-search/', '/adverse-media', '/adverse-media/', '/merchant-screening', '/merchant-screening/', '/bank-statement-analysis', '/bank-statement-analysis/', '/forms', '/forms/'].includes(pathname);
 }
 
 function portalLoginRedirect(res, pathname, search = '') {
@@ -1014,6 +1015,11 @@ async function handleAdminApi(req, res, url, store, loginThrottle) {
   const access = await requireAdmin(req, res, store, { csrf: !['GET', 'HEAD'].includes(req.method || 'GET') });
   if (!access) return;
 
+  if (url.pathname === '/admin/api/bsa' || url.pathname.startsWith('/admin/api/bsa/')) {
+    if (access.legacy) return json(res, 409, { status: 'Error', error: 'Complete account setup first.' });
+    return handleBsa(req, res, url, store, access.account);
+  }
+
   if (req.method === 'GET' && url.pathname === '/admin/api/integrations') {
     return json(res, 200, { integrations: await store.listIntegrations() });
   }
@@ -1099,6 +1105,135 @@ function serveStatic(res, directory, requestPath) {
   createReadStream(filePath).pipe(res);
 }
 
+async function handleBsa(req, res, url, store, adminAccount = null) {
+  if (!bsaEnabled()) return json(res, 503, { status: 'Error', reasonCode: 'BSA_UNAVAILABLE', error: 'Bank statement analysis is not configured.' });
+  if (!/^[0-9a-fA-F]{64}$/.test(process.env.BSA_DATA_KEY_HEX || '')) return json(res, 503, { status: 'Error', reasonCode: 'BSA_ENCRYPTION_UNAVAILABLE' });
+  const admin = Boolean(adminAccount);
+  const token = admin ? null : bearerToken(req);
+  if (!admin && !(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  const ownerId = reportOwnerId(admin ? `admin:${adminAccount.email}` : token);
+  const rootPath = admin ? '/admin/api/bsa' : '/service/bank_statement_analysis';
+  if (admin && req.method === 'GET' && url.pathname === `${rootPath}/config`) {
+    const managed = bsaCapabilities();
+    if (managed) return json(res, 200, managed);
+    let engines = {};
+    let workerOnline = false;
+    try {
+      const path = join(process.env.BSA_DATA_DIR || join(process.cwd(), '.local-bsa'), 'worker-capabilities.json');
+      workerOnline = Date.now() - statSync(path).mtimeMs < 15 * 1000;
+      if (workerOnline) engines = JSON.parse(readFileSync(path, 'utf8'));
+    } catch { /* Worker has not published readiness. */ }
+    return json(res, 200, { enabled: workerOnline, mode: bsaMode(), engines });
+  }
+  const artifactMatch = new RegExp(`^${rootPath}/(bsa_[0-9a-f-]{36})/artifacts/(ledger\\.json|transactions\\.parquet|audit\\.pdf|analysis\\.xlsx)$`).exec(url.pathname);
+  if (req.method === 'GET' && artifactMatch) {
+    const bytes = await getBsaArtifact(artifactMatch[1], ownerId, artifactMatch[2]);
+    if (!bytes) return json(res, 404, { status: 'Error', error: 'Artifact was not found.' });
+    const contentType = artifactMatch[2].endsWith('.pdf') ? 'application/pdf' :
+      artifactMatch[2].endsWith('.parquet') ? 'application/vnd.apache.parquet' :
+        artifactMatch[2].endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/json';
+    res.writeHead(200, { 'content-type': contentType, 'content-length': bytes.length,
+      'content-disposition': `attachment; filename="${artifactMatch[2]}"`, 'cache-control': 'no-store' });
+    return res.end(bytes);
+  }
+  const match = new RegExp(`^${rootPath}/(bsa_[0-9a-f-]{36})(/result)?$`).exec(url.pathname);
+  if (req.method === 'GET' && match) {
+    const record = match[2] ? await getBsaResult(match[1], ownerId) : { job: await getBsaJob(match[1], ownerId) };
+    if (!record?.job) return json(res, 404, { status: 'Error', error: 'Analysis was not found.' });
+    if (match[2]) {
+      if (!record.result) return json(res, 202, { analysisId: match[1], status: record.job.status });
+      return json(res, 200, { ...record.result,
+        artifacts: (record.result.artifacts || []).map((item) => ({ ...item,
+          downloadUrl: `${rootPath}/${match[1]}/artifacts/${item.filename}` })) });
+    }
+    return json(res, 200, { analysisId: match[1], status: record.job.status, receivedAt: record.job.receivedAt,
+      completedAt: record.job.completedAt || null, reasonCodes: record.job.reasonCodes || [] });
+  }
+  if (req.method !== 'POST' || url.pathname !== rootPath) return json(res, 404, { status: 'Error', error: 'Service was not found.' });
+  const idempotencyKey = String(req.headers['idempotency-key'] || '');
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) return json(res, 400, { status: 'Error', reasonCode: 'INVALID_IDEMPOTENCY_KEY' });
+  if (!String(req.headers['content-type'] || '').startsWith('multipart/form-data;')) return json(res, 400, { status: 'Error', reasonCode: 'MULTIPART_REQUIRED' });
+  try {
+    const raw = await readBody(req, Number(process.env.BSA_MAX_UPLOAD_BYTES || 25 * 1024 * 1024) + 262144);
+    const form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: raw }).formData();
+    const uploads = form.getAll('statement_file');
+    if (!uploads.length || uploads.some((item) => !(item instanceof File))) return json(res, 400, { status: 'Error', reasonCode: 'STATEMENT_FILE_REQUIRED' });
+    if (uploads.length > 100) return json(res, 400, { status: 'Error', reasonCode: 'FILE_COUNT_EXCEEDED' });
+    const files = [];
+    let totalBytes = 0;
+    for (const upload of uploads) {
+      const bytes = Buffer.from(await upload.arrayBuffer());
+      totalBytes += bytes.length;
+      if (totalBytes > Number(process.env.BSA_MAX_UPLOAD_BYTES || 25 * 1024 * 1024)) return json(res, 413, { status: 'Error', reasonCode: 'FILE_TOO_LARGE' });
+      const mediaType = bytes.subarray(0, 5).toString('ascii') === '%PDF-' ? 'application/pdf'
+        : bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ? 'image/png'
+          : bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? 'image/jpeg'
+            : (bytes.subarray(0, 4).equals(Buffer.from([73, 73, 42, 0])) || bytes.subarray(0, 4).equals(Buffer.from([77, 77, 0, 42]))) ? 'image/tiff' : null;
+      if (!mediaType) return json(res, 415, { status: 'Error', reasonCode: 'UNSUPPORTED_FILE_TYPE' });
+      if (upload.type && upload.type !== mediaType && !(mediaType === 'image/jpeg' && upload.type === 'image/jpg')) {
+        return json(res, 415, { status: 'Error', reasonCode: 'MIME_SIGNATURE_MISMATCH' });
+      }
+      files.push({ bytes, mediaType });
+    }
+    if (files.length > 1 && files.some((item) => item.mediaType === 'application/pdf')) return json(res, 400, { status: 'Error', reasonCode: 'INVALID_FILE_BUNDLE' });
+    const countryCode = String(form.get('country_code') || '').toUpperCase();
+    const entityType = String(form.get('entity_type') || '');
+    if (countryCode !== 'AE' || !['individual', 'sole_proprietor', 'company'].includes(entityType)) return json(res, 400, { status: 'Error', reasonCode: 'INVALID_REQUEST_FIELDS' });
+    const fields = { countryCode, entityType };
+    const declaredNames = form.get('declared_names');
+    if (declaredNames) {
+      const names = JSON.parse(String(declaredNames));
+      if (!Array.isArray(names) || names.length > 10 || names.some((name) => typeof name !== 'string' || name.length > 150)) throw new Error('invalid_fields');
+      fields.declaredNames = names;
+    }
+    const declaredEmployer = form.get('declared_employer');
+    if (declaredEmployer !== null) {
+      if (typeof declaredEmployer !== 'string' || declaredEmployer.length > 150) throw new Error('invalid_fields');
+      fields.declaredEmployer = declaredEmployer;
+    }
+    const declaredIncome = form.get('declared_monthly_income');
+    const declaredIncomeCurrency = form.get('declared_income_currency');
+    if (declaredIncome !== null) {
+      if (typeof declaredIncome !== 'string' || !/^(?:0|[1-9]\d{0,11})(?:\.\d{1,3})?$/.test(declaredIncome)
+        || typeof declaredIncomeCurrency !== 'string' || !/^[A-Z]{3}$/.test(declaredIncomeCurrency)) throw new Error('invalid_fields');
+      fields.declaredMonthlyIncome = declaredIncome;
+      fields.declaredIncomeCurrency = declaredIncomeCurrency;
+    } else if (declaredIncomeCurrency !== null) throw new Error('invalid_fields');
+    const customerReference = form.get('customer_reference');
+    if (customerReference !== null) {
+      if (typeof customerReference !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(customerReference)) throw new Error('invalid_fields');
+      fields.customerReference = customerReference;
+    }
+    if (form.has('callback_url')) return json(res, 400, { status: 'Error', reasonCode: 'CALLBACKS_NOT_ENABLED' });
+    if (form.has('reporting_currency')) return json(res, 400, { status: 'Error', reasonCode: 'FX_REPORTING_NOT_ENABLED' });
+    const getPdf = form.get('get_pdf');
+    if (getPdf !== null && getPdf !== 'true' && getPdf !== 'false') throw new Error('invalid_fields');
+    fields.getPdf = getPdf === 'true';
+    const getXlsx = form.get('get_xlsx');
+    if (getXlsx !== null && getXlsx !== 'true' && getXlsx !== 'false') throw new Error('invalid_fields');
+    fields.getXlsx = getXlsx === 'true';
+    const creditModels = form.get('credit_models');
+    if (creditModels !== null) {
+      const models = JSON.parse(String(creditModels));
+      const allowed = ['observed_repayment_ratio', 'residual_cash_flow', 'income_variability',
+        'liquidity_runway', 'uae_dbr', 'business_dscr'];
+      if (!Array.isArray(models) || models.length > allowed.length ||
+          models.some((model) => typeof model !== 'string' || !allowed.includes(model)) ||
+          new Set(models).size !== models.length) throw new Error('invalid_fields');
+      fields.creditModels = models;
+    } else fields.creditModels = [];
+    const created = await createBsaJob({ ownerId, idempotencyKey, files, fields });
+    const path = `${rootPath}/${created.job.id}`;
+    return json(res, 202, { analysisId: created.job.id, status: created.job.status, receivedAt: created.job.receivedAt,
+      statusUrl: path, resultUrl: `${path}/result`, reused: created.reused });
+  } catch (error) {
+    if (error.message === 'idempotency_conflict') return json(res, 409, { status: 'Error', reasonCode: 'IDEMPOTENCY_CONFLICT' });
+    if (error.message === 'request_too_large') return json(res, 413, { status: 'Error', reasonCode: 'FILE_TOO_LARGE' });
+    if (error.message === 'invalid_fields' || error instanceof SyntaxError || error instanceof TypeError) return json(res, 400, { status: 'Error', reasonCode: 'INVALID_REQUEST_FIELDS' });
+    return json(res, 503, { status: 'Error', reasonCode: 'ANALYSIS_UNAVAILABLE' });
+  }
+}
+
 export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
   const portalLoginThrottle = createLoginThrottle();
@@ -1135,6 +1270,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return createMerchantScreening(req, res, store, merchantScreener, reportStore);
+      if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return handleBsa(req, res, url, store);
       const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
       if (req.method === 'POST' && formSubmissionMatch) return submitForm(req, res, formSubmissionMatch[1], store, formsQueue);
       const formSchemaMatch = /^\/forms\/([a-z0-9-]+)\/schema$/.exec(url.pathname);
@@ -1168,6 +1304,9 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       }
       if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle);
       if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle);
+      if (url.pathname === '/admin/bsa-synthetic-combined.pdf') {
+        return json(res, 404, { status: 'Error', error: 'Page was not found.' });
+      }
       if (url.pathname === '/admin' || url.pathname === '/admin/') return serveStatic(res, join(root, 'admin-site'), '/');
       if (url.pathname.startsWith('/admin/')) return serveStatic(res, join(root, 'admin-site'), url.pathname.replace(/^\/admin/, '') || '/');
       if (url.pathname === '/catalog.json') return json(res, 200, { integrations: await store.listIntegrations({ publicOnly: true }) }, { 'cache-control': 'public, max-age=60' });
@@ -1181,6 +1320,11 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
         return res.end(spec);
       }
+      if (url.pathname === '/bank-statement-analysis/openapi.json' && bsaEnabled()) {
+        const spec = readFileSync(join(root, 'bank-statement-analysis', 'openapi.local.json'));
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'no-store' });
+        return res.end(spec);
+      }
 
       const integration = await store.getIntegration(url.pathname, req.method || 'GET');
       if (integration) return proxyIntegration(req, res, url, integration, store, fetchImpl);
@@ -1192,10 +1336,19 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
         const { session } = await currentPortalSession(req, store);
         if (!session) return portalLoginRedirect(res, url.pathname, url.search);
       }
+      if ((!bsaEnabled() && (url.pathname === '/bank-statement-analysis' || url.pathname === '/bank-statement-analysis/'))
+        || /^\/bsa-demo\.(?:html|css|js)$/.test(url.pathname)
+        || url.pathname === '/bsa-synthetic-combined.pdf') {
+        return json(res, 404, { status: 'Error', error: 'Page was not found.' });
+      }
+      if (!bsaEnabled() && url.pathname === '/bank-statement-analysis/openapi.json') {
+        return json(res, 404, { status: 'Error', error: 'Page was not found.' });
+      }
       if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
       if (directory.endsWith('api-site') && (url.pathname === '/merchant-screening' || url.pathname === '/merchant-screening/')) return serveStatic(res, directory, '/merchant-screening.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/bank-statement-analysis' || url.pathname === '/bank-statement-analysis/')) return serveStatic(res, directory, '/bank-statement-analysis.html');
       if (directory.endsWith('api-site') && (url.pathname === '/forms' || url.pathname === '/forms/' || /^\/forms\/[a-z0-9-]+\/?$/.test(url.pathname))) return serveStatic(res, directory, '/forms.html');
       return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
     } catch {
@@ -1205,5 +1358,5 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  createAppServer().listen(port, '0.0.0.0', () => console.log(`AI7 UAE service listening on port ${port}`));
+  createAppServer().listen(port, process.env.BIND_HOST || '0.0.0.0', () => console.log(`AI7 UAE service listening on port ${port}`));
 }

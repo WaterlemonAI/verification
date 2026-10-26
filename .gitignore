@@ -5,3 +5,11 @@
 node_modules/
 dist/
 bootstrap-credentials.json
+.local-bsa/
+.local-bsa-key
+bank-statement-analysis/demo/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+.venv-bsa/
+.local-paddle-models/

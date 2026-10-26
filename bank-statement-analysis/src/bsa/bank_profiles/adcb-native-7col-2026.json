@@ -1,0 +1,12 @@
+{
+  "bankId": "adcb",
+  "formatVersion": "native-7col-2026-01",
+  "effectiveFrom": "2026-01-01",
+  "locales": ["en-AE"],
+  "productTypes": ["current_account"],
+  "tableHeader": ["Posting Date", "Value Date", "Description", "Ref/Cheque No", "Debit Amount", "Credit Amount", "Balance"],
+  "dateFormat": "%d/%m/%Y",
+  "decimalSeparator": ".",
+  "thousandsSeparator": ",",
+  "balanceConvention": "credit_positive"
+}

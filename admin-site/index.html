@@ -9,8 +9,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/admin.css?v=6" />
-    <script src="/admin/admin.js?v=7" defer></script>
+    <link rel="stylesheet" href="/admin/admin.css?v=8" />
+    <script src="/admin/admin.js?v=11" defer></script>
+
   </head>
   <body>
     <div class="login" id="login-view">
@@ -63,6 +64,7 @@
         <nav>
           <button class="active" data-view="integrations"><i>⌁</i> Integrations</button>
           <button data-view="forms"><i>▦</i> Forms</button>
+          <button data-view="analysis" id="analysis-nav"><i>▤</i> Analysis</button>
           <button data-view="clients"><i>◇</i> Customer keys</button>
         </nav>
         <div class="secure-note"><i></i><span>Secrets protected<br />by Azure Key Vault</span></div>
@@ -112,6 +114,46 @@
             <div class="panel-head"><div><p class="eyebrow">ORCHESTRATION REGISTRY</p><h2>Multi-API Forms</h2></div><button class="refresh" data-refresh="forms">Refresh</button></div>
             <div class="empty" id="form-empty">No Forms have been configured.</div>
             <div class="form-list" id="form-list"></div>
+          </div>
+        </section>
+
+        <section id="analysis-view" hidden>
+          <div class="panel analysis-panel">
+            <div class="panel-head"><div><p class="eyebrow">ANALYSIS</p><h2>Bank statements</h2><p class="field-help">Upload a statement, inspect reconciled ledgers, and review source-backed cash-flow findings.</p></div><button class="refresh" id="bsa-refresh" type="button">Refresh engines</button></div>
+            <div class="bsa-content">
+              <div id="bsa-capabilities" class="bsa-capabilities" aria-label="Extraction engine status"></div>
+              <form id="bsa-form" class="bsa-form">
+                <div class="bsa-form-head"><h3>New analysis</h3><span>PDF or ordered PNG, JPEG, TIFF pages</span></div>
+                <label>Statement files<input id="bsa-file" type="file" accept="application/pdf,image/png,image/jpeg,image/tiff,.pdf,.png,.jpg,.jpeg,.tif,.tiff" multiple required /></label>
+                <div class="grid two"><label>Country<input value="AE" disabled /></label><label>Entity type<select id="bsa-entity"><option value="individual">Individual</option><option value="sole_proprietor">Sole proprietor</option><option value="company">Company</option></select></label></div>
+                <div class="grid two"><label>Declared names, one per line<textarea id="bsa-names" rows="2" placeholder="Optional"></textarea></label><label>Declared employer<input id="bsa-employer" maxlength="150" placeholder="Optional" /></label></div>
+                <div class="grid three"><label>Declared monthly income<input id="bsa-income" type="number" min="0" step="0.01" placeholder="Optional" /></label><label>Income currency<select id="bsa-income-currency"><option value="AED">AED</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option></select></label><label>Customer reference<input id="bsa-reference" maxlength="128" pattern="[A-Za-z0-9._:-]+" placeholder="Optional" /></label></div>
+                <fieldset class="bsa-model-options"><legend>Statement-based credit review models</legend><p>Select the transparent observations to include in the JSON and workbook. These do not decide eligibility.</p><div class="bsa-model-grid">
+                  <label class="bsa-check"><input type="checkbox" name="bsa-credit-model" value="observed_repayment_ratio" checked /> Observed repayment-to-salary ratio</label>
+                  <label class="bsa-check"><input type="checkbox" name="bsa-credit-model" value="residual_cash_flow" checked /> Residual monthly cash flow</label>
+                  <label class="bsa-check"><input type="checkbox" name="bsa-credit-model" value="income_variability" checked /> Income variability</label>
+                  <label class="bsa-check"><input type="checkbox" name="bsa-credit-model" value="liquidity_runway" checked /> Observed liquidity runway</label>
+                  <label class="bsa-check"><input type="checkbox" name="bsa-credit-model" value="uae_dbr" checked /> UAE debt burden ratio · verification required</label>
+                  <label class="bsa-check"><input type="checkbox" name="bsa-credit-model" value="business_dscr" checked /> Business debt-service coverage · verification required</label>
+                </div></fieldset>
+                <label class="bsa-check"><input id="bsa-get-xlsx" type="checkbox" checked /> Include private XLSX review workbook</label>
+                <label class="bsa-check"><input id="bsa-get-pdf" type="checkbox" /> Include private PDF audit report</label>
+                <button type="submit">Analyze statement <span>→</span></button>
+              </form>
+              <form id="bsa-lookup-form" class="bsa-lookup"><label>Open an existing analysis<input id="bsa-lookup-id" placeholder="bsa_…" pattern="bsa_[0-9a-fA-F-]{36}" required /></label><button type="submit" class="refresh">Open result</button></form>
+              <p id="bsa-message" role="status" aria-live="polite">Checking analysis engines…</p>
+              <div id="bsa-result" hidden>
+                <div class="bsa-result-head"><div><p class="eyebrow">RESULT</p><h3 id="bsa-result-title">Analysis</h3><p id="bsa-result-id"></p></div><div id="bsa-artifacts"></div></div>
+                <div id="bsa-summary" class="bsa-summary"></div>
+                <div class="bsa-tabs" role="tablist" aria-label="Analysis results"><button type="button" data-bsa-tab="overview" class="active">Overview</button><button type="button" data-bsa-tab="ledgers">Ledgers</button><button type="button" data-bsa-tab="cashflow">Cash flow</button><button type="button" data-bsa-tab="signals">Review signals</button><button type="button" data-bsa-tab="models">Credit models</button><button type="button" data-bsa-tab="evidence">Evidence & JSON</button></div>
+                <div id="bsa-tab-overview" class="bsa-tab"><h3>Coverage and quality</h3><div id="bsa-coverage"></div><h3>Reason codes</h3><div id="bsa-reasons"></div></div>
+                <div id="bsa-tab-ledgers" class="bsa-tab" hidden><h3>Accounts and statement segments</h3><div id="bsa-ledgers"></div><h3>Transactions</h3><div id="bsa-transactions"></div></div>
+                <div id="bsa-tab-cashflow" class="bsa-tab" hidden><h3>Income and monthly cash flow</h3><div id="bsa-features"></div><h3>Liquidity and obligations</h3><div id="bsa-liquidity"></div></div>
+                <div id="bsa-tab-signals" class="bsa-tab" hidden><h3>Transfers, facilities and review findings</h3><div id="bsa-signals"></div></div>
+                <div id="bsa-tab-models" class="bsa-tab" hidden><h3>Statement-based observations</h3><p class="field-help">Models show formulas, evidence, and missing inputs. An underwriter must verify liabilities and income before a credit decision.</p><div id="bsa-models"></div></div>
+                <div id="bsa-tab-evidence" class="bsa-tab" hidden><h3>Canonical result with source evidence</h3><pre id="bsa-raw"></pre></div>
+              </div>
+            </div>
           </div>
         </section>
       </main>

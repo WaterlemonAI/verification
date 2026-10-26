@@ -12,6 +12,9 @@ COPY site/ ./site/
 COPY api-site/ ./api-site/
 COPY admin-site/ ./admin-site/
 COPY api/openapi.json ./api/openapi.json
+COPY bank-statement-analysis/openapi.local.json ./bank-statement-analysis/openapi.local.json
+
+RUN mkdir /data && chown node:node /data
 
 USER node
 

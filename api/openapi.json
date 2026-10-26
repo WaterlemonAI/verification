@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AI7 UAE Verification API",
-    "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, and merchant-website risk screening. Responses are JSON.",
-    "version": "1.5.0"
+    "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, merchant-website risk screening, Forms orchestration, and asynchronous bank statement analysis.",
+    "version": "1.6.0"
   },
   "servers": [
     {
@@ -420,6 +420,18 @@
           "503": { "description": "The report store is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
+    },
+    "/service/bank_statement_analysis": {
+      "$ref": "/bank-statement-analysis/openapi.json#/paths/~1service~1bank_statement_analysis"
+    },
+    "/service/bank_statement_analysis/{analysisId}": {
+      "$ref": "/bank-statement-analysis/openapi.json#/paths/~1service~1bank_statement_analysis~1{analysisId}"
+    },
+    "/service/bank_statement_analysis/{analysisId}/result": {
+      "$ref": "/bank-statement-analysis/openapi.json#/paths/~1service~1bank_statement_analysis~1{analysisId}~1result"
+    },
+    "/service/bank_statement_analysis/{analysisId}/artifacts/{filename}": {
+      "$ref": "/bank-statement-analysis/openapi.json#/paths/~1service~1bank_statement_analysis~1{analysisId}~1artifacts~1{filename}"
     }
   },
   "components": {

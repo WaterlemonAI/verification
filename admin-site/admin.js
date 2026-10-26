@@ -32,6 +32,14 @@ async function showApp(auth) {
   byId('login-view').hidden = true;
   byId('app-view').hidden = false;
   await loadIntegrations();
+  const linkedAnalysis = new URLSearchParams(location.search).get('analysis');
+  if (/^bsa_[0-9a-fA-F-]{36}$/.test(linkedAnalysis || '')) {
+    setView('analysis');
+    byId('bsa-lookup-id').value = linkedAnalysis;
+    pollBsaResult(`/admin/api/bsa/${linkedAnalysis}/result`).catch(error => {
+      byId('bsa-message').textContent = error.message || 'Unable to open analysis.';
+    });
+  }
 }
 
 async function bootstrapAuth() {
@@ -52,8 +60,167 @@ function setView(name) {
   byId('integrations-view').hidden = name !== 'integrations';
   byId('clients-view').hidden = name !== 'clients';
   byId('forms-view').hidden = name !== 'forms';
-  byId('page-title').textContent = name === 'clients' ? 'Customer keys' : name === 'forms' ? 'Forms' : 'Integrations';
-  name === 'clients' ? loadClients() : name === 'forms' ? loadForms() : loadIntegrations();
+  byId('analysis-view').hidden = name !== 'analysis';
+  byId('page-title').textContent = name === 'clients' ? 'Customer keys' : name === 'forms' ? 'Forms' : name === 'analysis' ? 'Analysis' : 'Integrations';
+  if (name === 'clients') loadClients();
+  else if (name === 'forms') loadForms();
+  else if (name === 'analysis') loadBsaAvailability();
+  else if (name === 'integrations') loadIntegrations();
+}
+
+async function loadBsaAvailability() {
+  const container = byId('bsa-capabilities');
+  container.replaceChildren();
+  try {
+    const config = await request('/admin/api/bsa/config');
+    const engines = config.engines || {};
+    for (const [key, label] of [['native', 'Native PDF'], ['rapidocr', 'Private OCR'], ['paddleocr', 'PaddleOCR'], ['azureLayout', 'Azure Layout']]) {
+      const state = engines[key] || 'unavailable';
+      const card = bsaElement('div', '', `bsa-engine ${state}`);
+      card.append(bsaElement('strong', label), bsaElement('span', state.replaceAll('_', ' ')));
+      container.append(card);
+    }
+    byId('bsa-form').querySelector('button[type=submit]').disabled = !config.enabled;
+    byId('bsa-message').textContent = config.enabled
+      ? 'Ready to analyze. Pages that cannot be reliably read will be flagged for review.'
+      : 'Analysis worker is unavailable.';
+  } catch (error) {
+    byId('bsa-form').querySelector('button[type=submit]').disabled = true;
+    byId('bsa-message').textContent = error.message || 'Unable to check analysis engines.';
+  }
+}
+
+async function bsaRequest(path, options = {}) {
+  const response = await fetch(path, { ...options, credentials: 'same-origin', headers: { ...(!['GET', 'HEAD'].includes(options.method || 'GET') && csrfToken ? { 'x-ai7-csrf': csrfToken } : {}), ...(options.headers || {}) } });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.reasonCode || body.error || `Request failed with ${response.status}.`);
+  return { body, status: response.status };
+}
+
+function bsaElement(tag, value, className) {
+  const element = document.createElement(tag);
+  element.textContent = String(value);
+  if (className) element.className = className;
+  return element;
+}
+
+function bsaCard(containerId, title, details) {
+  const card = bsaElement('article', '', 'bsa-data-card');
+  card.append(bsaElement('strong', title));
+  for (const detail of details) if (detail) card.append(bsaElement('p', detail));
+  byId(containerId).append(card);
+}
+
+function bsaItems(containerId, title, items) {
+  if (!items?.length) return;
+  bsaCard(containerId, title, items.map(item => typeof item === 'string' ? item : JSON.stringify(item)));
+}
+
+function bsaMoney(value, currency = '') {
+  const amount = Number(value?.value ?? value);
+  return Number.isFinite(amount) ? `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency || value?.currency || ''}`.trim() : '—';
+}
+
+function bsaTable(containerId, headers, rows) {
+  const wrap = bsaElement('div', '', 'bsa-table-wrap');
+  const table = document.createElement('table'); table.className = 'bsa-table';
+  const head = document.createElement('thead'); const heading = document.createElement('tr');
+  headers.forEach(label => heading.append(bsaElement('th', label))); head.append(heading); table.append(head);
+  const body = document.createElement('tbody');
+  rows.forEach(values => { const tr = document.createElement('tr'); values.forEach(value => tr.append(bsaElement('td', value ?? '—'))); body.append(tr); });
+  table.append(body); wrap.append(table); byId(containerId).append(wrap);
+}
+
+function renderBsa(result) {
+  byId('bsa-result').hidden = false;
+  for (const id of ['bsa-summary', 'bsa-coverage', 'bsa-reasons', 'bsa-ledgers', 'bsa-transactions', 'bsa-features', 'bsa-liquidity', 'bsa-signals', 'bsa-models', 'bsa-artifacts']) byId(id).replaceChildren();
+  byId('bsa-result-title').textContent = `Analysis ${result.status}`;
+  byId('bsa-result-id').textContent = result.analysisId || '';
+  for (const [value, label] of [[result.status, 'Processing status'], [result.coverage?.pageCount || 0, 'Pages'],
+    [result.coverage?.transactionCount || 0, 'Unique transactions'], [result.transfers?.length || 0, 'Paired transfers'],
+    [result.observedObligations?.length || 0, 'Observed obligations'],
+    [result.decisionEligible ? 'Yes' : 'No', 'Decision eligible'],
+    [`${(result.segments || []).filter(segment => segment.reconciliation?.status === 'fully_reconciled').length}/${result.segments?.length || 0}`, 'Reconciled ledgers']]) {
+    const card = bsaElement('div', '');
+    card.append(bsaElement('strong', value), bsaElement('span', label));
+    byId('bsa-summary').append(card);
+  }
+  for (const reason of result.reasonCodes || []) byId('bsa-reasons').append(bsaElement('span', reason, 'bsa-reason'));
+  if (!result.reasonCodes?.length) byId('bsa-reasons').append(bsaElement('span', 'No blocking reason codes'));
+  bsaCard('bsa-coverage', 'Coverage', [`${result.coverage?.pageCount || 0} pages inspected; ${result.coverage?.transactionCount || 0} unique transactions extracted.`, `${result.coverage?.unsupportedPages?.length || 0} pages need manual review.`, `Extractor: ${result.versions?.extractor || result.extractorVersion || 'see source evidence'}`]);
+  bsaCard('bsa-coverage', 'Quality', [`${result.quality?.reconciledSegments || 0} of ${result.segments?.length || 0} ledgers reconcile.`, ...(result.limitations || [])]);
+  for (const segment of result.segments || []) {
+    const ledger = bsaElement('div', '', 'bsa-ledger');
+    const left = bsaElement('div', `${segment.bankId} · ${segment.accountNumberMasked} · ${segment.currency}`);
+    left.append(bsaElement('small', `${segment.periodStart} to ${segment.periodEnd} · ${segment.productType} · ${segment.ownershipType}`));
+    const right = bsaElement('div', `${bsaMoney(segment.openingBalance, segment.currency)} → ${bsaMoney(segment.closingBalance, segment.currency)}`);
+    right.append(bsaElement('small', `Ledger: ${segment.reconciliation?.status?.replaceAll('_', ' ') || 'unknown'} · ${segment.transactions?.length || 0} rows`));
+    ledger.append(left, right);
+    byId('bsa-ledgers').append(ledger);
+  }
+  for (const stream of result.features?.salaryStreams || []) {
+    byId('bsa-features').append(bsaElement('p', `${stream.observedPayer}: ${stream.candidateMonthlyAmount.value} ${stream.currency} · ${stream.months.length} months · ${stream.stable ? 'stable candidate' : 'insufficient history'}`));
+  }
+  byId('bsa-features').append(bsaElement('p', `${result.transfers?.length || 0} paired transfers excluded from income; ${result.duplicates?.length || 0} duplicate rows removed.`));
+  const accountLabels = new Map((result.accounts || []).map(item => [item.accountId, `${item.bankId} · ${item.accountNumberMasked}`]));
+  bsaCard('bsa-features', 'How to read cash flow', ['Candidate external credits are observed deposits, not verified income. Non-transfer debits subtract paired transfers. Residual is credits minus non-transfer debits. A savings account funded by internal transfers can show a negative residual without a borrower-wide deficit. Each row stays within one account and currency.']);
+  bsaTable('bsa-features', ['Account', 'Month', 'Currency', 'Candidate credits', 'Non-transfer debits', 'Residual'], (result.monthlyCashFlow || []).map(row => {
+    const credit = Number(row.candidateExternalCredits?.value || 0);
+    const debit = Number(row.grossDebits?.value || 0) - Number(row.selfTransferDebits?.value || 0);
+    return [accountLabels.get(row.accountId) || row.accountId, row.month, row.currency, bsaMoney(credit), bsaMoney(debit), bsaMoney(credit - debit)];
+  }));
+  for (const item of result.liquidity || []) byId('bsa-liquidity').append(bsaElement('p', `${accountLabels.get(item.accountId) || 'Account'} · ${item.currency}: average ${item.averageDailyBalance.value}, minimum ${item.minimumDailyBalance.value}, negative days ${item.negativeBalanceDays}`));
+  bsaCard('bsa-liquidity', 'Observed obligations', (result.observedObligations || []).map(item => `${item.category?.replaceAll('_', ' ')}: ${bsaMoney(item.typicalAmount, item.currency)} typical payment; ${item.paymentCount} observed payments.`));
+  bsaCard('bsa-signals', 'Review rules', ['Priorities order manual review; they do not determine fraud or eligibility. Each pattern gives a recommended check and source IDs in the JSON.']);
+  for (const item of result.creditAssessment?.riskHighlights || []) {
+    const card = bsaElement('article', '', `bsa-data-card bsa-risk ${item.reviewPriority || 'info'}`);
+    card.append(bsaElement('span', (item.reviewPriority || 'info').toUpperCase(), 'bsa-risk-priority'),
+      bsaElement('strong', item.title), bsaElement('p', item.explanation),
+      bsaElement('p', `Check: ${item.suggestedReview}`));
+    if (item.accountId) card.append(bsaElement('small', `${accountLabels.get(item.accountId) || item.accountId} · ${item.currency || ''}`));
+    byId('bsa-signals').append(card);
+  }
+  if (result.transfers?.length) bsaCard('bsa-signals', 'Excluded paired transfers', [`${result.transfers.length} matching transfers were kept in the ledger and excluded from candidate income.`]);
+  for (const model of result.creditAssessment?.models || []) {
+    const observations = model.observations || [];
+    const details = [`Formula: ${model.formula}`, `Status: ${model.status.replaceAll('_', ' ')}`];
+    for (const item of observations) {
+      const observed = !item.value ? 'Not calculable' : item.value.unit === 'ratio'
+        ? `${(Number(item.value.value) * 100).toFixed(1)}%` : bsaMoney(item.value.value, item.value.unit);
+      details.push(`${accountLabels.get(item.accountId) || item.accountId} · ${item.currency}: ${observed} · ${item.months?.length || 0} complete months`);
+    }
+    details.push(`Limit: ${model.limitation}`);
+    bsaCard('bsa-models', model.name, details);
+  }
+  const transactions = (result.segments || []).flatMap(segment => segment.transactions || []);
+  for (const item of transactions.slice(0, 200)) bsaCard('bsa-transactions', `${item.bookingDate} · ${item.creditDebitIndicator} ${item.ledgerAmount?.value} ${item.ledgerCurrency}`, [item.descriptionRaw, `Balance ${item.runningBalance?.value}`, item.referenceRaw]);
+  if (transactions.length > 200) byId('bsa-transactions').append(bsaElement('p', `Showing 200 of ${transactions.length} transactions. Download the workbook or Parquet export for all rows.`));
+  for (const item of result.artifacts || []) {
+    const button = bsaElement('button', `Download ${item.filename}`, 'bsa-export');
+    button.type = 'button';
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const response = await fetch(item.downloadUrl, { credentials: 'same-origin' });
+        if (!response.ok) throw new Error('Export download failed.');
+        const url = URL.createObjectURL(await response.blob());
+        const link = document.createElement('a'); link.href = url; link.download = item.filename; link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+      } catch (error) { byId('bsa-message').textContent = error.message; }
+      finally { button.disabled = false; }
+    });
+    byId('bsa-artifacts').append(button);
+  }
+  if (result.artifacts?.some(item => item.filename === 'analysis.xlsx')) {
+    const linkButton = bsaElement('button', 'Copy private analysis link', 'bsa-export');
+    linkButton.type = 'button';
+    linkButton.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(`${location.origin}/admin?analysis=${encodeURIComponent(result.analysisId)}`);
+      linkButton.textContent = 'Private link copied';
+    });
+    byId('bsa-artifacts').append(linkButton);
+  }
+  byId('bsa-raw').textContent = JSON.stringify(result, null, 2);
 }
 
 async function loadIntegrations() {
@@ -228,6 +395,7 @@ byId('setup-form').addEventListener('submit', async (event) => {
     await showApp(auth);
   } catch (error) {
     byId('setup-error').textContent = error.message;
+
   }
 });
 
@@ -246,6 +414,75 @@ byId('change-password').addEventListener('click', () => {
   byId('password-error').textContent = '';
   byId('password-dialog').showModal();
 });
+byId('bsa-refresh').addEventListener('click', loadBsaAvailability);
+document.querySelectorAll('[data-bsa-tab]').forEach(button => button.addEventListener('click', () => {
+  const active = button.dataset.bsaTab;
+  document.querySelectorAll('[data-bsa-tab]').forEach(tab => tab.classList.toggle('active', tab === button));
+  document.querySelectorAll('.bsa-tab').forEach(panel => { panel.hidden = panel.id !== `bsa-tab-${active}`; });
+}));
+
+async function pollBsaResult(resultUrl) {
+  const message = byId('bsa-message');
+  for (let attempt = 0; attempt < 360; attempt++) {
+    const { body: result, status } = await bsaRequest(resultUrl);
+    if (status === 200) {
+      renderBsa(result);
+      const ledgers = result.segments || [];
+      const allReconciled = ledgers.length > 0 && ledgers.every(segment => segment.reconciliation?.status === 'fully_reconciled');
+      message.textContent = allReconciled
+        ? `Statement processed. All ${ledgers.length} ledgers reconciled. Review the reason codes and ownership evidence.`
+        : ledgers.length ? 'Statement processed with review items. Check the reconciliation details below.'
+          : 'No ledger could be reconciled from this upload. It may still be a bank statement; check the reason codes below.';
+      return;
+    }
+    message.textContent = `Analysis ${result.analysisId || ''} ${result.status}…`;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  throw new Error('Analysis is still processing. Keep the analysis ID and check the result again later.');
+}
+
+byId('bsa-lookup-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const id = byId('bsa-lookup-id').value.trim();
+  if (!/^bsa_[0-9a-fA-F-]{36}$/.test(id)) return;
+  byId('bsa-result').hidden = true;
+  try { await pollBsaResult(`/admin/api/bsa/${id}/result`); }
+  catch (error) { byId('bsa-message').textContent = error.message || 'Unable to open analysis.'; }
+});
+
+byId('bsa-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const files = Array.from(byId('bsa-file').files);
+  if (!files.length) return;
+  const button = event.currentTarget.querySelector('button[type=submit]');
+  const message = byId('bsa-message');
+  button.disabled = true;
+  byId('bsa-result').hidden = true;
+  message.textContent = 'Uploading statement…';
+  try {
+    const body = new FormData();
+    for (const file of files) body.append('statement_file', file);
+    body.append('country_code', 'AE');
+    body.append('entity_type', byId('bsa-entity').value);
+    body.append('get_pdf', byId('bsa-get-pdf').checked ? 'true' : 'false');
+    body.append('get_xlsx', byId('bsa-get-xlsx').checked ? 'true' : 'false');
+    body.append('credit_models', JSON.stringify(Array.from(document.querySelectorAll('[name="bsa-credit-model"]:checked'), input => input.value)));
+    const names = byId('bsa-names').value.split('\n').map(value => value.trim()).filter(Boolean);
+    if (names.length) body.append('declared_names', JSON.stringify(names));
+    if (byId('bsa-employer').value.trim()) body.append('declared_employer', byId('bsa-employer').value.trim());
+    if (byId('bsa-income').value) {
+      body.append('declared_monthly_income', byId('bsa-income').value);
+      body.append('declared_income_currency', byId('bsa-income-currency').value);
+    }
+    if (byId('bsa-reference').value.trim()) body.append('customer_reference', byId('bsa-reference').value.trim());
+    const accepted = await bsaRequest('/admin/api/bsa', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body });
+    byId('bsa-lookup-id').value = accepted.body.analysisId;
+    history.replaceState(null, '', `/admin?analysis=${encodeURIComponent(accepted.body.analysisId)}`);
+    await pollBsaResult(accepted.body.resultUrl);
+  } catch (error) { message.textContent = error.message || 'Analysis failed.'; }
+  finally { button.disabled = false; }
+});
+
 
 byId('integration-form').addEventListener('submit', async (event) => {
   event.preventDefault();

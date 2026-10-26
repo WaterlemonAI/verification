@@ -19,6 +19,10 @@ The GitHub deployment identity receives the custom role in `infrastructure/ai7ua
 
 ## Verification API
 
+### Bank statement analysis
+
+The [Bank Statement Analysis module](bank-statement-analysis/README.md) is available in the customer portal and under **Analysis** in the admin console. Its authenticated asynchronous API uses encrypted private Azure Blob/Table/Queue storage, a dedicated scale-to-zero Python worker, and managed-identity access to Azure Document Intelligence in UAE North. The initial live F0 Layout tier is capped at two pages; an S0 promotion requires a separate cost decision. The [engineering handoff](docs/bank-statement-analysis/README.md) and module README document the remaining decision-support limitations.
+
 The provider-neutral API portal and wrapper are served from `api.ai7uae.com`. Current endpoints are:
 
 ```text
@@ -27,6 +31,9 @@ POST /service/iban_verification
 POST /service/entity_search
 POST /service/adverse_media
 POST /service/merchant_screening
+POST /service/bank_statement_analysis
+GET  /service/bank_statement_analysis/{analysisId}
+GET  /service/bank_statement_analysis/{analysisId}/result
 POST /forms/{formId}/submissions
 GET  /service/adverse_media/reports/{reportId}.pdf
 GET  /service/merchant_screening/reports/{reportId}.pdf

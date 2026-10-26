@@ -15,9 +15,11 @@ on:
       - package-lock.json
       - Dockerfile.api
       - Dockerfile.merchant-screenshot
+      - bank-statement-analysis/**
       - merchant-screenshot-worker.mjs
       - infrastructure/api.bicep
       - infrastructure/merchant-screenshot-platform.bicep
+      - infrastructure/api-bank-statement-platform.bicep
       - .github/workflows/deploy-api.yml
   workflow_dispatch:
 
@@ -88,6 +90,25 @@ jobs:
             api-deployment-evidence.json > api-deployment-evidence.next.json
           mv api-deployment-evidence.next.json api-deployment-evidence.json
 
+      - name: Build and publish immutable bank statement worker image
+        id: bank_statement_image
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="ai7uae-bank-statement-worker"
+          tag="${GITHUB_SHA}"
+          tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
+          docker build --pull --file bank-statement-analysis/Dockerfile --tag "${tagged_image}" bank-statement-analysis
+          docker push "${tagged_image}"
+          digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}:${tag}" --query digest --output tsv)"
+          test -n "${digest}"
+          image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          jq --arg repository "${repository}" --arg digest "${digest}" --arg image "${image}" \
+            '.bank_statement_worker = {repository: $repository, digest: $digest, image: $image}' \
+            api-deployment-evidence.json > api-deployment-evidence.next.json
+          mv api-deployment-evidence.next.json api-deployment-evidence.json
+
       - name: Validate API Bicep
         run: az bicep build --file infrastructure/api.bicep
 
@@ -100,6 +121,7 @@ jobs:
             --parameters \
               image="${{ steps.image.outputs.image }}" \
               merchantScreenshotWorkerImage="${{ steps.merchant_screenshot_image.outputs.image }}" \
+              bankStatementWorkerImage="${{ steps.bank_statement_image.outputs.image }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
@@ -116,6 +138,7 @@ jobs:
             --parameters \
               image="${{ steps.image.outputs.image }}" \
               merchantScreenshotWorkerImage="${{ steps.merchant_screenshot_image.outputs.image }}" \
+              bankStatementWorkerImage="${{ steps.bank_statement_image.outputs.image }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \

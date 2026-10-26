@@ -1,5 +1,5 @@
 (() => {
-  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/forms']);
+  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms']);
   const normalizedPath = location.pathname.length > 1 ? location.pathname.replace(/\/$/, '') : '/';
   const pageContext = {
     '/': ['Verification API', 'UAE Trade Licence'],
@@ -7,6 +7,7 @@
     '/entity-search': ['Verification API', 'Entity Search'],
     '/adverse-media': ['Verification API', 'Adverse Media'],
     '/merchant-screening': ['Verification API', 'Merchant Screening'],
+    '/bank-statement-analysis': ['Verification API', 'Bank Statement Analysis'],
     '/forms': ['Forms', 'Forms Module']
   };
 
@@ -40,10 +41,11 @@
         <a href="/entity-search" data-path="/entity-search"><span>03</span> Entity Search</a>
         <a href="/adverse-media" data-path="/adverse-media"><span>04</span> Adverse Media</a>
         <a href="/merchant-screening" data-path="/merchant-screening"><span>05</span> Merchant Screening</a>
+        <a href="/bank-statement-analysis" data-path="/bank-statement-analysis"><span>06</span> Bank Statement Analysis</a>
       </div>
       <div class="portal-nav-group">
         <p>FORMS</p>
-        <a href="/forms" data-path="/forms"><span>06</span> Forms Module</a>
+        <a href="/forms" data-path="/forms"><span>07</span> Forms Module</a>
       </div>
       <div class="portal-account">
         <span>WORKSPACE</span>
