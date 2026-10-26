@@ -20,8 +20,12 @@ import { createFormsQueue, makeFormsJob, startFormsWorker, validateFormsCallback
 import { createFormsAuditPdf } from './lib/forms-report.mjs';
 import {
   ADMIN_COOKIE, adminCookie, clearAdminCookie, createAdminAccount, createAdminSession,
-  newSigningKey, parseCookies, safeAdminAccount, verifyAdminPassword, verifyAdminSession
+  newSigningKey, normalizeAdminEmail, parseCookies, safeAdminAccount, verifyAdminPassword, verifyAdminSession
 } from './lib/admin-auth.mjs';
+import {
+  PORTAL_COOKIE, clearPortalCookie, createPortalAccount, createPortalSession,
+  portalCookie, safePortalAccount, verifyPortalPassword, verifyPortalSession
+} from './lib/portal-auth.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -809,6 +813,109 @@ function loginThrottleKey(req, email) {
   return `${requestOrigin(req).network_origin}:${String(email || '').trim().toLowerCase()}`;
 }
 
+async function currentPortalSession(req, store) {
+  const token = parseCookies(req.headers.cookie)[PORTAL_COOKIE];
+  if (!token) return { account: null, session: null };
+  try {
+    const payload = String(token).split('.')[0];
+    const unsigned = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    const account = await store.getPortalUser(normalizeAdminEmail(unsigned.email));
+    const signingKey = await store.getPortalSessionKey();
+    return { account, session: verifyPortalSession(token, account, signingKey) };
+  } catch {
+    return { account: null, session: null };
+  }
+}
+
+async function handlePortalApi(req, res, url, store, loginThrottle) {
+  if (req.method === 'GET' && url.pathname === '/portal/api/auth/status') {
+    const { account, session } = await currentPortalSession(req, store);
+    return json(res, 200, { authenticated: Boolean(session), account: session ? safePortalAccount(account) : null });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/portal/api/auth/signup') {
+    try {
+      const body = await readJson(req);
+      const email = normalizeAdminEmail(body.email);
+      const throttleKey = loginThrottleKey(req, email);
+      if (loginThrottle.blocked(throttleKey)) return json(res, 429, { status: 'Error', error: 'Too many account attempts. Try again later.' });
+      const client = await store.getClientForKey(String(body.api_key || ''));
+      if (!client) {
+        loginThrottle.failed(throttleKey);
+        return json(res, 401, { status: 'Error', error: 'AI7 API key is invalid or inactive.' });
+      }
+      if (await store.getPortalUser(email)) return json(res, 409, { status: 'Error', error: 'An account already exists for this email. Sign in instead.' });
+      const account = createPortalAccount(email, body.password, client);
+      let signingKey = await store.getPortalSessionKey();
+      if (!signingKey) {
+        signingKey = newSigningKey();
+        await store.setPortalSessionKey(signingKey);
+      }
+      await store.setPortalUser(account);
+      loginThrottle.clear(throttleKey);
+      const created = createPortalSession(account, signingKey);
+      return json(res, 201, { account: safePortalAccount(account), csrf_token: created.csrfToken, expires_in: created.expiresIn }, {
+        'set-cookie': portalCookie(created.token, { secure: secureRequest(req) })
+      });
+    } catch (error) {
+      return json(res, error.statusCode || 400, { status: 'Error', error: error.statusCode ? 'The signup request is invalid.' : error.message });
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/portal/api/auth/login') {
+    try {
+      const body = await readJson(req);
+      const email = normalizeAdminEmail(body.email);
+      const throttleKey = loginThrottleKey(req, email);
+      if (loginThrottle.blocked(throttleKey)) return json(res, 429, { status: 'Error', error: 'Too many sign-in attempts. Try again later.' });
+      const account = await store.getPortalUser(email);
+      if (!verifyPortalPassword(account, email, body.password)) {
+        loginThrottle.failed(throttleKey);
+        return json(res, 401, { status: 'Error', error: 'Email or password is incorrect.' });
+      }
+      loginThrottle.clear(throttleKey);
+      const signingKey = await store.getPortalSessionKey();
+      const created = createPortalSession(account, signingKey);
+      return json(res, 200, { account: safePortalAccount(account), csrf_token: created.csrfToken, expires_in: created.expiresIn }, {
+        'set-cookie': portalCookie(created.token, { secure: secureRequest(req) })
+      });
+    } catch (error) {
+      return json(res, error.statusCode || 400, { status: 'Error', error: 'The sign-in request is invalid.' });
+    }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/portal/api/auth/session') {
+    const { account, session } = await currentPortalSession(req, store);
+    if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
+    return json(res, 200, { account: safePortalAccount(account), csrf_token: session.csrf, expires_at: session.expires_at });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/portal/api/auth/logout') {
+    const { session } = await currentPortalSession(req, store);
+    if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
+    if (!sameOrigin(req) || String(req.headers['x-ai7-csrf'] || '') !== session.csrf) {
+      return json(res, 403, { status: 'Error', error: 'The security token is missing or invalid. Sign in again.' });
+    }
+    return json(res, 200, { signed_out: true }, { 'set-cookie': clearPortalCookie({ secure: secureRequest(req) }) });
+  }
+
+  return json(res, 404, { status: 'Error', error: 'Portal operation was not found.' });
+}
+
+function wantsHtml(req) {
+  return String(req.headers.accept || '').toLowerCase().includes('text/html');
+}
+
+function protectedPortalPath(pathname) {
+  return ['/', '/iban', '/iban/', '/entity-search', '/entity-search/', '/adverse-media', '/adverse-media/', '/merchant-screening', '/merchant-screening/', '/forms', '/forms/'].includes(pathname);
+}
+
+function portalLoginRedirect(res, pathname, search = '') {
+  const next = `${pathname}${search}`;
+  res.writeHead(302, { location: `/login?next=${encodeURIComponent(next)}`, 'cache-control': 'no-store' });
+  res.end();
+}
+
 async function currentAdminSession(req, store) {
   const account = await store.getAdminAccount();
   if (!account) return { account: null, session: null };
@@ -994,6 +1101,7 @@ function serveStatic(res, directory, requestPath) {
 
 export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
+  const portalLoginThrottle = createLoginThrottle();
   if (startWorker && deepResearchQueue) {
     startDeepResearchWorker({
       queue: deepResearchQueue,
@@ -1058,6 +1166,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
           cost_guardrail_usd: adverseMediaConfig.costGuardrailUsd
         }, { 'cache-control': 'public, max-age=3600' });
       }
+      if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle);
       if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle);
       if (url.pathname === '/admin' || url.pathname === '/admin/') return serveStatic(res, join(root, 'admin-site'), '/');
       if (url.pathname.startsWith('/admin/')) return serveStatic(res, join(root, 'admin-site'), url.pathname.replace(/^\/admin/, '') || '/');
@@ -1078,6 +1187,11 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       if (url.pathname.startsWith('/service/')) return json(res, 404, { status: 'Error', error: 'Service was not found.' });
 
       const directory = apiHosts.has(host) || url.pathname.startsWith('/docs') ? join(root, 'api-site') : join(root, 'site');
+      if (directory.endsWith('api-site') && (url.pathname === '/login' || url.pathname === '/login/')) return serveStatic(res, directory, '/login.html');
+      if (directory.endsWith('api-site') && wantsHtml(req) && protectedPortalPath(url.pathname)) {
+        const { session } = await currentPortalSession(req, store);
+        if (!session) return portalLoginRedirect(res, url.pathname, url.search);
+      }
       if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');

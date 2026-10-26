@@ -144,11 +144,76 @@ footer>div{display:flex;gap:.7rem}footer>div:first-child{flex-direction:column}f
 .forms-sample { margin-top: 1.5rem; max-height: 360px; }
 .forms-tester { margin: 0; }
 
+body.portal-ready { padding-left: 276px; }
+.portal-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: 276px; display: flex; flex-direction: column; padding: 1.35rem 1rem 1rem; color: #dbe7f3; background: var(--dark); box-shadow: 14px 0 38px #071f4322; }
+.portal-brand { display: flex; align-items: center; gap: .75rem; padding: .3rem .55rem 1.8rem; color: var(--white); }
+.portal-brand > span { width: 38px; height: 38px; display: grid; place-items: center; color: var(--dark); background: var(--mint); font: 700 .72rem "DM Mono",monospace; }
+.portal-brand strong { font-size: 1rem; letter-spacing: -.02em; }
+.portal-brand b { color: var(--mint); }
+.portal-nav-group { display: grid; gap: .25rem; margin-top: 1rem; }
+.portal-nav-group p { margin: 0 0 .45rem; padding: 0 .7rem; color: #7890a7; font: 600 .6rem "DM Mono",monospace; letter-spacing: .13em; }
+.portal-nav-group a { display: flex; align-items: center; gap: .8rem; min-height: 44px; padding: .7rem; border-left: 2px solid transparent; color: #b7c8d9; font-size: .78rem; transition: color .15s,background .15s,border-color .15s; }
+.portal-nav-group a span { color: #668099; font: .6rem "DM Mono",monospace; }
+.portal-nav-group a:hover { color: var(--white); background: #ffffff09; }
+.portal-nav-group a.active { border-left-color: var(--mint); color: var(--white); background: #ffffff0e; }
+.portal-nav-group a.active span { color: var(--mint); }
+.portal-account { display: grid; gap: .28rem; margin-top: auto; padding: 1rem; border: 1px solid #ffffff14; background: #ffffff08; overflow: hidden; }
+.portal-account > span { color: #7890a7; font: .58rem "DM Mono",monospace; letter-spacing: .12em; }
+.portal-account strong { margin-top: .2rem; color: var(--white); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-account small { color: #9db0c3; font-size: .67rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-account button { width: fit-content; margin-top: .65rem; border: 0; padding: 0; color: var(--mint); background: transparent; cursor: pointer; font: .65rem "DM Mono",monospace; }
+.portal-account button:disabled { opacity: .55; }
+.portal-menu { display: none; border: 0; color: var(--white); background: transparent; cursor: pointer; font-size: 1.25rem; }
+.portal-overlay { display: none; }
+
+.login-page { min-height: 100vh; color: var(--ink); background: var(--paper); }
+.login-shell { min-height: 100vh; display: grid; grid-template-columns: minmax(340px, .9fr) minmax(480px, 1.1fr); }
+.login-story { position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; padding: clamp(2rem,5vw,5rem); color: var(--white); background: linear-gradient(145deg,var(--dark),#0a3c74); }
+.login-story::after { content:""; position:absolute; right:-15rem; bottom:-12rem; width:38rem; height:38rem; border:1px solid #ffffff1a; border-radius:50%; box-shadow:0 0 0 7rem #ffffff07,0 0 0 14rem #ffffff04; }
+.login-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: .8rem; width: fit-content; font-weight: 700; }
+.login-brand span { width: 42px; height: 42px; display: grid; place-items:center; color:var(--dark); background:var(--mint); font:700 .76rem "DM Mono",monospace; }
+.login-brand b { color: var(--mint); }
+.login-message { position:relative; z-index:1; max-width: 590px; }
+.login-message p:first-child { color: var(--mint); font: .68rem "DM Mono",monospace; letter-spacing: .13em; }
+.login-message h1 { margin: 1rem 0 1.4rem; font-size: clamp(3rem,6vw,6rem); line-height: .94; letter-spacing: -.065em; }
+.login-message h1 em { color: var(--mint); font-style: normal; }
+.login-message > p:last-child { max-width: 520px; color: #b6c7d7; line-height: 1.8; }
+.login-company { position: relative; z-index:1; color:#91a9bf; font-size:.7rem; }
+.login-panel { display: grid; place-items: center; padding: 2rem; }
+.login-card { width: min(470px,100%); padding: clamp(1.7rem,4vw,3.2rem); border: 1px solid var(--line); background: var(--white); box-shadow: 0 28px 70px #102b4816; }
+.login-card .eyebrow { margin: 0; color: var(--green); }
+.login-card h2 { margin: .7rem 0 .55rem; font-size: clamp(2rem,4vw,2.8rem); letter-spacing: -.05em; }
+.login-intro { margin: 0 0 1.6rem; color:var(--muted); font-size:.84rem; line-height:1.6; }
+.auth-tabs { display:flex; margin-bottom:1.5rem; border-bottom:1px solid var(--line); }
+.auth-tabs button { flex:1; border:0; border-bottom:2px solid transparent; padding:.8rem; color:var(--muted); background:transparent; cursor:pointer; font-size:.78rem; font-weight:700; }
+.auth-tabs button.active { border-bottom-color:var(--green); color:var(--green); }
+.auth-form { display:grid; gap:1rem; }
+.auth-form label { display:grid; gap:.45rem; font-size:.73rem; font-weight:700; }
+.auth-form input { width:100%; border:1px solid #cbd6df; padding:.85rem .95rem; outline:none; background:#fbfcfd; }
+.auth-form input:focus { border-color:var(--green); box-shadow:0 0 0 3px #0062ad12; }
+.auth-form small { color:var(--muted); font-size:.67rem; line-height:1.5; font-weight:400; }
+.auth-form button[type="submit"] { min-height:47px; border:0; margin-top:.25rem; color:var(--dark); background:var(--mint); cursor:pointer; font-weight:800; }
+.auth-form button[type="submit"]:disabled { opacity:.55; cursor:wait; }
+.auth-error { min-height:1.2em; margin:0; color:#a14d34; font-size:.72rem; }
+.login-security { margin:1.4rem 0 0; padding-top:1.1rem; border-top:1px solid var(--line); color:var(--muted); font-size:.67rem; line-height:1.55; }
+
 @media (max-width: 1180px) {
   header nav { gap: .8rem; font-size: .7rem; }
 }
 
 @media (max-width: 760px) {
+  body.portal-ready { padding-left: 0; }
+  .portal-sidebar { transform: translateX(-105%); transition: transform .22s ease; }
+  .portal-menu-open .portal-sidebar { transform: translateX(0); }
+  .portal-overlay { position: fixed; inset: 0; z-index: 19; border: 0; background: #071f4399; }
+  .portal-menu-open .portal-overlay { display: block; }
+  .portal-menu { display: block; }
+  .portal-header { justify-content: flex-start; }
+  .portal-header .status { margin-left: auto; }
+  .login-shell { grid-template-columns: 1fr; }
+  .login-story { min-height: 330px; padding:2rem; }
+  .login-message h1 { font-size:3rem; }
+  .login-panel { padding:1.2rem; }
   .utility-bar span{display:none}.utility-bar{justify-content:flex-end}
   header nav { display: none; }
   .status { display: none; }
