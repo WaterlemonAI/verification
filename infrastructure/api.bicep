@@ -282,6 +282,11 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           keyVaultUrl: '${keyVaultUri}secrets/bsa-data-key'
           identity: runtimeIdentityResourceId
         }
+        {
+          name: 'platform-smtp-password'
+          keyVaultUrl: '${keyVaultUri}secrets/platform-smtp-password'
+          identity: runtimeIdentityResourceId
+        }
       ]
       ingress: {
         external: true
@@ -323,6 +328,11 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
             { name: 'AZURE_REGION_DISPLAY', value: 'Microsoft Azure UAE North' }
             { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
+            { name: 'APP_PUBLIC_BASE_URL', value: 'https://app.kycprobe.com' }
+            { name: 'PLATFORM_SMTP_HOST', value: 'smtpout.secureserver.net' }
+            { name: 'PLATFORM_SMTP_PORT', value: '465' }
+            { name: 'PLATFORM_SMTP_USER', value: 'notify@kycprobe.com' }
+            { name: 'PLATFORM_SMTP_PASSWORD', secretRef: 'platform-smtp-password' }
             { name: 'MERCHANT_SCREENSHOT_WORKER_URL', value: 'https://${merchantScreenshotWorker.properties.configuration.ingress.fqdn}' }
             { name: 'BSA_PRODUCTION_ENABLED', value: '1' }
             { name: 'BSA_DATA_KEY_HEX', secretRef: 'bsa-data-key' }

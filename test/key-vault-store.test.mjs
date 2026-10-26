@@ -52,6 +52,10 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
   const storedPortalUser = [...secrets.values()].find((item) => item.tags.kind === 'portal-user');
   assert.equal(storedPortalUser.value.includes(issued.apiKey), false);
   assert.equal(storedPortalUser.tags.clientId, issued.client.id);
+  const [portalSecretName, portalSecret] = [...secrets.entries()].find(([, item]) => item.tags.kind === 'portal-user');
+  secrets.set(portalSecretName, { ...portalSecret, value: JSON.stringify({ ...portalAccount, version: 2 }) });
+  assert.equal((await store.getPortalUser(portalAccount.email)).version, 1);
+  assert.equal((await store.getPortalUser(portalAccount.email, { fresh: true })).version, 2);
 
   await store.revokeClient(issued.client.id);
   assert.equal(await store.isClientKey(issued.apiKey), false);
