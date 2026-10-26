@@ -324,7 +324,18 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
       }
     }
     const logo = await fetchPublicLogo(request.customer_logo_url);
-    const narrative = await createAdverseMediaNarrative({ response, apiKey: aiApiKey, fetchImpl });
+    const narrativeKey = reportId ? `report-narrative:${reportId}` : '';
+    let narrative = narrativeKey && await reportStore.getDeepResearchComponent?.({
+      ownerId, screeningId: response.screening_id, componentKey: narrativeKey
+    });
+    if (!narrative) {
+      const reviewed = !response.coverage?.reason_codes?.includes('classification_incomplete');
+      narrative = await createAdverseMediaNarrative({ response,
+        apiKey: reviewed && response.results?.length ? aiApiKey : '', fetchImpl });
+      if (narrativeKey) await reportStore.saveDeepResearchComponent?.({
+        ownerId, screeningId: response.screening_id, componentKey: narrativeKey, value: narrative
+      });
+    }
     const report = await createAdverseMediaAuditPdf({ request, response, narrative, origin,
       ...(reportId ? { reportId } : {}), ...logo });
     const reportPath = `/service/adverse_media/reports/${report.reportId}.pdf`;

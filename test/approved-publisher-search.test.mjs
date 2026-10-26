@@ -320,6 +320,64 @@ test('identity scoring separates expanded full names from typo-like near matches
   assert.ok(near.results[0].risk_score < 0.9);
 });
 
+test('an individual middle initial is required and does not match a different full name', async () => {
+  const request = validateAdverseMediaRequest({ entity_type: 'individual', name: 'Alexander J Sterling', languages: ['en'] });
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      const result = { url: 'https://example.gov/jeffrey-sterling',
+        title: 'Jeffrey Alexander Sterling convicted',
+        description: 'Jeffrey Alexander Sterling was convicted in a criminal case.' };
+      return Response.json(url.pathname.includes('/news/') ? { results: [result] } : { web: { results: [result] } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+  const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
+  assert.equal(response.results.length, 0);
+});
+
+test('deep research waits for source retry exhaustion before one Gemini attempt', async () => {
+  const request = validateAdverseMediaRequest({ entity_type: 'business', name: 'Acme Quota Example', languages: ['en', 'ar'] });
+  const saved = new Map();
+  const checkpoint = {
+    get: async (key) => saved.get(key) ?? null,
+    save: async (key, value) => { if (!saved.has(key)) saved.set(key, value); }
+  };
+  let braveCalls = 0;
+  let geminiCalls = 0;
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      braveCalls += 1;
+      if (braveCalls === 1) return Response.json({ error: 'payment required' }, { status: 402 });
+      const result = { url: 'https://example.com/acme-case', title: 'Acme Quota Example charged with fraud',
+        description: 'Acme Quota Example was charged with fraud.' };
+      return Response.json(url.pathname.includes('/news/') ? { results: [result] } : { web: { results: [result] } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    if (url.hostname === 'generativelanguage.googleapis.com') {
+      geminiCalls += 1;
+      return Response.json({ error: 'quota exhausted' }, { status: 429 });
+    }
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+  const run = (sourceAttemptsExhausted) => screenAdverseMedia({ request, apiKey: 'test', aiApiKey: 'test',
+    fetchImpl, checkpoint, deferAiUntilSourcesComplete: true, sourceAttemptsExhausted });
+  const first = await run(false);
+  assert.equal(first.status, 'partial');
+  assert.equal(first.methodology.ai_classification.status, 'deferred');
+  assert.equal(geminiCalls, 0);
+  const paidCalls = braveCalls;
+  const final = await run(true);
+  assert.equal(final.status, 'partial');
+  assert.equal(geminiCalls, 1);
+  assert.equal(braveCalls, paidCalls);
+  await run(true);
+  assert.equal(geminiCalls, 1);
+  assert.equal(braveCalls, paidCalls);
+});
+
 test('identity scoring recognizes unsegmented CJK names inside headlines', async () => {
   const request = validateAdverseMediaRequest({ entity_type: 'business', name: '华信科技', languages: ['zh'] });
   const fetchImpl = async (input) => {

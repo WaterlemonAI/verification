@@ -109,6 +109,45 @@ test('deep-research finalization reuses one saved report after a retry', async (
   assert.equal(saves, 1);
 });
 
+test('a quota-failed classification cannot trigger another Gemini call for the PDF', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const partial = { ...response, status: 'partial',
+    coverage: { ...response.coverage, complete: false, reason_codes: ['classification_incomplete'] } };
+  const result = await finalizeAdverseMediaReport({ request, response: partial,
+    ownerId: 'synthetic-owner', reportId: 'b451b8db-9eaa-4a19-b99d-7f8970d4ef6a', aiApiKey: 'configured',
+    origin: { received_at: '2026-10-26T09:30:00.000Z', network_origin: '203.0.113.10',
+      processing_location: 'Microsoft Azure UAE North' },
+    fetchImpl: async () => { throw new Error('Gemini must not be called again'); }, reportStore: store });
+  assert.equal(result.report.transaction_id, partial.screening_id);
+});
+
+test('report storage retry reuses its saved narrative without another model call', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const originalSave = store.save.bind(store);
+  let saves = 0;
+  let modelCalls = 0;
+  store.save = async (value) => {
+    saves += 1;
+    if (saves === 1) throw new Error('synthetic_storage_failure');
+    return originalSave(value);
+  };
+  const input = { request, response, ownerId: 'synthetic-owner', aiApiKey: 'configured',
+    reportId: '44ef1995-3cd0-4b12-95af-eaa16959fd3f', reportStore: store,
+    origin: { received_at: '2026-10-26T09:30:00.000Z', network_origin: '203.0.113.10',
+      processing_location: 'Microsoft Azure UAE North' },
+    fetchImpl: async () => {
+      modelCalls += 1;
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        summary: 'One result requires review.', findings: ['A relevant result was found.'],
+        recommendations: ['Complete human review.']
+      }) }] } }] });
+    } };
+  await assert.rejects(() => finalizeAdverseMediaReport(input), /report_service_unavailable/);
+  const completed = await finalizeAdverseMediaReport(input);
+  assert.equal(completed.report.report_id, input.reportId);
+  assert.equal(modelCalls, 1);
+});
+
 test('provider component checkpoints survive a worker-store restart and are removed after completion', async () => {
   const blobs = new Map();
   const container = {
