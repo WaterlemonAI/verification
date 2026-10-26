@@ -47,7 +47,11 @@ def _public_https_target(raw_url: str) -> tuple[SplitResult, str]:
         raise CallbackDeliveryError("CALLBACK_DNS_FAILED") from error
     if any(not address.is_global for address in parsed_addresses):
         raise ValueError("INVALID_CALLBACK_URL")
-    return target, str(parsed_addresses[0])
+    # Container Apps currently provides reliable IPv4 egress for this worker.
+    # Prefer a validated public A record when a dual-stack callback also
+    # advertises AAAA; retain IPv6 as a fallback for IPv6-only endpoints.
+    selected = min(parsed_addresses, key=lambda address: (address.version != 4, str(address)))
+    return target, str(selected)
 
 
 class _PinnedHTTPSConnection(http.client.HTTPSConnection):
