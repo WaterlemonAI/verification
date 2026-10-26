@@ -109,6 +109,7 @@ test('failed callbacks reuse the saved screening and make zero additional Brave 
   let screenCalls = 0;
   let braveCalls = 0;
   let deliveries = 0;
+  const callbackTimestamps = [];
   let releases = 0;
   let controller;
   const message = messageFor(job);
@@ -134,16 +135,109 @@ test('failed callbacks reuse the saved screening and make zero additional Brave 
         return { status: 'completed', summary: { decision_eligible: true } };
       },
       finalize: async ({ response }) => ({ ...response, report: { report_id: 'saved-once' } }),
-      deliver: async () => { deliveries += 1; if (deliveries < 3) throw new Error('callback_failed_503'); }
+      deliver: async (deliveryJob) => {
+        deliveries += 1;
+        callbackTimestamps.push(deliveryJob.callback_completed_at);
+        if (deliveries < 3) throw new Error('callback_failed_503');
+      }
     });
   });
   await done;
   assert.equal(screenCalls, 1);
   assert.equal(braveCalls, 2);
   assert.equal(deliveries, 3);
+  assert.equal(new Set(callbackTimestamps).size, 1);
   assert.equal(releases, 2);
   assert.equal((await resultStore.getDeepResearchUsage({ ownerId: job.owner_id, screeningId: job.screening_id })).providerCalls.brave, 2);
-  assert.equal(await resultStore.getDeepResearchState({ ownerId: job.owner_id, screeningId: job.screening_id }), null);
+  const terminal = await resultStore.getDeepResearchState({ ownerId: job.owner_id, screeningId: job.screening_id });
+  assert.equal(terminal.stage, 'delivered');
+  assert.equal(terminal.response, undefined);
+});
+
+test('incomplete screening retries missing components and sends one final callback', async () => {
+  const job = makeDeepResearchJob(request, { owner_id: 'synthetic-owner' });
+  const resultStore = new MemoryAdverseMediaReportStore();
+  const message = messageFor(job);
+  let available = true;
+  let dequeueCount = 0;
+  let screenCalls = 0;
+  let braveCalls = 0;
+  let deliveries = 0;
+  let deliveredResult;
+  let controller;
+  const done = new Promise((resolve) => {
+    controller = startDeepResearchWorker({
+      queue: {
+        async receive() {
+          if (!available) return null;
+          available = false;
+          message.dequeueCount = ++dequeueCount;
+          return message;
+        },
+        async release(_message, nextJob) { message.messageText = JSON.stringify(nextJob); available = true; },
+        async complete() { controller.stop(); setImmediate(resolve); }
+      },
+      resultStore,
+      store: { getMasterKey: async () => 'configured' },
+      screen: async ({ checkpoint }) => {
+        screenCalls += 1;
+        if (!await checkpoint.get('brave:successful-query')) {
+          braveCalls += 1;
+          await checkpoint.save('brave:successful-query', { results: [{ url: 'https://example.com/article' }] });
+        }
+        return { status: screenCalls === 1 ? 'partial' : 'completed', coverage: { complete: screenCalls > 1 } };
+      },
+      deliver: async (_job, result) => { deliveries += 1; deliveredResult = result; }
+    });
+  });
+  await done;
+  assert.equal(screenCalls, 2);
+  assert.equal(braveCalls, 1);
+  assert.equal(deliveries, 1);
+  assert.equal(deliveredResult.status, 'completed');
+  assert.equal(await resultStore.getDeepResearchComponent({ ownerId: job.owner_id,
+    screeningId: job.screening_id, componentKey: 'brave:successful-query' }), null);
+});
+
+test('unavailable components produce one final partial callback after bounded retries', async () => {
+  const job = makeDeepResearchJob(request, { owner_id: 'synthetic-owner' });
+  const resultStore = new MemoryAdverseMediaReportStore();
+  const message = messageFor(job);
+  let available = true;
+  let attempts = 0;
+  let deliveries = 0;
+  let finalResult;
+  let controller;
+  const done = new Promise((resolve) => {
+    controller = startDeepResearchWorker({
+      queue: {
+        async receive() {
+          if (!available) return null;
+          available = false;
+          message.dequeueCount = ++attempts;
+          return message;
+        },
+        async release(_message, nextJob) { message.messageText = JSON.stringify(nextJob); available = true; },
+        async complete() { controller.stop(); resolve(); }
+      },
+      resultStore,
+      store: { getMasterKey: async () => 'configured' },
+      screen: async ({ checkpoint }) => {
+        if (!await checkpoint.get('brave:completed-query')) {
+          await checkpoint.save('brave:completed-query', { results: [{ url: 'https://example.com/article' }] });
+        }
+        return { status: 'partial', coverage: { complete: false },
+          summary: { decision_eligible: false }, results: [{ url: 'https://example.com/article' }] };
+      },
+      deliver: async (_job, result) => { deliveries += 1; finalResult = result; }
+    });
+  });
+  await done;
+  assert.equal(attempts, 2);
+  assert.equal(deliveries, 1);
+  assert.equal(finalResult.status, 'partial');
+  assert.equal(finalResult.summary.decision_eligible, false);
+  assert.equal(finalResult.results.length, 1);
 });
 
 test('callback attempts are bounded and exhausted jobs move to the dead-letter queue', async () => {
@@ -220,6 +314,31 @@ test('queue acknowledgement retry does not redeliver a completed callback or rer
   assert.equal(screenings, 1);
   assert.equal(deliveries, 1);
   assert.equal(acknowledgements, 2);
+});
+
+test('a late duplicate receipt sees the delivered tombstone and makes no provider or callback call', async () => {
+  const job = makeDeepResearchJob(request, { owner_id: 'synthetic-owner' });
+  const resultStore = new MemoryAdverseMediaReportStore();
+  await resultStore.saveDeepResearchState({ ownerId: job.owner_id, screeningId: job.screening_id,
+    state: { stage: 'delivered', report_id: job.report_id, delivered_at: '2026-10-27T00:00:00.000Z' } });
+  let screened = false;
+  let delivered = false;
+  let controller;
+  const done = new Promise((resolve) => {
+    controller = startDeepResearchWorker({
+      queue: {
+        receive: async () => messageFor(job),
+        complete: async () => { controller.stop(); resolve(); }
+      },
+      resultStore,
+      store: { getMasterKey: async () => 'configured' },
+      screen: async () => { screened = true; },
+      deliver: async () => { delivered = true; }
+    });
+  });
+  await done;
+  assert.equal(screened, false);
+  assert.equal(delivered, false);
 });
 
 test('report-finalization failures retry from saved screening and are dead-lettered after three attempts', async () => {

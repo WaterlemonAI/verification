@@ -16,11 +16,12 @@ At the owner's direction, `ADVERSE_MEDIA_QUEUE_URL` was removed only from Contai
 
 Branch `codex/adverse-retry-containment` is based directly on deployed main commit `8383894`; it is separate from the broader P0 draft. The candidate:
 
-1. Persists the presented screening after search, then persists the finalized PDF response. Callback retries load the saved result and never rerun search or report creation.
-2. Reserves paid Brave/Gemini cost in an Azure Table row keyed by owner and screening ID **before** each provider call, with ETag concurrency control and a lifetime USD 0.14 provider cap per job. Failed provider calls consume the reservation.
-3. Bounds screening, finalization, callback and total dequeue attempts; exhausted jobs go to a dedicated private dead-letter queue. Legacy version-1 jobs are quarantined without provider calls if the worker is eventually re-enabled.
-4. Logs screening ID, queue message ID, dequeue count, failure stage/code and provider-attempt counts, excluding subject, callback URL, payload and credentials.
-5. Adds an explicit deployment flag defaulting to paused. The worker and new deep-research submissions remain disabled until old messages are inspected and an operator deliberately enables it.
+1. Checkpoints each successful Brave query and completed archive/AI step separately. If coverage is incomplete, only missing steps run on the one bounded screening retry. The final callback is sent once after processing, with available results and an explicitly ineligible `partial` status if coverage remains incomplete. A non-retryable Brave HTTP 4xx is recorded without redialing during the retry.
+2. Persists the presented screening after search, then persists the finalized PDF response. Callback retries load the saved result and never rerun search or report creation. Each job has one fixed report ID; finalization first checks for the existing public report before regenerating it. Callback retries use a stable event ID and completion timestamp. A small delivered tombstone remains after queue acknowledgement so a late duplicate receipt cannot rerun providers.
+3. Reserves paid Brave/Gemini cost in an Azure Table row keyed by owner and screening ID **before** each provider call, with ETag concurrency control and a lifetime USD 0.14 provider cap per job. Failed provider calls consume the reservation.
+4. Bounds screening, finalization, callback and total dequeue attempts; exhausted jobs go to a dedicated private dead-letter queue. Legacy version-1 jobs are quarantined without provider calls if the worker is eventually re-enabled.
+5. Logs screening ID, queue message ID, dequeue count, failure stage/code and provider-attempt counts, excluding subject, callback URL, payload and credentials.
+6. Adds an explicit deployment flag defaulting to paused. The worker and new deep-research submissions remain disabled until old messages are inspected and an operator deliberately enables it.
 
 The synthetic callback-failure test forces two delivery failures and then success: one screening, two Brave attempts total, **zero additional Brave attempts** during delivery retries. Separate tests cover the lifetime cap across restarted guards and concurrent Azure Table reservations.
 

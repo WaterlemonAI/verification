@@ -62,7 +62,7 @@
               <div><strong>search_plus</strong><span>boolean · optional</span><p>Actively submits site-restricted searches for selected high-value publishers, prioritising requested countries, and consolidates the results with standard evidence.</p></div>
               <div><strong>max_results</strong><span>integer · optional</span><p>One to 50 results. Default: 25.</p></div>
               <div><strong>deep_research</strong><span>boolean · optional</span><p>Enables asynchronous screening and the optional callback workflow.</p></div>
-              <div><strong>callback_url</strong><span>HTTPS URI · optional</span><p>Available only with deep research. The signed final result is posted to this public URL. Partial results remain explicitly inconclusive and require review.</p></div>
+              <div><strong>callback_url</strong><span>HTTPS URI · optional</span><p>Available only with deep research. AI7 retries missing screening sources, then posts one signed final result to this public URL. The screening ID is the stable callback event ID for deduplication. Partial results retain available evidence but remain inconclusive and require review.</p></div>
               <div><strong>customer_logo_url</strong><span>HTTPS URI · optional</span><p>PNG or JPEG logo shown on the automatically generated audit PDF. The PDF is permanently retained and returned through an unguessable public capability URL.</p></div>
             </div>
             <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
@@ -73,6 +73,7 @@
             <p class="label">RESPONSE</p>
             <h2>Customer-ready evidence</h2>
             <p>Every retained result includes its original URL, evidence excerpt, risk category, legal stage, and combined risk score. Internal search, model, cost, and scoring diagnostics are never returned.</p>
+            <p>With deep research and a callback URL, the initial response is HTTP <code>202</code>. The final callback is sent once after bounded processing, with <code>event_id</code>, <code>screening_id</code>, <code>completed_at</code>, and <code>data</code>. Verify <code>x-ai7-signature</code> against the raw body and deduplicate delivery retries using <code>x-ai7-event-id</code>. If a source remains unavailable, <code>data.status</code> is <code>partial</code> and <code>data.summary.decision_eligible</code> is false.</p>
             <div class="schema-table" aria-label="Adverse media response fields">
               <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
               <div><code>screening_id</code><span>UUID</span><span>Unique screening reference.</span></div>
