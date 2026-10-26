@@ -139,6 +139,41 @@ test('Signzy data-leak coverage targets MediaNama and retains the exact cyber in
   assert.ok(queries.some((query) => query.includes('"data breach"') || query.includes('"data leak"')));
 });
 
+test('corporate event vocabulary detects misconduct, founder disputes, layoffs, and financial distress', async () => {
+  const queries = [];
+  const request = validateAdverseMediaRequest({
+    entity_type: 'business', name: 'Acme Holdings', countries: ['US'], languages: ['en'], max_results: 20
+  });
+  const evidence = [
+    ['accounting', 'Acme Holdings faces accounting fraud allegations over falsified accounts'],
+    ['founders', "Acme Holdings founder's breakup triggers a boardroom battle"],
+    ['layoffs', 'Acme Holdings announces mass layoffs and workforce reduction'],
+    ['liquidity', 'Acme Holdings misses debt payment amid liquidity crisis and cash crunch']
+  ].map(([slug, title]) => ({
+    url: `https://business.example/${slug}`,
+    title,
+    description: title,
+    page_age: '2026-10-20T10:00:00Z'
+  }));
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      queries.push(url.searchParams.get('q'));
+      return Response.json(url.pathname.includes('/news/') ? { results: evidence } : { web: { results: evidence } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+
+  const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
+  const categoriesBySlug = Object.fromEntries(response.results.map((result) => [result.url.split('/').at(-1), result.categories]));
+  assert.ok(categoriesBySlug.accounting.includes('corporate_misconduct'));
+  assert.ok(categoriesBySlug.founders.includes('governance_and_leadership_dispute'));
+  assert.ok(categoriesBySlug.layoffs.includes('workforce_and_restructuring'));
+  assert.ok(categoriesBySlug.liquidity.includes('financial_distress'));
+  assert.ok(queries.some((query) => query.includes('"founder dispute"') && query.includes('"layoffs"') && query.includes('"debt default"')));
+});
+
 test('association discovery runs when a supplied alias contains the full name', async () => {
   const queries = [];
   const request = validateAdverseMediaRequest({
