@@ -261,7 +261,7 @@
     <dialog id="usage-dialog" class="wide-dialog">
       <form id="usage-form">
         <div class="dialog-head"><div><p class="eyebrow">CUSTOMER BILLING</p><h2 id="usage-title">Modules and usage</h2></div><button type="button" class="close" data-close="usage-dialog">×</button></div>
-        <p class="notice">Each admitted API hit is charged once, including provider errors. Rejected access, insufficient credit and wrong methods cost zero. Forms charge the Form rate and each selected API rate on submission.</p>
+        <p class="notice">Credit is reserved when a call is admitted. HTTP 4xx/5xx results and Form queue failures are refunded with an audit entry. A queued Form keeps its orchestration rate; selected APIs without an HTTP 2xx result are refunded after processing. Tier hit counts track admitted attempts, including refunded calls.</p>
         <input name="workspace_id" type="hidden" />
         <div class="grid two"><label>Billing mode<select name="mode"><option value="prepaid">Prepaid · stop when credit is insufficient</option><option value="postpay">Postpay · unlimited usage</option></select></label><label>Currency<select name="currency"><option value="USD">USD</option><option value="AED">AED</option></select></label></div>
         <div class="usage-summary" id="usage-summary"></div>
@@ -272,6 +272,7 @@
         <div class="actions"><button type="button" class="secondary" data-close="usage-dialog">Cancel</button><button type="submit">Save access and rates</button></div>
       </form>
       <form id="credit-form" class="usage-credit"><label>Add prepaid credit<input name="amount" inputmode="decimal" placeholder="100.00" required /></label><button type="submit">Add credit</button><p id="credit-message" role="status"></p></form>
+      <h3>Credit adjustments</h3><div class="usage-table-wrap"><table class="usage-table"><thead><tr><th>UTC time</th><th>Adjustment ID</th><th>Amount</th><th>Actor</th><th>Reason / transaction</th></tr></thead><tbody id="admin-credit-logs"></tbody></table></div>
       <h3>Recent API transactions</h3><div class="usage-table-wrap"><table class="usage-table"><thead><tr><th>UTC time</th><th>Transaction ID</th><th>Module</th><th>HTTP</th><th>Cost</th></tr></thead><tbody id="admin-usage-logs"></tbody></table></div>
     </dialog>
 

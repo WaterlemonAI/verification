@@ -45,6 +45,12 @@ param appCertificateId string = ''
 @description('Name of the API Container App.')
 param containerAppName string = 'ca-ai7uae-api'
 
+@description('Dedicated AI7 UAE Log Analytics workspace used by Container Apps.')
+param logAnalyticsWorkspaceName string = 'log-ai7uae-web-uaen-001'
+
+@description('Operations mailbox for API availability alerts.')
+param apiAlertEmail string = 'notify@kycprobe.com'
+
 @description('Name of the isolated merchant screenshot worker Container App.')
 param merchantScreenshotWorkerName string = 'ca-ai7uae-merchant-screenshot'
 
@@ -388,6 +394,91 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       ]
       scale: { minReplicas: 1, maxReplicas: 3 }
     }
+  }
+}
+
+resource apiLogWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
+  name: logAnalyticsWorkspaceName
+}
+
+resource apiAlerts 'Microsoft.Insights/actionGroups@2023-01-01' = {
+  name: 'ag-ai7uae-api-uaen-001'
+  location: 'global'
+  properties: {
+    enabled: true
+    groupShortName: 'AI7UAEAPI'
+    emailReceivers: [
+      {
+        name: 'KYCProbe operations'
+        emailAddress: apiAlertEmail
+        useCommonAlertSchema: true
+      }
+    ]
+  }
+}
+
+resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-ai7uae-api-sustained-5xx'
+  location: 'global'
+  properties: {
+    description: 'Five or more API HTTP 5xx responses in five minutes.'
+    severity: 2
+    enabled: true
+    scopes: [ api.id ]
+    evaluationFrequency: 'PT1M'
+    windowSize: 'PT5M'
+    autoMitigate: true
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'Api5xx'
+          criterionType: 'StaticThresholdCriterion'
+          metricName: 'Requests'
+          metricNamespace: 'Microsoft.App/containerApps'
+          timeAggregation: 'Total'
+          operator: 'GreaterThanOrEqual'
+          threshold: 5
+          dimensions: [
+            {
+              name: 'statuscodecategory'
+              operator: 'Include'
+              values: [ '5xx' ]
+            }
+          ]
+        }
+      ]
+    }
+    actions: [ { actionGroupId: apiAlerts.id } ]
+  }
+}
+
+resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = {
+  name: 'alert-ai7uae-adverse-source-failures'
+  location: location
+  kind: 'LogAlert'
+  properties: {
+    description: 'Three or more adverse-media all-source failures in five minutes.'
+    displayName: 'AI7 UAE adverse-media sources unavailable'
+    severity: 2
+    enabled: true
+    scopes: [ apiLogWorkspace.id ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: 'ContainerAppConsoleLogs_CL | where ContainerAppName_s == "${containerAppName}" and Log_s has "adverse_media_search_unavailable" | summarize failed = count()'
+          metricMeasureColumn: 'failed'
+          timeAggregation: 'Total'
+          operator: 'GreaterThanOrEqual'
+          threshold: 3
+          failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
+        }
+      ]
+    }
+    actions: { actionGroups: [ apiAlerts.id ] }
   }
 }
 

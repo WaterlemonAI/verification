@@ -65,7 +65,8 @@
     const modules = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/forms': 'forms' };
     sidebar.querySelectorAll('a[data-path]').forEach((link) => {
       const module = modules[link.dataset.path];
-      if (module && !entitlements.allowed_modules.includes('*') && !entitlements.allowed_modules.includes(module)) link.remove();
+      if (module && ((!entitlements.allowed_modules.includes('*') && !entitlements.allowed_modules.includes(module))
+        || (Array.isArray(entitlements.available_modules) && !entitlements.available_modules.includes(module)))) link.remove();
     });
     document.body.prepend(sidebar);
 

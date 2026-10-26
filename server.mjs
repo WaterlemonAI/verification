@@ -106,7 +106,7 @@ function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, trans
     called = true;
     const status = this.statusCode;
     const operation = billable
-      ? usageStore.complete(workspaceId, logKey, status)
+      ? usageStore.complete(workspaceId, logKey, status, this.ai7BillingReason || '')
       : usageStore.record(workspaceId, { ...details, transactionId }, status);
     let timer;
     Promise.race([operation, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('usage_log_timeout')), 5000); timer.unref?.(); })])
@@ -116,7 +116,7 @@ function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, trans
   };
 }
 
-async function gateCustomerApi(req, res, url, store, usageStore, transactionId) {
+async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, transactionId) {
   const route = await classifyCustomerApi(req, url, store);
   if (!route) return true;
   const token = bearerToken(req);
@@ -134,12 +134,24 @@ async function gateCustomerApi(req, res, url, store, usageStore, transactionId) 
     json(res, 405, { status: 'Error', error: `Method must be ${route.method}.` }, { allow: route.method });
     return false;
   }
+  const formMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
+  if (formMatch && route.billable) {
+    const prepared = await prepareFormSubmission(req, formMatch[1], store, formsQueue);
+    if (prepared.status) {
+      await usageStore.record(workspaceId, details, prepared.status);
+      json(res, prepared.status, { status: 'Error', error: prepared.error });
+      return false;
+    }
+    req.ai7PreparedForm = prepared;
+  }
   if (route.billable) {
     const admission = await usageStore.admit(workspaceId, details, managed);
     if (!admission.allowed) {
       json(res, admission.statusCode, { status: 'Error', error: admission.reason });
       return false;
     }
+    req.ai7Usage = { workspaceId, logKey: admission.logKey };
+    if (req.ai7PreparedForm) req.ai7PreparedForm.job.billing.log_key = admission.logKey;
     completeUsageBeforeResponse(res, usageStore, workspaceId, admission.logKey, transactionId, details, true);
   } else {
     const profile = await usageStore.account(workspaceId, managed);
@@ -376,13 +388,20 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     });
     return json(res, 200, response);
   } catch (error) {
+    if (error.message === 'search_provider_unavailable') {
+      console.warn('adverse_media_search_unavailable', JSON.stringify({
+        transaction_id: res.getHeader('x-ai7-transaction-id'),
+        source_failures: error.sourceFailures || {}
+      }));
+    }
     if (error.statusCode === 400 || (!error.statusCode && error.message !== 'search_provider_unavailable')) {
       return json(res, 400, { status: 'Error', error: error.message || 'The request is invalid.' });
     }
     if (String(error.message || '').startsWith('report_') || /Blob|Table|storage/i.test(String(error.message || ''))) {
       return json(res, 503, { status: 'Error', error: 'The screening report service is temporarily unavailable. Please try again shortly.' });
     }
-    return json(res, 502, { status: 'Error', error: 'The media search service is temporarily unavailable. Please try again shortly.' });
+    return json(res, 502, { status: 'Error', reason_code: 'SEARCH_SOURCES_UNAVAILABLE',
+      error: 'The media search service is temporarily unavailable. Please try again shortly.' });
   }
 }
 
@@ -947,33 +966,36 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
   return result;
 }
 
-async function submitForm(req, res, formId, store, formsQueue) {
-  const token = bearerToken(req);
-  if (!req.ai7Client && !(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
-  if (!formsQueue) return json(res, 503, { status: 'Error', error: 'Forms processing is temporarily unavailable.' });
+async function prepareFormSubmission(req, formId, store, formsQueue) {
+  if (!formsQueue) return { status: 503, error: 'Forms processing is temporarily unavailable.' };
   const form = await store.getForm(formId);
-  if (!form || !form.enabled) return json(res, 404, { status: 'Error', error: 'Form was not found.' });
-  let job;
+  if (!form || !form.enabled) return { status: 404, error: 'Form was not found.' };
   try {
     const submission = validateFormSubmission(form, await readJson(req, 64 * 1024));
     await validateFormsCallbackUrl(submission.callback_url);
     if (submission.customer_logo_url) await validateFormsCallbackUrl(submission.customer_logo_url);
-    job = makeFormsJob({
-      form,
-      submission,
-      ownerId: reportOwnerId(token),
-      origin: requestOrigin(req)
-    });
+    const job = makeFormsJob({ form, submission, ownerId: reportOwnerId(bearerToken(req)), origin: requestOrigin(req),
+      billing: { workspace_id: req.ai7Client?.id || '', log_key: '0'.repeat(80) } });
+    return { form, submission, job };
   } catch (error) {
     const reason = String(error.message || '');
-    if (reason === 'callback_url_required') return json(res, 400, { status: 'Error', error: 'A public HTTPS callback_url is required.' });
-    if (reason.startsWith('callback_url_')) return json(res, 400, { status: 'Error', error: 'callback_url and customer_logo_url must be public HTTPS URLs.' });
-    if (reason === 'form_submission_too_large') return json(res, 400, { status: 'Error', error: 'The mapped Form submission is too large for asynchronous processing.' });
-    return json(res, 400, { status: 'Error', error: reason || 'The Form submission is invalid.' });
+    if (reason === 'callback_url_required') return { status: 400, error: 'A public HTTPS callback_url is required.' };
+    if (reason.startsWith('callback_url_')) return { status: 400, error: 'callback_url and customer_logo_url must be public HTTPS URLs.' };
+    if (reason === 'form_submission_too_large') return { status: 400, error: 'The mapped Form submission is too large for asynchronous processing.' };
+    return { status: 400, error: reason || 'The Form submission is invalid.' };
   }
+}
+
+async function submitForm(req, res, formId, store, formsQueue) {
+  const token = bearerToken(req);
+  if (!req.ai7Client && !(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  const prepared = req.ai7PreparedForm || await prepareFormSubmission(req, formId, store, formsQueue);
+  if (prepared.status) return json(res, prepared.status, { status: 'Error', error: prepared.error });
+  const { form, job } = prepared;
   try {
     await formsQueue.enqueue(job);
   } catch {
+    res.ai7BillingReason = 'form_queue_failed';
     return json(res, 503, { status: 'Error', error: 'Forms processing is temporarily unavailable.' });
   }
   return json(res, 202, {
@@ -1222,7 +1244,9 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
     const managed = Boolean((await store.getCustomer?.(account.client_id))?.usagePolicyVersion);
     const usage = await usageStore.account(account.client_id, managed);
     return json(res, 200, url.pathname.endsWith('/entitlements')
-      ? { allowed_modules: usage.allowed_modules, mode: usage.mode, balance: usage.balance, currency: usage.currency }
+      ? { allowed_modules: usage.allowed_modules,
+          available_modules: moduleCatalog(await store.listIntegrations({ publicOnly: true })).filter((module) => module.available).map((module) => module.id),
+          mode: usage.mode, balance: usage.balance, currency: usage.currency }
       : { account: usage, logs: await usageStore.logs(account.client_id, 100) });
   }
 
@@ -1379,7 +1403,7 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
     const managed = Boolean(customer?.usagePolicyVersion);
     try {
       if (req.method === 'GET' && usageMatch[2] === 'usage') {
-        return json(res, 200, { account: await usageStore.account(workspaceId, managed), logs: await usageStore.logs(workspaceId, 100) });
+        return json(res, 200, { account: await usageStore.account(workspaceId, managed), logs: await usageStore.logs(workspaceId, 100), credits: await usageStore.credits(workspaceId, 100) });
       }
       if (req.method === 'PUT' && usageMatch[2] === 'usage') {
         const policy = validateUsagePolicy(await readJson(req), new Set(moduleCatalog(await store.listIntegrations({ publicOnly: true })).map((item) => item.id)));
@@ -1388,7 +1412,11 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
       if (req.method === 'POST' && usageMatch[2] === 'credit') {
         const amount = moneyMicros((await readJson(req)).amount);
         if (amount <= 0) return json(res, 400, { status: 'Error', error: 'Credit amount must be greater than zero.' });
-        return json(res, 200, { account: await usageStore.addCredit(workspaceId, amount, managed) });
+        const idempotencyKey = String(req.headers['idempotency-key'] || '');
+        if (idempotencyKey && !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+          return json(res, 400, { status: 'Error', error: 'Invalid Idempotency-Key header.' });
+        }
+        return json(res, 200, { account: await usageStore.addCredit(workspaceId, amount, managed, { idempotencyKey, actor: access.account?.email || 'legacy-admin' }) });
       }
     } catch (error) {
       return json(res, error.statusCode || 400, { status: 'Error', error: error.message === 'usage_meter_unavailable' ? 'Usage meter is unavailable.' : error.message });
@@ -1758,6 +1786,9 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     startFormsWorker({
       queue: formsQueue,
       execute: (job) => executeFormsJob({ job, store, fetchImpl, merchantScreener, reportStore }),
+      onResult: (job, result) => job.billing?.workspace_id && job.billing?.log_key
+        ? usageStore.settleFormResult(job.billing.workspace_id, job.billing.log_key, result.services)
+        : undefined,
       resultStore: reportStore
     });
   }
@@ -1770,7 +1801,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     if (transactionId) res.setHeader('x-ai7-transaction-id', transactionId);
 
     try {
-      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, transactionId))) return;
+      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, transactionId))) return;
       if (url.pathname === '/healthz') {
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
         return res.end('ok\n');
@@ -1831,15 +1862,19 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (url.pathname === '/catalog.json') {
         const { account, session } = await currentPortalSession(req, store);
         const usage = session ? await usageStore.account(account.client_id, Boolean((await store.getCustomer?.(account.client_id))?.usagePolicyVersion)) : null;
-        const integrations = (await store.listIntegrations({ publicOnly: true })).filter((item) => !usage || usage.allowed_modules.includes('*') || usage.allowed_modules.includes(item.id));
+        const integrations = (await store.listIntegrations({ publicOnly: true })).filter((item) => item.enabled !== false
+          && (!usage || usage.allowed_modules.includes('*') || usage.allowed_modules.includes(item.id)));
         return json(res, 200, { integrations }, { 'cache-control': 'no-store' });
       }
       if (url.pathname === '/forms.json') {
         const integrations = await store.listIntegrations({ publicOnly: true });
+        const availableIntegrations = new Set(integrations.filter((item) => item.enabled !== false).map((item) => item.id));
         const { account, session } = await currentPortalSession(req, store);
         const usage = session ? await usageStore.account(account.client_id, Boolean((await store.getCustomer?.(account.client_id))?.usagePolicyVersion)) : null;
         const allowed = usage?.allowed_modules || [];
-        const forms = (await store.listForms()).filter((form) => form.enabled && (!session || ['forms', ...form.services.map((item) => item.service_id)].every((id) => allowed.includes('*') || allowed.includes(id))))
+        const forms = (await store.listForms()).filter((form) => form.enabled
+          && form.services.every((service) => availableIntegrations.has(service.service_id))
+          && (!session || ['forms', ...form.services.map((item) => item.service_id)].every((id) => allowed.includes('*') || allowed.includes(id))))
           .map((form) => publicFormDefinition(form, integrations));
         return json(res, 200, { forms }, { 'cache-control': 'public, max-age=60' });
       }

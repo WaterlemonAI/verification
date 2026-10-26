@@ -377,15 +377,34 @@ async function openUsageDialog(customer) {
   const body = byId('admin-usage-logs'); body.replaceChildren();
   for (const log of data.logs) {
     const tr = document.createElement('tr');
-    for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', `${data.account.currency} ${log.cost}`]) {
+    const cost = `${data.account.currency} ${log.cost}${log.refund_amount && log.refund_amount !== '0.000000' ? ` · refunded ${log.refund_amount}` : ''}`;
+    for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', cost]) {
       const td = document.createElement('td'); td.textContent = value; tr.append(td);
     }
     body.append(tr);
   }
   if (!data.logs.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 5; td.textContent = 'No API calls logged yet.'; tr.append(td); body.append(tr); }
+  renderCreditLogs(data.credits || []);
   byId('usage-dialog').showModal();
 }
 
+function renderCreditLogs(credits) {
+  const body = byId('admin-credit-logs'); body.replaceChildren();
+  for (const credit of credits) {
+    const tr = document.createElement('tr');
+    for (const value of [credit.credited_at, credit.id, `${credit.currency} ${credit.amount}`, credit.actor || 'Unknown',
+      credit.kind === 'refund' ? `${credit.reason || 'Refund'} · ${credit.related_transaction_id || ''}` : 'Manual credit']) {
+      const td = document.createElement('td'); td.textContent = value; tr.append(td);
+    }
+    body.append(tr);
+  }
+  if (!credits.length) {
+    const tr = document.createElement('tr'); const td = document.createElement('td');
+    td.colSpan = 5; td.textContent = 'No credit adjustments yet.'; tr.append(td); body.append(tr);
+  }
+}
+
+let pendingCreditRequest = null;
 byId('usage-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -403,13 +422,29 @@ byId('usage-form').addEventListener('submit', async (event) => {
 byId('credit-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
+  const button = form.querySelector('button[type="submit"]');
+  if (button.disabled) return;
+  button.disabled = true;
   byId('credit-message').textContent = '';
   try {
     const id = byId('usage-form').elements.workspace_id.value;
-    const data = await request(`/admin/api/customers/${id}/credit`, { method: 'POST', body: JSON.stringify({ amount: form.elements.amount.value }) });
+    const amount = form.elements.amount.value;
+    if (!pendingCreditRequest || pendingCreditRequest.workspaceId !== id || pendingCreditRequest.amount !== amount) {
+      pendingCreditRequest = { workspaceId: id, amount, idempotencyKey: crypto.randomUUID() };
+    }
+    const data = await request(`/admin/api/customers/${id}/credit`, { method: 'POST', headers: { 'Idempotency-Key': pendingCreditRequest.idempotencyKey }, body: JSON.stringify({ amount }) });
+    pendingCreditRequest = null;
+    byId('usage-summary').textContent = `${data.account.mode === 'postpay' ? 'Unlimited postpay' : `Credit ${data.account.currency} ${data.account.balance}`} · ${data.account.charged_calls} charged calls · total cost ${data.account.currency} ${data.account.spent}`;
     byId('credit-message').textContent = `Credit added. New balance: ${data.account.currency} ${data.account.balance}`;
     form.reset();
+    try {
+      const latest = await request(`/admin/api/customers/${id}/usage`);
+      renderCreditLogs(latest.credits || []);
+    } catch {
+      byId('credit-message').textContent += ' Audit history could not refresh; reopen this dialog to review it.';
+    }
   } catch (error) { byId('credit-message').textContent = error.message; }
+  finally { button.disabled = false; }
 });
 
 async function loadClients() {
@@ -502,14 +537,15 @@ byId('forgot-form').addEventListener('submit', async (event) => {
 });
 byId('reset-admin-form').addEventListener('submit', async (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   const password = byId('reset-admin-password').value;
   if (password !== byId('reset-admin-confirm').value) { byId('reset-admin-message').textContent = 'Passwords do not match.'; return; }
-  const button = event.currentTarget.querySelector('button[type=submit]');
+  const button = form.querySelector('button[type=submit]');
   button.disabled = true;
   try {
     const token = new URLSearchParams(location.search).get('reset');
     const result = await request('/admin/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
-    event.currentTarget.reset();
+    form.reset();
     history.replaceState(null, '', '/admin');
     byId('reset-card').hidden = true;
     byId('signin-card').hidden = false;

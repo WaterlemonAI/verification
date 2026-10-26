@@ -81,10 +81,16 @@
   });
   loginForm.addEventListener('submit', (event) => {
     event.preventDefault();
+    const email = document.getElementById('login-email');
+    const password = document.getElementById('login-password');
+    const error = document.getElementById('login-error');
+    if (!email.value.trim()) { error.textContent = 'Enter your email address.'; email.focus(); return; }
+    if (!email.validity.valid) { error.textContent = 'Enter a valid email address.'; email.focus(); return; }
+    if (!password.value) { error.textContent = 'Enter your password.'; password.focus(); return; }
     submit(loginForm, '/portal/api/auth/login', {
-      email: document.getElementById('login-email').value,
-      password: document.getElementById('login-password').value
-    }, document.getElementById('login-error'));
+      email: email.value.trim(),
+      password: password.value
+    }, error);
   });
   inviteForm.addEventListener('submit', async (event) => {
     event.preventDefault();

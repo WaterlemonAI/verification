@@ -73,7 +73,8 @@
       const body = byId('usage-rows'); body.replaceChildren();
       for (const log of logs) {
         const row = document.createElement('tr');
-        for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', `${account.currency} ${log.cost}`]) {
+        const cost = `${account.currency} ${log.cost}${log.refund_amount && log.refund_amount !== '0.000000' ? ` · refunded ${log.refund_amount}` : ''}`;
+        for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', cost]) {
           const cell = document.createElement('td'); cell.textContent = value; row.append(cell);
         }
         body.append(row);
@@ -83,10 +84,16 @@
   }
 
   byId('create-key-form').addEventListener('submit', async (event) => {
-    event.preventDefault(); const button = event.currentTarget.querySelector('button'); button.disabled = true;
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button');
+    button.disabled = true;
     byId('account-message').textContent = '';
     try { const result = await request('/portal/api/keys', { method: 'POST', body: JSON.stringify({ label: byId('key-label').value }) });
-      showNewKey(result.api_key); event.currentTarget.reset(); await loadKeys(); }
+      showNewKey(result.api_key); form.reset();
+      try { await loadKeys(); }
+      catch { byId('account-message').textContent = 'Key created. The list could not refresh; reload this page after storing the new key.'; }
+    }
     catch (error) { byId('account-message').textContent = error.message; }
     finally { button.disabled = false; }
   });

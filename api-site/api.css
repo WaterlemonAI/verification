@@ -96,6 +96,7 @@ article > p:not(.label,.footnote) { color: var(--muted); line-height: 1.75; }
 .tester legend span { margin-left: .4rem; color: var(--green); font: .65rem "DM Mono", monospace; }
 .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .field-help { margin: .9rem 0 0; color: var(--muted); font-size: .72rem; line-height: 1.5; }
+.field-error { display: block; min-height: 1.2em; color: #a14d34; font-size: .72rem; }
 .form-error { min-height: 1.2em; margin: 0; color: #a14d34; font-size: .76rem; }
 #send-request { height: 45px; border: 0; padding: 0 1.4rem; background: var(--mint); color: var(--dark); font-weight: 700; cursor: pointer; }
 #send-request:disabled { opacity: .5; cursor: wait; }
