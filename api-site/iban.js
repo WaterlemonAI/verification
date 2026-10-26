@@ -10,6 +10,7 @@ const samples = {
     "country": "AE",
     "firstName": "FIRST",
     "lastName": "LAST",
+    "completeName": "FIRST LAST",
     "bankCode": "BANKCODE",
     "bankAccountNumber": "ACCOUNTNUMBER",
     "bic": "",
@@ -31,6 +32,7 @@ const samples = {
       docType: 610,
       requestCategory: 'business',
       country: 'AE',
+      completeName: 'ACCOUNT OWNER',
       iban: 'YOUR-IBAN'
     })
   }
@@ -48,6 +50,7 @@ response = requests.post(
         "docType": 610,
         "requestCategory": "business",
         "country": "AE",
+        "completeName": "ACCOUNT OWNER",
         "iban": "YOUR-IBAN",
     },
 )
@@ -116,14 +119,16 @@ function createTransactionId() {
 }
 
 function requestBody() {
+  const firstName = byId('first-name').value.trim();
+  const lastName = byId('last-name').value.trim();
   const values = {
     source: byId('source').value.trim(),
     transID: createTransactionId(),
     docType: 610,
     country: byId('country').value.trim(),
-    firstName: byId('first-name').value.trim(),
-    lastName: byId('last-name').value.trim(),
-    completeName: byId('complete-name').value.trim(),
+    firstName,
+    lastName,
+    completeName: byId('complete-name').value.trim() || [firstName, lastName].filter(Boolean).join(' '),
     requestCategory: byId('request-category').value.trim(),
     bankCode: byId('bank-code').value.trim(),
     bankAccountNumber: byId('bank-account-number').value.trim(),
@@ -144,6 +149,7 @@ byId('iban-form').addEventListener('submit', async (event) => {
   for (const [name, id] of [['country', 'country'], ['requestCategory', 'request-category']]) {
     if (body[name] === undefined) { formError.textContent = `${name} is required.`; byId(id).focus(); return; }
   }
+  if (!body.completeName) { formError.textContent = 'Enter the account owner name.'; byId('complete-name').focus(); return; }
 
   sendButton.disabled = true;
   responseStatus.className = '';
