@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { approvedPublisherCount, approvedPublisherForUrl } from '../lib/approved-publishers.mjs';
+import { approvedPublisherCount, approvedPublisherForUrl, selectApprovedPublishers } from '../lib/approved-publishers.mjs';
 import { presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from '../lib/adverse-media.mjs';
 
 test('approved catalog matches direct publisher article URLs only', () => {
@@ -14,14 +14,24 @@ test('approved catalog matches direct publisher article URLs only', () => {
   ]) assert.equal(approvedPublisherForUrl(url), null);
 });
 
+test('publisher selection prioritizes requested countries and excludes low-value entertainment categories', () => {
+  const selected = selectApprovedPublishers({ countries: ['AE', 'IN'], limit: 20 });
+  assert.equal(selected.length, 20);
+  assert.ok(selected.every((publisher) => ['AE', 'IN'].includes(publisher.country_code)));
+  assert.ok(selected.every((publisher) => !['sports', 'music', 'culture'].includes(publisher.category)));
+  assert.ok(new Set(selected.map((publisher) => publisher.country_code)).size === 2);
+});
+
 test('request-time search returns adverse article URLs about an alias from approved publishers without visiting publishers', async () => {
   const requestedHosts = [];
+  const requestedQueries = [];
   const request = validateAdverseMediaRequest({ entity_type: 'individual', name: 'Alice Smith', aliases: ['A. Smith'], languages: ['en'], search_plus: true });
   const adverseResult = (url, title) => ({ url, title, description: 'A. Smith was charged with fraud.', page_age: '2026-10-20T10:00:00Z' });
   const fetchImpl = async (input) => {
     const url = new URL(input);
     requestedHosts.push(url.hostname);
     if (url.hostname === 'api.search.brave.com') {
+      requestedQueries.push(url.searchParams.get('q'));
       assert.match(url.searchParams.get('q'), /A\. Smith/);
       const results = [
         adverseResult('https://www.nytimes.com/2026/10/20/business/fraud.html', 'A. Smith charged with fraud'),
@@ -43,12 +53,52 @@ test('request-time search returns adverse article URLs about an alias from appro
   assert.equal(response.results.find((item) => item.search_plus_match).identity_match.type, 'exact_alias');
   assert.equal(response.results.find((item) => item.search_plus_match).risk_level, 'high');
   assert.equal(response.coverage.search_plus.publisher_catalog_size, 1499);
+  assert.ok(response.coverage.search_plus.publishers_screened.length >= 30);
+  assert.equal(response.coverage.search_plus.publishers_attempted, response.coverage.search_plus.publishers_screened.length);
+  assert.deepEqual(response.coverage.search_plus.publishers_not_completed, []);
+  assert.equal(response.coverage.search_plus.publisher_batches_attempted, response.coverage.search_plus.publisher_batches_completed);
   assert.ok(response.coverage.search_plus.matched_results >= 1);
+  assert.ok(response.coverage.search_plus.matched_publishers.some((publisher) => publisher.domain === 'nytimes.com'));
   assert.equal(response.coverage.search_plus.exhaustive, false);
   assert.ok(requestedHosts.every((host) => ['api.search.brave.com', 'api.gdeltproject.org'].includes(host)));
-  assert.match(response.coverage.limitation, /every approved publisher is not individually queried/);
+  const publisherQueries = requestedHosts.length && raw.methodology ? raw.coverage.source_status.publisher_search : null;
+  assert.ok(publisherQueries.attempted >= 3);
+  assert.equal(publisherQueries.failed, 0);
+  const publisherQueryText = requestedQueries.filter((query) => query.includes('site:')).join(' ');
+  assert.ok(response.coverage.search_plus.publishers_screened.every((publisher) => publisherQueryText.includes(`site:${publisher.domain}`)));
+  assert.ok(publisherQueryText.includes('site:nytimes.com'));
+  assert.match(response.coverage.limitation, /site-restricted index queries/);
   assert.ok(raw.usage.reserved_provider_cost_upper_bound_usd <= 0.14);
   assert.equal(raw.usage.cost_guardrail_usd, 0.15);
+});
+
+test('results found only by a publisher-targeted query retain their publisher-search provenance', async () => {
+  const request = validateAdverseMediaRequest({
+    entity_type: 'individual', name: 'Alice Smith', languages: ['en'], search_plus: true
+  });
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      const query = url.searchParams.get('q');
+      const results = query.includes('site:nytimes.com')
+        ? [{
+            url: 'https://www.nytimes.com/2026/10/20/business/fraud.html',
+            title: 'Alice Smith charged in fraud case',
+            description: 'Alice Smith was charged with fraud.',
+            page_age: '2026-10-20T10:00:00Z'
+          }]
+        : [];
+      return Response.json(url.pathname.includes('/news/') ? { results } : { web: { results } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+
+  const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
+  assert.equal(response.results.length, 1);
+  assert.equal(response.results[0].source_type, 'publisher_search');
+  assert.equal(response.results[0].publisher, 'The New York Times');
+  assert.ok(response.coverage.search_plus.matched_publishers.some((publisher) => publisher.domain === 'nytimes.com'));
 });
 
 test('association discovery runs when a supplied alias contains the full name', async () => {
@@ -69,6 +119,33 @@ test('association discovery runs when a supplied alias contains the full name', 
   assert.ok(queries.some((query) => query.includes('Prabhpreet Singh Gill') && query.includes('"founder"')));
   assert.equal(response.methodology.entity_resolution.status, 'completed');
   assert.ok(response.usage.reserved_provider_cost_upper_bound_usd <= 0.14);
+});
+
+test('publisher coverage separates completed batches from batches that exhaust retries', async () => {
+  const request = validateAdverseMediaRequest({
+    entity_type: 'business', name: 'Coverage Example', countries: ['AE'], languages: ['en'], search_plus: true
+  });
+  let failedPublisherQuery = '';
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      const query = url.searchParams.get('q');
+      if (query.includes('site:gulfnews.com') && (!failedPublisherQuery || query === failedPublisherQuery)) {
+        failedPublisherQuery ||= query;
+        return Response.json({ error: 'temporary' }, { status: 503 });
+      }
+      return Response.json(url.pathname.includes('/news/') ? { results: [] } : { web: { results: [] } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+
+  const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
+  assert.ok(response.coverage.search_plus.publishers_screened.length > 0);
+  assert.ok(response.coverage.search_plus.publishers_not_completed.length > 0);
+  assert.equal(response.coverage.search_plus.publisher_batches_failed, 1);
+  assert.ok(response.coverage.sources.some((source) => source.source === 'publisher_search' && source.status === 'partial'));
+  assert.ok(response.coverage.reason_codes.includes('publisher_search_partial'));
 });
 
 test('identity scoring separates expanded full names from typo-like near matches', async () => {

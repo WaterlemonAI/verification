@@ -7,7 +7,7 @@ import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store
 const request = {
   entity_type: 'individual', name: 'Example Person', aliases: [], countries: ['AE'], languages: ['en'],
   date_from: '', date_to: '', max_results: 25, risk_threshold: 0.65, deep_research: false,
-  callback_url: '', customer_logo_url: ''
+  search_plus: true, callback_url: '', customer_logo_url: ''
 };
 const response = {
   screening_id: '03e3be3d-9713-4c23-9d14-0e9128c7fe15', status: 'completed', completed_at: '2026-10-26T09:31:00.000Z',
@@ -21,7 +21,16 @@ const response = {
   coverage: {
     complete: true, sources: [{ source: 'current_news', status: 'complete' }], reason_codes: [], retryable: false,
     languages_searched: [{ code: 'en', name: 'English' }], date_from: null, date_to: null,
-    searched_at: '2026-10-26T09:31:00.000Z', archive_window: 'up to one year', limitation: 'Indexed public sources only.'
+    searched_at: '2026-10-26T09:31:00.000Z', archive_window: 'up to one year',
+    search_plus: {
+      requested: true, publisher_catalog_size: 1499, publishers_attempted: 2,
+      publishers_screened: [
+        { name: 'Example News', domain: 'news.example', country: 'United Arab Emirates', country_code: 'AE', category: 'general' },
+        { name: 'Example Finance', domain: 'finance.example', country: 'United Arab Emirates', country_code: 'AE', category: 'finance' }
+      ],
+      publishers_not_completed: [], matched_results: 1, matched_publishers: []
+    },
+    limitation: 'Indexed public sources only.'
   },
   results: [{
     result_id: 'r-1', title: 'Example Person named in investigation', url: 'https://news.example/case', publisher: 'news.example',
