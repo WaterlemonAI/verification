@@ -5,8 +5,8 @@ This record distinguishes verified behavior from remaining launch gates. All liv
 ## Source and deployment
 
 - PR [#77](https://github.com/WaterlemonAI/verification/pull/77), merge `a9d4f05232fb73fa9151567e63241c98333d7f75`, contains adverse-media retry containment, bounded per-service request lanes, durable Form submission idempotency, Form component checkpoints, cross-replica API-key creation locking, and API alerts. The integrated Node suite passed 146/146; its protected PR test passed.
-- The live API uses the PR #77 image digest `sha256:3b3aed97df714858d99f6f44959dce01864632444566010f022c279d17248958` at ready revision `ca-ai7uae-api--0000069`. The adverse-media worker is enabled on that revision.
-- PR [#78](https://github.com/WaterlemonAI/verification/pull/78), merge `1db84341dc49f8aa60a32be0f360bcfc409a4a4f`, changes subsequent normal push deployments to keep the verified worker enabled. Manual deployments retain a pause option. Its protected deployment run is [40413216236](https://github.com/WaterlemonAI/verification/actions/runs/40413216236); record its final outcome before release sign-off.
+- The current live API uses digest `sha256:d3b8ddc37b52fcbe4767e2412aff82d3a21dc1acff9aaa406db761ba464fe0eb` at ready revision `ca-ai7uae-api--0000070`, with `ADVERSE_MEDIA_WORKER_ENABLED=true` and `/healthz` returning HTTP 200. The earlier live retry test ran on the same PR #77 application code at revision `ca-ai7uae-api--0000069`.
+- PR [#78](https://github.com/WaterlemonAI/verification/pull/78), merge `1db84341dc49f8aa60a32be0f360bcfc409a4a4f`, changes subsequent normal push deployments to keep the verified worker enabled. Manual deployments retain a pause option. Its protected [deployment run 40413216236](https://github.com/WaterlemonAI/verification/actions/runs/40413216236) completed successfully; the final revision, worker setting, alert and health were read back from Azure.
 - The dedicated API 5xx metric alert and adverse-media all-source log alert are enabled and route to `notify@kycprobe.com`. The log alert was deployed separately after the GitHub deploy identity lacked Log Analytics query access; that identity has since been granted Log Analytics Reader on this project's workspace. Alert receipt by an on-call owner remains unproved.
 
 ## Adverse-media live checks
@@ -25,7 +25,7 @@ This record distinguishes verified behavior from remaining launch gates. All liv
 
 ## Still open before regulated customer release
 
-1. Finish protected run 40413216236 and retain its deployment evidence. The prior run 40402838286 was cancelled after the unchanged bank-statement image built but its ACR layer push stalled. The API revision and alert were verified separately; a completed protected production run remains a release gate.
+1. Include the retained `ai7uae-api-deployment-evidence-40413216236-1` artifact from the successful protected run in the release packet. The prior run 40402838286 was cancelled after the unchanged bank-statement image built but its ACR layer push stalled; the successful protected run supersedes it. Repeated full image builds remain an operational efficiency issue.
 2. Verify alert delivery to an owned operational mailbox and identify the on-call owner. Add queue age, billing-integrity, callback backlog and malware scanner alerts before broad rollout.
 3. Run paid-rate prepaid/postpay ledger reconciliation and tier-boundary tests in a controlled workspace. Zero-rate live smoke cannot prove charging or refunds.
 4. Finish invitation/recovery delivery to a distinct controlled recipient, DKIM/authentication checks, canonical app-host session and role-boundary UI tests.
