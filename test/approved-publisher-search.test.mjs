@@ -23,6 +23,77 @@ test('publisher selection prioritizes requested countries and excludes low-value
   assert.ok(new Set(selected.map((publisher) => publisher.country_code)).size === 2);
 });
 
+test('deep-research retries only the missing search query after successful Brave results are checkpointed', async () => {
+  const request = validateAdverseMediaRequest({
+    entity_type: 'business', name: 'Checkpoint Entity 01', languages: ['en']
+  });
+  const saved = new Map();
+  const checkpoint = {
+    get: async (key) => saved.has(key) ? structuredClone(saved.get(key)) : null,
+    save: async (key, value) => { saved.set(key, structuredClone(value)); }
+  };
+  const braveCalls = new Map();
+  let failingUrl = '';
+  let archiveCalls = 0;
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      const count = (braveCalls.get(url.href) || 0) + 1;
+      braveCalls.set(url.href, count);
+      if (!failingUrl && url.pathname.includes('/news/')) failingUrl = url.href;
+      if (url.href === failingUrl && count <= 2) {
+        return Response.json({ error: 'temporary' }, { status: 503 });
+      }
+      return Response.json(url.pathname.includes('/news/') ? { results: [] } : { web: { results: [] } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') {
+      archiveCalls += 1;
+      return Response.json({ articles: [] });
+    }
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+  const first = await screenAdverseMedia({ request, apiKey: 'test', fetchImpl, checkpoint });
+  assert.equal(first.status, 'partial');
+  assert.equal(first.coverage.source_status.global_news.failed, 1);
+  const firstCalls = new Map(braveCalls);
+  const second = await screenAdverseMedia({ request, apiKey: 'test', fetchImpl, checkpoint });
+  assert.equal(second.coverage.source_status.global_news.failed, 0);
+  assert.equal(second.usage.failed_search_queries, 0);
+  assert.equal(archiveCalls, 1);
+  for (const [url, count] of firstCalls) {
+    assert.equal(braveCalls.get(url), count === 2 ? 3 : count, `unexpected repeated call: ${url}`);
+  }
+});
+
+test('Brave payment failures are reported as missing coverage without redialing on retry', async () => {
+  const request = validateAdverseMediaRequest({
+    entity_type: 'business', name: 'Unfunded Provider Example 02', languages: ['en']
+  });
+  const saved = new Map();
+  const checkpoint = {
+    get: async (key) => saved.has(key) ? structuredClone(saved.get(key)) : null,
+    save: async (key, value) => { saved.set(key, structuredClone(value)); }
+  };
+  let braveCalls = 0;
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      braveCalls += 1;
+      return Response.json({ error: 'payment_required' }, { status: 402 });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+  const first = await screenAdverseMedia({ request, apiKey: 'test', fetchImpl, checkpoint });
+  const firstCalls = braveCalls;
+  const second = await screenAdverseMedia({ request, apiKey: 'test', fetchImpl, checkpoint });
+  assert.equal(first.status, 'partial');
+  assert.equal(second.status, 'partial');
+  assert.ok(firstCalls > 0);
+  assert.equal(braveCalls, firstCalls);
+  assert.equal(second.usage.paid_search_attempts, 0);
+});
+
 test('request-time search returns adverse article URLs about an alias from approved publishers without visiting publishers', async () => {
   const requestedHosts = [];
   const requestedQueries = [];
@@ -247,6 +318,64 @@ test('identity scoring separates expanded full names from typo-like near matches
   assert.ok(near.results[0].identity_match.score < 0.9);
   assert.equal(near.results[0].risk_level, 'review');
   assert.ok(near.results[0].risk_score < 0.9);
+});
+
+test('an individual middle initial is required and does not match a different full name', async () => {
+  const request = validateAdverseMediaRequest({ entity_type: 'individual', name: 'Alexander J Sterling', languages: ['en'] });
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      const result = { url: 'https://example.gov/jeffrey-sterling',
+        title: 'Jeffrey Alexander Sterling convicted',
+        description: 'Jeffrey Alexander Sterling was convicted in a criminal case.' };
+      return Response.json(url.pathname.includes('/news/') ? { results: [result] } : { web: { results: [result] } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+  const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
+  assert.equal(response.results.length, 0);
+});
+
+test('deep research waits for source retry exhaustion before one Gemini attempt', async () => {
+  const request = validateAdverseMediaRequest({ entity_type: 'business', name: 'Acme Quota Example', languages: ['en', 'ar'] });
+  const saved = new Map();
+  const checkpoint = {
+    get: async (key) => saved.get(key) ?? null,
+    save: async (key, value) => { if (!saved.has(key)) saved.set(key, value); }
+  };
+  let braveCalls = 0;
+  let geminiCalls = 0;
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      braveCalls += 1;
+      if (braveCalls === 1) return Response.json({ error: 'payment required' }, { status: 402 });
+      const result = { url: 'https://example.com/acme-case', title: 'Acme Quota Example charged with fraud',
+        description: 'Acme Quota Example was charged with fraud.' };
+      return Response.json(url.pathname.includes('/news/') ? { results: [result] } : { web: { results: [result] } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    if (url.hostname === 'generativelanguage.googleapis.com') {
+      geminiCalls += 1;
+      return Response.json({ error: 'quota exhausted' }, { status: 429 });
+    }
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+  const run = (sourceAttemptsExhausted) => screenAdverseMedia({ request, apiKey: 'test', aiApiKey: 'test',
+    fetchImpl, checkpoint, deferAiUntilSourcesComplete: true, sourceAttemptsExhausted });
+  const first = await run(false);
+  assert.equal(first.status, 'partial');
+  assert.equal(first.methodology.ai_classification.status, 'deferred');
+  assert.equal(geminiCalls, 0);
+  const paidCalls = braveCalls;
+  const final = await run(true);
+  assert.equal(final.status, 'partial');
+  assert.equal(geminiCalls, 1);
+  assert.equal(braveCalls, paidCalls);
+  await run(true);
+  assert.equal(geminiCalls, 1);
+  assert.equal(braveCalls, paidCalls);
 });
 
 test('identity scoring recognizes unsegmented CJK names inside headlines', async () => {

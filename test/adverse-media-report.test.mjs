@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { Readable } from 'node:stream';
 import { PDFDocument } from 'pdf-lib';
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from '../lib/adverse-media-report.mjs';
-import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
+import { AzureAdverseMediaReportStore, MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
+
+process.env.NODE_ENV = 'test';
+const { finalizeAdverseMediaReport } = await import('../server.mjs');
 
 const request = {
   entity_type: 'individual', name: 'Example Person', aliases: [], countries: ['AE'], languages: ['en'],
@@ -85,4 +89,143 @@ test('permanent report store retains owner isolation and supports public capabil
   assert.equal(await store.get({ ownerId: 'customer-b', reportId: 'rpt' }), null);
   assert.equal((await store.getPublic({ reportId: 'rpt' })).metadata.filename, 'report.pdf');
   assert.equal(await store.getPublic({ reportId: 'missing' }), null);
+});
+
+test('deep-research finalization reuses one saved report after a retry', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  let saves = 0;
+  const originalSave = store.save.bind(store);
+  store.save = async (value) => { saves += 1; return originalSave(value); };
+  const reportId = 'e565a72c-c734-4ad5-ab72-7dc5ed8391bb';
+  const input = { request, response, ownerId: 'synthetic-owner', reportId, aiApiKey: '',
+    origin: { received_at: '2026-10-26T09:30:00.000Z', network_origin: '203.0.113.10',
+      processing_location: 'Microsoft Azure UAE North' },
+    fetchImpl: async () => { throw new Error('unexpected_provider_call'); }, reportStore: store };
+  const first = await finalizeAdverseMediaReport(input);
+  const second = await finalizeAdverseMediaReport(input);
+  assert.equal(first.report.report_id, reportId);
+  assert.equal(second.report.report_id, reportId);
+  assert.equal(second.report.transaction_id, response.screening_id);
+  assert.equal(saves, 1);
+});
+
+test('a quota-failed classification cannot trigger another Gemini call for the PDF', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const partial = { ...response, status: 'partial',
+    coverage: { ...response.coverage, complete: false, reason_codes: ['classification_incomplete'] } };
+  const result = await finalizeAdverseMediaReport({ request, response: partial,
+    ownerId: 'synthetic-owner', reportId: 'b451b8db-9eaa-4a19-b99d-7f8970d4ef6a', aiApiKey: 'configured',
+    origin: { received_at: '2026-10-26T09:30:00.000Z', network_origin: '203.0.113.10',
+      processing_location: 'Microsoft Azure UAE North' },
+    fetchImpl: async () => { throw new Error('Gemini must not be called again'); }, reportStore: store });
+  assert.equal(result.report.transaction_id, partial.screening_id);
+});
+
+test('report storage retry reuses its saved narrative without another model call', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const originalSave = store.save.bind(store);
+  let saves = 0;
+  let modelCalls = 0;
+  store.save = async (value) => {
+    saves += 1;
+    if (saves === 1) throw new Error('synthetic_storage_failure');
+    return originalSave(value);
+  };
+  const input = { request, response, ownerId: 'synthetic-owner', aiApiKey: 'configured',
+    reportId: '44ef1995-3cd0-4b12-95af-eaa16959fd3f', reportStore: store,
+    origin: { received_at: '2026-10-26T09:30:00.000Z', network_origin: '203.0.113.10',
+      processing_location: 'Microsoft Azure UAE North' },
+    fetchImpl: async () => {
+      modelCalls += 1;
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        summary: 'One result requires review.', findings: ['A relevant result was found.'],
+        recommendations: ['Complete human review.']
+      }) }] } }] });
+    } };
+  await assert.rejects(() => finalizeAdverseMediaReport(input), /report_service_unavailable/);
+  const completed = await finalizeAdverseMediaReport(input);
+  assert.equal(completed.report.report_id, input.reportId);
+  assert.equal(modelCalls, 1);
+});
+
+test('provider component checkpoints survive a worker-store restart and are removed after completion', async () => {
+  const blobs = new Map();
+  const container = {
+    getBlockBlobClient(name) {
+      return {
+        async uploadData(bytes, options) {
+          if (blobs.has(name) && options.conditions?.ifNoneMatch === '*') {
+            throw Object.assign(new Error('already_exists'), { statusCode: 412 });
+          }
+          blobs.set(name, Buffer.from(bytes));
+        },
+        async download() {
+          const bytes = blobs.get(name);
+          if (!bytes) throw Object.assign(new Error('not_found'), { statusCode: 404 });
+          return { readableStreamBody: Readable.from([bytes]) };
+        }
+      };
+    },
+    async *listBlobsFlat({ prefix }) {
+      for (const name of blobs.keys()) if (name.startsWith(prefix)) yield { name };
+    },
+    async deleteBlob(name) { blobs.delete(name); }
+  };
+  const makeStore = () => {
+    const store = new AzureAdverseMediaReportStore({
+      blobServiceUrl: 'https://synthetic.blob.core.windows.net',
+      credential: { getToken: async () => ({ token: 'synthetic', expiresOnTimestamp: Date.now() + 60000 }) }
+    });
+    store.container = container;
+    return store;
+  };
+  const input = { ownerId: 'synthetic-owner', screeningId: 'synthetic-screening',
+    componentKey: 'brave:https://api.search.brave.com/res/v1/news/search?q=synthetic' };
+  await makeStore().saveDeepResearchComponent({ ...input, value: { results: [{ url: 'https://example.com/story' }] } });
+  await makeStore().saveDeepResearchComponent({ ...input, value: { results: [{ url: 'https://example.com/changed' }] } });
+  assert.deepEqual(await makeStore().getDeepResearchComponent(input),
+    { results: [{ url: 'https://example.com/story' }] });
+  await makeStore().deleteDeepResearchComponents(input);
+  assert.equal(await makeStore().getDeepResearchComponent(input), null);
+});
+
+test('Azure Table reserves one lifetime provider budget across concurrent worker replicas', async () => {
+  const entities = new Map();
+  let version = 0;
+  const key = (partitionKey, rowKey) => `${partitionKey}/${rowKey}`;
+  const conflict = (statusCode) => Object.assign(new Error('table_conflict'), { statusCode });
+  const table = {
+    async getEntity(partitionKey, rowKey) {
+      const row = entities.get(key(partitionKey, rowKey));
+      if (!row) throw conflict(404);
+      return { ...row };
+    },
+    async createEntity(row) {
+      const id = key(row.partitionKey, row.rowKey);
+      if (entities.has(id)) throw conflict(409);
+      entities.set(id, { ...row, etag: String(++version) });
+    },
+    async updateEntity(row, _mode, { etag }) {
+      const id = key(row.partitionKey, row.rowKey);
+      if (entities.get(id)?.etag !== etag) throw conflict(412);
+      entities.set(id, { ...row, etag: String(++version) });
+    }
+  };
+  const makeStore = () => {
+    const store = new AzureAdverseMediaReportStore({
+      blobServiceUrl: 'https://synthetic.blob.core.windows.net',
+      tableServiceUrl: 'https://synthetic.table.core.windows.net',
+      credential: { getToken: async () => ({ token: 'synthetic', expiresOnTimestamp: Date.now() + 60000 }) }
+    });
+    store.table = table;
+    return store;
+  };
+  const stores = [makeStore(), makeStore()];
+  const details = { ownerId: 'synthetic-owner', screeningId: 'synthetic-job', costMicroUsd: 5000,
+    provider: 'brave', maxMicroUsd: 5000 };
+  const outcomes = await Promise.allSettled(stores.map((store) => store.reserveDeepResearchCost(details)));
+  assert.equal(outcomes.filter((item) => item.status === 'fulfilled').length, 1);
+  assert.equal(outcomes.filter((item) => item.status === 'rejected' && item.reason.message === 'screening_cost_limit').length, 1);
+  assert.deepEqual(await stores[1].getDeepResearchUsage(details),
+    { reservedMicroUsd: 5000, providerCalls: { brave: 1, gemini: 0 } });
 });

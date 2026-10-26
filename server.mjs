@@ -299,11 +299,33 @@ async function createEntitySearchReport(req, res, store) {
   }
 }
 
-async function finalizeAdverseMediaReport({ request, response, ownerId, origin, aiApiKey, fetchImpl, reportStore }) {
+export async function finalizeAdverseMediaReport({ request, response, ownerId, origin, aiApiKey, fetchImpl, reportStore,
+  reportId = null }) {
   try {
+    if (reportId) {
+      const existing = await reportStore.get({ ownerId, reportId });
+      const publicReport = existing && await reportStore.getPublic({ reportId });
+      if (publicReport?.metadata.transaction_id === response.screening_id) {
+        const reportPath = `/service/adverse_media/reports/${reportId}.pdf`;
+        return { ...response, report: { ...existing.metadata,
+          download_url: process.env.API_PUBLIC_BASE_URL ? new URL(reportPath, process.env.API_PUBLIC_BASE_URL).href : reportPath } };
+      }
+    }
     const logo = await fetchPublicLogo(request.customer_logo_url);
-    const narrative = await createAdverseMediaNarrative({ response, apiKey: aiApiKey, fetchImpl });
-    const report = await createAdverseMediaAuditPdf({ request, response, narrative, origin, ...logo });
+    const narrativeKey = reportId ? `report-narrative:${reportId}` : '';
+    let narrative = narrativeKey && await reportStore.getDeepResearchComponent?.({
+      ownerId, screeningId: response.screening_id, componentKey: narrativeKey
+    });
+    if (!narrative) {
+      const reviewed = !response.coverage?.reason_codes?.includes('classification_incomplete');
+      narrative = await createAdverseMediaNarrative({ response,
+        apiKey: reviewed && response.results?.length ? aiApiKey : '', fetchImpl });
+      if (narrativeKey) await reportStore.saveDeepResearchComponent?.({
+        ownerId, screeningId: response.screening_id, componentKey: narrativeKey, value: narrative
+      });
+    }
+    const report = await createAdverseMediaAuditPdf({ request, response, narrative, origin,
+      ...(reportId ? { reportId } : {}), ...logo });
     const reportPath = `/service/adverse_media/reports/${report.reportId}.pdf`;
     const metadata = {
       report_id: report.reportId,
@@ -1722,19 +1744,23 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
   }
 }
 
-export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), usageStore = createCustomerUsageStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
+  deepResearchQueue = process.env.ADVERSE_MEDIA_WORKER_ENABLED === 'false' ? null : createDeepResearchQueue(),
+  formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), usageStore = createCustomerUsageStore(),
+  merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
   const portalLoginThrottle = createLoginThrottle();
   const resetThrottle = createLoginThrottle();
-  if (startWorker && deepResearchQueue) {
+  if (startWorker && deepResearchQueue && process.env.ADVERSE_MEDIA_WORKER_ENABLED !== 'false') {
     startDeepResearchWorker({
       queue: deepResearchQueue,
       store,
+      resultStore: reportStore,
       screen: screenAdverseMedia,
       present: presentAdverseMediaResponse,
       finalize: async ({ job, response, aiApiKey, costGuard }) => finalizeAdverseMediaReport({
         request: job.request, response, ownerId: job.owner_id, origin: job.request_origin,
-        aiApiKey, fetchImpl: costGuard.fetch, reportStore
+        aiApiKey, fetchImpl: costGuard.fetch, reportStore, reportId: job.report_id
       }),
       fetchImpl
     });
