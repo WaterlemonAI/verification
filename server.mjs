@@ -598,6 +598,103 @@ function formsIbanTransactionId(submissionId) {
   return `AI7F-${stableId}`;
 }
 
+function safeReasonCodes(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value
+    .filter((item) => typeof item === 'string')
+    .map((item) => item.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''))
+    .filter(Boolean))];
+}
+
+export function evaluateFormServiceQualification({ httpStatus, response }) {
+  const transportCompleted = Number.isInteger(httpStatus) && httpStatus >= 200 && httpStatus < 300;
+  const serviceStatus = typeof response?.status === 'string' ? response.status.trim().toLowerCase() : '';
+  const explicitCoverage = typeof response?.coverage?.complete === 'boolean' ? response.coverage.complete : undefined;
+  const explicitEligibility = typeof response?.summary?.decision_eligible === 'boolean'
+    ? response.summary.decision_eligible
+    : undefined;
+  const serviceReasonCodes = safeReasonCodes([
+    ...(Array.isArray(response?.coverage?.reason_codes) ? response.coverage.reason_codes : []),
+    ...(Array.isArray(response?.summary?.reason_codes) ? response.summary.reason_codes : [])
+  ]);
+  const serviceReportsIncomplete = ['partial', 'failed', 'error', 'incomplete'].includes(serviceStatus);
+  const hasServiceCoverageContract = explicitCoverage !== undefined
+    || explicitEligibility !== undefined
+    || ['completed', 'partial', 'failed', 'error', 'incomplete'].includes(serviceStatus);
+  const coverageComplete = transportCompleted && (explicitCoverage ?? (!serviceReportsIncomplete && explicitEligibility !== false));
+  const decisionEligible = transportCompleted && coverageComplete && explicitEligibility !== false;
+  const coverageReasonCodes = [...serviceReasonCodes];
+  if (!transportCompleted) coverageReasonCodes.push('transport_failed');
+  if (transportCompleted && !coverageComplete) coverageReasonCodes.push('incomplete_coverage');
+  const eligibilityReasonCodes = [...coverageReasonCodes];
+  if (transportCompleted && explicitEligibility === false) eligibilityReasonCodes.push('service_not_decision_eligible');
+  const uniqueCoverageReasons = [...new Set(coverageReasonCodes)];
+  const uniqueEligibilityReasons = [...new Set(eligibilityReasonCodes)];
+  const basis = hasServiceCoverageContract ? 'service_response' : 'http_contract';
+  return {
+    transport: {
+      status: transportCompleted ? 'completed' : 'failed',
+      completed: transportCompleted,
+      http_status: Number.isInteger(httpStatus) ? httpStatus : null
+    },
+    coverage: {
+      status: coverageComplete ? 'complete' : 'incomplete',
+      complete: coverageComplete,
+      basis,
+      reason_codes: uniqueCoverageReasons,
+      reason: coverageComplete
+        ? (basis === 'service_response' ? 'The service affirmatively reported sufficient coverage.' : 'The service contract treats a successful HTTP response as complete coverage.')
+        : (!transportCompleted ? 'Coverage could not complete because the service transport failed.' : 'The service reported incomplete screening coverage.')
+    },
+    eligibility: {
+      status: decisionEligible ? 'eligible' : 'ineligible',
+      decision_eligible: decisionEligible,
+      basis,
+      reason_codes: uniqueEligibilityReasons,
+      reason: decisionEligible
+        ? (basis === 'service_response' ? 'The service affirmatively qualifies for use in the consolidated decision.' : 'The service contract affirmatively qualifies a successful HTTP response.')
+        : (!transportCompleted ? 'The service did not complete successfully.' : 'The service did not affirmatively qualify for a consolidated decision.')
+    }
+  };
+}
+
+export function consolidateFormServiceResults(services) {
+  const completed = services.filter((service) => service.transport?.completed === true).length;
+  const failed = services.length - completed;
+  const coverageComplete = services.filter((service) => service.coverage?.complete === true).length;
+  const eligible = services.filter((service) => service.eligibility?.decision_eligible === true).length;
+  const ineligibleServices = services
+    .filter((service) => service.eligibility?.decision_eligible !== true)
+    .map((service) => ({
+      service_id: service.service_id,
+      name: service.name,
+      reason_codes: service.eligibility?.reason_codes || ['eligibility_not_confirmed'],
+      reason: service.eligibility?.reason || 'The service did not affirmatively qualify for a consolidated decision.'
+    }));
+  const status = completed === services.length ? 'completed' : completed > 0 ? 'partial' : 'failed';
+  const decisionEligible = services.length > 0 && eligible === services.length;
+  return {
+    status,
+    summary: {
+      total: services.length,
+      completed,
+      failed,
+      transport_completed: completed,
+      transport_failed: failed,
+      coverage_complete: coverageComplete,
+      coverage_incomplete: services.length - coverageComplete,
+      eligible,
+      ineligible: services.length - eligible,
+      decision_eligible: decisionEligible,
+      reason_codes: [...new Set(ineligibleServices.flatMap((service) => service.reason_codes))],
+      reason: decisionEligible
+        ? 'Every selected check completed with sufficient coverage and affirmatively qualified.'
+        : 'One or more selected checks did not affirmatively qualify; the consolidated result requires review.',
+      ineligible_services: ineligibleServices
+    }
+  };
+}
+
 async function executeProviderFormService(integration, input, store, fetchImpl, { submissionId } = {}) {
   let requestBody = input;
   if (integration.id === 'iban-verification') {
@@ -638,10 +735,11 @@ async function executeSingleFormService({ service, data, submissionId, store, fe
   const startedAt = new Date().toISOString();
   const started = Date.now();
   if (!integration) {
+    const qualification = evaluateFormServiceQualification({ httpStatus: null, response: null });
     return {
       service_id: service.service_id, name, status: 'failed', http_status: null,
       started_at: startedAt, completed_at: new Date().toISOString(), duration_ms: Date.now() - started,
-      error: 'The configured API is disabled or unavailable.', response: null
+      error: 'The configured API is disabled or unavailable.', response: null, ...qualification
     };
   }
   try {
@@ -667,6 +765,7 @@ async function executeSingleFormService({ service, data, submissionId, store, fe
       response = result.response;
     }
     const successful = httpStatus >= 200 && httpStatus < 300;
+    const qualification = evaluateFormServiceQualification({ httpStatus, response });
     return {
       service_id: integration.id,
       name,
@@ -676,13 +775,15 @@ async function executeSingleFormService({ service, data, submissionId, store, fe
       completed_at: new Date().toISOString(),
       duration_ms: Date.now() - started,
       ...(successful ? {} : { error: 'The API returned an unsuccessful status.' }),
-      response
+      response,
+      ...qualification
     };
   } catch {
+    const qualification = evaluateFormServiceQualification({ httpStatus: null, response: null });
     return {
       service_id: integration.id, name, status: 'failed', http_status: null,
       started_at: startedAt, completed_at: new Date().toISOString(), duration_ms: Date.now() - started,
-      error: 'The API could not complete this check.', response: null
+      error: 'The API could not complete this check.', response: null, ...qualification
     };
   }
 }
@@ -692,9 +793,7 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
   const services = await Promise.all(job.form.services.map((service) => executeSingleFormService({
     service, data: job.data, submissionId: job.submission_id, store, fetchImpl, merchantScreener
   })));
-  const completed = services.filter((service) => service.status === 'completed').length;
-  const failed = services.length - completed;
-  const status = completed === services.length ? 'completed' : completed > 0 ? 'partial' : 'failed';
+  const { status, summary } = consolidateFormServiceResults(services);
   const completedAt = new Date().toISOString();
   const processingLog = [
     { at: job.queued_at, stage: 'accepted', message: 'Authenticated submission accepted and queued.' },
@@ -702,15 +801,15 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
     ...services.map((service) => ({
       at: service.completed_at,
       stage: service.status === 'completed' ? 'api_completed' : 'api_failed',
-      message: `${service.name} finished with ${service.http_status || 'no'} HTTP status in ${service.duration_ms} ms.`
+      message: `${service.name} transport ${service.transport.status} with ${service.http_status || 'no'} HTTP status in ${service.duration_ms} ms; coverage ${service.coverage.status}; eligibility ${service.eligibility.status}. ${service.eligibility.reason}`
     })),
-    { at: completedAt, stage: 'consolidated', message: `Consolidated result created with status ${status}.` }
+    { at: completedAt, stage: 'consolidated', message: `Consolidated transport status ${status}; decision eligible: ${summary.decision_eligible ? 'yes' : 'no'}. ${summary.reason}` }
   ];
   let result = {
     submission_id: job.submission_id,
     status,
     form: { id: job.form.id, name: job.form.name, version: job.form.version },
-    summary: { total: services.length, completed, failed, decision_eligible: status === 'completed' },
+    summary,
     services,
     processing: {
       queued_at: job.queued_at,
