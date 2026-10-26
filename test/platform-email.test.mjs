@@ -28,6 +28,44 @@ test('GoDaddy SMTP transport uses TLS, fixed sender and reply address', async ()
   assert.equal(message.from, 'KYCProbe <notify@kycprobe.com>');
   assert.equal(message.replyTo, 'notify@ai7lab.net');
   assert.equal(message.to, 'operator@example.com');
+  assert.match(message.html, /cid:kycprobe-dark-logo@kycprobe\.com/);
+  assert.equal(message.attachments[0].contentDisposition, 'inline');
+  assert.ok(message.attachments[0].content.length > 1000);
+});
+
+test('customer email designs include inline logo, usable actions, safe copy and customer links', async () => {
+  const messages = [];
+  const mailer = createPlatformMailer({ password: 'test-only', transportFactory: () => ({
+    sendMail: async value => { messages.push(value); }
+  }) });
+  const invitationUrl = 'https://app.kycprobe.com/login#invite=one-time-token';
+  const resetUrl = 'https://app.kycprobe.com/login?reset=one-time-token';
+  await mailer.sendInvitation({ to: 'customer@example.com', url: invitationUrl, customerName: 'A&B <Vendor>', hours: 24 });
+  await mailer.sendPasswordReset({ to: 'customer@example.com', url: resetUrl, minutes: 30 });
+  await mailer.sendSecurityAlert({ to: 'customer@example.com', event: 'reset' });
+  assert.equal(messages.length, 3);
+  for (const message of messages) {
+    assert.match(message.html, /<img src="cid:kycprobe-dark-logo@kycprobe\.com"/);
+    assert.match(message.html, /https:\/\/kycprobe\.com\/terms/);
+    assert.match(message.html, /https:\/\/app\.kycprobe\.com\/login/);
+    assert.doesNotMatch(message.html, /href="https:\/\/app\.kycprobe\.com\/admin(?:[?#"])/);
+    assert.equal(message.attachments[0].cid, 'kycprobe-dark-logo@kycprobe.com');
+    assert.equal(message.replyTo, 'notify@ai7lab.net');
+    assert.doesNotMatch(message.text, /ai7_live_/);
+  }
+  assert.match(messages[0].html, /A&amp;B &lt;Vendor&gt;/);
+  assert.doesNotMatch(messages[0].html, /A&B <Vendor>/);
+  assert.match(messages[0].html, /Set up your account/);
+  assert.match(messages[0].html, /login#invite=one-time-token/);
+  assert.match(messages[1].html, /Reset password/);
+  assert.match(messages[1].html, /login\?reset=one-time-token/);
+  assert.match(messages[2].html, /Review your account/);
+  assert.match(messages[2].html, /https:\/\/app\.kycprobe\.com\/account/);
+  await mailer.sendPasswordReset({ to: 'admin@example.com', url: 'https://app.kycprobe.com/admin?reset=one-time-token', minutes: 30 });
+  assert.match(messages[3].html, /href="https:\/\/app\.kycprobe\.com\/admin\?reset=one-time-token"/);
+  assert.doesNotMatch(messages[3].html.split('KYCProbe by AI7Lab UAE')[1], /\/admin/);
+  await assert.rejects(() => mailer.sendPasswordReset({ to: 'customer@example.com', url: 'https://evil.example/reset', minutes: 30 }),
+    /platform_email_invalid_action_url/);
 });
 
 test('reset tokens are scoped, expire, and fail after a password version change', () => {
