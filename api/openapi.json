@@ -874,7 +874,8 @@
         "required": [
           "transID",
           "country",
-          "requestCategory"
+          "requestCategory",
+          "completeName"
         ],
         "properties": {
           "source": {
@@ -911,7 +912,9 @@
             "type": "string"
           },
           "completeName": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "description": "Required for business verification. Provide the complete account-owner name."
           },
           "bankCode": {
             "type": "string"

@@ -265,6 +265,8 @@ test('IBAN public docs include every input and response field without provider d
   }
   for (const field of responseFields) assert.equal(html.includes(field), true, `IBAN page omitted response field ${field}`);
   assert.equal(spec.components.schemas.IbanVerificationRequest.required.includes('requestCategory'), true);
+  assert.equal(spec.components.schemas.IbanVerificationRequest.required.includes('completeName'), true);
+  assert.equal(script.includes("completeName: 'ACCOUNT OWNER'"), true);
   assert.deepEqual(spec.components.schemas.IbanVerificationRequest.properties.requestCategory.enum, ['business']);
   assert.equal(html.includes('id="trans-id"'), false);
   assert.equal(html.includes('id="doc-type"'), false);
