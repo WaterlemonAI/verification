@@ -10,7 +10,7 @@
   --muted: #607087;
   --line: rgba(16, 29, 54, .14);
   --mono: "DM Mono", monospace;
-  --sans: "Manrope", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --sans: "Plus Jakarta Sans", "Tajawal", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 * { box-sizing: border-box; }
