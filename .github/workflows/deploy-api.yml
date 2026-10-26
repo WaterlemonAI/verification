@@ -24,9 +24,9 @@ on:
   workflow_dispatch:
     inputs:
       enableDeepResearchWorker:
-        description: Enable the adverse-media deep-research worker after reviewing legacy jobs and live smoke results
+        description: Keep the adverse-media deep-research worker enabled; uncheck only for a controlled pause
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -134,7 +134,7 @@ jobs:
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
               appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}" \
-              enableDeepResearchWorker="${{ inputs.enableDeepResearchWorker && 'true' || 'false' }}"
+              enableDeepResearchWorker="${{ github.event_name == 'push' && 'true' || (inputs.enableDeepResearchWorker && 'true' || 'false') }}"
 
       - name: Deploy digest-pinned API revision
         run: |
@@ -153,7 +153,7 @@ jobs:
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
               appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}" \
-              enableDeepResearchWorker="${{ inputs.enableDeepResearchWorker && 'true' || 'false' }}" \
+              enableDeepResearchWorker="${{ github.event_name == 'push' && 'true' || (inputs.enableDeepResearchWorker && 'true' || 'false') }}" \
             --query properties.outputs \
             --output json > api-deployment-outputs.json
 
