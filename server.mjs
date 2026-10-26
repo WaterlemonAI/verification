@@ -1856,8 +1856,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         }
         res.off('close', onClose);
         res.setHeader('x-ai7-queue-wait-ms', String(Date.now() - queuedAt));
-        res.once('finish', release);
-        res.once('close', release);
+        req.ai7CapacityRelease = release;
       }
       if (url.pathname === '/healthz') {
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
@@ -1876,12 +1875,12 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return rotated ? json(res, 200, { key: rotated.client, api_key: rotated.apiKey, notice: 'The previous key is invalid. Copy this replacement now.' })
           : json(res, 409, { status: 'Error', error: 'The key could not be rotated.' });
       }
-      if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
-      if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
-      if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return createMerchantScreening(req, res, store, merchantScreener, reportStore);
-      if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return handleBsa(req, res, url, store);
+      if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return await createEntitySearchReport(req, res, store);
+      if (req.method === 'POST' && url.pathname === '/service/adverse_media') return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
+      if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
+      if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return await handleBsa(req, res, url, store);
       const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
-      if (req.method === 'POST' && formSubmissionMatch) return submitForm(req, res, formSubmissionMatch[1], store, formsQueue);
+      if (req.method === 'POST' && formSubmissionMatch) return await submitForm(req, res, formSubmissionMatch[1], store, formsQueue);
       const formSchemaMatch = /^\/forms\/([a-z0-9-]+)\/schema$/.exec(url.pathname);
       if (req.method === 'GET' && formSchemaMatch) {
         const form = await store.getForm(formSchemaMatch[1]);
@@ -1949,7 +1948,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       }
 
       const integration = await store.getIntegration(url.pathname, req.method || 'GET');
-      if (integration) return proxyIntegration(req, res, url, integration, store, fetchImpl);
+      if (integration) return await proxyIntegration(req, res, url, integration, store, fetchImpl);
       if (url.pathname.startsWith('/service/')) return json(res, 404, { status: 'Error', error: 'Service was not found.' });
 
       const directory = apiHosts.has(host) || url.pathname.startsWith('/docs') ? join(root, 'api-site') : join(root, 'site');
@@ -1987,6 +1986,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     } catch (error) {
       if (res.headersSent) return;
       return json(res, error.message === 'usage_meter_unavailable' ? 503 : 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });
+    } finally {
+      req.ai7CapacityRelease?.();
     }
   });
 }

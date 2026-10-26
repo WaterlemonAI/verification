@@ -124,3 +124,38 @@ test('a caller disconnecting while queued releases its credit reservation', asyn
   releaseSupplier();
   assert.equal((await first).status, 200);
 });
+
+test('a disconnected active caller keeps its lane until supplier work actually ends', async (t) => {
+  const store = new EnvironmentStore();
+  await store.upsertIntegration({ id: 'company-search', name: 'Company Search', publicPath: '/service/company_search',
+    method: 'POST', upstreamUrl: 'https://supplier.test/check', authType: 'none',
+    acceptedContentTypes: ['application/json'], enabled: true }, '');
+  const issued = await store.createClient('Capacity customer');
+  let supplierCalls = 0;
+  let releaseSupplier;
+  const supplierGate = new Promise((resolve) => { releaseSupplier = resolve; });
+  const capacity = createRequestCapacity({ globalLimit: 1, defaultLaneLimit: 1, maximumWaitMs: 1_000 });
+  const server = createAppServer({ store, requestCapacity: capacity, startWorker: false,
+    fetchImpl: async () => { supplierCalls += 1; await supplierGate; return new Response('{}', {
+      status: 200, headers: { 'content-type': 'application/json' }
+    }); } });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const url = `http://127.0.0.1:${server.address().port}/service/company_search`;
+  const headers = { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' };
+  const controller = new AbortController();
+  const first = fetch(url, { method: 'POST', headers, body: '{}', signal: controller.signal });
+  for (let attempt = 0; attempt < 30 && supplierCalls === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(supplierCalls, 1);
+  controller.abort();
+  await assert.rejects(first, /abort/i);
+  assert.equal(capacity.snapshot().active, 1);
+  const second = fetch(url, { method: 'POST', headers, body: '{}' });
+  for (let attempt = 0; attempt < 30 && capacity.snapshot().waiting === 0; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(capacity.snapshot().waiting, 1);
+  assert.equal(supplierCalls, 1);
+  releaseSupplier();
+  assert.equal((await second).status, 200);
+  assert.equal(supplierCalls, 2);
+  assert.equal(capacity.snapshot().active, 0);
+});
