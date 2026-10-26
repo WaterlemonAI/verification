@@ -6,16 +6,19 @@ import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store
 
 const request = {
   entity_type: 'individual', name: 'Example Person', aliases: [], countries: ['AE'], languages: ['en'],
-  date_from: '', date_to: '', max_results: 25, risk_threshold: 0.65, deep_research: false,
+  date_from: '', date_to: '', max_results: 25, risk_threshold: 0.65,
+  review_threshold_percent: 65, high_risk_threshold_percent: 90, deep_research: false,
   search_plus: true, callback_url: '', customer_logo_url: ''
 };
 const response = {
   screening_id: '03e3be3d-9713-4c23-9d14-0e9128c7fe15', status: 'completed', completed_at: '2026-10-26T09:31:00.000Z',
   entity: { entity_type: 'individual', name: 'Example Person', aliases: [], countries: ['AE'] },
   summary: {
-    outcome: 'potential_match', risk_level: 'high', highest_risk_score: 0.86, potentially_relevant_results: 1,
+    outcome: 'review_required', risk_level: 'review', highest_risk_score: 0.86, potentially_relevant_results: 1,
     categories: { financial_crime: 1 }, human_review_required: true,
     statement: 'One potentially relevant result reached the configured review threshold.', risk_threshold: 0.65,
+    thresholds: { high_risk_percent: 90, review_percent: 65, safe_below_percent: 65 },
+    risk_distribution: { high_risk: 0, review: 1, safe: 0 },
     results_at_or_above_threshold: 1, decision_eligible: true, threshold_status: 'review_required'
   },
   coverage: {
@@ -35,7 +38,7 @@ const response = {
   results: [{
     result_id: 'r-1', title: 'Example Person named in investigation', url: 'https://news.example/case', publisher: 'news.example',
     published_at: '2026-10-20T00:00:00Z', language: 'en', source_type: 'news_index',
-    excerpt: 'Authorities opened an investigation. No final judgment was reported.', risk_score: 0.86, risk_level: 'high',
+    excerpt: 'Authorities opened an investigation. No final judgment was reported.', risk_score: 0.86, risk_level: 'review',
     categories: ['financial_crime'], legal_stage: 'investigation', review_required: true
   }]
 };

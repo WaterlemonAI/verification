@@ -245,7 +245,7 @@ test('identity scoring separates expanded full names from typo-like near matches
   const near = await run('Arban Uddin');
   assert.equal(near.results[0].identity_match.type, 'near_match');
   assert.ok(near.results[0].identity_match.score < 0.9);
-  assert.equal(near.results[0].risk_level, 'intermediate');
+  assert.equal(near.results[0].risk_level, 'review');
   assert.ok(near.results[0].risk_score < 0.9);
 });
 
