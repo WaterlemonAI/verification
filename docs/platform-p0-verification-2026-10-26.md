@@ -13,6 +13,7 @@
 | Billing and entitlements | Admin rate save/reload, USD 0.30 initial Form+service charge, USD 0.15 second-tier charge, 402 on insufficient credit, customer/admin UTC ledgers, hidden disabled module, direct 403 | Pass locally |
 | Credit audit | Atomic Azure Table balance+audit adjustment, idempotent credit request, UTC amount/actor/ID in admin UI; tests for six-decimal precision, currency lock, concurrent duplicate requests | Pass locally |
 | Login feedback | Empty email/password blocked locally; valid synthetic sign-in, key creation and account navigation work | Pass locally |
+| Platform SMTP | Controlled `sendTest` from `notify@kycprobe.com` to the same mailbox was accepted by SMTP and the message appeared in the Titan inbox; no customer data or credentials were sent | Pass for transport and self-delivery |
 | Adverse-media outage behavior | Forced paid 402 plus free 429 returns customer-safe 502 with `SEARCH_SOURCES_UNAVAILABLE` and transaction ID; logs contain source status codes and no subject | Pass locally |
 | Monitoring template | API 5xx metric alert and adverse-media source-failure log alert target the dedicated AI7 UAE API and action group | Bicep build and Azure deployment validation pass; alert firing not yet tested |
 | API hostname in Form docs | Copied Form endpoint uses `api.ai7uae.com` on hosted pages; local development uses local origin | Code review; hosted verification awaits deployment |
@@ -26,7 +27,7 @@
 3. **Forms commercial policy:** malformed requests cost zero. Admitted Form requests are charged at submission; a subsequent queue write failure returns 503 without automatic compensation. The provider-error and never-queued-job charge/refund policy needs finance/product approval before go-live. Do not advertise Form billing as fully reconciled until this is resolved.
 4. **Forms idempotency:** worker retries reuse stored results and do not rerun checks; separate duplicate client submissions can still create separate jobs and charges. A durable submission idempotency contract is required before broad rollout.
 5. **Key creation under retry/concurrency:** the UI now distinguishes a successful creation from a failed list refresh. If the create response itself is lost after the server commits the key, a manual retry can still create another key. The 20-active-key limit is checked before creation but is not an atomic cross-replica limit. Request idempotency and a durable workspace lock/reservation are needed for full P0 sign-off.
-6. **Production identity/email:** SPF, DMARC, MX and app/API DNS were observed. The SMTP secret is enabled in the dedicated Key Vault. DKIM, controlled end-to-end mail delivery, invitation/recovery in the deployed UI and app-host cookie behavior still need staging/live proof.
+6. **Production identity/email:** SPF, DMARC, MX and app/API DNS were observed. The SMTP secret is enabled in the dedicated Key Vault, and a controlled self-delivery succeeded. DKIM, invitation/recovery delivery to a distinct controlled recipient, and app-host cookie behavior still need staging/live proof.
 7. **Live UI and P1:** changes remain in the candidate checkout. The deployed UI still serves the previous revision. P1 provider-backed contracts, callback/report persistence and accessibility/responsive testing are on hold under the requested P0-before-P1 order.
 
 ## Go-live rule
