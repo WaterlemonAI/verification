@@ -1,5 +1,5 @@
 import { createReadStream, readFileSync, existsSync, statSync } from 'node:fs';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { createServer } from 'node:http';
 import { get as httpsGet } from 'node:https';
@@ -9,6 +9,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
 import { createPlatformMailer } from './lib/platform-mail.mjs';
+import { createCustomerUsageStore, moneyMicros, validateUsagePolicy } from './lib/customer-usage.mjs';
 import { createInvitation, invitationCustomerId, validInvitation, publicCustomer, INVITATION_HOURS } from './lib/customer-invitation.mjs';
 import { createPasswordResetToken, parsePasswordResetToken, RESET_MINUTES } from './lib/password-reset.mjs';
 import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
@@ -57,6 +58,100 @@ function securityHeaders(res) {
   res.setHeader('x-content-type-options', 'nosniff');
   res.setHeader('x-frame-options', 'DENY');
   res.setHeader('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('access-control-expose-headers', 'x-ai7-transaction-id');
+}
+
+function moduleCatalog(integrations) {
+  return [
+    ...integrations.map((item) => ({ id: item.id, name: item.name, available: item.enabled !== false })),
+    { id: 'bank-statement-analysis', name: 'Bank Statement Analysis', available: bsaEnabled() },
+    { id: 'entity-search-report', name: 'Entity Search PDF report', available: true },
+    { id: 'forms', name: 'Forms orchestration', available: true }
+  ];
+}
+
+async function classifyCustomerApi(req, url, store) {
+  const path = url.pathname;
+  const fixed = {
+    '/service/adverse_media': 'adverse-media',
+    '/service/merchant_screening': 'merchant-screening',
+    '/service/bank_statement_analysis': 'bank-statement-analysis',
+    '/reports/entity-search.pdf': 'entity-search-report'
+  };
+  if (path === '/service/health') return { moduleIds: [], method: 'GET', billable: false };
+  if (path === '/service/keys/self/rotate') return { moduleIds: [], method: 'POST', billable: false };
+  if (fixed[path]) return { moduleIds: [fixed[path]], method: 'POST', billable: true };
+  if (path === '/service/adverse_media/config' || /\/service\/(?:adverse_media|merchant_screening|forms)\/reports\//.test(path)
+    || /\/service\/merchant_screening\/screenshots\//.test(path)) return null;
+  if (path.startsWith('/service/bank_statement_analysis/')) return { moduleIds: ['bank-statement-analysis'], method: 'GET', billable: false };
+  const formMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(path);
+  if (formMatch) {
+    const form = await store.getForm(formMatch[1]);
+    return { moduleIds: ['forms', ...(form?.enabled ? form.services.map((item) => item.service_id) : [])], method: 'POST', billable: Boolean(form?.enabled) };
+  }
+  const integration = await store.getIntegration?.(path, req.method || 'GET');
+  if (integration) return { moduleIds: [integration.id], method: integration.method, billable: true };
+  if (path.startsWith('/service/') && store.listIntegrations) {
+    const configured = (await store.listIntegrations({ publicOnly: true })).find((item) => item.publicPath === path);
+    if (configured) return { moduleIds: [configured.id], method: configured.method, billable: false };
+  }
+  return null;
+}
+
+function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, transactionId, details, billable) {
+  const originalEnd = res.end;
+  let called = false;
+  res.end = function (...args) {
+    if (called) return this;
+    called = true;
+    const status = this.statusCode;
+    const operation = billable
+      ? usageStore.complete(workspaceId, logKey, status)
+      : usageStore.record(workspaceId, { ...details, transactionId }, status);
+    let timer;
+    Promise.race([operation, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('usage_log_timeout')), 5000); timer.unref?.(); })])
+      .catch(() => console.warn('customer_usage_completion_failed'))
+      .finally(() => { clearTimeout(timer); originalEnd.apply(this, args); });
+    return this;
+  };
+}
+
+async function gateCustomerApi(req, res, url, store, usageStore, transactionId) {
+  const route = await classifyCustomerApi(req, url, store);
+  if (!route) return true;
+  const token = bearerToken(req);
+  let client = await store.getClientForKey?.(token);
+  if (!client && !store.getClientForKey && await store.isClientKey?.(token)) {
+    client = { id: `test-${createHash('sha256').update(token).digest('hex').slice(0, 16)}`, key_id: '' };
+  }
+  if (!client) return true; // The existing route returns its unchanged 401 body.
+  req.ai7Client = client;
+  const workspaceId = client.id;
+  const details = { transactionId, keyId: client.key_id || '', moduleIds: route.moduleIds, method: req.method || 'GET', path: url.pathname };
+  const managed = Boolean((await store.getCustomer?.(workspaceId))?.usagePolicyVersion);
+  if (req.method !== route.method) {
+    await usageStore.record(workspaceId, details, 405);
+    json(res, 405, { status: 'Error', error: `Method must be ${route.method}.` }, { allow: route.method });
+    return false;
+  }
+  if (route.billable) {
+    const admission = await usageStore.admit(workspaceId, details, managed);
+    if (!admission.allowed) {
+      json(res, admission.statusCode, { status: 'Error', error: admission.reason });
+      return false;
+    }
+    completeUsageBeforeResponse(res, usageStore, workspaceId, admission.logKey, transactionId, details, true);
+  } else {
+    const profile = await usageStore.account(workspaceId, managed);
+    const allowed = profile.allowed_modules;
+    if (route.moduleIds.some((id) => !allowed.includes('*') && !allowed.includes(id))) {
+      await usageStore.record(workspaceId, details, 403);
+      json(res, 403, { status: 'Error', error: 'This module is not enabled for this customer.' });
+      return false;
+    }
+    completeUsageBeforeResponse(res, usageStore, workspaceId, '', transactionId, details, false);
+  }
+  return true;
 }
 
 function bearerToken(req) {
@@ -987,7 +1082,7 @@ async function currentPortalSession(req, store) {
   }
 }
 
-async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottle, mailer) {
+async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore) {
   if (req.method === 'GET' && url.pathname === '/portal/api/auth/status') {
     const { account, session } = await currentPortalSession(req, store);
     return json(res, 200, { authenticated: Boolean(session), account: session ? safePortalAccount(account) : null });
@@ -1110,6 +1205,16 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
     return json(res, 200, await serviceHealth(store));
   }
 
+  if (req.method === 'GET' && (url.pathname === '/portal/api/usage' || url.pathname === '/portal/api/entitlements')) {
+    const { account, session } = await currentPortalSession(req, store);
+    if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
+    const managed = Boolean((await store.getCustomer?.(account.client_id))?.usagePolicyVersion);
+    const usage = await usageStore.account(account.client_id, managed);
+    return json(res, 200, url.pathname.endsWith('/entitlements')
+      ? { allowed_modules: usage.allowed_modules, mode: usage.mode, balance: usage.balance, currency: usage.currency }
+      : { account: usage, logs: await usageStore.logs(account.client_id, 100) });
+  }
+
   return json(res, 404, { status: 'Error', error: 'Portal operation was not found.' });
 }
 
@@ -1117,8 +1222,14 @@ function wantsHtml(req) {
   return String(req.headers.accept || '').toLowerCase().includes('text/html');
 }
 
+function portalPagePath(pathname) {
+  return pathname === '/index.html' ? '/' : pathname.replace(/\.html$/, '').replace(/\/$/, '') || '/';
+}
+
 function protectedPortalPath(pathname) {
-  return ['/', '/iban', '/iban/', '/entity-search', '/entity-search/', '/adverse-media', '/adverse-media/', '/merchant-screening', '/merchant-screening/', '/bank-statement-analysis', '/bank-statement-analysis/', '/forms', '/forms/', '/account', '/account/'].includes(pathname);
+  const page = portalPagePath(pathname);
+  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account'].includes(page)
+    || /^\/forms\/[a-z0-9-]+$/.test(page);
 }
 
 async function serviceHealth(store) {
@@ -1164,7 +1275,7 @@ async function requireAdmin(req, res, store, { csrf = false } = {}) {
   return { account, session };
 }
 
-async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer) {
+async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore) {
   if (req.method === 'GET' && url.pathname === '/admin/api/auth/status') {
     const account = await store.getAdminAccount();
     return json(res, 200, { configured: Boolean(account) });
@@ -1244,6 +1355,35 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
 
   const access = await requireAdmin(req, res, store, { csrf: !['GET', 'HEAD'].includes(req.method || 'GET') });
   if (!access) return;
+
+  if (req.method === 'GET' && url.pathname === '/admin/api/modules') {
+    return json(res, 200, { modules: moduleCatalog(await store.listIntegrations({ publicOnly: true })) });
+  }
+  const usageMatch = /^\/admin\/api\/customers\/([a-f0-9]{16})\/(usage|credit)$/.exec(url.pathname);
+  if (usageMatch) {
+    const workspaceId = usageMatch[1];
+    const customer = await store.getCustomer(workspaceId);
+    const legacy = !customer && (await store.listClients()).some((key) => key.workspaceId === workspaceId);
+    if (!customer && !legacy) return json(res, 404, { status: 'Error', error: 'Customer workspace was not found.' });
+    const managed = Boolean(customer?.usagePolicyVersion);
+    try {
+      if (req.method === 'GET' && usageMatch[2] === 'usage') {
+        return json(res, 200, { account: await usageStore.account(workspaceId, managed), logs: await usageStore.logs(workspaceId, 100) });
+      }
+      if (req.method === 'PUT' && usageMatch[2] === 'usage') {
+        const policy = validateUsagePolicy(await readJson(req), new Set(moduleCatalog(await store.listIntegrations({ publicOnly: true })).map((item) => item.id)));
+        return json(res, 200, { account: await usageStore.configure(workspaceId, policy, managed) });
+      }
+      if (req.method === 'POST' && usageMatch[2] === 'credit') {
+        const amount = moneyMicros((await readJson(req)).amount);
+        if (amount <= 0) return json(res, 400, { status: 'Error', error: 'Credit amount must be greater than zero.' });
+        return json(res, 200, { account: await usageStore.addCredit(workspaceId, amount, managed) });
+      }
+    } catch (error) {
+      return json(res, error.statusCode || 400, { status: 'Error', error: error.message === 'usage_meter_unavailable' ? 'Usage meter is unavailable.' : error.message });
+    }
+    return json(res, 405, { status: 'Error', error: 'Method is not supported.' });
+  }
 
   if (url.pathname === '/admin/api/bsa' || url.pathname.startsWith('/admin/api/bsa/')) {
     if (access.legacy) return json(res, 409, { status: 'Error', error: 'Complete account setup first.' });
@@ -1352,7 +1492,7 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
       const id = randomBytes(8).toString('hex');
       const invitation = createInvitation(id);
       const timestamp = new Date().toISOString();
-      const customer = { id, name, adminEmail, status: 'pending', invitationHash: invitation.tokenHash,
+      const customer = { id, name, adminEmail, status: 'pending', usagePolicyVersion: 1, invitationHash: invitation.tokenHash,
         invitationExpiresAt: invitation.expiresAt, createdAt: timestamp, updatedAt: timestamp };
       await store.setCustomer(customer);
       let delivery = 'sent';
@@ -1582,7 +1722,7 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
   }
 }
 
-export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), usageStore = createCustomerUsageStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
   const portalLoginThrottle = createLoginThrottle();
   const resetThrottle = createLoginThrottle();
@@ -1610,8 +1750,12 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     securityHeaders(res);
     const url = new URL(req.url || '/', 'http://localhost');
     const host = String(req.headers.host || '').split(':')[0].toLowerCase();
+    const customerApiPath = url.pathname.startsWith('/service/') || url.pathname === '/reports/entity-search.pdf' || /^\/forms\/[a-z0-9-]+\/submissions$/.test(url.pathname);
+    const transactionId = customerApiPath ? randomUUID() : '';
+    if (transactionId) res.setHeader('x-ai7-transaction-id', transactionId);
 
     try {
+      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, transactionId))) return;
       if (url.pathname === '/healthz') {
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
         return res.end('ok\n');
@@ -1662,17 +1806,26 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           cost_guardrail_usd: adverseMediaConfig.costGuardrailUsd
         }, { 'cache-control': 'public, max-age=3600' });
       }
-      if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle, mailer);
-      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer);
+      if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle, mailer, usageStore);
+      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore);
       if (url.pathname === '/admin/bsa-synthetic-combined.pdf') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }
       if (url.pathname === '/admin' || url.pathname === '/admin/') return serveStatic(res, join(root, 'admin-site'), '/');
       if (url.pathname.startsWith('/admin/')) return serveStatic(res, join(root, 'admin-site'), url.pathname.replace(/^\/admin/, '') || '/');
-      if (url.pathname === '/catalog.json') return json(res, 200, { integrations: await store.listIntegrations({ publicOnly: true }) }, { 'cache-control': 'public, max-age=60' });
+      if (url.pathname === '/catalog.json') {
+        const { account, session } = await currentPortalSession(req, store);
+        const usage = session ? await usageStore.account(account.client_id, Boolean((await store.getCustomer?.(account.client_id))?.usagePolicyVersion)) : null;
+        const integrations = (await store.listIntegrations({ publicOnly: true })).filter((item) => !usage || usage.allowed_modules.includes('*') || usage.allowed_modules.includes(item.id));
+        return json(res, 200, { integrations }, { 'cache-control': 'no-store' });
+      }
       if (url.pathname === '/forms.json') {
         const integrations = await store.listIntegrations({ publicOnly: true });
-        const forms = (await store.listForms()).filter((form) => form.enabled).map((form) => publicFormDefinition(form, integrations));
+        const { account, session } = await currentPortalSession(req, store);
+        const usage = session ? await usageStore.account(account.client_id, Boolean((await store.getCustomer?.(account.client_id))?.usagePolicyVersion)) : null;
+        const allowed = usage?.allowed_modules || [];
+        const forms = (await store.listForms()).filter((form) => form.enabled && (!session || ['forms', ...form.services.map((item) => item.service_id)].every((id) => allowed.includes('*') || allowed.includes(id))))
+          .map((form) => publicFormDefinition(form, integrations));
         return json(res, 200, { forms }, { 'cache-control': 'public, max-age=60' });
       }
       if (url.pathname === '/openapi.json') {
@@ -1693,8 +1846,18 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       const directory = apiHosts.has(host) || url.pathname.startsWith('/docs') ? join(root, 'api-site') : join(root, 'site');
       if (directory.endsWith('api-site') && (url.pathname === '/login' || url.pathname === '/login/')) return serveStatic(res, directory, '/login.html');
       if (directory.endsWith('api-site') && wantsHtml(req) && protectedPortalPath(url.pathname)) {
-        const { session } = await currentPortalSession(req, store);
+        const { account, session } = await currentPortalSession(req, store);
         if (!session) return portalLoginRedirect(res, url.pathname, url.search);
+        const page = portalPagePath(url.pathname);
+        const pageModule = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/forms': 'forms' }[page]
+          || (/^\/forms\/[a-z0-9-]+$/.test(page) ? 'forms' : '');
+        if (pageModule) {
+          const usage = await usageStore.account(account.client_id, Boolean((await store.getCustomer?.(account.client_id))?.usagePolicyVersion));
+          if (!usage.allowed_modules.includes('*') && !usage.allowed_modules.includes(pageModule)) {
+            res.writeHead(302, { location: '/account', 'cache-control': 'no-store' });
+            return res.end();
+          }
+        }
       }
       if ((!bsaEnabled() && (url.pathname === '/bank-statement-analysis' || url.pathname === '/bank-statement-analysis/'))
         || /^\/bsa-demo\.(?:html|css|js)$/.test(url.pathname)
@@ -1712,8 +1875,9 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (directory.endsWith('api-site') && (url.pathname === '/bank-statement-analysis' || url.pathname === '/bank-statement-analysis/')) return serveStatic(res, directory, '/bank-statement-analysis.html');
       if (directory.endsWith('api-site') && (url.pathname === '/forms' || url.pathname === '/forms/' || /^\/forms\/[a-z0-9-]+\/?$/.test(url.pathname))) return serveStatic(res, directory, '/forms.html');
       return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
-    } catch {
-      return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });
+    } catch (error) {
+      if (res.headersSent) return;
+      return json(res, error.message === 'usage_meter_unavailable' ? 503 : 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });
     }
   });
 }

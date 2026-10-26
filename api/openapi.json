@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "AI7 UAE Verification API",
-    "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, merchant-website risk screening, Forms orchestration, and asynchronous bank statement analysis.",
-    "version": "1.7.0"
+    "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, merchant-website risk screening, Forms orchestration, and asynchronous bank statement analysis. Every user-facing API response includes the random X-AI7-Transaction-ID header. Signed-in customers can review UTC timestamps, HTTP codes and per-hit costs in Account settings. Modules must be enabled for the workspace (otherwise HTTP 403); prepaid workspaces need sufficient credit (otherwise HTTP 402). An admitted hit is charged once even if the supplier returns an error or a screening result is partial. Supplier response JSON and HTTP codes are preserved. Form submissions charge the Form and each selected API once when accepted; callback retries are free.",
+    "version": "1.8.0"
   },
   "servers": [
     {

@@ -65,6 +65,23 @@
     } catch (error) { byId('health-status').textContent = error.message; }
   }
 
+  async function loadUsage() {
+    byId('usage-status').textContent = 'Loading usage…';
+    try {
+      const { account, logs } = await request('/portal/api/usage');
+      byId('usage-status').textContent = `${account.mode === 'postpay' ? 'Postpay · unlimited usage' : `Prepaid balance ${account.currency} ${account.balance}`} · ${account.charged_calls} charged calls · total cost ${account.currency} ${account.spent}`;
+      const body = byId('usage-rows'); body.replaceChildren();
+      for (const log of logs) {
+        const row = document.createElement('tr');
+        for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', `${account.currency} ${log.cost}`]) {
+          const cell = document.createElement('td'); cell.textContent = value; row.append(cell);
+        }
+        body.append(row);
+      }
+      if (!logs.length) { const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 5; cell.textContent = 'No API calls logged yet.'; row.append(cell); body.append(row); }
+    } catch (error) { byId('usage-status').textContent = error.message; }
+  }
+
   byId('create-key-form').addEventListener('submit', async (event) => {
     event.preventDefault(); const button = event.currentTarget.querySelector('button'); button.disabled = true;
     byId('account-message').textContent = '';
@@ -75,12 +92,13 @@
   });
   byId('copy-new-key').addEventListener('click', async () => { await navigator.clipboard.writeText(byId('new-key-value').textContent); byId('copy-new-key').textContent = 'Copied'; });
   byId('refresh-health').addEventListener('click', loadHealth);
+  byId('refresh-usage').addEventListener('click', loadUsage);
 
   request('/portal/api/auth/session').then(async (session) => {
     csrf = session.csrf_token;
     byId('account-identity').textContent = `${session.account.client_name} · ${session.account.email}`;
     const initial = sessionStorage.getItem('ai7_new_api_key');
     if (initial) { sessionStorage.removeItem('ai7_new_api_key'); showNewKey(initial); }
-    await Promise.all([loadKeys(), loadHealth()]);
+    await Promise.all([loadKeys(), loadHealth(), loadUsage()]);
   }).catch(() => location.replace('/login?next=%2Faccount'));
 })();

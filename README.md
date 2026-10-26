@@ -90,6 +90,14 @@ The protected console at `/admin` lets an operator:
 
 Customer administrators sign in at `https://app.kycprobe.com/login` and manage up to 20 active keys in **Account settings**. A 48-hour, single-use invitation link creates the portal account and an initial API key. The key appears once after setup; later keys and rotations also appear once and are retained only as SHA-256 hashes. Rotating a key retains its key ID and workspace ownership, so older key material stops authenticating and existing report ownership for that key ID remains stable. Existing customer keys remain valid; an administrator can use **Invite admin** on a legacy workspace to add password-based access without invalidating its existing key.
 
+### Customer access, transaction logs, and billing
+
+The admin **Customer keys → Usage & rates** control configures each workspace's enabled modules, billing mode, currency (USD or AED), and per-module rates. A rate tier's `up_to` is the inclusive hit count. Use a blank final `up_to` for all later hits; for example, `1–10,000`, `10,001–20,000`, and `20,001+`. Tiers are counted separately per workspace and module. Rates may be zero. Prepaid workspaces require sufficient credit before a check runs; postpay workspaces have no credit limit. An admin can add prepaid credit, and every credit addition is stored as a durable audit event. Currency cannot be changed after credit is added or a billable call. Existing workspaces retain all-module, zero-rate postpay access until explicitly configured; newly invited workspaces start prepaid with no enabled modules.
+
+Every customer-facing API call receives a random UUID in the `X-AI7-Transaction-ID` response header, including failed calls. The signed-in customer sees the transaction ID, UTC request timestamp, HTTP response code, module and cost in **Account settings → Credit and API calls**. The admin sees the same ledger for that workspace. Supplier JSON bodies and HTTP response codes are preserved. An admitted hit is charged once, including a provider error or a partial result; wrong methods, disabled modules, insufficient credit, health checks, and key rotation cost zero. A Form submission charges one hit for the Form plus one hit for every selected API at acceptance; queued worker execution and callback retries do not charge again. Form pricing is independent of its later decision eligibility.
+
+The protected endpoints are `GET /admin/api/modules`, `GET|PUT /admin/api/customers/{workspaceId}/usage`, `POST /admin/api/customers/{workspaceId}/credit`, `GET /portal/api/entitlements`, and `GET /portal/api/usage`. Admin writes require the signed session and CSRF token. The API returns HTTP 403 for a disabled module and 402 for insufficient prepaid credit before contacting a provider. Usage accounts and call rows use separate per-customer partitions in the project's existing private `AdverseMediaReports` Azure Table; each billed admission atomically updates credit, hit count, and the call row. A Table failure prevents a billed request from reaching the provider.
+
 `GET https://api.ai7uae.com/service/health` requires `Authorization: Bearer <key>` and returns API transport and enabled-route status. It does not perform an upstream provider probe. `POST https://api.ai7uae.com/service/keys/self/rotate` with the current key as Bearer authentication rotates that key and returns the replacement once. The old key is invalidated. Portal session endpoints `GET /portal/api/keys`, `POST /portal/api/keys`, `POST /portal/api/keys/{id}/rotate`, and `POST /portal/api/keys/{id}/revoke` are available at `app.kycprobe.com` and require the session CSRF token for changes.
 
 ### Forms orchestration
@@ -104,7 +112,7 @@ Forms currently accept JSON-capable API inputs. Binary trade-licence document up
 
 The live UAE Vendor Due Diligence Form combines four APIs: UAE Trade Licence, Comprehensive Entity Search, Global Adverse Media Screening, and Merchant Website Screening. Its current public schema does not include IBAN Verification or Bank Statement Analysis. Forms can still be configured with other JSON-capable APIs through the protected builder; binary uploads remain direct-API operations.
 
-The admin key stays in browser memory only. Issued customer keys are displayed once, while only SHA-256 hashes are retained. Public catalog responses omit upstream URLs, authentication configuration, Key Vault names, and supplier identity.
+Issued customer keys are displayed once, while only SHA-256 hashes are retained. Public catalog responses omit upstream URLs, authentication configuration, Key Vault names, and supplier identity.
 
 Run the contract tests locally with:
 

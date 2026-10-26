@@ -262,3 +262,4 @@ body.portal-ready { padding-left: 276px; }
   .meta .copy { display: none; }
   footer,footer>div:last-child{align-items:flex-start;flex-direction:column}
 }
+.account-usage-wrap{max-height:440px;overflow:auto;border:1px solid #dae3ea;background:#fff}.account-usage-table{width:100%;border-collapse:collapse;font-size:.72rem;min-width:650px}.account-usage-table th,.account-usage-table td{text-align:left;padding:.8rem;border-bottom:1px solid #dae3ea;overflow-wrap:anywhere}.account-usage-table th{position:sticky;top:0;color:white;background:#071f43}.account-usage-table td:nth-child(2){font-family:"DM Mono",monospace}

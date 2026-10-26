@@ -340,6 +340,78 @@ async function loadForms() {
   });
 }
 
+function parseTierLines(value) {
+  const lines = value.split(/\n/).map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return [];
+  return lines.map((line) => {
+    const match = /^(\*|[1-9]\d*)\s*:\s*((?:0|[1-9]\d*)(?:\.\d{1,6})?)$/.exec(line);
+    if (!match) throw new Error('Use tiers like 10000:0.10, then *:0.06 on the final line.');
+    return { up_to: match[1] === '*' ? null : Number(match[1]), price: match[2] };
+  });
+}
+
+async function openUsageDialog(customer) {
+  const [data, catalog] = await Promise.all([
+    request(`/admin/api/customers/${customer.id}/usage`), request('/admin/api/modules')
+  ]);
+  const form = byId('usage-form');
+  form.elements.workspace_id.value = customer.id;
+  form.elements.mode.value = data.account.mode;
+  form.elements.currency.value = data.account.currency;
+  byId('usage-title').textContent = `${customer.name} · access and rates`;
+  byId('usage-error').textContent = '';
+  byId('credit-message').textContent = '';
+  byId('usage-summary').textContent = `${data.account.mode === 'postpay' ? 'Unlimited postpay' : `Credit ${data.account.currency} ${data.account.balance}`} · ${data.account.charged_calls} charged calls · total cost ${data.account.currency} ${data.account.spent}`;
+  const list = byId('usage-modules'); list.replaceChildren();
+  for (const module of catalog.modules) {
+    const row = document.createElement('div'); row.className = 'usage-module'; row.dataset.module = module.id;
+    const label = document.createElement('label'); label.className = 'check';
+    const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = data.account.allowed_modules.includes('*') || data.account.allowed_modules.includes(module.id);
+    const name = document.createElement('span'); name.textContent = `${module.name}${module.available ? '' : ' (unavailable)'}`;
+    label.append(checkbox, name);
+    const tiers = document.createElement('textarea'); tiers.rows = 2; tiers.spellcheck = false;
+    tiers.placeholder = '*:0.00'; tiers.setAttribute('aria-label', `Rate tiers for ${module.name}`);
+    tiers.value = (data.account.rates[module.id] || []).map((tier) => `${tier.up_to ?? '*'}:${tier.price}`).join('\n');
+    row.append(label, tiers); list.append(row);
+  }
+  const body = byId('admin-usage-logs'); body.replaceChildren();
+  for (const log of data.logs) {
+    const tr = document.createElement('tr');
+    for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', `${data.account.currency} ${log.cost}`]) {
+      const td = document.createElement('td'); td.textContent = value; tr.append(td);
+    }
+    body.append(tr);
+  }
+  if (!data.logs.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 5; td.textContent = 'No API calls logged yet.'; tr.append(td); body.append(tr); }
+  byId('usage-dialog').showModal();
+}
+
+byId('usage-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  byId('usage-error').textContent = '';
+  try {
+    const rows = [...byId('usage-modules').children];
+    const allowed_modules = rows.filter((row) => row.querySelector('input').checked).map((row) => row.dataset.module);
+    const rates = {};
+    for (const row of rows) { const tiers = parseTierLines(row.querySelector('textarea').value); if (tiers.length) rates[row.dataset.module] = tiers; }
+    await request(`/admin/api/customers/${form.elements.workspace_id.value}/usage`, { method: 'PUT', body: JSON.stringify({ mode: form.elements.mode.value, currency: form.elements.currency.value, allowed_modules, rates }) });
+    byId('usage-dialog').close(); await loadClients();
+  } catch (error) { byId('usage-error').textContent = error.message; }
+});
+
+byId('credit-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  byId('credit-message').textContent = '';
+  try {
+    const id = byId('usage-form').elements.workspace_id.value;
+    const data = await request(`/admin/api/customers/${id}/credit`, { method: 'POST', body: JSON.stringify({ amount: form.elements.amount.value }) });
+    byId('credit-message').textContent = `Credit added. New balance: ${data.account.currency} ${data.account.balance}`;
+    form.reset();
+  } catch (error) { byId('credit-message').textContent = error.message; }
+});
+
 async function loadClients() {
   const data = await request('/admin/api/customers');
   const list = byId('client-list');
@@ -350,10 +422,11 @@ async function loadClients() {
   data.customers.forEach((customer) => {
     const heading = document.createElement('div');
     heading.className = 'client';
-    heading.innerHTML = '<div><strong></strong><small></small></div><span class="pill"></span><button class="resend" type="button"></button>';
+    heading.innerHTML = '<div><strong></strong><small></small></div><span class="pill"></span><button class="usage-open" type="button">Usage & rates</button><button class="resend" type="button"></button>';
     heading.querySelector('strong').textContent = customer.name;
     heading.querySelector('small').textContent = customer.adminEmail || 'Existing workspace';
     heading.querySelector('.pill').textContent = customer.status;
+    heading.querySelector('.usage-open').addEventListener('click', () => openUsageDialog(customer).catch((error) => window.alert(error.message)));
     const resend = heading.querySelector('.resend');
     resend.hidden = !['pending', 'legacy'].includes(customer.status);
     resend.textContent = customer.status === 'legacy' ? 'Invite admin' : 'Resend invite';

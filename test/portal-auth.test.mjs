@@ -26,9 +26,9 @@ test('one-time customer invitation creates a portal account and initial workspac
   assert.equal(protectedPage.status, 302);
   assert.equal(protectedPage.headers.get('location'), '/login?next=%2Fadverse-media');
 
-  const publicForm = await fetch(`${baseUrl}/forms/public-onboarding`, { headers: { accept: 'text/html' } });
-  assert.equal(publicForm.status, 200);
-  assert.match(await publicForm.text(), /LIVE FORM/);
+  const protectedForm = await fetch(`${baseUrl}/forms/public-onboarding`, { redirect: 'manual', headers: { accept: 'text/html' } });
+  assert.equal(protectedForm.status, 302);
+  assert.match(protectedForm.headers.get('location'), /^\/login\?next=/);
 
   const invalid = await fetch(`${baseUrl}/portal/api/invitations/accept`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
