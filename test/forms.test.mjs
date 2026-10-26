@@ -5,7 +5,7 @@ import { PDFDocument } from 'pdf-lib';
 
 process.env.NODE_ENV = 'test';
 process.env.API_PUBLIC_BASE_URL = 'https://api.ai7uae.com';
-const { createAppServer, executeFormsJob } = await import('../server.mjs');
+const { consolidateFormServiceResults, createAppServer, evaluateFormServiceQualification, executeFormsJob } = await import('../server.mjs');
 const { EnvironmentStore } = await import('../lib/api-store.mjs');
 const { MemoryAdverseMediaReportStore } = await import('../lib/adverse-media-report-store.mjs');
 const { resolveFormServiceInput, validateFormDefinition } = await import('../lib/forms.mjs');
@@ -35,6 +35,18 @@ const formDefinition = {
   }],
   enabled: true
 };
+
+function serviceResult(serviceId, httpStatus, response) {
+  const qualification = evaluateFormServiceQualification({ httpStatus, response });
+  return {
+    service_id: serviceId,
+    name: serviceId,
+    status: qualification.transport.completed ? 'completed' : 'failed',
+    http_status: httpStatus,
+    response,
+    ...qualification
+  };
+}
 
 before(async () => {
   await store.upsertIntegration({
@@ -121,6 +133,9 @@ test('Forms execution returns exact nested responses and creates one permanent t
   });
   assert.equal(result.status, 'completed');
   assert.equal(result.summary.decision_eligible, true);
+  assert.equal(result.services[0].transport.status, 'completed');
+  assert.equal(result.services[0].coverage.status, 'complete');
+  assert.equal(result.services[0].eligibility.status, 'eligible');
   assert.deepEqual(result.services[0].response, {
     matched: true,
     received: { company_name: 'Acme LLC', country: 'AE', confirmed: true, source: 'AI7 Form - Acme LLC' }
@@ -135,6 +150,74 @@ test('Forms execution returns exact nested responses and creates one permanent t
   const downloaded = await fetch(`${baseUrl}/service/forms/reports/${result.report.report_id}.pdf`);
   assert.equal(downloaded.status, 200);
   assert.equal(downloaded.headers.get('content-type'), 'application/pdf');
+});
+
+test('Forms decision is eligible only when every selected check affirmatively qualifies', () => {
+  const services = [
+    serviceResult('uae-trade-licence', 200, { licence_number: '12345' }),
+    serviceResult('entity-search', 200, { data: [{ name: 'Example Trading LLC' }] }),
+    serviceResult('adverse-media', 200, { status: 'completed', coverage: { complete: true }, summary: { decision_eligible: true } }),
+    serviceResult('merchant-screening', 200, { status: 'completed', summary: { decision_eligible: true } })
+  ];
+  const result = consolidateFormServiceResults(services);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.summary.transport_completed, 4);
+  assert.equal(result.summary.coverage_complete, 4);
+  assert.equal(result.summary.eligible, 4);
+  assert.equal(result.summary.decision_eligible, true);
+  assert.deepEqual(result.summary.reason_codes, []);
+});
+
+test('HTTP 200 partial adverse-media keeps transport complete but blocks Form eligibility', () => {
+  const adverse = serviceResult('adverse-media', 200, {
+    status: 'partial',
+    coverage: { complete: false, reason_codes: ['current_news_unavailable'] },
+    summary: { decision_eligible: false, threshold_status: 'incomplete_coverage' }
+  });
+  const result = consolidateFormServiceResults([
+    serviceResult('entity-search', 200, { data: [] }),
+    adverse
+  ]);
+  assert.equal(result.status, 'completed');
+  assert.equal(adverse.transport.completed, true);
+  assert.equal(adverse.coverage.complete, false);
+  assert.equal(adverse.eligibility.decision_eligible, false);
+  assert.deepEqual(adverse.eligibility.reason_codes, ['current_news_unavailable', 'incomplete_coverage', 'service_not_decision_eligible']);
+  assert.equal(result.summary.decision_eligible, false);
+  assert.equal(result.summary.ineligible_services[0].service_id, 'adverse-media');
+});
+
+test('HTTP 200 partial merchant screening keeps transport complete but blocks Form eligibility', () => {
+  const merchant = serviceResult('merchant-screening', 200, {
+    status: 'partial',
+    summary: { decision_eligible: false, coverage: { website: 'available', screenshots: 'unavailable' } }
+  });
+  const result = consolidateFormServiceResults([
+    serviceResult('uae-trade-licence', 200, { licence_number: '12345' }),
+    merchant
+  ]);
+  assert.equal(result.status, 'completed');
+  assert.equal(merchant.transport.completed, true);
+  assert.equal(merchant.coverage.status, 'incomplete');
+  assert.equal(merchant.eligibility.status, 'ineligible');
+  assert.ok(merchant.eligibility.reason_codes.includes('service_not_decision_eligible'));
+  assert.equal(result.summary.decision_eligible, false);
+  assert.equal(result.summary.ineligible_services[0].service_id, 'merchant-screening');
+});
+
+test('failed provider remains a transport failure and blocks Form eligibility', () => {
+  const provider = serviceResult('entity-search', 503, { message: 'Provider unavailable' });
+  const result = consolidateFormServiceResults([
+    serviceResult('uae-trade-licence', 200, { licence_number: '12345' }),
+    provider
+  ]);
+  assert.equal(result.status, 'partial');
+  assert.equal(provider.transport.status, 'failed');
+  assert.equal(provider.coverage.complete, false);
+  assert.equal(provider.eligibility.decision_eligible, false);
+  assert.deepEqual(provider.eligibility.reason_codes, ['transport_failed']);
+  assert.equal(result.summary.decision_eligible, false);
+  assert.equal(result.summary.transport_failed, 1);
 });
 
 test('Forms IBAN execution generates and locks supplier control fields server-side', async () => {

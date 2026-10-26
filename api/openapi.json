@@ -484,7 +484,7 @@
           "delivery_id": { "type": "string", "format": "uuid" },
           "submission_id": { "type": "string", "format": "uuid" },
           "completed_at": { "type": "string", "format": "date-time" },
-          "data": { "type": "object", "description": "Consolidated result with completed, partial, or failed status; per-service exact responses; processing log; and permanent report metadata.", "additionalProperties": true }
+          "data": { "type": "object", "description": "Consolidated result with transport-level completed, partial, or failed status; explicit per-service transport, coverage, eligibility, and customer-safe reasons; every exact nested API response; processing log; and permanent report metadata. decision_eligible is true only when every selected check affirmatively qualifies.", "additionalProperties": true }
         },
         "additionalProperties": false
       },
