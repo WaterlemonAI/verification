@@ -7,15 +7,20 @@ process.env.NODE_ENV = 'test';
 process.env.API_PUBLIC_BASE_URL = 'https://api.ai7uae.com';
 const { consolidateFormServiceResults, createAppServer, evaluateFormServiceQualification, executeFormsJob } = await import('../server.mjs');
 const { EnvironmentStore } = await import('../lib/api-store.mjs');
+const { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } = await import('../lib/customer-usage.mjs');
 const { MemoryAdverseMediaReportStore } = await import('../lib/adverse-media-report-store.mjs');
 const { resolveFormServiceInput, validateFormDefinition } = await import('../lib/forms.mjs');
 const { startFormsWorker } = await import('../lib/forms-queue.mjs');
+const { CapacityError } = await import('../lib/request-capacity.mjs');
 
 const adminKey = 'forms_admin_test_key';
 process.env.AI7_ADMIN_KEY_HASHES = createHash('sha256').update(adminKey).digest('hex');
 const store = new EnvironmentStore();
 const reportStore = new MemoryAdverseMediaReportStore();
+const usageStore = new MemoryCustomerUsageStore();
 let queuedJob;
+let primaryJob;
+let queueWrites = 0;
 let app;
 let baseUrl;
 
@@ -57,7 +62,8 @@ before(async () => {
   app = createAppServer({
     store,
     reportStore,
-    formsQueue: { async enqueue(job) { queuedJob = job; } },
+    usageStore,
+    formsQueue: { async enqueue(job) { queuedJob = job; queueWrites += 1; } },
     startWorker: false,
     fetchImpl: async (_url, options) => new Response(JSON.stringify({ matched: true, received: JSON.parse(options.body) }), {
       status: 200, headers: { 'content-type': 'application/json' }
@@ -106,7 +112,7 @@ test('one customer credential queues one signed multi-API submission', async () 
   assert.equal(unauthorized.status, 401);
   const response = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json', 'idempotency-key': 'forms-test-primary-0001' },
     body: JSON.stringify({
       callback_url: 'https://8.8.8.8/callback',
       data: { company_name: 'Acme LLC', country: 'ae', confirmed: true }
@@ -115,16 +121,121 @@ test('one customer credential queues one signed multi-API submission', async () 
   assert.equal(response.status, 202);
   const body = await response.json();
   assert.equal(body.status, 'queued');
+  assert.equal(body.submission_id, response.headers.get('x-ai7-transaction-id'));
   assert.equal(body.callback.event, 'forms.submission.completed');
   assert.match(body.callback.signing_secret, /^[A-Za-z0-9_-]+$/);
   assert.equal(queuedJob.data.country, 'AE');
   assert.equal(queuedJob.form.id, 'vendor-onboarding');
   assert.equal(JSON.stringify(queuedJob).includes(issued.apiKey), false);
+  primaryJob = queuedJob;
+});
+
+test('same Form request ID replays accepted receipt without a second queue write or charge', async () => {
+  const issued = await store.createClient('Form replay customer');
+  const workspaceId = issued.client.workspaceId;
+  await store.setCustomer({ id: workspaceId, name: 'Form replay customer', status: 'active', usagePolicyVersion: 1 });
+  await usageStore.configure(workspaceId, validateUsagePolicy({ mode: 'prepaid', currency: 'USD',
+    allowed_modules: ['forms', 'company-search'], rates: {
+      forms: [{ up_to: null, price: '0.05' }], 'company-search': [{ up_to: null, price: '0.15' }]
+    } }, new Set(['forms', 'company-search'])), true);
+  await usageStore.addCredit(workspaceId, moneyMicros('0.40'), true);
+  const headers = { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
+    'idempotency-key': 'forms-replay-customer-0001' };
+  const body = JSON.stringify({ callback_url: 'https://8.8.8.8/callback',
+    data: { company_name: 'Replay LLC', country: 'AE' } });
+  const priorWrites = queueWrites;
+  const first = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, { method: 'POST', headers, body });
+  assert.equal(first.status, 202);
+  const original = await first.json();
+  assert.ok(original.callback.signing_secret);
+  const replay = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, { method: 'POST', headers, body });
+  assert.equal(replay.status, 202);
+  const repeated = await replay.json();
+  assert.equal(repeated.submission_id, original.submission_id);
+  assert.equal(repeated.callback.signing_secret, undefined);
+  assert.equal(queueWrites, priorWrites + 1);
+  const logs = await usageStore.logs(workspaceId);
+  assert.equal(logs.length, 2);
+  assert.equal(logs.filter((row) => row.cost !== '0.000000').length, 1);
+  assert.equal((await usageStore.account(workspaceId, true)).balance, '0.200000');
+  const conflict = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, { method: 'POST', headers,
+    body: JSON.stringify({ callback_url: 'https://8.8.8.8/callback', data: { company_name: 'Changed LLC', country: 'AE' } }) });
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).reasonCode, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(queueWrites, priorWrites + 1);
+});
+
+test('invalid Form input is logged but never billed or queued', async () => {
+  const issued = await store.createClient('Invalid Form customer');
+  const workspaceId = issued.client.workspaceId;
+  const previousJob = queuedJob;
+  const response = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ callback_url: 'https://8.8.8.8/callback', data: {} })
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /Company name is required/);
+  assert.equal(queuedJob, previousJob);
+  const account = await usageStore.account(workspaceId);
+  assert.equal(account.charged_calls, 0);
+  assert.deepEqual(account.counts, {});
+  const logs = await usageStore.logs(workspaceId);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].response_code, 400);
+  assert.equal(logs[0].cost, '0.000000');
+  assert.equal(logs[0].transaction_id, response.headers.get('x-ai7-transaction-id'));
+});
+
+test('failed Form queue admission refunds the reserved charge exactly once', async (t) => {
+  const isolatedStore = new EnvironmentStore();
+  const isolatedUsage = new MemoryCustomerUsageStore();
+  await isolatedStore.upsertIntegration({ id: 'company-search', name: 'Company Search', publicPath: '/service/company_search',
+    method: 'POST', upstreamUrl: 'https://company.test/search', authType: 'none', acceptedContentTypes: ['application/json'], enabled: true }, '');
+  await isolatedStore.upsertForm(formDefinition);
+  const issued = await isolatedStore.createClient('Queue failure customer');
+  const id = issued.client.workspaceId;
+  await isolatedStore.setCustomer({ id, name: 'Queue failure customer', status: 'active', usagePolicyVersion: 1 });
+  const policy = validateUsagePolicy({ mode: 'prepaid', currency: 'USD', allowed_modules: ['forms', 'company-search'], rates: {
+    forms: [{ up_to: null, price: '0.05' }], 'company-search': [{ up_to: null, price: '0.15' }]
+  } }, new Set(['forms', 'company-search']));
+  await isolatedUsage.configure(id, policy, true);
+  await isolatedUsage.addCredit(id, moneyMicros('0.20'), true);
+  const isolatedApp = createAppServer({ store: isolatedStore, usageStore: isolatedUsage, startWorker: false,
+    formsQueue: { async enqueue() { throw new Error('synthetic_queue_outage'); } } });
+  await new Promise((resolve) => isolatedApp.listen(0, '127.0.0.1', resolve));
+  t.after(() => isolatedApp.close());
+  const response = await fetch(`http://127.0.0.1:${isolatedApp.address().port}/forms/vendor-onboarding/submissions`, {
+    method: 'POST', headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
+      'idempotency-key': 'forms-outage-customer-0001' },
+    body: JSON.stringify({ callback_url: 'https://8.8.8.8/callback', data: { company_name: 'Synthetic LLC', country: 'AE' } })
+  });
+  assert.equal(response.status, 503);
+  const account = await isolatedUsage.account(id, true);
+  assert.equal(account.balance, '0.200000');
+  assert.equal(account.spent, '0.000000');
+  assert.equal(account.charged_calls, 0);
+  const log = (await isolatedUsage.logs(id))[0];
+  assert.equal(log.transaction_id, response.headers.get('x-ai7-transaction-id'));
+  assert.equal(log.cost, '0.000000');
+  assert.equal(log.refund_amount, '0.200000');
+  assert.equal(log.refund_reason, 'form_queue_failed');
+  assert.equal((await isolatedUsage.credits(id)).find((row) => row.related_transaction_id === log.transaction_id).amount, '0.200000');
+  await isolatedUsage.complete(id, isolatedUsage.rows.get(log.transaction_id).rowKey, 503, 'form_queue_failed');
+  assert.equal((await isolatedUsage.credits(id)).length, 2);
+  const retry = await fetch(`http://127.0.0.1:${isolatedApp.address().port}/forms/vendor-onboarding/submissions`, {
+    method: 'POST', headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
+      'idempotency-key': 'forms-outage-customer-0001' },
+    body: JSON.stringify({ callback_url: 'https://8.8.8.8/callback', data: { company_name: 'Synthetic LLC', country: 'AE' } })
+  });
+  assert.equal(retry.status, 503);
+  assert.equal((await retry.json()).reasonCode, 'SUBMISSION_PENDING');
+  assert.equal((await isolatedUsage.account(id, true)).balance, '0.200000');
 });
 
 test('Forms execution returns exact nested responses and creates one permanent typed PDF', async () => {
   const result = await executeFormsJob({
-    job: queuedJob,
+    job: primaryJob,
     store,
     reportStore,
     fetchImpl: async (_url, options) => new Response(JSON.stringify({ matched: true, received: JSON.parse(options.body) }), {
@@ -141,6 +252,7 @@ test('Forms execution returns exact nested responses and creates one permanent t
     received: { company_name: 'Acme LLC', country: 'AE', confirmed: true, source: 'AI7 Form - Acme LLC' }
   });
   assert.equal(result.report.retention, 'permanent');
+  assert.equal(result.report.transaction_id, primaryJob.submission_id);
   assert.match(result.report.download_url, /^https:\/\/api\.ai7uae\.com\/service\/forms\/reports\/[0-9a-f-]{36}\.pdf$/);
   const stored = await reportStore.getPublic({ reportId: result.report.report_id });
   assert.equal(stored.metadata.report_type, 'forms');
@@ -150,6 +262,71 @@ test('Forms execution returns exact nested responses and creates one permanent t
   const downloaded = await fetch(`${baseUrl}/service/forms/reports/${result.report.report_id}.pdf`);
   assert.equal(downloaded.status, 200);
   assert.equal(downloaded.headers.get('content-type'), 'application/pdf');
+});
+
+test('Form capacity retries only missing checks after each completed supplier checkpoint', async () => {
+  const isolatedStore = new EnvironmentStore();
+  for (const id of ['first-check', 'second-check']) await isolatedStore.upsertIntegration({
+    id, name: id, publicPath: `/service/${id}`, method: 'POST', upstreamUrl: `https://supplier.test/${id}`,
+    authType: 'none', acceptedContentTypes: ['application/json'], enabled: true
+  }, '');
+  const isolatedReports = new MemoryAdverseMediaReportStore();
+  const calls = [];
+  let blockSecond = true;
+  let releases = 0;
+  const capacity = { async acquire(lane) {
+    if (lane === 'second-check' && blockSecond) throw new CapacityError('capacity_queue_full');
+    return () => { releases += 1; };
+  } };
+  const job = { ...primaryJob, submission_id: 'd038504b-aeb4-4f6f-86e5-d33ce32e5b78',
+    report_id: 'cc5704f0-88db-43f5-b60c-9204a2d5355d', owner_id: 'checkpoint-owner',
+    customer_logo_url: '', stage_attempts: {},
+    form: { ...primaryJob.form, services: [
+      { service_id: 'first-check', input_template: { name: '{{company_name}}' } },
+      { service_id: 'second-check', input_template: { name: '{{company_name}}' } }
+    ] } };
+  const options = { job, store: isolatedStore, reportStore: isolatedReports, requestCapacity: capacity,
+    fetchImpl: async (url) => { calls.push(url.pathname); return new Response('{"ok":true}', { status: 200,
+      headers: { 'content-type': 'application/json' } }); } };
+  await assert.rejects(executeFormsJob(options), (error) => error instanceof CapacityError);
+  assert.deepEqual(calls, ['/first-check']);
+  const checkpoint = await isolatedReports.getFormResult({ ownerId: job.owner_id, submissionId: job.submission_id });
+  assert.equal(checkpoint.stage, 'services_partial');
+  assert.equal(checkpoint.services.length, 1);
+  blockSecond = false;
+  job.stage_attempts.execution = 1;
+  const result = await executeFormsJob(options);
+  assert.equal(result.summary.decision_eligible, true);
+  assert.deepEqual(calls, ['/first-check', '/second-check']);
+  assert.equal(releases, 2);
+});
+
+test('exhausted Form capacity reports an ineligible partial result and preserves completed checks', async () => {
+  const isolatedStore = new EnvironmentStore();
+  await isolatedStore.upsertIntegration({ id: 'first-check', name: 'First check', publicPath: '/service/first-check',
+    method: 'POST', upstreamUrl: 'https://supplier.test/first', authType: 'none',
+    acceptedContentTypes: ['application/json'], enabled: true }, '');
+  const isolatedReports = new MemoryAdverseMediaReportStore();
+  let calls = 0;
+  const job = { ...primaryJob, submission_id: 'a86075dc-5d2f-4fdf-9329-ad02bec3b946',
+    report_id: '7d84a397-772f-4d24-ab5d-2d4abaf2893e', owner_id: 'capacity-exhausted-owner',
+    customer_logo_url: '', stage_attempts: { execution: 2 },
+    form: { ...primaryJob.form, services: [
+      { service_id: 'first-check', input_template: { name: '{{company_name}}' } },
+      { service_id: 'blocked-check', input_template: { name: '{{company_name}}' } }
+    ] } };
+  const result = await executeFormsJob({ job, store: isolatedStore, reportStore: isolatedReports,
+    requestCapacity: { async acquire(lane) {
+      if (lane === 'blocked-check') throw new CapacityError('capacity_wait_timeout');
+      return () => {};
+    } },
+    fetchImpl: async () => { calls += 1; return new Response('{"ok":true}', { status: 200 }); } });
+  assert.equal(calls, 1);
+  assert.equal(result.status, 'partial');
+  assert.equal(result.summary.decision_eligible, false);
+  assert.ok(result.services[1].eligibility.reason_codes.includes('capacity_unavailable'));
+  assert.ok(result.summary.reason_codes.includes('capacity_unavailable'));
+  assert.equal(result.report.transaction_id, job.submission_id);
 });
 
 test('Forms decision is eligible only when every selected check affirmatively qualifies', () => {
@@ -274,6 +451,7 @@ test('Forms worker durably retries callback delivery without re-running complete
   let available = true;
   let executions = 0;
   let deliveries = 0;
+  let settlements = 0;
   let completed = false;
   const message = { messageId: '1', popReceipt: 'a', messageText: JSON.stringify({ submission_id: 's1', owner_id: 'owner-1', callback_url: 'https://8.8.8.8/callback' }) };
   const queue = {
@@ -285,13 +463,70 @@ test('Forms worker durably retries callback delivery without re-running complete
   const worker = startFormsWorker({
     queue,
     execute: async () => { executions += 1; return { submission_id: 's1', completed_at: new Date().toISOString() }; },
+    onResult: async () => { settlements += 1; },
     deliver: async () => { deliveries += 1; if (deliveries === 1) throw new Error('temporary_callback_failure'); },
     resultStore: pendingStore
   });
   await new Promise((resolve) => setTimeout(resolve, 60));
   worker.stop();
   assert.equal(executions, 1);
+  assert.equal(settlements, 2);
   assert.equal(deliveries, 2);
   assert.equal(completed, true);
   assert.equal(await pendingStore.getFormResult({ ownerId: 'owner-1', submissionId: 's1' }), null);
+});
+
+test('Forms report-storage retry reuses completed supplier responses and a stable report ID', async () => {
+  const job = {
+    submission_id: 'd95f2fd9-a75f-4961-99bf-3a824be8691e',
+    report_id: 'a0d7d73c-72c7-42e2-9da9-23e5a63e82f7',
+    owner_id: 'owner-form-checkpoint', queued_at: new Date().toISOString(),
+    customer_logo_url: '', request_origin: { network_origin: '203.0.113.9', processing_location: 'UAE North' },
+    data: { company_name: 'Acme LLC', country: 'AE' }, form: formDefinition
+  };
+  const pendingStore = new MemoryAdverseMediaReportStore();
+  const originalSave = pendingStore.save.bind(pendingStore);
+  let saves = 0;
+  pendingStore.save = async (input) => {
+    if (++saves === 1) throw new Error('temporary_report_store_failure');
+    return originalSave(input);
+  };
+  let supplierCalls = 0;
+  const options = { job, store, reportStore: pendingStore,
+    fetchImpl: async () => { supplierCalls += 1; return new Response('{"match":true}', {
+      status: 200, headers: { 'content-type': 'application/json' }
+    }); } };
+  await assert.rejects(executeFormsJob(options), /temporary_report_store_failure/);
+  assert.equal(supplierCalls, 1);
+  const result = await executeFormsJob(options);
+  assert.equal(supplierCalls, 1);
+  assert.equal(result.report.report_id, job.report_id);
+  assert.equal((await executeFormsJob(options)).report.report_id, job.report_id);
+  assert.equal(supplierCalls, 1);
+});
+
+test('Forms callback exhaustion dead-letters one saved result without rerunning suppliers', async () => {
+  let available = true;
+  let executions = 0;
+  let deliveries = 0;
+  let deadLettered;
+  const message = { messageId: 'form-callback-retry', popReceipt: 'a', dequeueCount: 1,
+    messageText: JSON.stringify({ submission_id: 's-callback', owner_id: 'owner-callback', callback_url: 'https://8.8.8.8/callback' }) };
+  const queue = {
+    async receive() { if (!available) return null; available = false; return message; },
+    async complete() { throw new Error('callback_must_not_complete'); },
+    async release(_message, job) { message.messageText = JSON.stringify(job); message.dequeueCount += 1; available = true; },
+    async deadLetter(_message, job, reason) { deadLettered = { job, reason }; }
+  };
+  const pendingStore = new MemoryAdverseMediaReportStore();
+  const worker = startFormsWorker({ queue, resultStore: pendingStore,
+    execute: async () => { executions += 1; return { submission_id: 's-callback', completed_at: new Date().toISOString() }; },
+    deliver: async () => { deliveries += 1; throw new Error('callback_failed_503'); } });
+  for (let attempt = 0; attempt < 30 && !deadLettered; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  worker.stop();
+  assert.equal(executions, 1);
+  assert.equal(deliveries, 5);
+  assert.equal(deadLettered.reason, 'callback_failed_503');
+  assert.equal(deadLettered.job.stage_attempts.callback, 5);
+  assert.ok(await pendingStore.getFormResult({ ownerId: 'owner-callback', submissionId: 's-callback' }));
 });

@@ -45,6 +45,12 @@ param appCertificateId string = ''
 @description('Name of the API Container App.')
 param containerAppName string = 'ca-ai7uae-api'
 
+@description('Dedicated AI7 UAE Log Analytics workspace used by Container Apps.')
+param logAnalyticsWorkspaceName string = 'log-ai7uae-web-uaen-001'
+
+@description('Operations mailbox for API availability alerts.')
+param apiAlertEmail string = 'notify@kycprobe.com'
+
 @description('Name of the isolated merchant screenshot worker Container App.')
 param merchantScreenshotWorkerName string = 'ca-ai7uae-merchant-screenshot'
 
@@ -66,6 +72,7 @@ param reportStorageName string = 'stai7uaereportsuaen001'
 var deepResearchQueueName = 'adverse-media-deep-research'
 var deepResearchDeadLetterQueueName = 'adverse-media-deep-research-deadletter'
 var formsQueueName = 'forms-submissions'
+var formsDeadLetterQueueName = 'forms-submissions-deadletter'
 
 resource deepResearchStorage 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: deepResearchStorageName
@@ -79,6 +86,11 @@ resource deepResearchQueueService 'Microsoft.Storage/storageAccounts/queueServic
 resource deepResearchDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
   parent: deepResearchQueueService
   name: deepResearchDeadLetterQueueName
+}
+
+resource formsDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: deepResearchQueueService
+  name: formsDeadLetterQueueName
 }
 // Cisco Talos ClamAV 1.4.6 LTS, mirrored into the private ACR and pinned to the amd64 manifest.
 var bankStatementClamavImage = '${acrLoginServer}/ai7uae-clamav@sha256:6ba4e78b29853b2fc7e3c111389596e2cad5ec4ed5f0fd2cb663d29ab6b0e6a3'
@@ -339,6 +351,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ADVERSE_MEDIA_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchDeadLetterQueueName}' }
             { name: 'ADVERSE_MEDIA_WORKER_ENABLED', value: enableDeepResearchWorker ? 'true' : 'false' }
             { name: 'FORMS_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsQueueName}' }
+            { name: 'FORMS_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsDeadLetterQueueName}' }
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
             { name: 'GDELT_INDEX_TABLE', value: 'GdeltEntityMentions' }
@@ -386,8 +399,102 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           ]
         }
       ]
-      scale: { minReplicas: 1, maxReplicas: 3 }
+      scale: {
+        minReplicas: 1
+        maxReplicas: 8
+        rules: [
+          {
+            name: 'api-http-concurrency'
+            http: { metadata: { concurrentRequests: '16' } }
+          }
+        ]
+      }
     }
+  }
+}
+
+resource apiLogWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
+  name: logAnalyticsWorkspaceName
+}
+
+resource apiAlerts 'Microsoft.Insights/actionGroups@2023-01-01' = {
+  name: 'ag-ai7uae-api-uaen-001'
+  location: 'global'
+  properties: {
+    enabled: true
+    groupShortName: 'AI7UAEAPI'
+    emailReceivers: [
+      {
+        name: 'KYCProbe operations'
+        emailAddress: apiAlertEmail
+        useCommonAlertSchema: true
+      }
+    ]
+  }
+}
+
+resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-ai7uae-api-sustained-5xx'
+  location: 'global'
+  properties: {
+    description: 'Five or more API HTTP 5xx responses in five minutes.'
+    severity: 2
+    enabled: true
+    scopes: [ api.id ]
+    evaluationFrequency: 'PT1M'
+    windowSize: 'PT5M'
+    autoMitigate: true
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'Api5xx'
+          criterionType: 'StaticThresholdCriterion'
+          metricName: 'Requests'
+          metricNamespace: 'Microsoft.App/containerApps'
+          timeAggregation: 'Total'
+          operator: 'GreaterThanOrEqual'
+          threshold: 5
+          dimensions: [
+            {
+              name: 'statusCodeCategory'
+              operator: 'Include'
+              values: [ '5xx' ]
+            }
+          ]
+        }
+      ]
+    }
+    actions: [ { actionGroupId: apiAlerts.id } ]
+  }
+}
+
+resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = {
+  name: 'alert-ai7uae-adverse-source-failures'
+  location: location
+  kind: 'LogAlert'
+  properties: {
+    description: 'Three or more adverse-media all-source failures in five minutes.'
+    displayName: 'AI7 UAE adverse-media sources unavailable'
+    severity: 2
+    enabled: true
+    scopes: [ apiLogWorkspace.id ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: 'ContainerAppConsoleLogs_CL | where ContainerAppName_s == "${containerAppName}" and Log_s has "adverse_media_search_unavailable" | summarize failed = count()'
+          metricMeasureColumn: 'failed'
+          timeAggregation: 'Total'
+          operator: 'GreaterThanOrEqual'
+          threshold: 3
+          failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
+        }
+      ]
+    }
+    actions: { actionGroups: [ apiAlerts.id ] }
   }
 }
 

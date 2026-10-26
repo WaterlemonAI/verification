@@ -32,12 +32,23 @@ function inputFor(field) {
   } else {
     input = document.createElement('input');
     input.type = field.type === 'country' ? 'text' : field.type;
-    if (field.type === 'country') input.maxLength = 2;
+    if (field.type === 'country') {
+      input.maxLength = 2;
+      input.pattern = '[A-Za-z]{2}';
+      input.title = 'Enter a two-letter ISO country code.';
+    }
+    if (field.type === 'number') input.step = 'any';
   }
   input.id = `field-${field.key}`;
   input.name = field.key;
   input.required = field.required;
   input.placeholder = field.placeholder || '';
+  const error = document.createElement('small');
+  error.id = `error-${field.key}`;
+  error.className = 'field-error';
+  error.setAttribute('role', 'alert');
+  input.setAttribute('aria-describedby', error.id);
+  input.addEventListener('input', () => { error.textContent = ''; });
   label.append(input);
   if (field.description) {
     const help = document.createElement('small');
@@ -45,6 +56,7 @@ function inputFor(field) {
     help.textContent = field.description;
     label.append(help);
   }
+  label.append(error);
   return label;
 }
 
@@ -83,7 +95,8 @@ async function loadForm() {
   byId('form-title').innerHTML = '';
   byId('form-title').append(document.createTextNode(formDefinition.name));
   byId('form-description').textContent = formDefinition.description || 'Consolidated verification workflow.';
-  const endpoint = `${location.origin}/forms/${formDefinition.id}/submissions`;
+  const apiOrigin = ['localhost', '127.0.0.1'].includes(location.hostname) ? location.origin : 'https://api.ai7uae.com';
+  const endpoint = `${apiOrigin}/forms/${formDefinition.id}/submissions`;
   byId('endpoint').textContent = endpoint;
   byId('endpoint-meta').hidden = false;
   byId('copy-endpoint').addEventListener('click', () => navigator.clipboard.writeText(endpoint));
@@ -93,12 +106,15 @@ async function loadForm() {
     chip.textContent = service.name;
     services.append(chip);
   });
+  const required = formDefinition.fields.filter((field) => field.required).map((field) => field.key);
+  const optional = formDefinition.fields.filter((field) => !field.required).map((field) => field.key);
+  byId('form-schema-summary').textContent = `This Form runs ${formDefinition.services.map((service) => service.name).join(', ')}. Required data: ${required.join(', ') || 'none'}. Optional data: ${optional.join(', ') || 'none'}. A public HTTPS callback_url is required; customer_logo_url is optional. Use one Idempotency-Key per intended run and reuse it after a network error. Only the listed services run for this Form.`;
   const sampleData = Object.fromEntries(formDefinition.fields.filter((field) => field.required).map((field) => {
     const example = field.placeholder || field.options?.[0] || (field.type === 'country' ? 'AE' : `YOUR_${field.key.toUpperCase()}`);
     return [field.key, field.type === 'number' ? Number(example) : field.type === 'boolean' ? true : example];
   }));
   const sampleBody = JSON.stringify({ data: sampleData, callback_url: 'https://your-system.example/webhooks/ai7', customer_logo_url: 'https://your-domain.example/logo.png' }, null, 2);
-  byId('form-curl').textContent = `curl -X POST '${endpoint}' \\\n  -H 'Authorization: Bearer YOUR_AI7_API_KEY' \\\n  -H 'Content-Type: application/json' \\\n  --data '${sampleBody}'`;
+  byId('form-curl').textContent = `curl -X POST '${endpoint}' \\\n  -H 'Authorization: Bearer YOUR_AI7_API_KEY' \\\n  -H 'Idempotency-Key: YOUR_UNIQUE_REQUEST_ID' \\\n  -H 'Content-Type: application/json' \\\n  --data '${sampleBody}'`;
   byId('copy-form-curl').addEventListener('click', async () => {
     await navigator.clipboard.writeText(byId('form-curl').textContent);
     byId('copy-form-curl').textContent = 'Copied';
@@ -109,7 +125,31 @@ async function loadForm() {
 byId('submission-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!formDefinition) return;
-  byId('form-error').textContent = '';
+  const form = event.currentTarget;
+  const formError = byId('form-error');
+  formError.textContent = '';
+  form.querySelectorAll('.field-error').forEach((item) => { item.textContent = ''; });
+  if (!form.reportValidity()) {
+    const invalid = form.querySelector(':invalid');
+    if (invalid?.id.startsWith('field-')) {
+      const key = invalid.id.slice(6);
+      const field = formDefinition.fields.find((item) => item.key === key);
+      const message = field?.type === 'country' && invalid.validity.patternMismatch
+        ? `${field.label} must be a two-letter ISO country code.`
+        : invalid.validity.valueMissing ? `${field?.label || 'This field'} is required.`
+          : `${field?.label || 'This field'} is invalid.`;
+      byId(`error-${key}`).textContent = message;
+    } else formError.textContent = 'Complete the required fields before submitting.';
+    return;
+  }
+  for (const id of ['callback-url', 'logo-url']) {
+    const input = byId(id);
+    if (input.value && new URL(input.value).protocol !== 'https:') {
+      formError.textContent = `${id === 'callback-url' ? 'Callback URL' : 'Logo URL'} must use HTTPS.`;
+      input.focus();
+      return;
+    }
+  }
   const button = byId('send-request');
   button.disabled = true;
   byId('response-status').className = '';
@@ -120,20 +160,27 @@ byId('submission-form').addEventListener('submit', async (event) => {
     if (input.value === '') continue;
     data[field.key] = field.type === 'number' ? Number(input.value) : field.type === 'boolean' ? input.value === 'true' : input.value;
   }
+  const requestBody = JSON.stringify({ data, callback_url: byId('callback-url').value.trim(), customer_logo_url: byId('logo-url').value.trim() });
+  const pendingKey = `ai7-form-pending:${formDefinition.id}`;
+  let pending;
+  try { pending = JSON.parse(sessionStorage.getItem(pendingKey) || 'null'); } catch { /* stale browser storage */ }
+  const requestId = pending?.body === requestBody ? pending.id : crypto.randomUUID();
+  sessionStorage.setItem(pendingKey, JSON.stringify({ id: requestId, body: requestBody }));
   try {
     const response = await fetch(`/forms/${formDefinition.id}/submissions`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${byId('api-key').value.trim()}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ data, callback_url: byId('callback-url').value.trim(), customer_logo_url: byId('logo-url').value.trim() })
+      headers: { authorization: `Bearer ${byId('api-key').value.trim()}`, 'content-type': 'application/json', 'idempotency-key': requestId },
+      body: requestBody
     });
     const body = await response.json();
     byId('response-json').textContent = JSON.stringify(body, null, 2);
     byId('copy-response').disabled = false;
     byId('response-status').textContent = response.ok ? `Queued · HTTP ${response.status}` : `HTTP ${response.status}`;
     byId('response-status').className = response.ok ? 'success' : 'error';
-    if (!response.ok) byId('form-error').textContent = body.error || 'The Form could not be submitted.';
+    if (response.ok) sessionStorage.removeItem(pendingKey);
+    if (!response.ok) formError.textContent = body.error || 'The Form could not be submitted.';
   } catch {
-    byId('form-error').textContent = 'The API could not be reached.';
+    formError.textContent = 'The API could not be reached.';
     byId('response-status').textContent = 'Network error';
     byId('response-status').className = 'error';
   } finally { button.disabled = false; }

@@ -197,3 +197,6 @@ byId('bsa-form').addEventListener('submit', async (event) => {
     sendButton.disabled = false;
   }
 });
+
+byId('api-key').addEventListener('input', () => { formError.textContent = ''; });
+byId('statement-file').addEventListener('change', () => { formError.textContent = ''; });
