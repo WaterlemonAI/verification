@@ -211,6 +211,7 @@ byId('login-form').addEventListener('submit', async (event) => {
 
 byId('setup-form').addEventListener('submit', async (event) => {
   event.preventDefault();
+  const form = event.currentTarget;
   byId('setup-error').textContent = '';
   const password = byId('setup-password').value;
   if (password !== byId('setup-password-confirm').value) {
@@ -223,7 +224,7 @@ byId('setup-form').addEventListener('submit', async (event) => {
       headers: { Authorization: `Bearer ${byId('setup-key').value.trim()}` },
       body: JSON.stringify({ email: byId('setup-email').value, password })
     });
-    event.currentTarget.reset();
+    form.reset();
     await showApp(auth);
   } catch (error) {
     byId('setup-error').textContent = error.message;
