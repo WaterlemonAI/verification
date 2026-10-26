@@ -84,8 +84,13 @@ The protected console at `/admin` lets an operator:
 - configure Bearer, custom-header, or unauthenticated upstream access;
 - constrain accepted content types and document expected status codes;
 - enable or disable an integration;
-- issue a one-time customer API key that works across every configured integration; and
+- invite a customer administrator to set a password without emailing an API key;
+- view every key belonging to a customer workspace; and
 - revoke a customer key without changing other customers or upstream credentials.
+
+Customer administrators sign in at `https://app.kycprobe.com/login` and manage up to 20 active keys in **Account settings**. A 48-hour, single-use invitation link creates the portal account and an initial API key. The key appears once after setup; later keys and rotations also appear once and are retained only as SHA-256 hashes. Rotating a key retains its key ID and workspace ownership, so older key material stops authenticating and existing report ownership for that key ID remains stable. Existing customer keys remain valid; an administrator can use **Invite admin** on a legacy workspace to add password-based access without invalidating its existing key.
+
+`GET https://api.ai7uae.com/service/health` requires `Authorization: Bearer <key>` and returns API transport and enabled-route status. It does not perform an upstream provider probe. `POST https://api.ai7uae.com/service/keys/self/rotate` with the current key as Bearer authentication rotates that key and returns the replacement once. The old key is invalidated. Portal session endpoints `GET /portal/api/keys`, `POST /portal/api/keys`, `POST /portal/api/keys/{id}/rotate`, and `POST /portal/api/keys/{id}/revoke` are available at `app.kycprobe.com` and require the session CSRF token for changes.
 
 ### Forms orchestration
 
@@ -146,6 +151,8 @@ The API Engine manages these records inside the dedicated Key Vault:
 - `api-engine-integrations`: the private integration registry.
 - `form-<id>`: one versioned multi-API Form definition per secret, without supplier credentials.
 - `client-<id>`: one customer record per key, containing only the hash plus non-secret lifecycle tags.
+- `customer-<id>`: one customer workspace and administrator invitation record, containing only a hash of the one-time invitation token.
+- `AdverseMediaReports` table partition `customer-invitations`: atomic, hash-only invitation claims so parallel app replicas cannot accept the same setup link twice.
 - `integration-<id>-master-key`: one write-only upstream master key per integration.
 
 `adverse-media` and `adverse-media-ai` are runtime-managed integrations. Their private credentials are stored separately as `integration-adverse-media-master-key` and `integration-adverse-media-ai-master-key`; either can be set or rotated from the protected administration console. The AI credential is optional and deterministic screening remains available without it.
@@ -156,4 +163,4 @@ Do not commit or place plaintext credentials in GitHub variables. Bootstrap the 
 
 `notify@kycprobe.com` is the platform sender, with replies directed to `notify@ai7lab.net`. The dedicated API Key Vault secret `platform-smtp-password` supplies the mailbox password to the API Container App; the image and GitHub variables contain no plaintext mailbox credential. The app connects to GoDaddy Professional Email powered by Titan over authenticated TLS on `smtpout.secureserver.net:465`.
 
-Portal and administrator sign-in pages offer password recovery. A valid account receives a signed, 30-minute reset link at its registered email; the request endpoint gives the same response for known and unknown addresses. Resetting changes the account version and invalidates prior sessions and links. Password changes send a security notice. In the administration console, issuing a customer API key can optionally email that one-time credential to a specified recipient; the key is still displayed once, and delivery status is shown. Keep recipient addresses under administrator control because email carries the plaintext key.
+Portal and administrator sign-in pages offer password recovery. A valid account receives a signed, 30-minute reset link at its registered email; the request endpoint gives the same response for known and unknown addresses. Resetting changes the account version and invalidates prior sessions and links. Password changes send a security notice. Customer onboarding sends a 48-hour password-setup link to the designated administrator. Invitation emails never contain an API key. A failed delivery leaves the workspace pending so the operator can resend a newly generated link.

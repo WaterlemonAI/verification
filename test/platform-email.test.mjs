@@ -4,6 +4,7 @@ import test from 'node:test';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { createPlatformMailer } from '../lib/platform-mail.mjs';
 import { createPasswordResetToken, parsePasswordResetToken } from '../lib/password-reset.mjs';
+import { createPortalAccount } from '../lib/portal-auth.mjs';
 
 process.env.NODE_ENV = 'test';
 const { createAppServer } = await import('../server.mjs');
@@ -38,26 +39,28 @@ test('reset tokens are scoped, expire, and fail after a password version change'
   assert.equal(parsePasswordResetToken(`${token}x`, { kind: 'portal', signingKey: 'test-key', now: 1000 }), null);
 });
 
-test('portal and admin recovery email resets passwords without account enumeration; credential email is optional', async (t) => {
+test('portal and admin recovery email resets passwords; customer invitations do not email API keys', async (t) => {
   const key = 'setup-key-for-mail-test';
   process.env.AI7_ADMIN_KEY_HASHES = createHash('sha256').update(key).digest('hex');
   const messages = [];
   const mailer = {
     configured: true,
     sendPasswordReset: async (value) => { messages.push({ type: 'reset', ...value }); },
-    sendCredential: async (value) => { messages.push({ type: 'credential', ...value }); },
+    sendInvitation: async (value) => { messages.push({ type: 'invitation', ...value }); },
     sendSecurityAlert: async (value) => { messages.push({ type: 'alert', ...value }); }
   };
   const store = new EnvironmentStore();
   const customer = await store.createClient('Test Customer');
+  await store.setPortalUser(createPortalAccount('user@example.com', 'OldPortalPass!123', customer.client));
+  await store.setPortalSessionKey('portal-session-key');
   const server = createAppServer({ store, mailer, startWorker: false, deepResearchQueue: null, formsQueue: null });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
 
-  const signup = await post(base, '/portal/api/auth/signup', { api_key: customer.apiKey, email: 'user@example.com', password: 'OldPortalPass!123' });
-  assert.equal(signup.status, 201);
-  const oldPortalCookie = signup.headers.get('set-cookie').split(';')[0];
+  const portalLogin = await post(base, '/portal/api/auth/login', { email: 'user@example.com', password: 'OldPortalPass!123' });
+  assert.equal(portalLogin.status, 200);
+  const oldPortalCookie = portalLogin.headers.get('set-cookie').split(';')[0];
   const unknown = await post(base, '/portal/api/auth/forgot-password', { email: 'unknown@example.com' });
   const known = await post(base, '/portal/api/auth/forgot-password', { email: 'user@example.com' });
   assert.equal(unknown.status, 202);
@@ -87,15 +90,16 @@ test('portal and admin recovery email resets passwords without account enumerati
   assert.equal(login.status, 200);
   const activeCookie = login.headers.get('set-cookie').split(';')[0];
   const activeCsrf = (await login.json()).csrf_token;
-  const issued = await post(base, '/admin/api/clients', { name: 'New Workspace', recipient_email: 'customer@example.com' }, { cookie: activeCookie, 'x-ai7-csrf': activeCsrf });
+  const issued = await post(base, '/admin/api/customers', { name: 'New Workspace', admin_email: 'customer@example.com' }, { cookie: activeCookie, 'x-ai7-csrf': activeCsrf });
   assert.equal(issued.status, 201);
   const issuedBody = await issued.json();
   assert.equal(issuedBody.delivery, 'sent');
-  assert.equal(messages.find(item => item.type === 'credential')?.apiKey, issuedBody.apiKey);
-  assert.equal(messages.find(item => item.type === 'credential')?.to, 'customer@example.com');
-  const invalidRecipient = await post(base, '/admin/api/clients', { name: 'Invalid Workspace', recipient_email: 'bad-address' }, { cookie: activeCookie, 'x-ai7-csrf': activeCsrf });
+  assert.equal(messages.find(item => item.type === 'invitation')?.to, 'customer@example.com');
+  assert.equal(JSON.stringify(messages).includes('ai7_live_'), false);
+  assert.equal(JSON.stringify(issuedBody).includes('invitationHash'), false);
+  const invalidRecipient = await post(base, '/admin/api/customers', { name: 'Invalid Workspace', admin_email: 'bad-address' }, { cookie: activeCookie, 'x-ai7-csrf': activeCsrf });
   assert.equal(invalidRecipient.status, 400);
-  const multipleRecipients = await post(base, '/admin/api/clients', { name: 'Invalid Workspace', recipient_email: 'one@example.com,two@example.com' }, { cookie: activeCookie, 'x-ai7-csrf': activeCsrf });
+  const multipleRecipients = await post(base, '/admin/api/customers', { name: 'Invalid Workspace', admin_email: 'one@example.com,two@example.com' }, { cookie: activeCookie, 'x-ai7-csrf': activeCsrf });
   assert.equal(multipleRecipients.status, 400);
   assert.equal(messages.filter(item => item.type === 'alert').length, 2);
   assert.ok(csrf);

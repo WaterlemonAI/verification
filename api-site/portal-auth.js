@@ -1,5 +1,5 @@
 (() => {
-  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms']);
+  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account']);
   const normalizedPath = location.pathname.length > 1 ? location.pathname.replace(/\/$/, '') : '/';
   const pageContext = {
     '/': ['Verification API', 'UAE Trade Licence'],
@@ -8,7 +8,8 @@
     '/adverse-media': ['Verification API', 'Adverse Media'],
     '/merchant-screening': ['Verification API', 'Merchant Screening'],
     '/bank-statement-analysis': ['Verification API', 'Bank Statement Analysis'],
-    '/forms': ['Forms', 'Forms Module']
+    '/forms': ['Forms', 'Forms Module'],
+    '/account': ['Workspace', 'Account settings']
   };
 
   function escapeHtml(value) {
@@ -46,6 +47,10 @@
       <div class="portal-nav-group">
         <p>FORMS</p>
         <a href="/forms" data-path="/forms"><span>07</span> Forms Module</a>
+      </div>
+      <div class="portal-nav-group">
+        <p>WORKSPACE</p>
+        <a href="/account" data-path="/account"><span>08</span> Account settings</a>
       </div>
       <div class="portal-account">
         <span>WORKSPACE</span>

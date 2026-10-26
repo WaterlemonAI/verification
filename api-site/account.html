@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#071f43" /><title>KYCProbe — Account settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/api.css?v=11" />
+  <script src="/portal-auth.js?v=3" defer></script><script src="/account.js?v=1" defer></script>
+</head>
+<body>
+  <div class="utility-bar"><span>KYCProbe Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
+  <header><a class="brand" href="https://kycprobe.com"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a><span class="status"><i></i> API available</span></header>
+  <main class="account-main">
+    <section class="account-hero"><p class="eyebrow">WORKSPACE ACCESS</p><h1>Account <em>settings.</em></h1><p>Manage API credentials for your workspace. Every key works across the APIs enabled for your account.</p><div id="account-identity"></div></section>
+    <section class="account-content">
+      <div class="account-section-head"><div><p class="label">API CREDENTIALS</p><h2>Your API keys</h2><p>Keys are displayed only when created or rotated. Store the full value in your own secret manager.</p></div></div>
+      <div id="new-key-panel" class="account-key-reveal" hidden><strong>New key — copy now</strong><code id="new-key-value"></code><button id="copy-new-key" type="button">Copy key</button><p>The old key stops working immediately after rotation.</p></div>
+      <form id="create-key-form" class="account-create-form"><label>Key label<input id="key-label" maxlength="60" placeholder="Production integration" required /></label><button type="submit">Create API key</button></form>
+      <p id="account-message" role="status"></p><div id="key-list" class="account-key-list"></div>
+      <div class="account-section-head"><div><p class="label">SERVICE STATUS</p><h2>API health</h2><p>Transport and route configuration status. This check does not run chargeable supplier probes.</p></div><button id="refresh-health" type="button">Refresh</button></div>
+      <p id="health-status" role="status"></p><div id="health-list" class="account-health-list"></div>
+      <div class="account-section-head"><div><p class="label">AUTOMATION</p><h2>Manage keys by API</h2><p>Rotate the key used for a request with a server-to-server call. The response returns the replacement once and immediately invalidates the old value.</p></div></div>
+      <pre class="account-command">curl -X POST https://api.ai7uae.com/service/keys/self/rotate \
+  -H "Authorization: Bearer YOUR_CURRENT_API_KEY"</pre>
+      <pre class="account-command">curl https://api.ai7uae.com/service/health \
+  -H "Authorization: Bearer YOUR_API_KEY"</pre>
+    </section>
+  </main>
+</body>
+</html>

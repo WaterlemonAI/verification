@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/admin/admin.css?v=10" />
-    <script src="/admin/admin.js?v=12" defer></script>
+    <script src="/admin/admin.js?v=13" defer></script>
 
   </head>
   <body>
@@ -119,11 +119,12 @@
           <div class="summary">
             <div><span>Customer keys</span><strong id="client-count">0</strong></div>
             <div><span>Active keys</span><strong id="active-client-count">0</strong></div>
-            <button id="new-client">＋ Issue credential</button>
+            <button id="new-client">＋ Invite customer</button>
           </div>
           <div class="panel">
-            <div class="panel-head"><div><p class="eyebrow">ACCESS REGISTRY</p><h2>Customer credentials</h2></div><button class="refresh" data-refresh="clients">Refresh</button></div>
-            <div class="empty" id="client-empty">No customer credentials have been issued.</div>
+            <div class="panel-head"><div><p class="eyebrow">ACCESS REGISTRY</p><h2>Customer workspaces and keys</h2></div><button class="refresh" data-refresh="clients">Refresh</button></div>
+            <p class="notice" id="client-notice" role="status" hidden></p>
+            <div class="empty" id="client-empty">No customer workspaces have been invited.</div>
             <div class="client-list" id="client-list"></div>
           </div>
         </section>
@@ -247,21 +248,14 @@
 
     <dialog id="client-dialog">
       <form id="client-form">
-        <div class="dialog-head"><div><p class="eyebrow">CUSTOMER ACCESS</p><h2>Issue an API credential</h2></div><button type="button" class="close" data-close="client-dialog">×</button></div>
-        <p class="notice">The plaintext credential is displayed once. Only its SHA-256 hash is retained.</p>
+        <div class="dialog-head"><div><p class="eyebrow">CUSTOMER ACCESS</p><h2>Invite a customer administrator</h2></div><button type="button" class="close" data-close="client-dialog">×</button></div>
+        <p class="notice">A one-time password setup link is emailed to the administrator. API keys are created after sign in and are never emailed.</p>
+        <input name="workspace_id" type="hidden" />
         <label>Customer or workspace name<input name="name" placeholder="Customer name" required /></label>
-        <label>Send credential to email (optional)<input name="recipient_email" type="email" placeholder="customer@example.com" autocomplete="off" /></label>
+        <label>Customer administrator email<input name="admin_email" type="email" placeholder="admin@customer.com" autocomplete="off" required /></label>
         <p class="error" id="client-error" aria-live="polite"></p>
-        <div class="actions"><button type="button" class="secondary" data-close="client-dialog">Cancel</button><button type="submit">Issue credential</button></div>
+        <div class="actions"><button type="button" class="secondary" data-close="client-dialog">Cancel</button><button type="submit">Send setup invitation</button></div>
       </form>
-    </dialog>
-
-    <dialog id="credential-dialog" class="credential-dialog">
-      <div class="dialog-head"><div><p class="eyebrow">DISPLAYED ONCE</p><h2>Customer API key</h2></div></div>
-      <p>Copy this key now. It cannot be recovered after this window closes.</p>
-      <p id="credential-delivery"></p>
-      <div class="credential"><code id="new-credential"></code><button id="copy-credential">Copy</button></div>
-      <div class="actions"><button id="close-credential">I have stored it securely</button></div>
     </dialog>
 
     <dialog id="password-dialog">
