@@ -3,199 +3,124 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#071f43" />
-    <meta
-      name="description"
-      content="AI7 UAE is an AI7Lab verification platform for vendor onboarding, due diligence, and risk operations."
-    />
-    <title>AI7 UAE — Vendor verification, built for the UAE</title>
+    <meta name="theme-color" content="#081d42" />
+    <meta name="description" content="KYCProbe is a UAE-native KYC marketplace for business and individual verification, AML, adverse media, PEP and sanctions screening, API orchestration, and continuous monitoring." />
+    <title>KYCProbe — UAE-native verification and KYC orchestration</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="/styles.css?v=6" />
-    <script src="/script.js" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css?v=7" />
+    <script src="/script.js?v=2" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
-    <div class="ambient ambient-one" aria-hidden="true"></div>
-    <div class="ambient ambient-two" aria-hidden="true"></div>
+    <div class="utility-bar"><span>UAE-NATIVE VERIFICATION INFRASTRUCTURE</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">A brand by AI7Lab · DIFC, Dubai ↗</a></div>
 
-    <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
-    <header class="site-header">
-      <a class="brand" href="#top" aria-label="AI7 UAE home">
-        <span class="brand-mark">A7</span>
-        <span>AI7 <b>UAE</b></span>
-      </a>
-      <nav aria-label="Main navigation">
-        <a href="#approach">How it works</a>
-        <a href="#coverage">Solutions</a>
-        <a href="https://api.ai7uae.com/forms">Forms</a>
-        <a href="#controls">Trust</a>
+    <header class="site-header" id="top">
+      <a class="brand" href="#top" aria-label="KYCProbe home"><img src="/assets/kycprobe-logo-dark.png" alt="KYCProbe by AI7Lab" /></a>
+      <button class="menu-button" type="button" aria-expanded="false" aria-controls="site-navigation">Menu</button>
+      <nav id="site-navigation" aria-label="Main navigation">
+        <a href="#marketplace">Marketplace</a><a href="#orchestration">Orchestration</a><a href="#use-cases">Use cases</a><a href="#monitoring">Monitoring</a><a href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Contact</a>
       </nav>
-      <a class="button button-small" href="https://api.ai7uae.com">Open API platform</a>
+      <a class="button button-small" href="https://api.ai7uae.com">Open developer portal <span>↗</span></a>
     </header>
 
     <main id="main">
-      <section class="hero" id="top">
+      <section class="hero">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span></span> Verification infrastructure for the Emirates</p>
-          <h1>Trust every<br />business <em>relationship.</em></h1>
-          <p class="hero-intro">
-            Verify entities, bank accounts, adverse media, trade licences, and merchant websites through one secure platform—built for decisive onboarding and risk operations.
-          </p>
-          <div class="hero-actions">
-            <a class="button" href="https://api.ai7uae.com">Explore the APIs</a>
-            <a class="text-link" href="mailto:contact@ai7lab.net?subject=AI7%20UAE%20briefing">Talk to AI7Lab <span aria-hidden="true">↗</span></a>
-          </div>
-          <div class="hero-meta" aria-label="Deployment details">
-            <span>UAE-focused</span>
-            <span>API-first</span>
-            <span>Azure UAE North</span>
-          </div>
+          <p class="eyebrow"><span></span> THE UAE-NATIVE KYC MARKETPLACE</p>
+          <h1>Know who you are<br />doing business <em>with.</em></h1>
+          <p class="hero-intro">Verify businesses and individuals. Screen AML, adverse media, PEP and sanctions. Orchestrate the checks your policy requires—and return one clear, auditable record.</p>
+          <div class="hero-actions"><a class="button button-accent" href="https://api.ai7uae.com">Explore verification APIs <span>↗</span></a><a class="text-link" href="#orchestration">See API orchestration <span>↓</span></a></div>
+          <div class="proof-row" aria-label="Platform highlights"><div><strong>01</strong><span>One credential</span></div><div><strong>02</strong><span>One workflow</span></div><div><strong>03</strong><span>One audit record</span></div></div>
         </div>
 
-        <div class="signal-panel reveal" aria-label="Illustrative vendor risk review">
-          <div class="panel-topline">
-            <span class="mono">VENDOR REVIEW / 07</span>
-            <span class="live-dot">Review ready</span>
+        <div class="hero-stage reveal" aria-label="Illustration of an orchestrated KYC workflow">
+          <div class="orbit orbit-one" aria-hidden="true"></div><div class="orbit orbit-two" aria-hidden="true"></div>
+          <div class="stage-tag stage-tag-a"><span>✓</span> Trade licence</div><div class="stage-tag stage-tag-b"><span>✓</span> Sanctions + PEP</div><div class="stage-tag stage-tag-c"><span>✓</span> Adverse media</div><div class="stage-tag stage-tag-d"><span>✓</span> Merchant risk</div>
+          <div class="orchestrator-card">
+            <div class="orchestrator-top"><span>API ORCHESTRATION</span><i></i></div>
+            <div class="orchestrator-title"><div class="pulse-mark">K</div><div><small>WORKFLOW / UAE-001</small><h2>Vendor onboarding</h2></div></div>
+            <div class="flow-line"><span>INPUT</span><i></i><i></i><i></i><b>REPORT</b></div>
+            <div class="flow-result"><span>6 checks complete</span><strong>Review ready</strong></div>
+            <div class="report-stamp"><span>PDF</span><div><strong>Auditable report</strong><small>Evidence · timestamps · source trail</small></div></div>
           </div>
-          <div class="vendor-name">
-            <div class="vendor-avatar">NS</div>
-            <div>
-              <p class="mono">ILLUSTRATIVE RECORD</p>
-              <h2>Northstar Supply LLC</h2>
-              <p>Dubai, United Arab Emirates</p>
+          <div class="stage-caption">Compose specialised checks behind one stable API.</div>
+        </div>
+      </section>
+
+      <section class="capability-rail" aria-label="Verification coverage"><span>BUSINESS</span><i></i><span>INDIVIDUAL</span><i></i><span>AML</span><i></i><span>ADVERSE MEDIA</span><i></i><span>PEP</span><i></i><span>SANCTIONS</span></section>
+
+      <section class="section intro" id="marketplace">
+        <div class="section-kicker reveal"><span>01</span><p>KYC MARKETPLACE</p></div>
+        <div class="intro-copy reveal"><h2>Choose the checks.<br /><em>Keep one integration.</em></h2><p>KYCProbe brings regional and global verification services into a provider-neutral marketplace. Start with one check, combine several into a Form, or embed the complete workflow in your product.</p></div>
+        <div class="market-grid">
+          <a class="market-card reveal" href="https://api.ai7uae.com"><span class="card-index">01 / BUSINESS</span><div class="market-icon">⌂</div><h3>Business verification</h3><p>Validate UAE trade licence and entity information with structured evidence.</p><b>Explore API →</b></a>
+          <a class="market-card reveal" href="https://api.ai7uae.com/entity-search"><span class="card-index">02 / IDENTITY</span><div class="market-icon">◎</div><h3>Individual & entity</h3><p>Search people and organisations across identity and risk datasets.</p><b>Explore API →</b></a>
+          <a class="market-card reveal" href="https://api.ai7uae.com/adverse-media"><span class="card-index">03 / FINCRIME</span><div class="market-icon">◇</div><h3>AML, PEP & sanctions</h3><p>Screen financial-crime exposure with configurable decision thresholds.</p><b>Explore API →</b></a>
+          <a class="market-card reveal" href="https://api.ai7uae.com/merchant-screening"><span class="card-index">04 / DIGITAL</span><div class="market-icon">↗</div><h3>Merchant screening</h3><p>Turn a live website into a defensible merchant-risk review.</p><b>Explore API →</b></a>
+        </div>
+      </section>
+
+      <section class="section orchestration" id="orchestration">
+        <div class="orchestration-copy reveal"><p class="eyebrow light"><span></span> API ORCHESTRATION</p><h2>Many checks in.<br /><em>One answer out.</em></h2><p>Define the workflow once. KYCProbe collects the required inputs, routes each check, manages asynchronous completion, and consolidates the evidence into one callback response and one report.</p><a class="button button-light" href="https://api.ai7uae.com/forms">Build an orchestrated Form <span>↗</span></a></div>
+        <div class="pipeline reveal" aria-label="API orchestration sequence">
+          <div class="pipeline-source"><small>YOUR SYSTEM</small><strong>One API request</strong><code>POST /forms/vendor-onboarding</code></div><div class="pipeline-arrow">→</div>
+          <div class="pipeline-core"><div class="core-head"><span>KYCProbe</span><b>ORCHESTRATOR</b></div><ul><li><span>01</span> Validate inputs <i>done</i></li><li><span>02</span> Route checks <i>done</i></li><li><span>03</span> Reconcile results <i>done</i></li><li><span>04</span> Apply policy <i>done</i></li></ul></div><div class="pipeline-arrow">→</div>
+          <div class="pipeline-output"><small>ONE OUTCOME</small><strong>JSON + PDF</strong><span>Callback delivered</span><span>Audit record stored</span></div>
+        </div>
+        <div class="orchestration-points reveal"><div><span>01</span><strong>Automate workflows</strong><p>Replace manual hand-offs with controlled routing, callbacks and processing logs.</p></div><div><span>02</span><strong>Stay policy-aligned</strong><p>Choose services and thresholds around your organisation’s risk appetite.</p></div><div><span>03</span><strong>Change without rebuilding</strong><p>Keep a stable customer-facing contract while verification services evolve.</p></div></div>
+      </section>
+
+      <section class="section evidence" id="use-cases">
+        <div class="section-kicker reveal"><span>02</span><p>ADVERSE MEDIA</p></div>
+        <div class="evidence-heading reveal"><h2>Evidence you can read.<br /><em>Not a black-box score.</em></h2><p>Multilingual discovery, entity matching and risk classification are presented with source links, relevance signals and the context a reviewer needs.</p></div>
+        <div class="media-showcase">
+          <div class="media-card reveal">
+            <div class="media-card-top"><span>ADVERSE MEDIA SCREENING</span><b>REVIEW</b></div>
+            <div class="media-subject"><div>SN</div><span><small>SUBJECT</small><strong>Sample Network Holdings</strong><em>Business · United Arab Emirates</em></span></div>
+            <div class="risk-summary"><span><small>RISK LEVEL</small><strong>REVIEW</strong></span><span><small>ENTITY MATCH</small><strong>94%</strong></span><span><small>SOURCES</small><strong>08</strong></span></div>
+            <div class="finding"><i></i><div><small>CORPORATE CONDUCT · 18 OCT 2026</small><strong>Potentially relevant reporting identified</strong><p>Name and jurisdiction signals align. A human reviewer should confirm the relationship and context before deciding.</p></div></div>
+            <div class="media-actions"><span>Evidence preserved</span><span>Audit PDF generated</span><span>Sources linked</span></div><p class="demo-note">Illustrative interface only. This is not a real entity or screening result.</p>
+          </div>
+          <div class="publisher-field reveal" aria-label="Examples of publisher domains used in broad media discovery">
+            <div class="publisher-intro"><p class="eyebrow"><span></span> MULTI-REGION DISCOVERY</p><h3>Search beyond one language, one index, or one region.</h3><p>Publisher examples shown for coverage context. Inclusion does not imply endorsement or a guaranteed result from every source.</p></div>
+            <div class="publisher-cloud">
+              <div class="publisher p1"><img src="/assets/publishers/reuters.png" alt="" /><span>Reuters<small>GLOBAL</small></span></div><div class="publisher p2"><img src="/assets/publishers/aljazeera.png" alt="" /><span>Al Jazeera<small>GCC</small></span></div><div class="publisher p3"><img src="/assets/publishers/gulfnews.png" alt="" /><span>Gulf News<small>UAE</small></span></div><div class="publisher p4"><img src="/assets/publishers/ap.png" alt="" /><span>Associated Press<small>AMERICAS</small></span></div><div class="publisher p5"><img src="/assets/publishers/bbc.png" alt="" /><span>BBC<small>EUROPE</small></span></div><div class="publisher p6"><img src="/assets/publishers/toi.png" alt="" /><span>Times of India<small>INDIA</small></span></div><div class="publisher p7"><img src="/assets/publishers/scmp.png" alt="" /><span>SCMP<small>CHINA</small></span></div><div class="publisher p8"><img src="/assets/publishers/rbc.png" alt="" /><span>RBC<small>RUSSIA</small></span></div><div class="publisher p9"><img src="/assets/publishers/abc-au.png" alt="" /><span>ABC News<small>ANZ</small></span></div><div class="publisher p10"><img src="/assets/publishers/the-national.png" alt="" /><span>The National<small>UAE</small></span></div><div class="publisher p11"><img src="/assets/publishers/ft.png" alt="" /><span>Financial Times<small>GLOBAL</small></span></div><div class="publisher p12"><img src="/assets/publishers/nz-herald.png" alt="" /><span>NZ Herald<small>ANZ</small></span></div>
             </div>
           </div>
-          <div class="score-row">
-            <div>
-              <span class="score">82</span><span class="score-max">/100</span>
-              <p>Review confidence</p>
-            </div>
-            <div class="score-ring" aria-hidden="true"><span>82</span></div>
-          </div>
-          <div class="check-list">
-            <div><span class="check">✓</span><span>Trade licence signals</span><b>Aligned</b></div>
-            <div><span class="check">✓</span><span>Ownership review</span><b>Reviewed</b></div>
-            <div><span class="check amber">!</span><span>Bank detail change</span><b>Check</b></div>
-          </div>
-          <p class="panel-note">Example interface only — not a real company or verification result.</p>
         </div>
       </section>
 
-      <section class="trust-strip" aria-label="Core principles">
-        <p class="mono">BUILT AROUND</p>
-        <div><span>01</span> UAE business context</div>
-        <div><span>02</span> Auditable evidence</div>
-        <div><span>03</span> Unified API access</div>
+      <section class="section audit-section">
+        <div class="audit-copy reveal"><p class="eyebrow"><span></span> CERTIFIED & AUDITABLE</p><h2>A report built for the question: <em>“How did you decide?”</em></h2><p>Each generated report can preserve the transaction ID, request time, processing location, checks performed, decision thresholds, source evidence, findings and reviewer guidance.</p><div class="audit-list"><span>Timestamped transaction trail</span><span>Source and evidence references</span><span>Policy thresholds recorded</span><span>Customer-branded PDF output</span></div></div>
+        <div class="report-preview reveal" aria-label="Illustrative audit report preview"><div class="report-page report-page-back"></div><div class="report-page"><div class="report-head"><img src="/assets/kycprobe-logo-dark.png" alt="KYCProbe" /><span>VERIFICATION REPORT</span></div><p class="report-ref">REPORT / KYC-2026-1048</p><h3>Consolidated due diligence</h3><div class="report-decision"><span>DECISION STATUS</span><strong>REVIEW COMPLETE</strong></div><div class="report-bars"><i style="--w: 92%"></i><i style="--w: 76%"></i><i style="--w: 86%"></i></div><div class="report-fields"><span>Entity identity</span><b>Verified</b><span>AML / sanctions</span><b>Reviewed</b><span>Media signals</span><b>3 findings</b></div><div class="report-seal"><strong>AI7</strong><span>Audit record<br />digitally issued</span></div></div></div>
       </section>
 
-      <section class="section approach" id="approach">
-        <div class="section-heading reveal">
-          <p class="eyebrow"><span></span> One review path</p>
-          <h2>One platform.<br />A clearer decision.</h2>
-          <p>Bring specialised verification services into one consistent workflow, credential model, and audit trail.</p>
-        </div>
-        <ol class="steps">
-          <li class="reveal">
-            <span class="step-number">01</span>
-            <div class="step-icon" aria-hidden="true">＋</div>
-            <h3>Collect</h3>
-            <p>Capture the right data once through an API or a configurable multi-service Form.</p>
-          </li>
-          <li class="reveal">
-            <span class="step-number">02</span>
-            <div class="step-icon" aria-hidden="true">⌁</div>
-            <h3>Review</h3>
-            <p>Run the selected checks in a controlled workflow and preserve the underlying evidence.</p>
-          </li>
-          <li class="reveal">
-            <span class="step-number">03</span>
-            <div class="step-icon" aria-hidden="true">✓</div>
-            <h3>Decide</h3>
-            <p>Return structured JSON, callbacks, and audit-ready PDF reports to the systems your team already uses.</p>
-          </li>
-        </ol>
+      <section class="section merchant">
+        <div class="merchant-screen reveal"><div class="browser-bar"><i></i><i></i><i></i><span>merchant.example</span><b>SCREENING</b></div><div class="merchant-body"><aside class="screen-sidebar"><span class="active">Overview</span><span>Evidence</span><span>Policies</span><span>Technology</span></aside><div class="screen-content"><div class="capture-placeholder"><span>LIVE PAGE CAPTURE</span><strong>Merchant website</strong><small>Visual evidence captured at screening time</small></div><div class="screen-signals"><span><i class="good"></i> Business identity</span><span><i class="warn"></i> Policy disclosure</span><span><i class="good"></i> Contact footprint</span></div></div></div></div>
+        <div class="merchant-copy reveal"><p class="eyebrow"><span></span> MERCHANT SCREENING API</p><h2>See the business behind the URL.</h2><p>Screen a merchant website for identity, claims, policies, prohibited-content indicators and operational signals. Preserve screenshots and processing logs alongside a structured risk outcome.</p><ul><li>Actual page captures in the report</li><li>Configurable risk and review thresholds</li><li>Evidence-led findings, not unexplained labels</li><li>JSON response and optional PDF</li></ul><a class="text-link" href="https://api.ai7uae.com/merchant-screening">Explore merchant screening <span>↗</span></a></div>
       </section>
 
-      <section class="section coverage" id="coverage">
-        <div class="coverage-card reveal">
-          <p class="eyebrow"><span></span> UAE vendor context</p>
-          <h2>Focused checks for the moments that matter.</h2>
-          <p>
-            Use standalone verification APIs or combine them in Forms. Each service has live documentation, testing tools, and a consistent AI7 credential.
-          </p>
-          <a class="text-link light" href="https://api.ai7uae.com">Review API documentation <span>→</span></a>
-        </div>
-        <div class="coverage-grid reveal">
-          <article>
-            <span class="tag">ENTITY</span>
-            <h3>Trade licence & entity</h3>
-            <p>UAE licence verification and comprehensive entity screening through structured endpoints.</p>
-          </article>
-          <article>
-            <span class="tag">BANKING</span>
-            <h3>IBAN verification</h3>
-            <p>International bank-account verification with a controlled, provider-neutral response path.</p>
-          </article>
-          <article>
-            <span class="tag">RISK</span>
-            <h3>Adverse media</h3>
-            <p>Multi-source, multilingual screening with configurable thresholds and audit reporting.</p>
-          </article>
-          <article>
-            <span class="tag">DIGITAL</span>
-            <h3>Merchant websites</h3>
-            <p>Website screening, visual evidence, processing logs, and consolidated risk outcomes.</p>
-          </article>
-        </div>
+      <section class="section vendoreye" aria-labelledby="vendoreye-heading">
+        <div class="vendoreye-copy reveal"><p class="eyebrow light"><span></span> IN PRODUCTION / VENDOREYE</p><img src="/assets/vendoreye-logo.png" alt="Vendoreye" /><h2 id="vendoreye-heading">Verification that moves vendor work forward.</h2><p>Vendoreye applies KYC and risk checks inside a connected UAE procurement journey—from supplier onboarding and qualification to evidence review and ongoing governance.</p><a class="button button-light" href="https://www.vendoreye.ae/solutions/vendor-verification" target="_blank" rel="noopener">Read the vendor verification use case <span>↗</span></a></div>
+        <div class="vendor-journey reveal" aria-label="Vendoreye supplier verification workflow"><div class="journey-head"><span>SUPPLIER QUALIFICATION</span><b>VIK · PROCUREMENT AGENT</b></div><ol><li><span>01</span><div><strong>Collect</strong><small>Licence, ownership, tax and bank evidence</small></div><b>→</b></li><li><span>02</span><div><strong>Verify</strong><small>Registration, AML, sanctions and payment checks</small></div><b>→</b></li><li><span>03</span><div><strong>Review</strong><small>Evidence gaps and risk signals surfaced</small></div><b>→</b></li><li><span>04</span><div><strong>Monitor</strong><small>Approved vendors checked for new signals</small></div><b>✓</b></li></ol><p>People remain responsible for approvals, exceptions and procurement decisions.</p></div>
       </section>
 
-      <section class="section controls" id="controls">
-        <div class="section-heading reveal">
-          <p class="eyebrow"><span></span> Responsible by design</p>
-          <h2>AI supports the review.<br />Your team owns the decision.</h2>
-        </div>
-        <div class="control-list">
-          <article class="reveal">
-            <span>01</span>
-            <div>
-              <h3>Explainable review</h3>
-              <p>Keep the evidence and the rationale together, so a decision can be understood later.</p>
-            </div>
-          </article>
-          <article class="reveal">
-            <span>02</span>
-            <div>
-              <h3>Human oversight</h3>
-              <p>Use automation to focus attention while reserving approval and escalation for accountable people.</p>
-            </div>
-          </article>
-          <article class="reveal">
-            <span>03</span>
-            <div>
-              <h3>Dedicated UAE deployment</h3>
-              <p>The AI7 UAE platform runs on dedicated project resources in Microsoft Azure UAE North.</p>
-            </div>
-          </article>
-        </div>
+      <section class="section monitoring" id="monitoring">
+        <div class="monitoring-copy reveal"><div class="section-kicker"><span>03</span><p>CONTINUOUS MONITORING</p></div><h2>A pass today is not a promise tomorrow.</h2><p>Turn a point-in-time verification into an active watch. Re-screen selected subjects, compare new signals with the prior record, and route material changes to the right team.</p></div>
+        <div class="monitor-grid reveal"><div class="monitor-timeline"><span class="timeline-line"></span><article><i></i><small>DAY 00</small><strong>Baseline verified</strong><p>Identity, ownership and risk record established.</p></article><article><i></i><small>DAY 30</small><strong>No material change</strong><p>Monitoring completed. Record retained.</p></article><article class="alert"><i></i><small>DAY 61</small><strong>New media signal</strong><p>Evidence routed for human review.</p></article></div><div class="monitor-side"><span>WATCH CONFIGURATION</span><div><small>Subjects monitored</small><strong>Businesses · individuals · merchants</strong></div><div><small>Signals</small><strong>Sanctions · PEP · media · licence</strong></div><div><small>Delivery</small><strong>Callback · PDF · workflow event</strong></div><b>Monitoring active <i></i></b></div></div>
       </section>
 
-      <section class="cta-section reveal">
-        <p class="mono">A BETTER FIRST LOOK</p>
-        <h2>Make vendor confidence<br />part of every decision.</h2>
-        <p>Start with a single verification endpoint or orchestrate multiple services through one AI7 Form.</p>
-        <a class="button button-dark" href="https://api.ai7uae.com">Open the developer platform</a>
-      </section>
+      <section class="brand-story"><div class="brand-story-inner reveal"><div><p class="eyebrow light"><span></span> ABOUT THE BRAND</p><h2>KYCProbe is a brand by <a href="https://www.ai7lab.net" target="_blank" rel="noopener">AI7Lab</a>, built in Dubai.</h2></div><div><p>AI7Lab builds and operates agentic AI products for real enterprise workflows. KYCProbe brings that product discipline to modular verification, orchestration and evidence-led compliance operations.</p><div class="brand-links"><a href="https://www.ai7lab.net" target="_blank" rel="noopener">About AI7Lab ↗</a><a href="https://www.ai7lab.net/products" target="_blank" rel="noopener">Products ↗</a><a href="https://www.ai7lab.net/technology" target="_blank" rel="noopener">Technology ↗</a><a href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Contact ↗</a></div></div></div></section>
+
+      <section class="final-cta reveal"><p class="eyebrow"><span></span> START WITH ONE CHECK</p><h2>Build the verification<br />workflow you need.</h2><p>Use one API, orchestrate a complete KYC journey, or connect KYCProbe to the systems your team already operates.</p><div><a class="button" href="https://api.ai7uae.com">Open developer portal <span>↗</span></a><a class="text-link" href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Talk to AI7Lab <span>↗</span></a></div></section>
     </main>
 
     <footer>
-      <a class="brand" href="#top"><span class="brand-mark">A7</span><span>AI7 <b>UAE</b></span></a>
-      <p>AI7LAB Tech Innovation Limited · DIFC, Dubai, UAE<br /><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a> · <a href="https://www.ai7lab.net">ai7lab.net</a></p>
-      <p class="mono">© <span id="year">2026</span> AI7 UAE · An AI7Lab company</p>
+      <div class="footer-brand"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /><p>UAE-native verification infrastructure for auditable KYC workflows.</p></div>
+      <div class="footer-links"><div><strong>PLATFORM</strong><a href="#marketplace">Marketplace</a><a href="#orchestration">API orchestration</a><a href="#monitoring">Continuous monitoring</a><a href="https://api.ai7uae.com">Developer portal</a></div><div><strong>AI7LAB</strong><a href="https://www.ai7lab.net" target="_blank" rel="noopener">About</a><a href="https://www.ai7lab.net/products" target="_blank" rel="noopener">Products</a><a href="https://www.ai7lab.net/technology" target="_blank" rel="noopener">Technology</a><a href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Contact</a></div><div><strong>LEGAL</strong><a href="/terms">Terms of Use</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a></div></div>
+      <div class="footer-bottom"><span>© <span id="year">2026</span> AI7LAB Tech Innovation Limited · DIFC, Dubai, UAE</span><span>KYCProbe is a brand by AI7Lab</span></div>
     </footer>
   </body>
 </html>

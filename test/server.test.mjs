@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, get as httpGet } from 'node:http';
 import { after, before, test } from 'node:test';
 
 process.env.NODE_ENV = 'test';
@@ -36,6 +36,21 @@ const completeSuccess = {
     risk_scores: { trade_license_number: null }
   }
 };
+
+function getWithHost(path, host) {
+  return new Promise((resolve, reject) => {
+    const request = httpGet(`${appUrl}${path}`, { headers: { host } }, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => resolve({
+        status: response.statusCode,
+        headers: response.headers,
+        body: Buffer.concat(chunks)
+      }));
+    });
+    request.on('error', reject);
+  });
+}
 
 before(async () => {
   upstream = createServer(async (req, res) => {
@@ -166,6 +181,30 @@ test('serves provider-neutral API documentation', async () => {
   assert.equal(text.includes('kycdd'), false);
   assert.equal(text.includes('api.ai7uae.com'), true);
   assert.equal(text.includes('/service/uae_tlv'), true);
+});
+
+test('serves the public KYCProbe marketplace homepage and terms on the apex host', async () => {
+  const homepage = await getWithHost('/', 'ai7uae.com');
+  const html = homepage.body.toString('utf8');
+  assert.equal(homepage.status, 200);
+  assert.match(html, /UAE-native KYC marketplace/i);
+  assert.match(html, /API ORCHESTRATION/);
+  assert.match(html, /CONTINUOUS MONITORING/);
+  assert.match(html, /vendoreye-logo\.png/);
+  assert.match(html, /Terms of Use/);
+  assert.match(html, /kycprobe-logo-dark\.png/);
+  assert.match(html, /kycprobe-logo-white\.png/);
+
+  const terms = await getWithHost('/terms.html', 'ai7uae.com');
+  const termsHtml = terms.body.toString('utf8');
+  assert.equal(terms.status, 200);
+  assert.match(termsHtml, /Terms of Use/);
+  assert.match(termsHtml, /AI7LAB Tech Innovation Limited/);
+
+  const vendoreyeLogo = await getWithHost('/assets/vendoreye-logo.png', 'ai7uae.com');
+  assert.equal(vendoreyeLogo.status, 200);
+  assert.equal(vendoreyeLogo.headers['content-type'], 'image/png');
+  assert.ok(vendoreyeLogo.body.byteLength > 0);
 });
 
 test('serves a complete live tester and response-field reference', async () => {
