@@ -13,6 +13,8 @@ COPY api-site/ ./api-site/
 COPY admin-site/ ./admin-site/
 COPY api/openapi.json ./api/openapi.json
 
+RUN mkdir /data && chown node:node /data
+
 USER node
 
 EXPOSE 8080

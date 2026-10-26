@@ -19,6 +19,10 @@ The GitHub deployment identity receives the custom role in `infrastructure/ai7ua
 
 ## Verification API
 
+### Bank statement analysis local demo
+
+The [Bank Statement Analysis module](bank-statement-analysis/README.md) lives under **Analysis** in the existing admin console, alongside Forms. Its authenticated asynchronous local API uses a separate Python worker. Processing is enabled only with `BSA_LOCAL_ENABLED=1` outside production; the module remains visible while service setup is pending. The [engineering handoff](docs/bank-statement-analysis/README.md) defines the broader MVP and production gates.
+
 The provider-neutral API portal and wrapper are served from `api.ai7uae.com`. Current endpoints are:
 
 ```text

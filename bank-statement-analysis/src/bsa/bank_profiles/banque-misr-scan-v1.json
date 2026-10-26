@@ -1,0 +1,12 @@
+{
+  "bankId": "banque-misr",
+  "formatVersion": "historical-scan-v1",
+  "effectiveFrom": "2020-01-01",
+  "locales": ["en-AE"],
+  "productTypes": ["current_account"],
+  "headerTokens": ["banque misr", "historical statement"],
+  "dateFormat": "%d/%m/%Y",
+  "decimalSeparator": ".",
+  "thousandsSeparator": ",",
+  "balanceConvention": "credit_positive"
+}

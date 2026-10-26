@@ -1,0 +1,13 @@
+{
+  "bankId": "ai7-synthetic",
+  "formatVersion": "1.0.0",
+  "effectiveFrom": "2026-01-01",
+  "locales": ["en-AE"],
+  "productTypes": ["current_account", "savings_account", "credit_card", "loan"],
+  "header": "AI7 SYNTHETIC BANK STATEMENT",
+  "dateFormat": "%Y-%m-%d",
+  "decimalSeparator": ".",
+  "thousandsSeparator": ",",
+  "balanceConvention": "credit_positive",
+  "goldFixture": "demo/synthetic-combined.pdf"
+}
