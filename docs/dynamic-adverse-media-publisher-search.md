@@ -5,10 +5,12 @@ Owner direction, 26 October 2026: search dynamically for the given entity name a
 ## Current local implementation
 
 - The approved source file has 50 placements in each of 30 economies. One domain appears in two economies, yielding 1,499 unique approved domains. The source file is copied into the API image; no publisher manifests, crawler jobs, queues, tables, or dedicated news storage are needed.
-- A request with `search_plus: true` uses the existing multilingual current-news, open-web, and archive searches for the subject, supplied aliases, generated transliterations, and narrowly evidenced associations. It classifies provider hits by the original result URL's HTTPS publisher hostname, rejects lookalike domains and homepages, and consolidates catalog matches with other relevant evidence. The existing direct official-record lookup remains separate.
+- A request with `search_plus: true` reserves up to six calls inside the existing twelve-call ceiling for explicit site-restricted publisher batches. The selector first round-robins high-value publishers from the requested countries, excludes sports/music/culture-only outlets, and then fills unused capacity with a GDP-country-diversified global ranking. The remaining calls continue broader multilingual current-news, open-web, association, archive, and official-record coverage.
+- Each publisher batch searches the primary name, supplied aliases, relevant generated transliterations, and a compact multilingual adverse-term set. Domain batches are packed below the provider's 400-character query boundary. No publisher website is fetched.
+- `coverage.search_plus.publishers_screened` contains only publishers assigned to successfully completed site-restricted index queries. `publishers_not_completed` contains publishers whose batch failed after controlled retries. Batch counts and the selection strategy are also returned. Approved publishers represented in retained results appear in `matched_publishers`.
+- The engine still validates every result URL against the catalog, rejects lookalike domains and homepages, and consolidates targeted publisher results with other relevant evidence. The existing direct official-record lookup remains separate.
 - The existing deterministic entity and adverse-term check runs on titles and provider snippets. Bounded model review may reject high-confidence mismatches. The API returns candidate URLs with source metadata for human review. The feature does not fetch article pages or claim to verify the full article text.
-- Search-provider results are not a guarantee that each of the 1,499 publishers was individually queried or that every article was found. The customer coverage limitation says this explicitly. A no-result response is limited to the providers and queries actually used.
-- The feature flag is off by default until local validation, reviewed deployment, and measured cost and quality checks are complete. No production deployment or provider-backed live screening has been performed from this branch.
+- Search-provider results are not a guarantee that every article from a listed publisher was indexed. A no-result response is limited to the publishers named in `publishers_screened`, the broader sources, and the queries actually completed. The full 1,499-domain catalog is not claimed as screened on every request.
 
 ## Cost gate
 
@@ -18,6 +20,6 @@ USD 0.01 remains provisionally available for API compute, reporting, and other i
 
 ## Validation before activation
 
-1. Test representative subject and alias searches locally using mocked providers, then bounded real provider searches with approved test names. Check domain precision, adverse relevance, missed known stories, multilingual results, and provider behavior when a domain is absent from its index.
+1. Test representative subject and alias searches locally using mocked providers, then bounded real provider searches with approved test names. Check country prioritisation, publisher-batch packing, domain precision, adverse relevance, missed known stories, multilingual results, and provider behavior when a domain is absent from its index.
 2. Confirm actual provider rates and compare reserved upper bounds with invoices. Allocate measured infrastructure and report-storage cost per screening; keep the total below USD 0.15.
 3. Review the draft PR and deploy through the protected API workflow from `main`. Activate the feature flag only after the quality and cost gates pass.
