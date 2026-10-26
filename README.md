@@ -81,7 +81,7 @@ The default schedule is `01:30 UTC` daily. All raw files and index entries remai
 
 ### Approved publisher search
 
-The owner-approved [publisher catalog](top_50_media_publishers_30_largest_economies_2026.json) contains 1,499 unique domains across 30 economies. When `APPROVED_PUBLISHER_SEARCH_ENABLED=true`, each adverse-media request searches for the subject and aliases through the existing search providers, keeps adverse candidate URLs on approved publisher domains, and retains the separate official-record source. No publisher is crawled or indexed by this feature. See the [current design and cost gate](docs/dynamic-adverse-media-publisher-search.md). The older [owned-index handoff](docs/owned-news-index-build-handoff.md) is superseded and is retained for history.
+The owner-approved [publisher catalog](top_50_media_publishers_30_largest_economies_2026.json) contains 1,499 unique domains across 30 economies. Set `search_plus: true` per request to classify indexed evidence URLs against this catalog and consolidate approved-publisher matches with the normal evidence set. Search+ does not crawl publishers or claim that every catalog domain was queried. See the [current design and cost gate](docs/dynamic-adverse-media-publisher-search.md). The older [owned-index handoff](docs/owned-news-index-build-handoff.md) is superseded and is retained for history.
 
 The API Engine manages these records inside the dedicated Key Vault:
 

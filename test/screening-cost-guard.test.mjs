@@ -7,10 +7,10 @@ test('each paid search attempt, including retries, is admitted before dialing', 
   let dialed = 0;
   const guard = createScreeningCostGuard(async () => { dialed += 1; return new Response(null, { status: 503 }); });
   const url = 'https://api.search.brave.com/res/v1/news/search?q=test';
-  for (let attempt = 0; attempt < 14; attempt += 1) await guard.fetch(url);
+  for (let attempt = 0; attempt < 28; attempt += 1) await guard.fetch(url);
   assert.equal(guard.reservedProviderCostUsd, MAX_PROVIDER_COST_USD);
   await assert.rejects(guard.fetch(url), /screening_cost_limit/);
-  assert.equal(dialed, 14);
+  assert.equal(dialed, 28);
   assert.equal(Math.round((MAX_SCREENING_COST_USD - MAX_PROVIDER_COST_USD) * 100), 1);
 });
 
@@ -23,7 +23,7 @@ test('model input and maximum output are reserved before a paid call', async () 
   await guard.fetch(url, options);
   assert.ok(guard.reservedProviderCostUsd > 0.005);
   assert.equal(dialed, 1);
-  await assert.rejects(guard.fetch(url, { method: 'POST', body: JSON.stringify({ contents: [{ parts: [{ text: 'x'.repeat(400_000) }] }],
+  await assert.rejects(guard.fetch(url, { method: 'POST', body: JSON.stringify({ contents: [{ parts: [{ text: 'x'.repeat(500_000) }] }],
     generationConfig: { maxOutputTokens: 2048 } }) }), /screening_cost_limit/);
   assert.equal(dialed, 1);
 });
@@ -31,7 +31,7 @@ test('model input and maximum output are reserved before a paid call', async () 
 test('the report narrative falls back without dialing Gemini when the shared request allowance is exhausted', async () => {
   const hosts = [];
   const guard = createScreeningCostGuard(async (input) => { hosts.push(new URL(input).hostname); return Response.json({}); });
-  for (let attempt = 0; attempt < 14; attempt += 1) {
+  for (let attempt = 0; attempt < 28; attempt += 1) {
     await guard.fetch('https://api.search.brave.com/res/v1/news/search?q=test');
   }
   const narrative = await createAdverseMediaNarrative({
@@ -40,6 +40,6 @@ test('the report narrative falls back without dialing Gemini when the shared req
     apiKey: 'test', fetchImpl: guard.fetch
   });
   assert.match(narrative.summary, /Inconclusive/);
-  assert.equal(guard.reservedProviderCostUsd, 0.07);
+  assert.equal(guard.reservedProviderCostUsd, 0.14);
   assert.deepEqual(new Set(hosts), new Set(['api.search.brave.com']));
 });
