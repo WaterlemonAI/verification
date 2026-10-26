@@ -18,6 +18,8 @@ const store = new EnvironmentStore();
 const reportStore = new MemoryAdverseMediaReportStore();
 const usageStore = new MemoryCustomerUsageStore();
 let queuedJob;
+let primaryJob;
+let queueWrites = 0;
 let app;
 let baseUrl;
 
@@ -60,7 +62,7 @@ before(async () => {
     store,
     reportStore,
     usageStore,
-    formsQueue: { async enqueue(job) { queuedJob = job; } },
+    formsQueue: { async enqueue(job) { queuedJob = job; queueWrites += 1; } },
     startWorker: false,
     fetchImpl: async (_url, options) => new Response(JSON.stringify({ matched: true, received: JSON.parse(options.body) }), {
       status: 200, headers: { 'content-type': 'application/json' }
@@ -109,7 +111,7 @@ test('one customer credential queues one signed multi-API submission', async () 
   assert.equal(unauthorized.status, 401);
   const response = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json', 'idempotency-key': 'forms-test-primary-0001' },
     body: JSON.stringify({
       callback_url: 'https://8.8.8.8/callback',
       data: { company_name: 'Acme LLC', country: 'ae', confirmed: true }
@@ -123,6 +125,42 @@ test('one customer credential queues one signed multi-API submission', async () 
   assert.equal(queuedJob.data.country, 'AE');
   assert.equal(queuedJob.form.id, 'vendor-onboarding');
   assert.equal(JSON.stringify(queuedJob).includes(issued.apiKey), false);
+  primaryJob = queuedJob;
+});
+
+test('same Form request ID replays accepted receipt without a second queue write or charge', async () => {
+  const issued = await store.createClient('Form replay customer');
+  const workspaceId = issued.client.workspaceId;
+  await store.setCustomer({ id: workspaceId, name: 'Form replay customer', status: 'active', usagePolicyVersion: 1 });
+  await usageStore.configure(workspaceId, validateUsagePolicy({ mode: 'prepaid', currency: 'USD',
+    allowed_modules: ['forms', 'company-search'], rates: {
+      forms: [{ up_to: null, price: '0.05' }], 'company-search': [{ up_to: null, price: '0.15' }]
+    } }, new Set(['forms', 'company-search'])), true);
+  await usageStore.addCredit(workspaceId, moneyMicros('0.40'), true);
+  const headers = { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
+    'idempotency-key': 'forms-replay-customer-0001' };
+  const body = JSON.stringify({ callback_url: 'https://8.8.8.8/callback',
+    data: { company_name: 'Replay LLC', country: 'AE' } });
+  const priorWrites = queueWrites;
+  const first = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, { method: 'POST', headers, body });
+  assert.equal(first.status, 202);
+  const original = await first.json();
+  assert.ok(original.callback.signing_secret);
+  const replay = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, { method: 'POST', headers, body });
+  assert.equal(replay.status, 202);
+  const repeated = await replay.json();
+  assert.equal(repeated.submission_id, original.submission_id);
+  assert.equal(repeated.callback.signing_secret, undefined);
+  assert.equal(queueWrites, priorWrites + 1);
+  const logs = await usageStore.logs(workspaceId);
+  assert.equal(logs.length, 2);
+  assert.equal(logs.filter((row) => row.cost !== '0.000000').length, 1);
+  assert.equal((await usageStore.account(workspaceId, true)).balance, '0.200000');
+  const conflict = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, { method: 'POST', headers,
+    body: JSON.stringify({ callback_url: 'https://8.8.8.8/callback', data: { company_name: 'Changed LLC', country: 'AE' } }) });
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).reasonCode, 'IDEMPOTENCY_CONFLICT');
+  assert.equal(queueWrites, priorWrites + 1);
 });
 
 test('invalid Form input is logged but never billed or queued', async () => {
@@ -166,7 +204,8 @@ test('failed Form queue admission refunds the reserved charge exactly once', asy
   await new Promise((resolve) => isolatedApp.listen(0, '127.0.0.1', resolve));
   t.after(() => isolatedApp.close());
   const response = await fetch(`http://127.0.0.1:${isolatedApp.address().port}/forms/vendor-onboarding/submissions`, {
-    method: 'POST', headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    method: 'POST', headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
+      'idempotency-key': 'forms-outage-customer-0001' },
     body: JSON.stringify({ callback_url: 'https://8.8.8.8/callback', data: { company_name: 'Synthetic LLC', country: 'AE' } })
   });
   assert.equal(response.status, 503);
@@ -182,11 +221,19 @@ test('failed Form queue admission refunds the reserved charge exactly once', asy
   assert.equal((await isolatedUsage.credits(id)).find((row) => row.related_transaction_id === log.transaction_id).amount, '0.200000');
   await isolatedUsage.complete(id, isolatedUsage.rows.get(log.transaction_id).rowKey, 503, 'form_queue_failed');
   assert.equal((await isolatedUsage.credits(id)).length, 2);
+  const retry = await fetch(`http://127.0.0.1:${isolatedApp.address().port}/forms/vendor-onboarding/submissions`, {
+    method: 'POST', headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
+      'idempotency-key': 'forms-outage-customer-0001' },
+    body: JSON.stringify({ callback_url: 'https://8.8.8.8/callback', data: { company_name: 'Synthetic LLC', country: 'AE' } })
+  });
+  assert.equal(retry.status, 503);
+  assert.equal((await retry.json()).reasonCode, 'SUBMISSION_PENDING');
+  assert.equal((await isolatedUsage.account(id, true)).balance, '0.200000');
 });
 
 test('Forms execution returns exact nested responses and creates one permanent typed PDF', async () => {
   const result = await executeFormsJob({
-    job: queuedJob,
+    job: primaryJob,
     store,
     reportStore,
     fetchImpl: async (_url, options) => new Response(JSON.stringify({ matched: true, received: JSON.parse(options.body) }), {

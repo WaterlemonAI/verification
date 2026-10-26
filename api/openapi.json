@@ -416,9 +416,9 @@
       "post": {
         "summary": "Submit a configured multi-API Form",
         "operationId": "submitVerificationForm",
-        "description": "Authenticates once, maps collected fields into every API configured for the named Form, and returns HTTP 202. AI7 later posts one HMAC-SHA256 signed callback containing each exact nested API response and a permanent consolidated PDF capability URL.",
+        "description": "Authenticates once, maps collected fields into every API configured for the named Form, and returns HTTP 202. Reuse the same Idempotency-Key and identical request body after a network timeout; an accepted submission returns the same submission ID without another charge or supplier run. If queue admission is uncertain, HTTP 503 SUBMISSION_PENDING requires operator reconciliation and must not be retried under a new key. AI7 later posts one HMAC-SHA256 signed callback containing each exact nested API response and a permanent consolidated PDF capability URL.",
         "security": [{ "ApiKey": [] }],
-        "parameters": [{ "name": "formId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" } }],
+        "parameters": [{ "name": "formId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" } }, { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "minLength": 16, "maxLength": 128 }, "description": "One unique request ID per intended Form run; reuse only for retries of identical input." }],
         "requestBody": {
           "required": true,
           "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FormSubmissionRequest" } } }
@@ -428,6 +428,7 @@
           "400": { "description": "The fields, callback URL, or mapped job are invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "401": { "description": "The AI7 API key is missing or invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "404": { "description": "The Form is unavailable or disabled.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "Idempotency-Key was already used with different input.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "503": { "description": "Durable Forms processing is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }

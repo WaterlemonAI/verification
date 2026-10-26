@@ -108,13 +108,13 @@ async function loadForm() {
   });
   const required = formDefinition.fields.filter((field) => field.required).map((field) => field.key);
   const optional = formDefinition.fields.filter((field) => !field.required).map((field) => field.key);
-  byId('form-schema-summary').textContent = `This Form runs ${formDefinition.services.map((service) => service.name).join(', ')}. Required data: ${required.join(', ') || 'none'}. Optional data: ${optional.join(', ') || 'none'}. A public HTTPS callback_url is required; customer_logo_url is optional. Only the listed services run for this Form.`;
+  byId('form-schema-summary').textContent = `This Form runs ${formDefinition.services.map((service) => service.name).join(', ')}. Required data: ${required.join(', ') || 'none'}. Optional data: ${optional.join(', ') || 'none'}. A public HTTPS callback_url is required; customer_logo_url is optional. Use one Idempotency-Key per intended run and reuse it after a network error. Only the listed services run for this Form.`;
   const sampleData = Object.fromEntries(formDefinition.fields.filter((field) => field.required).map((field) => {
     const example = field.placeholder || field.options?.[0] || (field.type === 'country' ? 'AE' : `YOUR_${field.key.toUpperCase()}`);
     return [field.key, field.type === 'number' ? Number(example) : field.type === 'boolean' ? true : example];
   }));
   const sampleBody = JSON.stringify({ data: sampleData, callback_url: 'https://your-system.example/webhooks/ai7', customer_logo_url: 'https://your-domain.example/logo.png' }, null, 2);
-  byId('form-curl').textContent = `curl -X POST '${endpoint}' \\\n  -H 'Authorization: Bearer YOUR_AI7_API_KEY' \\\n  -H 'Content-Type: application/json' \\\n  --data '${sampleBody}'`;
+  byId('form-curl').textContent = `curl -X POST '${endpoint}' \\\n  -H 'Authorization: Bearer YOUR_AI7_API_KEY' \\\n  -H 'Idempotency-Key: YOUR_UNIQUE_REQUEST_ID' \\\n  -H 'Content-Type: application/json' \\\n  --data '${sampleBody}'`;
   byId('copy-form-curl').addEventListener('click', async () => {
     await navigator.clipboard.writeText(byId('form-curl').textContent);
     byId('copy-form-curl').textContent = 'Copied';
@@ -160,17 +160,24 @@ byId('submission-form').addEventListener('submit', async (event) => {
     if (input.value === '') continue;
     data[field.key] = field.type === 'number' ? Number(input.value) : field.type === 'boolean' ? input.value === 'true' : input.value;
   }
+  const requestBody = JSON.stringify({ data, callback_url: byId('callback-url').value.trim(), customer_logo_url: byId('logo-url').value.trim() });
+  const pendingKey = `ai7-form-pending:${formDefinition.id}`;
+  let pending;
+  try { pending = JSON.parse(sessionStorage.getItem(pendingKey) || 'null'); } catch { /* stale browser storage */ }
+  const requestId = pending?.body === requestBody ? pending.id : crypto.randomUUID();
+  sessionStorage.setItem(pendingKey, JSON.stringify({ id: requestId, body: requestBody }));
   try {
     const response = await fetch(`/forms/${formDefinition.id}/submissions`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${byId('api-key').value.trim()}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ data, callback_url: byId('callback-url').value.trim(), customer_logo_url: byId('logo-url').value.trim() })
+      headers: { authorization: `Bearer ${byId('api-key').value.trim()}`, 'content-type': 'application/json', 'idempotency-key': requestId },
+      body: requestBody
     });
     const body = await response.json();
     byId('response-json').textContent = JSON.stringify(body, null, 2);
     byId('copy-response').disabled = false;
     byId('response-status').textContent = response.ok ? `Queued · HTTP ${response.status}` : `HTTP ${response.status}`;
     byId('response-status').className = response.ok ? 'success' : 'error';
+    if (response.ok) sessionStorage.removeItem(pendingKey);
     if (!response.ok) formError.textContent = body.error || 'The Form could not be submitted.';
   } catch {
     formError.textContent = 'The API could not be reached.';

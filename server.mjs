@@ -22,6 +22,7 @@ import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
 import { publicFormDefinition, resolveFormServiceInput, validateFormDefinition, validateFormSubmission } from './lib/forms.mjs';
 import { createFormsQueue, makeFormsJob, startFormsWorker, validateFormsCallbackUrl } from './lib/forms-queue.mjs';
+import { createFormsSubmissionStore, formSubmissionFingerprint, publicFormQueueReceipt } from './lib/forms-submission-store.mjs';
 import { createFormsAuditPdf } from './lib/forms-report.mjs';
 import { CapacityError, createRequestCapacity } from './lib/request-capacity.mjs';
 import {
@@ -117,7 +118,7 @@ function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, trans
   };
 }
 
-async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, transactionId) {
+async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, transactionId) {
   const route = await classifyCustomerApi(req, url, store);
   if (!route) return true;
   const token = bearerToken(req);
@@ -143,11 +144,36 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, tra
       json(res, prepared.status, { status: 'Error', error: prepared.error });
       return false;
     }
+    const idempotencyKey = String(req.headers['idempotency-key'] || '').trim();
+    if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) {
+      await usageStore.record(workspaceId, details, 400);
+      json(res, 400, { status: 'Error', error: 'Idempotency-Key must contain 16–128 letters, digits, dots, underscores, colons or hyphens.' });
+      return false;
+    }
+    const claim = await formSubmissionStore.claim({ workspaceId, form: prepared.form, idempotencyKey,
+      payloadHash: formSubmissionFingerprint(prepared.form, prepared.submission), job: prepared.job });
+    if (claim.status !== 'new') {
+      const status = claim.status === 'replayed' ? 202 : claim.status === 'conflict' ? 409 : 503;
+      await usageStore.record(workspaceId, details, status);
+      if (claim.status === 'replayed') json(res, 202, publicFormQueueReceipt(claim.row));
+      else json(res, status, { status: 'Error', reasonCode: claim.status === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'SUBMISSION_PENDING',
+        error: claim.status === 'conflict' ? 'This Idempotency-Key was used with different input.' : 'Submission admission is pending reconciliation. No additional check was queued or charged.' },
+      claim.status === 'in_progress' ? { 'retry-after': '2' } : {});
+      return false;
+    }
+    prepared.claim = claim.row;
+    prepared.job.idempotency = { partitionKey: claim.row.partitionKey, rowKey: claim.row.rowKey };
     req.ai7PreparedForm = prepared;
   }
   if (route.billable) {
-    const admission = await usageStore.admit(workspaceId, details, managed);
+    let admission;
+    try { admission = await usageStore.admit(workspaceId, details, managed); }
+    catch (error) {
+      if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
+      throw error;
+    }
     if (!admission.allowed) {
+      if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
       json(res, admission.statusCode, { status: 'Error', error: admission.reason });
       return false;
     }
@@ -1012,31 +1038,21 @@ async function prepareFormSubmission(req, formId, store, formsQueue) {
   }
 }
 
-async function submitForm(req, res, formId, store, formsQueue) {
+async function submitForm(req, res, formId, store, formsQueue, formSubmissionStore) {
   const token = bearerToken(req);
   if (!req.ai7Client && !(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   const prepared = req.ai7PreparedForm || await prepareFormSubmission(req, formId, store, formsQueue);
   if (prepared.status) return json(res, prepared.status, { status: 'Error', error: prepared.error });
-  const { form, job } = prepared;
+  const { job, claim } = prepared;
   try {
     await formsQueue.enqueue(job);
   } catch {
     res.ai7BillingReason = 'form_queue_failed';
     return json(res, 503, { status: 'Error', error: 'Forms processing is temporarily unavailable.' });
   }
-  return json(res, 202, {
-    submission_id: job.submission_id,
-    status: 'queued',
-    form: { id: form.id, name: form.name, version: form.version },
-    callback: {
-      configured: true,
-      event: 'forms.submission.completed',
-      signature_header: 'x-ai7-signature',
-      delivery_id_header: 'x-ai7-delivery-id',
-      signing_secret: job.callback_secret
-    },
-    message: 'The consolidated response and permanent PDF link will be posted to the callback URL. Store the signing secret now; it is not shown again.'
-  });
+  try { await formSubmissionStore.accept(claim); }
+  catch { console.warn('forms_submission_accept_repair_needed', JSON.stringify({ submission_id: job.submission_id })); }
+  return json(res, 202, publicFormQueueReceipt(claim, { initialSecret: job.callback_secret }));
 }
 
 function secureRequest(req) {
@@ -1799,7 +1815,8 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
 
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
   deepResearchQueue = process.env.ADVERSE_MEDIA_WORKER_ENABLED === 'false' ? null : createDeepResearchQueue(),
-  formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), usageStore = createCustomerUsageStore(),
+  formsQueue = createFormsQueue(), formSubmissionStore = createFormsSubmissionStore(),
+  reportStore = createAdverseMediaReportStore(), usageStore = createCustomerUsageStore(),
   merchantScreener = configuredMerchantScreener, requestCapacity = createRequestCapacity(),
   startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
@@ -1823,9 +1840,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     startFormsWorker({
       queue: formsQueue,
       execute: (job) => executeFormsJob({ job, store, fetchImpl, merchantScreener, reportStore }),
-      onResult: (job, result) => job.billing?.workspace_id && job.billing?.log_key
-        ? usageStore.settleFormResult(job.billing.workspace_id, job.billing.log_key, result.services)
-        : undefined,
+      onResult: async (job, result) => {
+        if (job.idempotency) await formSubmissionStore.accept(job.idempotency);
+        if (job.billing?.workspace_id && job.billing?.log_key)
+          await usageStore.settleFormResult(job.billing.workspace_id, job.billing.log_key, result.services);
+      },
       resultStore: reportStore
     });
   }
@@ -1838,7 +1857,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     if (transactionId) res.setHeader('x-ai7-transaction-id', transactionId);
 
     try {
-      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, transactionId))) return;
+      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, transactionId))) return;
       if (req.ai7CapacityLane) {
         const queuedAt = Date.now();
         const cancelled = new AbortController();
@@ -1850,6 +1869,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         } catch (error) {
           res.off('close', onClose);
           if (error instanceof CapacityError) {
+            if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
             console.warn('api_capacity_rejected', JSON.stringify({ transaction_id: transactionId,
               lane: req.ai7CapacityLane, reason: error.reason,
               waiting_ms: Date.now() - queuedAt, capacity: requestCapacity.snapshot?.() || null }));
@@ -1890,7 +1910,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return await handleBsa(req, res, url, store);
       const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
-      if (req.method === 'POST' && formSubmissionMatch) return await submitForm(req, res, formSubmissionMatch[1], store, formsQueue);
+      if (req.method === 'POST' && formSubmissionMatch) return await submitForm(req, res, formSubmissionMatch[1], store, formsQueue, formSubmissionStore);
       const formSchemaMatch = /^\/forms\/([a-z0-9-]+)\/schema$/.exec(url.pathname);
       if (req.method === 'GET' && formSchemaMatch) {
         const form = await store.getForm(formSchemaMatch[1]);
