@@ -9,8 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/admin.css?v=10" />
-    <script src="/admin/admin.js?v=13" defer></script>
+    <link rel="stylesheet" href="/admin/admin.css?v=11" />
+    <script src="/admin/admin.js?v=14" defer></script>
 
   </head>
   <body>
@@ -256,6 +256,23 @@
         <p class="error" id="client-error" aria-live="polite"></p>
         <div class="actions"><button type="button" class="secondary" data-close="client-dialog">Cancel</button><button type="submit">Send setup invitation</button></div>
       </form>
+    </dialog>
+
+    <dialog id="usage-dialog" class="wide-dialog">
+      <form id="usage-form">
+        <div class="dialog-head"><div><p class="eyebrow">CUSTOMER BILLING</p><h2 id="usage-title">Modules and usage</h2></div><button type="button" class="close" data-close="usage-dialog">×</button></div>
+        <p class="notice">Each admitted API hit is charged once, including provider errors. Rejected access, insufficient credit and wrong methods cost zero. Forms charge the Form rate and each selected API rate on submission.</p>
+        <input name="workspace_id" type="hidden" />
+        <div class="grid two"><label>Billing mode<select name="mode"><option value="prepaid">Prepaid · stop when credit is insufficient</option><option value="postpay">Postpay · unlimited usage</option></select></label><label>Currency<select name="currency"><option value="USD">USD</option><option value="AED">AED</option></select></label></div>
+        <div class="usage-summary" id="usage-summary"></div>
+        <h3>Enabled modules and per-hit rates</h3>
+        <p class="field-help">One tier per line: inclusive upper hit count, colon, rate. Use * for the final open tier. Example: 10000:0.10, 20000:0.08, *:0.06. An empty rate means zero cost.</p>
+        <div id="usage-modules" class="usage-modules"></div>
+        <p class="error" id="usage-error" aria-live="polite"></p>
+        <div class="actions"><button type="button" class="secondary" data-close="usage-dialog">Cancel</button><button type="submit">Save access and rates</button></div>
+      </form>
+      <form id="credit-form" class="usage-credit"><label>Add prepaid credit<input name="amount" inputmode="decimal" placeholder="100.00" required /></label><button type="submit">Add credit</button><p id="credit-message" role="status"></p></form>
+      <h3>Recent API transactions</h3><div class="usage-table-wrap"><table class="usage-table"><thead><tr><th>UTC time</th><th>Transaction ID</th><th>Module</th><th>HTTP</th><th>Cost</th></tr></thead><tbody id="admin-usage-logs"></tbody></table></div>
     </dialog>
 
     <dialog id="password-dialog">

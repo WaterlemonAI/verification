@@ -24,10 +24,13 @@
       if (protectedPaths.has(normalizedPath)) location.replace(`/login?next=${encodeURIComponent(location.pathname + location.search + location.hash)}`);
       return;
     }
-    renderPortal(await response.json());
+    const session = await response.json();
+    const entitlementResponse = await fetch('/portal/api/entitlements', { credentials: 'same-origin', headers: { accept: 'application/json' } });
+    if (!entitlementResponse.ok) return;
+    renderPortal(session, await entitlementResponse.json());
   }
 
-  function renderPortal(session) {
+  function renderPortal(session, entitlements) {
     const account = session.account || {};
     const sidebar = document.createElement('nav');
     sidebar.className = 'portal-sidebar';
@@ -59,6 +62,11 @@
         <button type="button" id="portal-sign-out">Sign out</button>
       </div>`;
     sidebar.querySelector(`[data-path="${normalizedPath}"]`)?.classList.add('active');
+    const modules = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/forms': 'forms' };
+    sidebar.querySelectorAll('a[data-path]').forEach((link) => {
+      const module = modules[link.dataset.path];
+      if (module && !entitlements.allowed_modules.includes('*') && !entitlements.allowed_modules.includes(module)) link.remove();
+    });
     document.body.prepend(sidebar);
 
     const header = document.querySelector('header');
