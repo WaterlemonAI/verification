@@ -98,3 +98,20 @@ test('identity scoring separates expanded full names from typo-like near matches
   assert.equal(near.results[0].risk_level, 'intermediate');
   assert.ok(near.results[0].risk_score < 0.9);
 });
+
+test('identity scoring recognizes unsegmented CJK names inside headlines', async () => {
+  const request = validateAdverseMediaRequest({ entity_type: 'business', name: '华信科技', languages: ['zh'] });
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      const result = { url: 'https://example.cn/case', title: '华信科技因欺诈被立案调查', description: '监管机构已立案调查。' };
+      return Response.json(url.pathname.includes('/news/') ? { results: [result] } : { web: { results: [result] } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    throw new Error(`unexpected_network_call:${url.hostname}`);
+  };
+  const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
+  assert.equal(response.results[0].identity_match.type, 'exact_name');
+  assert.equal(response.results[0].identity_match.score, 1);
+  assert.equal(response.results[0].risk_level, 'high');
+});
