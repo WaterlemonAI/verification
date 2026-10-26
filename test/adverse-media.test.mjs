@@ -602,7 +602,7 @@ test('public documentation exposes the complete route without provider or key de
   const specText = await (await fetch(`${appUrl}/openapi.json`)).text();
   const spec = JSON.parse(specText);
   assert.ok(Object.hasOwn(spec.paths, '/service/adverse_media'));
-  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'risk_threshold', 'max_results', 'deep_research', 'callback_url']) {
+  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'risk_threshold', 'search_plus', 'max_results', 'deep_research', 'callback_url']) {
     assert.ok(Object.hasOwn(spec.components.schemas.AdverseMediaRequest.properties, field));
     assert.ok(html.includes(field));
   }

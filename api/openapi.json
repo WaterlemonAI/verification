@@ -2644,6 +2644,7 @@
           "date_from": { "type": "string", "format": "date" },
           "date_to": { "type": "string", "format": "date" },
           "risk_threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.65, "description": "Retained results at or above this score are flagged for review. Only high-confidence evidence mismatches are suppressed." },
+          "search_plus": { "type": "boolean", "default": false, "description": "Classifies returned evidence URLs against the curated 1,499-publisher catalog and consolidates catalog matches with standard results. This uses provider indexes and is not an exhaustive direct query of every publisher." },
           "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 },
           "deep_research": { "type": "boolean", "default": false, "description": "Enables asynchronous screening and optional signed callback delivery." },
           "callback_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS callback URL. Accepted only when deep_research is true. Receives the final completed or explicitly partial result." },
@@ -2653,7 +2654,7 @@
       },
       "AdverseMediaResult": {
         "type": "object",
-        "required": ["result_id", "title", "url", "publisher", "published_at", "language", "source_type", "excerpt", "risk_score", "risk_level", "categories", "legal_stage", "review_required"],
+        "required": ["result_id", "title", "url", "publisher", "published_at", "language", "source_type", "excerpt", "identity_match", "search_plus_match", "risk_score", "risk_level", "categories", "legal_stage", "review_required"],
         "properties": {
           "result_id": { "type": "string" },
           "title": { "type": "string" },
@@ -2663,8 +2664,20 @@
           "language": { "type": "string" },
           "source_type": { "type": "string", "enum": ["news_index", "open_web", "global_news_archive", "official_regulatory"] },
           "excerpt": { "type": "string" },
+          "identity_match": {
+            "type": "object",
+            "required": ["score", "type", "matched_input", "explanation"],
+            "properties": {
+              "score": { "type": "number", "minimum": 0, "maximum": 1 },
+              "type": { "type": "string", "enum": ["exact_name", "exact_alias", "expanded_full_name", "expanded_alias", "near_match", "partial"] },
+              "matched_input": { "type": "string" },
+              "explanation": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "search_plus_match": { "type": "boolean", "description": "True when the evidence URL belongs to the approved Search+ publisher catalog." },
           "risk_score": { "type": "number", "minimum": 0, "maximum": 1 },
-          "risk_level": { "type": "string", "enum": ["low", "medium", "high"] },
+          "risk_level": { "type": "string", "enum": ["low", "intermediate", "high"] },
           "categories": { "type": "array", "items": { "type": "string" } },
           "legal_stage": { "type": "string" },
           "review_required": { "type": "boolean", "description": "True when the retained result meets or exceeds risk_threshold." }

@@ -11,6 +11,7 @@ const samples = {
     "languages": ["en", "ar"],
     "date_from": "2023-01-01",
     "risk_threshold": 0.65,
+    "search_plus": true,
     "deep_research": true,
     "callback_url": "https://your-domain.example/webhooks/ai7",
     "customer_logo_url": "https://your-domain.example/logo.png",
@@ -32,6 +33,7 @@ const samples = {
       languages: ['en', 'ar'],
       date_from: '2023-01-01',
       risk_threshold: 0.65,
+      search_plus: true,
       deep_research: true,
       callback_url: 'https://your-domain.example/webhooks/ai7',
       customer_logo_url: 'https://your-domain.example/logo.png',
@@ -54,6 +56,7 @@ response = requests.post(
         "languages": ["en", "ar"],
         "date_from": "2023-01-01",
         "risk_threshold": 0.65,
+        "search_plus": True,
         "deep_research": True,
         "callback_url": "https://your-domain.example/webhooks/ai7",
         "customer_logo_url": "https://your-domain.example/logo.png",
@@ -172,6 +175,7 @@ function requestBody() {
     date_from: byId('date-from').value,
     date_to: byId('date-to').value,
     risk_threshold: thresholdPercent / 100,
+    search_plus: byId('search-plus').checked,
     max_results: maxResults,
     deep_research: deepResearch.checked,
     callback_url: deepResearch.checked ? callbackUrl.value.trim() : '',
@@ -207,11 +211,10 @@ byId('languages').addEventListener('change', (event) => {
 });
 
 downloadReport.addEventListener('click', async () => {
-  const key = byId('api-key').value.trim();
-  if (!latestReportUrl || !key) return;
+  if (!latestReportUrl) return;
   downloadReport.disabled = true;
   try {
-    const response = await fetch(latestReportUrl, { headers: { Authorization: `Bearer ${key}` } });
+    const response = await fetch(latestReportUrl);
     if (!response.ok) throw new Error('download_failed');
     const blob = await response.blob();
     const link = document.createElement('a');
