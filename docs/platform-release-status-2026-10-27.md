@@ -1,5 +1,7 @@
 # KYCProbe release status — 27 October 2026 (Dubai)
 
+This snapshot was taken before the live deployment. See [the current live evidence](platform-live-evidence-2026-10-27.md) for the verified production state and remaining gates.
+
 ## Production currently serving
 
 - API Container App revision `ca-ai7uae-api--0000065`, image digest `sha256:baca8d297e69a02a2a6168c4f83553ce5ee770005ce95d1287b63d64454eeeb2`, is ready. It contains the narrow adverse-media retry-containment release from PR #76.
