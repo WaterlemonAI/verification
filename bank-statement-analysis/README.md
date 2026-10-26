@@ -9,7 +9,7 @@ This module implements the [MVP handoff](../docs/bank-statement-analysis/README.
 - `ca-ai7uae-bsa-worker` scales from zero on queue depth and has a dedicated user-assigned managed identity.
 - Azure Document Intelligence `prebuilt-layout` runs in UAE North through Microsoft Entra authentication. Local keys are disabled on the resource.
 - The production resource uses paid S0 and accepts up to 100 pages per managed Layout request. The worker enforces a USD 1.00 request ceiling using the UAE North retail rate of USD 0.01 per prebuilt page.
-- A private ClamAV sidecar listens only on the shared container localhost interface. The worker waits for scanner readiness and scans every decrypted input with INSTREAM before normalization or extraction. Malware detection and scanner unavailability fail closed.
+- A private, digest-pinned official ClamAV 1.4.6 LTS sidecar listens only inside the Container App replica. The worker waits for scanner readiness and scans every decrypted input with INSTREAM before normalization or extraction. Malware detection and scanner unavailability fail closed. The scanner receives 4 GiB RAM and scales to zero with the analysis worker.
 - Source documents, results, PDFs, XLSX workbooks, ledgers, and Parquet exports are never public. Every retrieval route rechecks the authenticated tenant owner.
 - The encryption key is stored in the API-only Key Vault and referenced by managed identity. It is not committed to source or stored in GitHub.
 
