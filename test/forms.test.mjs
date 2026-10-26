@@ -7,7 +7,7 @@ process.env.NODE_ENV = 'test';
 process.env.API_PUBLIC_BASE_URL = 'https://api.ai7uae.com';
 const { consolidateFormServiceResults, createAppServer, evaluateFormServiceQualification, executeFormsJob } = await import('../server.mjs');
 const { EnvironmentStore } = await import('../lib/api-store.mjs');
-const { MemoryCustomerUsageStore } = await import('../lib/customer-usage.mjs');
+const { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } = await import('../lib/customer-usage.mjs');
 const { MemoryAdverseMediaReportStore } = await import('../lib/adverse-media-report-store.mjs');
 const { resolveFormServiceInput, validateFormDefinition } = await import('../lib/forms.mjs');
 const { startFormsWorker } = await import('../lib/forms-queue.mjs');
@@ -145,6 +145,43 @@ test('invalid Form input is logged but never billed or queued', async () => {
   assert.equal(logs[0].response_code, 400);
   assert.equal(logs[0].cost, '0.000000');
   assert.equal(logs[0].transaction_id, response.headers.get('x-ai7-transaction-id'));
+});
+
+test('failed Form queue admission refunds the reserved charge exactly once', async (t) => {
+  const isolatedStore = new EnvironmentStore();
+  const isolatedUsage = new MemoryCustomerUsageStore();
+  await isolatedStore.upsertIntegration({ id: 'company-search', name: 'Company Search', publicPath: '/service/company_search',
+    method: 'POST', upstreamUrl: 'https://company.test/search', authType: 'none', acceptedContentTypes: ['application/json'], enabled: true }, '');
+  await isolatedStore.upsertForm(formDefinition);
+  const issued = await isolatedStore.createClient('Queue failure customer');
+  const id = issued.client.workspaceId;
+  await isolatedStore.setCustomer({ id, name: 'Queue failure customer', status: 'active', usagePolicyVersion: 1 });
+  const policy = validateUsagePolicy({ mode: 'prepaid', currency: 'USD', allowed_modules: ['forms', 'company-search'], rates: {
+    forms: [{ up_to: null, price: '0.05' }], 'company-search': [{ up_to: null, price: '0.15' }]
+  } }, new Set(['forms', 'company-search']));
+  await isolatedUsage.configure(id, policy, true);
+  await isolatedUsage.addCredit(id, moneyMicros('0.20'), true);
+  const isolatedApp = createAppServer({ store: isolatedStore, usageStore: isolatedUsage, startWorker: false,
+    formsQueue: { async enqueue() { throw new Error('synthetic_queue_outage'); } } });
+  await new Promise((resolve) => isolatedApp.listen(0, '127.0.0.1', resolve));
+  t.after(() => isolatedApp.close());
+  const response = await fetch(`http://127.0.0.1:${isolatedApp.address().port}/forms/vendor-onboarding/submissions`, {
+    method: 'POST', headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ callback_url: 'https://8.8.8.8/callback', data: { company_name: 'Synthetic LLC', country: 'AE' } })
+  });
+  assert.equal(response.status, 503);
+  const account = await isolatedUsage.account(id, true);
+  assert.equal(account.balance, '0.200000');
+  assert.equal(account.spent, '0.000000');
+  assert.equal(account.charged_calls, 0);
+  const log = (await isolatedUsage.logs(id))[0];
+  assert.equal(log.transaction_id, response.headers.get('x-ai7-transaction-id'));
+  assert.equal(log.cost, '0.000000');
+  assert.equal(log.refund_amount, '0.200000');
+  assert.equal(log.refund_reason, 'form_queue_failed');
+  assert.equal((await isolatedUsage.credits(id)).find((row) => row.related_transaction_id === log.transaction_id).amount, '0.200000');
+  await isolatedUsage.complete(id, isolatedUsage.rows.get(log.transaction_id).rowKey, 503, 'form_queue_failed');
+  assert.equal((await isolatedUsage.credits(id)).length, 2);
 });
 
 test('Forms execution returns exact nested responses and creates one permanent typed PDF', async () => {
@@ -299,6 +336,7 @@ test('Forms worker durably retries callback delivery without re-running complete
   let available = true;
   let executions = 0;
   let deliveries = 0;
+  let settlements = 0;
   let completed = false;
   const message = { messageId: '1', popReceipt: 'a', messageText: JSON.stringify({ submission_id: 's1', owner_id: 'owner-1', callback_url: 'https://8.8.8.8/callback' }) };
   const queue = {
@@ -310,12 +348,14 @@ test('Forms worker durably retries callback delivery without re-running complete
   const worker = startFormsWorker({
     queue,
     execute: async () => { executions += 1; return { submission_id: 's1', completed_at: new Date().toISOString() }; },
+    onResult: async () => { settlements += 1; },
     deliver: async () => { deliveries += 1; if (deliveries === 1) throw new Error('temporary_callback_failure'); },
     resultStore: pendingStore
   });
   await new Promise((resolve) => setTimeout(resolve, 60));
   worker.stop();
   assert.equal(executions, 1);
+  assert.equal(settlements, 2);
   assert.equal(deliveries, 2);
   assert.equal(completed, true);
   assert.equal(await pendingStore.getFormResult({ ownerId: 'owner-1', submissionId: 's1' }), null);

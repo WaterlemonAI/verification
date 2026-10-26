@@ -106,7 +106,7 @@ function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, trans
     called = true;
     const status = this.statusCode;
     const operation = billable
-      ? usageStore.complete(workspaceId, logKey, status)
+      ? usageStore.complete(workspaceId, logKey, status, this.ai7BillingReason || '')
       : usageStore.record(workspaceId, { ...details, transactionId }, status);
     let timer;
     Promise.race([operation, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('usage_log_timeout')), 5000); timer.unref?.(); })])
@@ -150,6 +150,8 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, tra
       json(res, admission.statusCode, { status: 'Error', error: admission.reason });
       return false;
     }
+    req.ai7Usage = { workspaceId, logKey: admission.logKey };
+    if (req.ai7PreparedForm) req.ai7PreparedForm.job.billing.log_key = admission.logKey;
     completeUsageBeforeResponse(res, usageStore, workspaceId, admission.logKey, transactionId, details, true);
   } else {
     const profile = await usageStore.account(workspaceId, managed);
@@ -961,7 +963,8 @@ async function prepareFormSubmission(req, formId, store, formsQueue) {
     const submission = validateFormSubmission(form, await readJson(req, 64 * 1024));
     await validateFormsCallbackUrl(submission.callback_url);
     if (submission.customer_logo_url) await validateFormsCallbackUrl(submission.customer_logo_url);
-    const job = makeFormsJob({ form, submission, ownerId: reportOwnerId(bearerToken(req)), origin: requestOrigin(req) });
+    const job = makeFormsJob({ form, submission, ownerId: reportOwnerId(bearerToken(req)), origin: requestOrigin(req),
+      billing: { workspace_id: req.ai7Client?.id || '', log_key: '0'.repeat(80) } });
     return { form, submission, job };
   } catch (error) {
     const reason = String(error.message || '');
@@ -981,6 +984,7 @@ async function submitForm(req, res, formId, store, formsQueue) {
   try {
     await formsQueue.enqueue(job);
   } catch {
+    res.ai7BillingReason = 'form_queue_failed';
     return json(res, 503, { status: 'Error', error: 'Forms processing is temporarily unavailable.' });
   }
   return json(res, 202, {
@@ -1767,6 +1771,9 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     startFormsWorker({
       queue: formsQueue,
       execute: (job) => executeFormsJob({ job, store, fetchImpl, merchantScreener, reportStore }),
+      onResult: (job, result) => job.billing?.workspace_id && job.billing?.log_key
+        ? usageStore.settleFormResult(job.billing.workspace_id, job.billing.log_key, result.services)
+        : undefined,
       resultStore: reportStore
     });
   }

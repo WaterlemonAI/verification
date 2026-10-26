@@ -73,7 +73,8 @@
       const body = byId('usage-rows'); body.replaceChildren();
       for (const log of logs) {
         const row = document.createElement('tr');
-        for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', `${account.currency} ${log.cost}`]) {
+        const cost = `${account.currency} ${log.cost}${log.refund_amount && log.refund_amount !== '0.000000' ? ` · refunded ${log.refund_amount}` : ''}`;
+        for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', cost]) {
           const cell = document.createElement('td'); cell.textContent = value; row.append(cell);
         }
         body.append(row);

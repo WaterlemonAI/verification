@@ -377,7 +377,8 @@ async function openUsageDialog(customer) {
   const body = byId('admin-usage-logs'); body.replaceChildren();
   for (const log of data.logs) {
     const tr = document.createElement('tr');
-    for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', `${data.account.currency} ${log.cost}`]) {
+    const cost = `${data.account.currency} ${log.cost}${log.refund_amount && log.refund_amount !== '0.000000' ? ` · refunded ${log.refund_amount}` : ''}`;
+    for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', cost]) {
       const td = document.createElement('td'); td.textContent = value; tr.append(td);
     }
     body.append(tr);
@@ -391,14 +392,15 @@ function renderCreditLogs(credits) {
   const body = byId('admin-credit-logs'); body.replaceChildren();
   for (const credit of credits) {
     const tr = document.createElement('tr');
-    for (const value of [credit.credited_at, credit.id, `${credit.currency} ${credit.amount}`, credit.actor || 'Unknown']) {
+    for (const value of [credit.credited_at, credit.id, `${credit.currency} ${credit.amount}`, credit.actor || 'Unknown',
+      credit.kind === 'refund' ? `${credit.reason || 'Refund'} · ${credit.related_transaction_id || ''}` : 'Manual credit']) {
       const td = document.createElement('td'); td.textContent = value; tr.append(td);
     }
     body.append(tr);
   }
   if (!credits.length) {
     const tr = document.createElement('tr'); const td = document.createElement('td');
-    td.colSpan = 4; td.textContent = 'No credit adjustments yet.'; tr.append(td); body.append(tr);
+    td.colSpan = 5; td.textContent = 'No credit adjustments yet.'; tr.append(td); body.append(tr);
   }
 }
 
