@@ -35,7 +35,7 @@ const apiHosts = new Set((process.env.API_HOSTS || 'api.ai7uae.com,localhost,127
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon',
   '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml', '.webp': 'image/webp'
+  '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp'
 };
 
 const hopByHopHeaders = new Set(['authorization', 'connection', 'content-length', 'host', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']);
