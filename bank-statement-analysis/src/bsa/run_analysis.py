@@ -50,7 +50,9 @@ def run(directory: Path) -> None:
         malware_gate = scan_inputs(files)
         document = normalize_inputs(files)
     except ValueError as error:
-        if str(error) in {"MALWARE_CHECK_FAILED", "MALWARE_DETECTED"}:
+        if str(error) == "MALWARE_DETECTED":
+            malware_gate = "detected"
+        elif str(error) == "MALWARE_CHECK_FAILED":
             malware_gate = "failed"
         result = {"analysisId": job["id"], "status": "failed", "decisionEligible": False,
                   "reasonCodes": [str(error)], "segments": [], "features": {}, "schemaVersion": "bsa-v1.0.0"}

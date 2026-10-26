@@ -119,14 +119,26 @@ resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = {
             { name: 'BSA_AZURE_LAYOUT_ENDPOINT', value: bankStatementDocumentEndpoint }
             { name: 'BSA_AZURE_LAYOUT_REGION', value: location }
             { name: 'BSA_APPROVED_PROCESSING_REGION', value: location }
-            { name: 'BSA_MANAGED_MAX_PAGES', value: '2' }
-            { name: 'BSA_MANAGED_MAX_COST_USD', value: '0.01' }
-            { name: 'BSA_MANAGED_ESTIMATED_PAGE_COST_USD', value: '0' }
+            { name: 'BSA_MANAGED_MAX_PAGES', value: '100' }
+            { name: 'BSA_MANAGED_MAX_COST_USD', value: '1.00' }
+            { name: 'BSA_MANAGED_ESTIMATED_PAGE_COST_USD', value: '0.01' }
+            { name: 'BSA_CLAMD_HOST', value: '127.0.0.1' }
+            { name: 'BSA_CLAMD_PORT', value: '3310' }
+            { name: 'BSA_CLAMD_STARTUP_TIMEOUT_SECONDS', value: '180' }
             { name: 'BSA_WORKER_VISIBILITY_SECONDS', value: '900' }
           ]
           resources: {
             cpu: json('2.0')
             memory: '4Gi'
+          }
+        }
+        {
+          name: 'clamav'
+          image: bankStatementWorkerImage
+          command: [ '/app/scripts/start_clamav.sh' ]
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
           }
         }
       ]
