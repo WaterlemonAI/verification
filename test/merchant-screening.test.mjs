@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { analyzeMerchantWebsite, screenMerchantWebsite, validateMerchantScreeningRequest } from '../lib/merchant-screening.mjs';
-import { isPublicIpAddress, validatePublicHttpsUrl } from '../lib/merchant-screening-network.mjs';
+import { collectMerchantWebsite, isPublicIpAddress, validatePublicHttpsUrl } from '../lib/merchant-screening-network.mjs';
 import { captureMerchantScreenshots, selectScreenshotTargets } from '../lib/merchant-screenshot.mjs';
 
 process.env.NODE_ENV = 'test';
@@ -22,6 +22,26 @@ test('merchant URL validation rejects SSRF-prone destinations and invalid reques
   assert.match(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'AE', max_pages: 21 }).error, /between 1 and 20/);
   assert.match(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'AE', declared_mcc: '123' }).error, /four digits/);
   assert.match(validateMerchantScreeningRequest({ website_url: 'https://shop.example.com', country_code: 'AE', unexpected: true }).error, /Unsupported field/);
+});
+
+test('merchant crawl does not accept a later page redirected away from the merchant origin', async () => {
+  const fetchResource = async (value) => {
+    const url = String(value);
+    if (url.endsWith('/robots.txt')) return { url, status: 404, headers: { 'content-type': 'text/plain' }, body: '', tls: {} };
+    if (url === 'https://shop.example.com/') {
+      return {
+        url, status: 200, headers: { 'content-type': 'text/html' },
+        body: '<a href="/redirect-away">External redirect</a>', tls: {}
+      };
+    }
+    return {
+      url: 'https://other.example.net/private', status: 200,
+      headers: { 'content-type': 'text/html' }, body: '<title>Other origin</title>', tls: {}
+    };
+  };
+  const result = await collectMerchantWebsite('https://shop.example.com/', { maxPages: 2, fetchResource });
+  assert.equal(result.pages.length, 1);
+  assert.equal(result.errors[0].error, 'cross_origin_redirect_blocked');
 });
 
 test('screenshot target selection is bounded to homepage, contact and product detail pages', () => {
@@ -160,7 +180,10 @@ test('optional provider failures produce explicit partial coverage instead of fa
 test('merchant screening route preserves API-key auth and supports an injected local screener', async (context) => {
   const calls = [];
   const app = createAppServer({
-    store: { isClientKey: async (value) => value === 'test-key' },
+    store: {
+      isClientKey: async (value) => value === 'test-key',
+      getIntegration: async () => null
+    },
     merchantScreener: async (request) => {
       calls.push(request);
       return { screening_id: 'local-screening', status: 'partial', request };
@@ -193,4 +216,15 @@ test('merchant screening route preserves API-key auth and supports an injected l
   assert.equal(calls.length, 1);
   assert.equal(calls[0].country_code, 'AE');
   assert.equal(calls[0].max_pages, 5);
+
+  const portal = await fetch(`${baseUrl}/merchant-screening`, { headers: { host: 'api.ai7uae.com' } });
+  const html = await portal.text();
+  assert.equal(portal.status, 200);
+  assert.match(html, /Merchant Website Screening/);
+  assert.match(html, /merchant-screening\.js\?v=1/);
+  assert.match(html, /Copy JSON/);
+
+  const script = await (await fetch(`${baseUrl}/merchant-screening.js`, { headers: { host: 'api.ai7uae.com' } })).text();
+  assert.match(script, /fetch\('\/service\/merchant_screening'/);
+  assert.match(script, /navigator\.clipboard\.writeText/);
 });

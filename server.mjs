@@ -13,6 +13,7 @@ import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, 
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
 import { screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
+import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -239,14 +240,15 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     const providerKey = await store.getMasterKey('adverse-media');
     if (!providerKey) return providerUnavailable(res);
     const aiApiKey = await store.getMasterKey('adverse-media-ai');
-    const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, fetchImpl });
+    const costGuard = createScreeningCostGuard(fetchImpl);
+    const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, fetchImpl, costGuard });
     const response = await finalizeAdverseMediaReport({
       request,
       response: presentAdverseMediaResponse(result),
       ownerId: reportOwnerId(token),
       origin: requestOrigin(req),
       aiApiKey,
-      fetchImpl,
+      fetchImpl: costGuard.fetch,
       reportStore
     });
     return json(res, 200, response);
@@ -312,16 +314,16 @@ async function downloadLocalMerchantScreenshot(req, res, store, batchId, filenam
   return createReadStream(screenshotPath).pipe(res);
 }
 
-async function downloadAdverseMediaReport(req, res, store, reportStore, reportId) {
-  const token = bearerToken(req);
-  if (!(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+async function downloadAdverseMediaReport(res, reportStore, reportId) {
   try {
-    const report = await reportStore.get({ ownerId: reportOwnerId(token), reportId });
+    const report = await reportStore.getPublic({ reportId });
     if (!report) return json(res, 404, { status: 'Error', error: 'The report was not found.' });
     const filename = String(report.metadata.filename || `ai7-adverse-media-${reportId}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '-');
     res.writeHead(200, {
       'content-type': 'application/pdf', 'content-length': report.bytes.length,
       'content-disposition': `attachment; filename="${filename}"`, 'cache-control': 'private, no-store',
+      'content-security-policy': "default-src 'none'; sandbox", 'referrer-policy': 'no-referrer',
+      'x-robots-tag': 'noindex, nofollow, noarchive',
       'x-ai7-report-id': reportId, 'x-content-sha256': report.metadata.sha256
     });
     return res.end(report.bytes);
@@ -574,9 +576,9 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       store,
       screen: screenAdverseMedia,
       present: presentAdverseMediaResponse,
-      finalize: async ({ job, response, aiApiKey }) => finalizeAdverseMediaReport({
+      finalize: async ({ job, response, aiApiKey, costGuard }) => finalizeAdverseMediaReport({
         request: job.request, response, ownerId: job.owner_id, origin: job.request_origin,
-        aiApiKey, fetchImpl, reportStore
+        aiApiKey, fetchImpl: costGuard.fetch, reportStore
       }),
       fetchImpl
     });
@@ -599,7 +601,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
         return downloadLocalMerchantScreenshot(req, res, store, merchantScreenshotMatch[1], merchantScreenshotMatch[2]);
       }
       const adverseReportMatch = /^\/service\/adverse_media\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
-      if (req.method === 'GET' && adverseReportMatch) return downloadAdverseMediaReport(req, res, store, reportStore, adverseReportMatch[1]);
+      if (req.method === 'GET' && adverseReportMatch) return downloadAdverseMediaReport(res, reportStore, adverseReportMatch[1]);
       if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
         return json(res, 200, {
           supported_languages: adverseMediaConfig.supportedLanguages,
@@ -608,6 +610,8 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
           maximum_paid_queries: adverseMediaConfig.maxPaidQueries,
           maximum_ai_candidates: adverseMediaConfig.maxAiCandidates,
           default_risk_threshold: adverseMediaConfig.defaultRiskThreshold,
+          default_review_threshold_percent: adverseMediaConfig.defaultReviewThresholdPercent,
+          default_high_risk_threshold_percent: adverseMediaConfig.defaultHighRiskThresholdPercent,
           cost_guardrail_usd: adverseMediaConfig.costGuardrailUsd
         }, { 'cache-control': 'public, max-age=3600' });
       }
@@ -629,6 +633,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/merchant-screening' || url.pathname === '/merchant-screening/')) return serveStatic(res, directory, '/merchant-screening.html');
       return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
     } catch {
       return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });

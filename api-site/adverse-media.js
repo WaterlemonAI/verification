@@ -10,7 +10,9 @@ const samples = {
     "countries": ["AE"],
     "languages": ["en", "ar"],
     "date_from": "2023-01-01",
-    "risk_threshold": 0.65,
+    "high_risk_threshold_percent": 90,
+    "review_threshold_percent": 65,
+    "search_plus": true,
     "deep_research": true,
     "callback_url": "https://your-domain.example/webhooks/ai7",
     "customer_logo_url": "https://your-domain.example/logo.png",
@@ -31,7 +33,9 @@ const samples = {
       countries: ['AE'],
       languages: ['en', 'ar'],
       date_from: '2023-01-01',
-      risk_threshold: 0.65,
+      high_risk_threshold_percent: 90,
+      review_threshold_percent: 65,
+      search_plus: true,
       deep_research: true,
       callback_url: 'https://your-domain.example/webhooks/ai7',
       customer_logo_url: 'https://your-domain.example/logo.png',
@@ -53,7 +57,9 @@ response = requests.post(
         "countries": ["AE"],
         "languages": ["en", "ar"],
         "date_from": "2023-01-01",
-        "risk_threshold": 0.65,
+        "high_risk_threshold_percent": 90,
+        "review_threshold_percent": 65,
+        "search_plus": True,
         "deep_research": True,
         "callback_url": "https://your-domain.example/webhooks/ai7",
         "customer_logo_url": "https://your-domain.example/logo.png",
@@ -150,8 +156,15 @@ function requestBody() {
   if (countries.length > 20) throw new Error('Select no more than 20 countries.');
   const maxResults = Number(byId('max-results').value);
   if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 50) throw new Error('Maximum results must be from 1 to 50.');
-  const thresholdPercent = Number(byId('risk-threshold').value);
-  if (!Number.isFinite(thresholdPercent) || thresholdPercent < 0 || thresholdPercent > 100) throw new Error('Review threshold must be from 0% to 100%.');
+  const highRiskThresholdPercent = Number(byId('high-risk-threshold').value);
+  const reviewThresholdPercent = Number(byId('review-threshold').value);
+  if (!Number.isFinite(highRiskThresholdPercent) || highRiskThresholdPercent <= 0 || highRiskThresholdPercent > 100) {
+    throw new Error('High Risk threshold must be greater than 0% and no more than 100%.');
+  }
+  if (!Number.isFinite(reviewThresholdPercent) || reviewThresholdPercent < 0 || reviewThresholdPercent > 100) {
+    throw new Error('Review threshold must be from 0% to 100%.');
+  }
+  if (reviewThresholdPercent > highRiskThresholdPercent) throw new Error('Review threshold must not be higher than High Risk threshold.');
   if (deepResearch.checked && callbackUrl.value.trim()) {
     let parsed;
     try { parsed = new URL(callbackUrl.value.trim()); } catch { throw new Error('Callback URL must be a valid HTTPS URL.'); }
@@ -171,7 +184,9 @@ function requestBody() {
     languages,
     date_from: byId('date-from').value,
     date_to: byId('date-to').value,
-    risk_threshold: thresholdPercent / 100,
+    high_risk_threshold_percent: highRiskThresholdPercent,
+    review_threshold_percent: reviewThresholdPercent,
+    search_plus: byId('search-plus').checked,
     max_results: maxResults,
     deep_research: deepResearch.checked,
     callback_url: deepResearch.checked ? callbackUrl.value.trim() : '',
@@ -207,11 +222,10 @@ byId('languages').addEventListener('change', (event) => {
 });
 
 downloadReport.addEventListener('click', async () => {
-  const key = byId('api-key').value.trim();
-  if (!latestReportUrl || !key) return;
+  if (!latestReportUrl) return;
   downloadReport.disabled = true;
   try {
-    const response = await fetch(latestReportUrl, { headers: { Authorization: `Bearer ${key}` } });
+    const response = await fetch(latestReportUrl);
     if (!response.ok) throw new Error('download_failed');
     const blob = await response.blob();
     const link = document.createElement('a');

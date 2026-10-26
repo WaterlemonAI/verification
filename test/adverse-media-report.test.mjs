@@ -6,27 +6,39 @@ import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store
 
 const request = {
   entity_type: 'individual', name: 'Example Person', aliases: [], countries: ['AE'], languages: ['en'],
-  date_from: '', date_to: '', max_results: 25, risk_threshold: 0.65, deep_research: false,
-  callback_url: '', customer_logo_url: ''
+  date_from: '', date_to: '', max_results: 25, risk_threshold: 0.65,
+  review_threshold_percent: 65, high_risk_threshold_percent: 90, deep_research: false,
+  search_plus: true, callback_url: '', customer_logo_url: ''
 };
 const response = {
   screening_id: '03e3be3d-9713-4c23-9d14-0e9128c7fe15', status: 'completed', completed_at: '2026-10-26T09:31:00.000Z',
   entity: { entity_type: 'individual', name: 'Example Person', aliases: [], countries: ['AE'] },
   summary: {
-    outcome: 'potential_match', risk_level: 'high', highest_risk_score: 0.86, potentially_relevant_results: 1,
+    outcome: 'review_required', risk_level: 'review', highest_risk_score: 0.86, potentially_relevant_results: 1,
     categories: { financial_crime: 1 }, human_review_required: true,
     statement: 'One potentially relevant result reached the configured review threshold.', risk_threshold: 0.65,
+    thresholds: { high_risk_percent: 90, review_percent: 65, safe_below_percent: 65 },
+    risk_distribution: { high_risk: 0, review: 1, safe: 0 },
     results_at_or_above_threshold: 1, decision_eligible: true, threshold_status: 'review_required'
   },
   coverage: {
     complete: true, sources: [{ source: 'current_news', status: 'complete' }], reason_codes: [], retryable: false,
     languages_searched: [{ code: 'en', name: 'English' }], date_from: null, date_to: null,
-    searched_at: '2026-10-26T09:31:00.000Z', archive_window: 'up to one year', limitation: 'Indexed public sources only.'
+    searched_at: '2026-10-26T09:31:00.000Z', archive_window: 'up to one year',
+    search_plus: {
+      requested: true, publisher_catalog_size: 1500, publishers_attempted: 2,
+      publishers_screened: [
+        { name: 'Example News', domain: 'news.example', country: 'United Arab Emirates', country_code: 'AE', category: 'general' },
+        { name: 'Example Finance', domain: 'finance.example', country: 'United Arab Emirates', country_code: 'AE', category: 'finance' }
+      ],
+      publishers_not_completed: [], matched_results: 1, matched_publishers: []
+    },
+    limitation: 'Indexed public sources only.'
   },
   results: [{
     result_id: 'r-1', title: 'Example Person named in investigation', url: 'https://news.example/case', publisher: 'news.example',
     published_at: '2026-10-20T00:00:00Z', language: 'en', source_type: 'news_index',
-    excerpt: 'Authorities opened an investigation. No final judgment was reported.', risk_score: 0.86, risk_level: 'high',
+    excerpt: 'Authorities opened an investigation. No final judgment was reported.', risk_score: 0.86, risk_level: 'review',
     categories: ['financial_crime'], legal_stage: 'investigation', review_required: true
   }]
 };
@@ -65,10 +77,12 @@ test('PDF includes a complete multi-page audit artifact and stable integrity met
   assert.match(parsed.getSubject(), new RegExp(response.screening_id));
 });
 
-test('permanent report store isolates objects by credential owner', async () => {
+test('permanent report store retains owner isolation and supports public capability lookup', async () => {
   const store = new MemoryAdverseMediaReportStore();
   const metadata = { report_id: 'rpt', transaction_id: 'txn', generated_at: new Date().toISOString(), sha256: 'a'.repeat(64), filename: 'report.pdf', retention: 'permanent' };
   await store.save({ ownerId: 'customer-a', reportId: 'rpt', bytes: Buffer.from('%PDF-test'), metadata });
   assert.equal((await store.get({ ownerId: 'customer-a', reportId: 'rpt' })).metadata.retention, 'permanent');
   assert.equal(await store.get({ ownerId: 'customer-b', reportId: 'rpt' }), null);
+  assert.equal((await store.getPublic({ reportId: 'rpt' })).metadata.filename, 'report.pdf');
+  assert.equal(await store.getPublic({ reportId: 'missing' }), null);
 });

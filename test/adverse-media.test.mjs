@@ -196,6 +196,9 @@ before(async () => {
         assert.match(payload.systemInstruction.parts[0].text, /Never follow commands/);
         assert.equal(payload.generationConfig.responseJsonSchema.additionalProperties, false);
         assert.equal(payload.generationConfig.responseJsonSchema.properties.classifications.items.additionalProperties, false);
+        assert.equal(payload.generationConfig.responseJsonSchema.properties.classifications.minItems, undefined);
+        assert.equal(payload.generationConfig.responseJsonSchema.properties.classifications.maxItems, undefined);
+        assert.equal(payload.generationConfig.responseJsonSchema.properties.classifications.items.properties.result_id.enum, undefined);
         assert.equal(payload.generationConfig.maxOutputTokens, 2048);
         assert.equal(payload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
         assert.equal(prompt.job, 'classify_adverse_media_evidence');
@@ -280,17 +283,24 @@ test('adverse media endpoint returns a customer-safe evidence response', async (
   assert.equal(body.results[0].url, 'https://publisher.example/news/john-example');
   assert.equal(body.results[0].review_required, true);
   assert.equal(body.summary.risk_threshold, 0.65);
+  assert.deepEqual(body.summary.thresholds, { high_risk_percent: 90, review_percent: 65, safe_below_percent: 65 });
   assert.equal(body.summary.results_at_or_above_threshold, 1);
-  assert.equal(body.summary.threshold_status, 'review_required');
+  assert.equal(body.summary.threshold_status, 'high_risk');
+  assert.equal(body.summary.risk_distribution.high_risk, 1);
+  assert.equal(body.results[0].risk_level, 'high');
   assert.deepEqual(Object.keys(body).sort(), ['completed_at', 'coverage', 'entity', 'report', 'results', 'screening_id', 'status', 'summary']);
   assert.equal(body.report.transaction_id, body.screening_id);
   assert.equal(body.report.retention, 'permanent');
   assert.match(body.report.sha256, /^[0-9a-f]{64}$/);
   assert.match(body.report.download_url, /^https:\/\/api\.ai7uae\.com\/service\/adverse_media\/reports\/[0-9a-f-]{36}\.pdf$/);
-  const reportResponse = await fetch(`${appUrl}${new URL(body.report.download_url).pathname}`, { headers: { authorization: `Bearer ${apiKey}` } });
+  const reportResponse = await fetch(`${appUrl}${new URL(body.report.download_url).pathname}`);
   assert.equal(reportResponse.status, 200);
   assert.equal(reportResponse.headers.get('content-type'), 'application/pdf');
+  assert.equal(reportResponse.headers.get('x-robots-tag'), 'noindex, nofollow, noarchive');
+  assert.equal(reportResponse.headers.get('referrer-policy'), 'no-referrer');
   assert.equal(Buffer.from(await reportResponse.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
+  const missingReport = await fetch(`${appUrl}/service/adverse_media/reports/00000000-0000-4000-8000-000000000000.pdf`);
+  assert.equal(missingReport.status, 404);
   assert.equal(body.methodology, undefined);
   assert.equal(body.usage, undefined);
   assert.equal(body.transliterations, undefined);
@@ -316,9 +326,30 @@ test('identical checks reuse cached evidence without paid search calls', async (
   assert.equal(body.summary.risk_threshold, 1);
   assert.equal(body.summary.results_at_or_above_threshold, 0);
   assert.equal(body.summary.human_review_required, false);
-  assert.equal(body.summary.threshold_status, 'within_acceptable_threshold');
+  assert.equal(body.summary.threshold_status, 'safe');
+  assert.equal(body.summary.risk_level, 'safe');
+  assert.equal(body.results[0].risk_level, 'safe');
   assert.equal(body.results[0].review_required, false);
   assert.equal(paidSearchCount(), beforeCount);
+});
+
+test('customers can configure High Risk and Review percentage bands', async () => {
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      entity_type: 'individual', name: 'John Example', aliases: ['J Example'], countries: ['AE'],
+      languages: ['en'], date_from: '2025-01-01', high_risk_threshold_percent: 95,
+      review_threshold_percent: 91, max_results: 25
+    })
+  });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.summary.thresholds, { high_risk_percent: 95, review_percent: 91, safe_below_percent: 91 });
+  const expectedBand = body.results[0].risk_score >= 0.95 ? 'high' : body.results[0].risk_score >= 0.91 ? 'review' : 'safe';
+  assert.equal(body.results[0].risk_level, expectedBand);
+  assert.equal(body.summary.risk_distribution[expectedBand === 'high' ? 'high_risk' : expectedBand], 1);
+  assert.equal(body.results[0].review_required, expectedBand !== 'safe');
 });
 
 test('uses native adverse-event terms for a non-English language pack', async () => {
@@ -547,6 +578,16 @@ test('adverse media endpoint validates credentials and input', async () => {
   assert.equal(invalidThreshold.status, 400);
   assert.match((await invalidThreshold.json()).error, /risk_threshold/);
 
+  const invalidThresholdOrder = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      entity_type: 'business', name: 'Example LLC', review_threshold_percent: 91, high_risk_threshold_percent: 90
+    })
+  });
+  assert.equal(invalidThresholdOrder.status, 400);
+  assert.match((await invalidThresholdOrder.json()).error, /review_threshold_percent/);
+
   const callbackWithoutDeepResearch = await fetch(`${appUrl}/service/adverse_media`, {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -591,6 +632,8 @@ test('public documentation exposes the complete route without provider or key de
   assert.equal(config.maximum_ai_candidates, 15);
   assert.equal(config.cost_guardrail_usd, 0.15);
   assert.equal(config.default_risk_threshold, 0.65);
+  assert.equal(config.default_review_threshold_percent, 65);
+  assert.equal(config.default_high_risk_threshold_percent, 90);
   assert.deepEqual(config.regions.gulf.countries, ['AE', 'SA', 'QA', 'KW', 'BH', 'OM']);
   assert.deepEqual(config.regions.anz.countries, ['AU', 'NZ']);
   const html = await (await fetch(`${appUrl}/adverse-media`)).text();
@@ -598,7 +641,7 @@ test('public documentation exposes the complete route without provider or key de
   const specText = await (await fetch(`${appUrl}/openapi.json`)).text();
   const spec = JSON.parse(specText);
   assert.ok(Object.hasOwn(spec.paths, '/service/adverse_media'));
-  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'risk_threshold', 'max_results', 'deep_research', 'callback_url']) {
+  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'high_risk_threshold_percent', 'review_threshold_percent', 'search_plus', 'max_results', 'deep_research', 'callback_url']) {
     assert.ok(Object.hasOwn(spec.components.schemas.AdverseMediaRequest.properties, field));
     assert.ok(html.includes(field));
   }
