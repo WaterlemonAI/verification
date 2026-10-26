@@ -59,6 +59,8 @@ param reportStorageName string = 'stai7uaereportsuaen001'
 
 var deepResearchQueueName = 'adverse-media-deep-research'
 var formsQueueName = 'forms-submissions'
+// Cisco Talos ClamAV 1.4.6 LTS, mirrored into the private ACR and pinned to the amd64 manifest.
+var bankStatementClamavImage = '${acrLoginServer}/ai7uae-clamav@sha256:6ba4e78b29853b2fc7e3c111389596e2cad5ec4ed5f0fd2cb663d29ab6b0e6a3'
 var customDomains = empty(apiCertificateId) ? [] : [
   {
     name: 'api.ai7uae.com'
@@ -134,11 +136,10 @@ resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = {
         }
         {
           name: 'clamav'
-          image: bankStatementWorkerImage
-          command: [ '/app/scripts/start_clamav.sh' ]
+          image: bankStatementClamavImage
           resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
+            cpu: json('2.0')
+            memory: '4Gi'
           }
         }
       ]
