@@ -457,7 +457,7 @@ resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = {
           threshold: 5
           dimensions: [
             {
-              name: 'statuscodecategory'
+              name: 'statusCodeCategory'
               operator: 'Include'
               values: [ '5xx' ]
             }
