@@ -15,6 +15,9 @@ import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-medi
 import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
+import { publicFormDefinition, resolveFormServiceInput, validateFormDefinition, validateFormSubmission } from './lib/forms.mjs';
+import { createFormsQueue, makeFormsJob, startFormsWorker, validateFormsCallbackUrl } from './lib/forms-queue.mjs';
+import { createFormsAuditPdf } from './lib/forms-report.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -387,7 +390,9 @@ async function downloadPublicScreeningReport(res, reportStore, reportId, expecte
       ? !actualType || actualType === expectedType
       : actualType === expectedType;
     if (!typeMatches) return json(res, 404, { status: 'Error', error: 'The report was not found.' });
-    const fallback = expectedType === 'merchant_screening' ? 'ai7-merchant-screening' : 'ai7-adverse-media';
+    const fallback = expectedType === 'merchant_screening'
+      ? 'ai7-merchant-screening'
+      : expectedType === 'forms' ? 'ai7-forms' : 'ai7-adverse-media';
     const filename = String(report.metadata.filename || `${fallback}-${reportId}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '-');
     res.writeHead(200, {
       'content-type': 'application/pdf', 'content-length': report.bytes.length,
@@ -463,9 +468,9 @@ function encryptedValue(text, field) {
   return trimmed && parsed === null ? trimmed : '';
 }
 
-async function encryptedJsonRelay(res, integration, store, fetchImpl, body) {
+async function executeEncryptedJsonIntegration(integration, store, fetchImpl, body) {
   const credential = await store.getMasterKey(integration.id);
-  if (!credential) return providerUnavailable(res);
+  if (!credential) throw new Error('provider_credentials_unavailable');
 
   const headers = {
     accept: 'application/json',
@@ -480,9 +485,9 @@ async function encryptedJsonRelay(res, integration, store, fetchImpl, body) {
   const encryptResponse = await fetchImpl(encryptUrl, {
     method: 'POST', headers, body, signal: AbortSignal.timeout(timeout)
   });
-  if (!encryptResponse.ok) return providerUnavailable(res);
+  if (!encryptResponse.ok) throw new Error('provider_encryption_unavailable');
   const encryptedRequest = encryptedValue(await encryptResponse.text(), 'requestData');
-  if (!encryptedRequest) return providerUnavailable(res);
+  if (!encryptedRequest) throw new Error('provider_encryption_invalid');
 
   const verificationResponse = await fetchImpl(verificationUrl, {
     method: 'POST', headers, body: JSON.stringify({ requestData: encryptedRequest }), signal: AbortSignal.timeout(timeout)
@@ -490,15 +495,32 @@ async function encryptedJsonRelay(res, integration, store, fetchImpl, body) {
   const verificationText = await verificationResponse.text();
   const encryptedResponse = encryptedValue(verificationText, 'responseData');
   if (!encryptedResponse) {
-    return responseBytes(res, verificationResponse.status, verificationText, verificationResponse.headers.get('content-type') || 'application/json; charset=utf-8');
+    return {
+      status: verificationResponse.status,
+      body: Buffer.from(verificationText),
+      contentType: verificationResponse.headers.get('content-type') || 'application/json; charset=utf-8'
+    };
   }
 
   const decryptResponse = await fetchImpl(decryptUrl, {
     method: 'POST', headers, body: JSON.stringify({ responseData: encryptedResponse }), signal: AbortSignal.timeout(timeout)
   });
-  if (!decryptResponse.ok) return providerUnavailable(res);
+  if (!decryptResponse.ok) throw new Error('provider_decryption_unavailable');
   const decryptedBody = Buffer.from(await decryptResponse.arrayBuffer());
-  return responseBytes(res, verificationResponse.status, decryptedBody, decryptResponse.headers.get('content-type') || 'application/json; charset=utf-8');
+  return {
+    status: verificationResponse.status,
+    body: decryptedBody,
+    contentType: decryptResponse.headers.get('content-type') || 'application/json; charset=utf-8'
+  };
+}
+
+async function encryptedJsonRelay(res, integration, store, fetchImpl, body) {
+  try {
+    const result = await executeEncryptedJsonIntegration(integration, store, fetchImpl, body);
+    return responseBytes(res, result.status, result.body, result.contentType);
+  } catch {
+    return providerUnavailable(res);
+  }
 }
 
 async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
@@ -561,6 +583,182 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
   }
 }
 
+async function executeProviderFormService(integration, input, store, fetchImpl) {
+  let requestBody = input;
+  if (integration.id === 'iban-verification') requestBody = { ...requestBody, docType: 610 };
+  if (integration.id === 'entity-search') requestBody = { country: '', gender: '', dob: '', ...requestBody };
+  const body = Buffer.from(JSON.stringify(requestBody));
+  if (integration.adapter === 'encrypted-json-relay') {
+    const result = await executeEncryptedJsonIntegration(integration, store, fetchImpl, body);
+    const stringBody = result.body.toString('utf8');
+    return { httpStatus: result.status, response: parseJsonText(stringBody) ?? { raw_response: stringBody } };
+  }
+  const headers = { accept: 'application/json', 'content-type': 'application/json' };
+  if (integration.authType !== 'none') {
+    const masterKey = await store.getMasterKey(integration.id);
+    if (!masterKey) throw new Error('provider_credentials_unavailable');
+    headers[integration.authHeader] = `${integration.authPrefix || ''}${masterKey}`;
+  }
+  const upstream = await fetchImpl(new URL(integration.upstreamUrl), {
+    method: integration.method,
+    headers,
+    body: ['GET', 'HEAD'].includes(integration.method) ? undefined : body,
+    signal: AbortSignal.timeout(Number(process.env.UPSTREAM_TIMEOUT_MS || 120000))
+  });
+  const raw = Buffer.from(await upstream.arrayBuffer()).toString('utf8');
+  return { httpStatus: upstream.status, response: parseJsonText(raw) ?? { raw_response: raw } };
+}
+
+async function executeSingleFormService({ service, data, store, fetchImpl, merchantScreener }) {
+  const integration = await store.getIntegrationById(service.service_id);
+  const name = integration?.name || service.service_id;
+  const startedAt = new Date().toISOString();
+  const started = Date.now();
+  if (!integration) {
+    return {
+      service_id: service.service_id, name, status: 'failed', http_status: null,
+      started_at: startedAt, completed_at: new Date().toISOString(), duration_ms: Date.now() - started,
+      error: 'The configured API is disabled or unavailable.', response: null
+    };
+  }
+  try {
+    const input = resolveFormServiceInput(service, data);
+    let httpStatus = 200;
+    let response;
+    if (integration.id === 'adverse-media') {
+      const request = validateAdverseMediaRequest({ ...input, deep_research: false, callback_url: '' });
+      const apiKey = await store.getMasterKey('adverse-media');
+      if (!apiKey) throw new Error('provider_credentials_unavailable');
+      const aiApiKey = await store.getMasterKey('adverse-media-ai');
+      const costGuard = createScreeningCostGuard(fetchImpl);
+      response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey, aiApiKey, fetchImpl, costGuard }));
+    } else if (integration.id === 'merchant-screening') {
+      const validation = validateMerchantScreeningRequest({ ...input, get_pdf: false, customer_logo_url: '' });
+      if (validation.error) {
+        httpStatus = 400;
+        response = { status: 'Error', error: validation.error };
+      } else response = await merchantScreener(validation.value);
+    } else {
+      const result = await executeProviderFormService(integration, input, store, fetchImpl);
+      httpStatus = result.httpStatus;
+      response = result.response;
+    }
+    const successful = httpStatus >= 200 && httpStatus < 300;
+    return {
+      service_id: integration.id,
+      name,
+      status: successful ? 'completed' : 'failed',
+      http_status: httpStatus,
+      started_at: startedAt,
+      completed_at: new Date().toISOString(),
+      duration_ms: Date.now() - started,
+      ...(successful ? {} : { error: 'The API returned an unsuccessful status.' }),
+      response
+    };
+  } catch {
+    return {
+      service_id: integration.id, name, status: 'failed', http_status: null,
+      started_at: startedAt, completed_at: new Date().toISOString(), duration_ms: Date.now() - started,
+      error: 'The API could not complete this check.', response: null
+    };
+  }
+}
+
+export async function executeFormsJob({ job, store, fetchImpl, merchantScreener = configuredMerchantScreener, reportStore }) {
+  const startedAt = new Date().toISOString();
+  const services = await Promise.all(job.form.services.map((service) => executeSingleFormService({
+    service, data: job.data, store, fetchImpl, merchantScreener
+  })));
+  const completed = services.filter((service) => service.status === 'completed').length;
+  const failed = services.length - completed;
+  const status = completed === services.length ? 'completed' : completed > 0 ? 'partial' : 'failed';
+  const completedAt = new Date().toISOString();
+  const processingLog = [
+    { at: job.queued_at, stage: 'accepted', message: 'Authenticated submission accepted and queued.' },
+    { at: startedAt, stage: 'orchestration_started', message: `${services.length} configured API checks started.` },
+    ...services.map((service) => ({
+      at: service.completed_at,
+      stage: service.status === 'completed' ? 'api_completed' : 'api_failed',
+      message: `${service.name} finished with ${service.http_status || 'no'} HTTP status in ${service.duration_ms} ms.`
+    })),
+    { at: completedAt, stage: 'consolidated', message: `Consolidated result created with status ${status}.` }
+  ];
+  let result = {
+    submission_id: job.submission_id,
+    status,
+    form: { id: job.form.id, name: job.form.name, version: job.form.version },
+    summary: { total: services.length, completed, failed, decision_eligible: status === 'completed' },
+    services,
+    processing: {
+      queued_at: job.queued_at,
+      started_at: startedAt,
+      request_origin: job.request_origin.network_origin,
+      location: job.request_origin.processing_location,
+      log: processingLog
+    },
+    completed_at: completedAt
+  };
+  const logo = await fetchPublicLogo(job.customer_logo_url);
+  const report = await createFormsAuditPdf({ job, result, ...logo });
+  const reportPath = `/service/forms/reports/${report.reportId}.pdf`;
+  const metadata = {
+    report_id: report.reportId,
+    transaction_id: job.submission_id,
+    generated_at: report.generatedAt,
+    download_url: process.env.API_PUBLIC_BASE_URL ? new URL(reportPath, process.env.API_PUBLIC_BASE_URL).href : reportPath,
+    sha256: report.sha256,
+    filename: report.filename,
+    retention: 'permanent'
+  };
+  await reportStore.save({ ownerId: job.owner_id, reportId: report.reportId, bytes: report.bytes, metadata: { ...metadata, report_type: 'forms' } });
+  result = { ...result, report: metadata };
+  return result;
+}
+
+async function submitForm(req, res, formId, store, formsQueue) {
+  const token = bearerToken(req);
+  if (!(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  if (!formsQueue) return json(res, 503, { status: 'Error', error: 'Forms processing is temporarily unavailable.' });
+  const form = await store.getForm(formId);
+  if (!form || !form.enabled) return json(res, 404, { status: 'Error', error: 'Form was not found.' });
+  let job;
+  try {
+    const submission = validateFormSubmission(form, await readJson(req, 64 * 1024));
+    await validateFormsCallbackUrl(submission.callback_url);
+    if (submission.customer_logo_url) await validateFormsCallbackUrl(submission.customer_logo_url);
+    job = makeFormsJob({
+      form,
+      submission,
+      ownerId: reportOwnerId(token),
+      origin: requestOrigin(req)
+    });
+  } catch (error) {
+    const reason = String(error.message || '');
+    if (reason === 'callback_url_required') return json(res, 400, { status: 'Error', error: 'A public HTTPS callback_url is required.' });
+    if (reason.startsWith('callback_url_')) return json(res, 400, { status: 'Error', error: 'callback_url and customer_logo_url must be public HTTPS URLs.' });
+    if (reason === 'form_submission_too_large') return json(res, 400, { status: 'Error', error: 'The mapped Form submission is too large for asynchronous processing.' });
+    return json(res, 400, { status: 'Error', error: reason || 'The Form submission is invalid.' });
+  }
+  try {
+    await formsQueue.enqueue(job);
+  } catch {
+    return json(res, 503, { status: 'Error', error: 'Forms processing is temporarily unavailable.' });
+  }
+  return json(res, 202, {
+    submission_id: job.submission_id,
+    status: 'queued',
+    form: { id: form.id, name: form.name, version: form.version },
+    callback: {
+      configured: true,
+      event: 'forms.submission.completed',
+      signature_header: 'x-ai7-signature',
+      delivery_id_header: 'x-ai7-delivery-id',
+      signing_secret: job.callback_secret
+    },
+    message: 'The consolidated response and permanent PDF link will be posted to the callback URL. Store the signing secret now; it is not shown again.'
+  });
+}
+
 async function requireAdmin(req, res, store) {
   if (await store.isAdminKey(bearerToken(req))) return true;
   json(res, 401, { status: 'Error', error: 'Admin key is missing or incorrect.' });
@@ -572,6 +770,22 @@ async function handleAdminApi(req, res, url, store) {
 
   if (req.method === 'GET' && url.pathname === '/admin/api/integrations') {
     return json(res, 200, { integrations: await store.listIntegrations() });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/admin/api/forms') {
+    return json(res, 200, { forms: await store.listForms() });
+  }
+
+  if (req.method === 'PUT' && /^\/admin\/api\/forms\/[a-z0-9-]+$/.test(url.pathname)) {
+    try {
+      const body = await readJson(req, 256 * 1024);
+      const id = url.pathname.split('/').pop();
+      const integrations = await store.listIntegrations({ publicOnly: true });
+      const form = validateFormDefinition({ ...body, id }, integrations);
+      return json(res, 200, { form: await store.upsertForm(form) });
+    } catch (error) {
+      return json(res, error.statusCode || 400, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : error.message });
+    }
   }
 
   if (req.method === 'PUT' && /^\/admin\/api\/integrations\/[a-z0-9-]+$/.test(url.pathname)) {
@@ -639,7 +853,7 @@ function serveStatic(res, directory, requestPath) {
   createReadStream(filePath).pipe(res);
 }
 
-export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), reportStore = createAdverseMediaReportStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   if (startWorker && deepResearchQueue) {
     startDeepResearchWorker({
       queue: deepResearchQueue,
@@ -651,6 +865,13 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
         aiApiKey, fetchImpl: costGuard.fetch, reportStore
       }),
       fetchImpl
+    });
+  }
+  if (startWorker && formsQueue) {
+    startFormsWorker({
+      queue: formsQueue,
+      execute: (job) => executeFormsJob({ job, store, fetchImpl, merchantScreener, reportStore }),
+      resultStore: reportStore
     });
   }
   return createServer(async (req, res) => {
@@ -666,6 +887,14 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return createEntitySearchReport(req, res, store);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media') return createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return createMerchantScreening(req, res, store, merchantScreener, reportStore);
+      const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
+      if (req.method === 'POST' && formSubmissionMatch) return submitForm(req, res, formSubmissionMatch[1], store, formsQueue);
+      const formSchemaMatch = /^\/forms\/([a-z0-9-]+)\/schema$/.exec(url.pathname);
+      if (req.method === 'GET' && formSchemaMatch) {
+        const form = await store.getForm(formSchemaMatch[1]);
+        if (!form || !form.enabled) return json(res, 404, { status: 'Error', error: 'Form was not found.' });
+        return json(res, 200, { form: publicFormDefinition(form, await store.listIntegrations({ publicOnly: true })) }, { 'cache-control': 'public, max-age=60' });
+      }
       const merchantScreenshotMatch = /^\/service\/merchant_screening\/screenshots\/([0-9a-f-]{36})\/([a-z0-9-]{1,128}\.png)$/i.exec(url.pathname);
       if (req.method === 'GET' && merchantScreenshotMatch) {
         return downloadLocalMerchantScreenshot(req, res, store, merchantScreenshotMatch[1], merchantScreenshotMatch[2]);
@@ -674,6 +903,8 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       if (req.method === 'GET' && adverseReportMatch) return downloadPublicScreeningReport(res, reportStore, adverseReportMatch[1], 'adverse_media');
       const merchantReportMatch = /^\/service\/merchant_screening\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
       if (req.method === 'GET' && merchantReportMatch) return downloadPublicScreeningReport(res, reportStore, merchantReportMatch[1], 'merchant_screening');
+      const formsReportMatch = /^\/service\/forms\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
+      if (req.method === 'GET' && formsReportMatch) return downloadPublicScreeningReport(res, reportStore, formsReportMatch[1], 'forms');
       if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
         return json(res, 200, {
           supported_languages: adverseMediaConfig.supportedLanguages,
@@ -691,6 +922,11 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       if (url.pathname === '/admin' || url.pathname === '/admin/') return serveStatic(res, join(root, 'admin-site'), '/');
       if (url.pathname.startsWith('/admin/')) return serveStatic(res, join(root, 'admin-site'), url.pathname.replace(/^\/admin/, '') || '/');
       if (url.pathname === '/catalog.json') return json(res, 200, { integrations: await store.listIntegrations({ publicOnly: true }) }, { 'cache-control': 'public, max-age=60' });
+      if (url.pathname === '/forms.json') {
+        const integrations = await store.listIntegrations({ publicOnly: true });
+        const forms = (await store.listForms()).filter((form) => form.enabled).map((form) => publicFormDefinition(form, integrations));
+        return json(res, 200, { forms }, { 'cache-control': 'public, max-age=60' });
+      }
       if (url.pathname === '/openapi.json') {
         const spec = readFileSync(join(root, 'api', 'openapi.json'));
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
@@ -706,6 +942,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
       if (directory.endsWith('api-site') && (url.pathname === '/merchant-screening' || url.pathname === '/merchant-screening/')) return serveStatic(res, directory, '/merchant-screening.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/forms' || url.pathname === '/forms/' || /^\/forms\/[a-z0-9-]+\/?$/.test(url.pathname))) return serveStatic(res, directory, '/forms.html');
       return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
     } catch {
       return json(res, 500, { status: 'Error', error: 'The service is temporarily unavailable. Please try again shortly.' });

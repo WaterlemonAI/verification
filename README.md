@@ -27,8 +27,10 @@ POST /service/iban_verification
 POST /service/entity_search
 POST /service/adverse_media
 POST /service/merchant_screening
+POST /forms/{formId}/submissions
 GET  /service/adverse_media/reports/{reportId}.pdf
 GET  /service/merchant_screening/reports/{reportId}.pdf
+GET  /service/forms/reports/{reportId}.pdf
 ```
 
 The services authenticate each AI7 customer with one Bearer API key. Provider-backed wrappers relay their upstream JSON body and HTTP status without exposing upstream hostnames, credentials, or identifying headers. The native adverse-media service searches current and archived global news plus open-web indexes in up to five languages, deduplicates evidence, classifies adverse-event categories and legal stage, and can enrich the highest-priority candidates with a bounded AI review. For multi-part individual names it can resolve explicit aliases and associated organizations from neutral evidence before running one bounded association search. It enforces a 12-query/$0.15 internal cost guardrail. Customers can set `high_risk_threshold_percent` and `review_threshold_percent`; retained scores at or above the first are High Risk, scores from the second up to the first require Review, and lower scores are Safe. The legacy decimal `risk_threshold` remains supported as a review-boundary alias. The adverse-media public contract exposes only customer-ready evidence and provider-neutral coverage fields; internal model output, transliterations, query/cost telemetry, component scores, and high-confidence rejected mismatches remain private. Low-confidence AI output cannot suppress evidence, and incomplete runs return an inconclusive outcome with safe reason codes. Every synchronous screening automatically creates a PDF audit report. The only report-specific request field is the optional `customer_logo_url`; the response contains the permanent report ID, transaction ID, integrity hash, and an absolute public capability URL. Anyone with that unguessable URL can download the report without an API key, while the underlying Azure container remains private and non-listable. Deep-research callbacks contain the same report metadata and always post the final result after the engine's controlled retries. A callback can therefore contain either a completed, decision-eligible result or a partial, explicitly inconclusive result that requires manual review. The portal includes copyable cURL, JavaScript, and Python examples, an OpenAPI document, live JSON response consoles, and direct PDF download. The comprehensive entity-search page also exposes a searchable response-field reference generated from every path in its official schema and response variants.
@@ -76,6 +78,16 @@ The protected console at `/admin` lets an operator:
 - issue a one-time customer API key that works across every configured integration; and
 - revoke a customer key without changing other customers or upstream credentials.
 
+### Forms orchestration
+
+The protected administration console includes a Forms builder for combining up to ten enabled AI7 APIs behind one customer-facing endpoint. Each versioned Form defines its public fields and a server-side JSON input template for each selected API. Templates use `{{field_key}}` placeholders; an exact placeholder preserves numbers and booleans, while embedded placeholders produce text. Supplier endpoints, master credentials, and private adapter settings are never exposed in the Form schema or browser.
+
+Customers submit one authenticated JSON request to `POST /forms/{formId}/submissions` containing `data`, a public HTTPS `callback_url`, and an optional public HTTPS `customer_logo_url`. The API returns HTTP 202 with a submission ID and one-time HMAC signing secret. Processing is durable and asynchronous. The final `forms.submission.completed` callback includes a stable delivery ID, top-level `completed`, `partial`, or `failed` orchestration status, decision eligibility, processing log, every API's exact response nested under its own service record, and one permanent consolidated PDF capability URL. The callback is signed in `x-ai7-signature` as `sha256=<hex HMAC of the raw body>` and includes `x-ai7-delivery-id` for idempotent consumers. Delivery is retried with bounded exponential backoff without re-running completed checks.
+
+Top-level orchestration status and each API's business result are independent. `completed` means every selected API returned HTTP 2xx; `partial` means at least one but not all APIs completed; and `failed` means none completed. Only `completed` sets `summary.decision_eligible` to true. The consolidated PDF records the submission ID, form version, timestamps, request network origin, Azure processing location, collected fields, per-service status and response, processing log, and full response JSON. It is stored permanently in the existing private, non-listable AI7 report store and downloaded through an unguessable public capability URL.
+
+Forms currently accept JSON-capable API inputs. Binary trade-licence document uploads remain available through the direct UAE trade-licence endpoint and are intentionally not copied into the queue-backed Forms contract.
+
 The admin key stays in browser memory only. Issued customer keys are displayed once, while only SHA-256 hashes are retained. Public catalog responses omit upstream URLs, authentication configuration, Key Vault names, and supplier identity.
 
 Run the contract tests locally with:
@@ -121,6 +133,7 @@ The API Engine manages these records inside the dedicated Key Vault:
 
 - `ai7-admin-key-hashes`: comma-separated SHA-256 hashes of authorized admin keys; bootstrapped outside the app.
 - `api-engine-integrations`: the private integration registry.
+- `form-<id>`: one versioned multi-API Form definition per secret, without supplier credentials.
 - `client-<id>`: one customer record per key, containing only the hash plus non-secret lifecycle tags.
 - `integration-<id>-master-key`: one write-only upstream master key per integration.
 

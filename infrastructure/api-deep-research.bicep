@@ -10,6 +10,7 @@ param runtimeIdentityResourceId string
 param storageAccountName string = 'stai7uaejobsuaen001'
 
 var queueName = 'adverse-media-deep-research'
+var formsQueueName = 'forms-submissions'
 var queueContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '974c5e8b-45b9-4653-ba55-5f855dd0fb88')
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
@@ -35,6 +36,11 @@ resource queue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-0
   name: queueName
 }
 
+resource formsQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queueService
+  name: formsQueueName
+}
+
 resource queueAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storage.id, runtimeIdentityResourceId, queueContributorRoleId)
   scope: storage
@@ -46,3 +52,4 @@ resource queueAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 }
 
 output queueUrl string = '${storage.properties.primaryEndpoints.queue}${queueName}'
+output formsQueueUrl string = '${storage.properties.primaryEndpoints.queue}${formsQueueName}'

@@ -9,8 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/admin.css?v=3" />
-    <script src="/admin/admin.js?v=4" defer></script>
+    <link rel="stylesheet" href="/admin/admin.css?v=4" />
+    <script src="/admin/admin.js?v=5" defer></script>
   </head>
   <body>
     <div class="login" id="login-view">
@@ -34,6 +34,7 @@
         <p class="nav-label">API ENGINE</p>
         <nav>
           <button class="active" data-view="integrations"><i>⌁</i> Integrations</button>
+          <button data-view="forms"><i>▦</i> Forms</button>
           <button data-view="clients"><i>◇</i> Customer keys</button>
         </nav>
         <div class="secure-note"><i></i><span>Secrets protected<br />by Azure Key Vault</span></div>
@@ -71,6 +72,19 @@
             <div class="client-list" id="client-list"></div>
           </div>
         </section>
+
+        <section id="forms-view" hidden>
+          <div class="summary">
+            <div><span>Configured Forms</span><strong id="form-count">0</strong></div>
+            <div><span>Active endpoints</span><strong id="active-form-count">0</strong></div>
+            <button id="new-form">＋ Create Form</button>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><p class="eyebrow">ORCHESTRATION REGISTRY</p><h2>Multi-API Forms</h2></div><button class="refresh" data-refresh="forms">Refresh</button></div>
+            <div class="empty" id="form-empty">No Forms have been configured.</div>
+            <div class="form-list" id="form-list"></div>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -101,6 +115,26 @@
         <label class="check"><input name="enabled" type="checkbox" checked /> Enable this public route</label>
         <p class="error" id="integration-error" aria-live="polite"></p>
         <div class="actions"><button type="button" class="secondary" data-close="integration-dialog">Cancel</button><button type="submit">Save API securely</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="form-dialog" class="wide-dialog">
+      <form id="form-form">
+        <div class="dialog-head"><div><p class="eyebrow">MULTI-API ORCHESTRATION</p><h2>Create or update a Form</h2></div><button type="button" class="close" data-close="form-dialog">×</button></div>
+        <p class="notice">A Form collects one JSON payload, maps it into selected AI7 APIs, posts one signed consolidated callback, and creates one permanent audit PDF. Supplier URLs and credentials never enter this configuration.</p>
+        <div class="grid two">
+          <label>Form ID<input name="id" placeholder="vendor-onboarding" pattern="[a-z0-9][a-z0-9-]+" required /></label>
+          <label>Display name<input name="name" placeholder="Vendor onboarding verification" required /></label>
+        </div>
+        <label>Description<textarea name="description" rows="2" placeholder="Explain what the consolidated verification covers."></textarea></label>
+        <label>Default customer logo URL (optional)<input name="default_logo_url" type="url" placeholder="https://customer.example/logo.png" /></label>
+        <label>Fields JSON<textarea name="fields" class="code-input" rows="10" spellcheck="false" required></textarea></label>
+        <p class="field-help">Supported types: text, textarea, email, url, number, date, select, country and boolean.</p>
+        <label>APIs and input mappings JSON<textarea name="services" class="code-input" rows="12" spellcheck="false" required></textarea></label>
+        <p class="field-help">Use <code>{{field_key}}</code> placeholders. An exact placeholder keeps number and boolean types; embedded placeholders become text.</p>
+        <label class="check"><input name="enabled" type="checkbox" checked /> Enable the public Form endpoint</label>
+        <p class="error" id="form-error" aria-live="polite"></p>
+        <div class="actions"><button type="button" class="secondary" data-close="form-dialog">Cancel</button><button type="submit">Save Form</button></div>
       </form>
     </dialog>
 

@@ -1,4 +1,5 @@
 let adminKey = '';
+let integrationCatalog = [];
 const byId = (id) => document.getElementById(id);
 
 async function request(path, options = {}) {
@@ -15,12 +16,14 @@ function setView(name) {
   document.querySelectorAll('aside nav button').forEach((button) => button.classList.toggle('active', button.dataset.view === name));
   byId('integrations-view').hidden = name !== 'integrations';
   byId('clients-view').hidden = name !== 'clients';
-  byId('page-title').textContent = name === 'clients' ? 'Customer keys' : 'Integrations';
-  name === 'clients' ? loadClients() : loadIntegrations();
+  byId('forms-view').hidden = name !== 'forms';
+  byId('page-title').textContent = name === 'clients' ? 'Customer keys' : name === 'forms' ? 'Forms' : 'Integrations';
+  name === 'clients' ? loadClients() : name === 'forms' ? loadForms() : loadIntegrations();
 }
 
 async function loadIntegrations() {
   const data = await request('/admin/api/integrations');
+  integrationCatalog = data.integrations.filter((item) => item.enabled && item.id !== 'adverse-media-ai');
   const list = byId('integration-list');
   list.replaceChildren();
   byId('integration-empty').hidden = data.integrations.length > 0;
@@ -38,6 +41,7 @@ async function loadIntegrations() {
     pill.textContent = item.enabled ? 'Active' : 'Disabled';
     pill.classList.toggle('off', !item.enabled);
     const credentialButton = row.querySelector('.set-credential');
+    credentialButton.hidden = item.id === 'merchant-screening';
     credentialButton.textContent = item.masterAuthKeyConfigured ? 'Replace credential' : 'Set credential';
     credentialButton.addEventListener('click', () => {
       const form = byId('supplier-credential-form');
@@ -62,6 +66,67 @@ async function loadIntegrations() {
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });
+    list.append(row);
+  });
+}
+
+function formExamples() {
+  const preferred = integrationCatalog.find((item) => item.id === 'uae-trade-licence') || integrationCatalog[0];
+  const service = preferred
+    ? [{
+      service_id: preferred.id,
+      input_template: preferred.id === 'adverse-media'
+        ? { entity_type: 'business', name: '{{company_name}}' }
+        : { company_name: '{{company_name}}' }
+    }]
+    : [];
+  return {
+    fields: [{ key: 'company_name', label: 'Company name', type: 'text', required: true, description: 'Registered legal or trading name.' }],
+    services: service
+  };
+}
+
+function openFormDialog(item) {
+  const form = byId('form-form');
+  form.reset();
+  const examples = formExamples();
+  form.elements.id.value = item?.id || '';
+  form.elements.id.readOnly = Boolean(item);
+  form.elements.name.value = item?.name || '';
+  form.elements.description.value = item?.description || '';
+  form.elements.default_logo_url.value = item?.default_logo_url || '';
+  form.elements.fields.value = JSON.stringify(item?.fields || examples.fields, null, 2);
+  form.elements.services.value = JSON.stringify(item?.services || examples.services, null, 2);
+  form.elements.enabled.checked = item?.enabled !== false;
+  byId('form-error').textContent = '';
+  byId('form-dialog').showModal();
+}
+
+async function loadForms() {
+  if (!integrationCatalog.length) {
+    const catalog = await request('/admin/api/integrations');
+    integrationCatalog = catalog.integrations.filter((item) => item.enabled && item.id !== 'adverse-media-ai');
+  }
+  const data = await request('/admin/api/forms');
+  const list = byId('form-list');
+  list.replaceChildren();
+  byId('form-empty').hidden = data.forms.length > 0;
+  byId('form-count').textContent = data.forms.length;
+  byId('active-form-count').textContent = data.forms.filter((item) => item.enabled).length;
+  data.forms.forEach((item) => {
+    const row = document.createElement('div');
+    row.className = 'form-row';
+    row.innerHTML = '<div><strong></strong><small></small></div><code></code><span class="pill"></span><button class="secondary edit-form">Edit</button><a class="open-form" target="_blank" rel="noopener">Open</a>';
+    row.querySelector('strong').textContent = item.name;
+    row.querySelector('small').textContent = `${item.services.length} APIs · ${item.fields.length} fields · version ${item.version}`;
+    row.querySelector('code').textContent = `/forms/${item.id}/submissions`;
+    const pill = row.querySelector('.pill');
+    pill.textContent = item.enabled ? 'Active' : 'Disabled';
+    pill.classList.toggle('off', !item.enabled);
+    row.querySelector('.edit-form').addEventListener('click', () => openFormDialog(item));
+    const open = row.querySelector('.open-form');
+    open.href = `/forms/${item.id}`;
+    open.textContent = 'Open Form';
     list.append(row);
   });
 }
@@ -110,9 +175,10 @@ byId('login-form').addEventListener('submit', async (event) => {
 });
 
 document.querySelectorAll('aside nav button').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
-document.querySelectorAll('[data-refresh]').forEach((button) => button.addEventListener('click', () => button.dataset.refresh === 'clients' ? loadClients() : loadIntegrations()));
+document.querySelectorAll('[data-refresh]').forEach((button) => button.addEventListener('click', () => button.dataset.refresh === 'clients' ? loadClients() : button.dataset.refresh === 'forms' ? loadForms() : loadIntegrations()));
 document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => byId(button.dataset.close).close()));
 byId('new-integration').addEventListener('click', () => byId('integration-dialog').showModal());
+byId('new-form').addEventListener('click', () => openFormDialog());
 byId('new-client').addEventListener('click', () => byId('client-dialog').showModal());
 byId('sign-out').addEventListener('click', () => { adminKey = ''; byId('app-view').hidden = true; byId('login-view').hidden = false; });
 
@@ -166,6 +232,27 @@ byId('client-form').addEventListener('submit', async (event) => {
     byId('credential-dialog').showModal();
     await loadClients();
   } catch (error) { byId('client-error').textContent = error.message; }
+});
+
+byId('form-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  byId('form-error').textContent = '';
+  try {
+    const body = {
+      name: form.elements.name.value,
+      description: form.elements.description.value,
+      default_logo_url: form.elements.default_logo_url.value,
+      fields: JSON.parse(form.elements.fields.value),
+      services: JSON.parse(form.elements.services.value),
+      enabled: form.elements.enabled.checked
+    };
+    await request(`/admin/api/forms/${form.elements.id.value}`, { method: 'PUT', body: JSON.stringify(body) });
+    byId('form-dialog').close();
+    await loadForms();
+  } catch (error) {
+    byId('form-error').textContent = error instanceof SyntaxError ? 'Fields and APIs must contain valid JSON.' : error.message;
+  }
 });
 
 byId('copy-credential').addEventListener('click', async () => {

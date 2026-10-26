@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071412" />
+    <meta name="description" content="AI7 UAE Forms - one signed workflow across multiple verification APIs." />
+    <title>AI7 UAE API - Forms</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/api.css?v=8" />
+    <script src="/forms.js?v=1" defer></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="https://ai7uae.com"><span>A7</span> AI7 <b>UAE</b></a>
+      <nav><a href="/">Trade licence</a><a href="/iban">IBAN</a><a href="/entity-search">Entity search</a><a href="/adverse-media">Adverse media</a><a href="/merchant-screening">Merchant screening</a><a href="/forms">Forms</a><a href="/openapi.json">OpenAPI</a></nav>
+      <span class="status"><i></i> API available</span>
+    </header>
+
+    <main>
+      <section class="hero forms-hero">
+        <p class="eyebrow">MULTI-API ORCHESTRATION</p>
+        <h1 id="form-title">One input.<br /><em>One verified result.</em></h1>
+        <p id="form-description">Submit customer data once, run multiple AI7 verification APIs, receive one signed callback, and retain one consolidated audit PDF.</p>
+        <div class="meta" id="endpoint-meta" hidden><span>POST</span><code id="endpoint"></code><button class="copy" id="copy-endpoint">Copy endpoint</button></div>
+      </section>
+
+      <section class="forms-shell">
+        <div id="forms-index">
+          <p class="label">AVAILABLE FORMS</p>
+          <h2>Configured verification workflows</h2>
+          <p>Select a Form to review its fields and submit a live request.</p>
+          <div class="forms-grid" id="forms-list"></div>
+        </div>
+
+        <div id="form-detail" hidden>
+          <div class="forms-guide">
+            <p class="label">HOW IT WORKS</p>
+            <h2>Asynchronous by design</h2>
+            <ol>
+              <li>Submit this Form with your existing AI7 Bearer key.</li>
+              <li>Store the one-time callback signing secret returned with HTTP 202.</li>
+              <li>Verify <code>x-ai7-signature</code> on the callback before trusting its body.</li>
+              <li>Inspect every service status and download the permanent consolidated PDF.</li>
+            </ol>
+            <div class="service-chips" id="service-list"></div>
+            <div class="code-block forms-sample"><pre id="form-curl"></pre><button class="copy" id="copy-form-curl">Copy cURL</button></div>
+          </div>
+
+          <article class="tester forms-tester" id="tester">
+            <p class="label">LIVE FORM</p>
+            <h2>Submit a consolidated check</h2>
+            <form id="submission-form" novalidate>
+              <label>AI7 API key<input id="api-key" type="password" autocomplete="off" placeholder="Paste your API key" required /></label>
+              <label>Public callback URL <code>callback_url</code><input id="callback-url" type="url" placeholder="https://your-system.example/webhooks/ai7" required /><small class="field-help">AI7 posts one signed JSON event here after all configured APIs and the PDF are complete.</small></label>
+              <label>Customer logo URL <code>customer_logo_url</code><input id="logo-url" type="url" placeholder="https://your-domain.example/logo.png" /><small class="field-help">Optional public HTTPS PNG or JPEG printed on the consolidated report.</small></label>
+              <div class="input-grid" id="dynamic-fields"></div>
+              <p class="form-error" id="form-error" role="alert"></p>
+              <button type="submit" id="send-request">Submit Form <span>→</span></button>
+            </form>
+            <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
+            <div class="response-actions"><button id="copy-response" disabled>Copy JSON</button></div>
+            <pre id="response-json" aria-live="polite">{
+  "message": "Your queued submission response will appear here."
+}</pre>
+          </article>
+        </div>
+      </section>
+    </main>
+    <footer><span>AI7 UAE Verification API</span><a href="https://ai7uae.com">ai7uae.com</a></footer>
+  </body>
+</html>

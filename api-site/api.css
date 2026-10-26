@@ -123,6 +123,22 @@ article > p:not(.label,.footnote) { color: var(--muted); line-height: 1.75; }
 .response-schema .schema-table { margin: 0; }
 .response-schema .schema-table > div { grid-template-columns: minmax(320px, 1.6fr) 100px 1fr; }
 footer { display: flex; justify-content: space-between; padding: 2rem clamp(1.25rem, 5vw, 5rem); color: #afbeb9; background: var(--dark); font-size: .75rem; }
+.forms-shell { max-width: 1050px; margin: 0 auto; padding: 5rem 2rem 8rem; }
+.forms-shell h2 { margin: .7rem 0 1rem; font-size: clamp(1.8rem,4vw,2.8rem); letter-spacing: -.045em; }
+.forms-shell > div > p:not(.label) { color: var(--muted); }
+.forms-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; margin-top: 2rem; }
+.form-card { display: grid; gap: .8rem; min-height: 200px; padding: 1.5rem; border: 1px solid var(--line); background: var(--white); transition: transform .2s,border-color .2s; }
+.form-card:hover { transform: translateY(-3px); border-color: var(--green); }
+.form-card span { color: var(--green); font: .67rem "DM Mono",monospace; letter-spacing: .08em; }
+.form-card strong { font-size: 1.25rem; }
+.form-card p { margin: 0; color: var(--muted); font-size: .84rem; line-height: 1.55; }
+.form-card code { margin-top: auto; color: var(--green); font-size: .68rem; overflow-wrap: anywhere; }
+.forms-guide { margin-bottom: 3rem; padding: 2rem; border: 1px solid var(--line); background: var(--white); }
+.forms-guide ol { padding-left: 1.2rem; color: var(--muted); line-height: 1.8; }
+.service-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.5rem; }
+.service-chips span { padding: .55rem .7rem; color: var(--green); background: #e8f3ed; font: .67rem "DM Mono",monospace; }
+.forms-sample { margin-top: 1.5rem; max-height: 360px; }
+.forms-tester { margin: 0; }
 
 @media (max-width: 1180px) {
   header nav { gap: .8rem; font-size: .7rem; }
@@ -140,6 +156,7 @@ footer { display: flex; justify-content: space-between; padding: 2rem clamp(1.25
   .schema-table { overflow-x: auto; }
   .schema-table > div { min-width: 600px; }
   .tabs { flex-wrap: wrap; }
+  .forms-grid { grid-template-columns: 1fr; }
   .meta { max-width: 100%; }
   .meta code { overflow: hidden; text-overflow: ellipsis; }
   .meta .copy { display: none; }

@@ -386,6 +386,40 @@
           "503": { "description": "The report store is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
+    },
+    "/forms/{formId}/submissions": {
+      "post": {
+        "summary": "Submit a configured multi-API Form",
+        "operationId": "submitVerificationForm",
+        "description": "Authenticates once, maps collected fields into every API configured for the named Form, and returns HTTP 202. AI7 later posts one HMAC-SHA256 signed callback containing each exact nested API response and a permanent consolidated PDF capability URL.",
+        "security": [{ "ApiKey": [] }],
+        "parameters": [{ "name": "formId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" } }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FormSubmissionRequest" } } }
+        },
+        "responses": {
+          "202": { "description": "Submission accepted for asynchronous processing.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FormQueuedResponse" } } } },
+          "400": { "description": "The fields, callback URL, or mapped job are invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "The AI7 API key is missing or invalid.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "The Form is unavailable or disabled.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "Durable Forms processing is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/service/forms/reports/{reportId}.pdf": {
+      "get": {
+        "summary": "Download a permanent consolidated Form audit report",
+        "operationId": "downloadFormsReport",
+        "description": "Downloads a permanently retained consolidated PDF without an API key. The UUID is an unguessable capability identifier.",
+        "security": [],
+        "parameters": [{ "name": "reportId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "The consolidated Form PDF.", "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } } } },
+          "404": { "description": "No Form report has that capability ID.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "The report store is temporarily unavailable.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
     }
   },
   "components": {
@@ -397,6 +431,51 @@
       }
     },
     "schemas": {
+      "FormSubmissionRequest": {
+        "type": "object",
+        "required": ["data", "callback_url"],
+        "properties": {
+          "data": { "type": "object", "description": "Values defined by GET /forms/{formId}/schema. Unknown fields are rejected.", "additionalProperties": true },
+          "callback_url": { "type": "string", "format": "uri", "pattern": "^https://", "description": "Public HTTPS endpoint that will receive the signed consolidated result." },
+          "customer_logo_url": { "type": "string", "format": "uri", "pattern": "^https://", "description": "Optional public PNG or JPEG printed on the consolidated PDF." }
+        },
+        "additionalProperties": false
+      },
+      "FormQueuedResponse": {
+        "type": "object",
+        "required": ["submission_id", "status", "form", "callback", "message"],
+        "properties": {
+          "submission_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "const": "queued" },
+          "form": { "type": "object", "additionalProperties": true },
+          "callback": {
+            "type": "object",
+            "required": ["configured", "event", "signature_header", "delivery_id_header", "signing_secret"],
+            "properties": {
+              "configured": { "type": "boolean", "const": true },
+              "event": { "type": "string", "const": "forms.submission.completed" },
+              "signature_header": { "type": "string", "const": "x-ai7-signature" },
+              "delivery_id_header": { "type": "string", "const": "x-ai7-delivery-id" },
+              "signing_secret": { "type": "string", "description": "One-time secret used to verify the callback HMAC-SHA256 signature." }
+            },
+            "additionalProperties": false
+          },
+          "message": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "FormConsolidatedCallback": {
+        "type": "object",
+        "required": ["event", "delivery_id", "submission_id", "completed_at", "data"],
+        "properties": {
+          "event": { "type": "string", "const": "forms.submission.completed" },
+          "delivery_id": { "type": "string", "format": "uuid" },
+          "submission_id": { "type": "string", "format": "uuid" },
+          "completed_at": { "type": "string", "format": "date-time" },
+          "data": { "type": "object", "description": "Consolidated result with completed, partial, or failed status; per-service exact responses; processing log; and permanent report metadata.", "additionalProperties": true }
+        },
+        "additionalProperties": false
+      },
       "MerchantScreeningRequest": {
         "type": "object",
         "required": ["website_url", "country_code"],
