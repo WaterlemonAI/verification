@@ -10,8 +10,8 @@ param storageAccountName string = 'stai7uaebsauaen001'
 param documentIntelligenceName string = 'doc-ai7uae-bsa-uaen-001'
 
 @allowed([ 'F0', 'S0' ])
-@description('F0 is the initial no-charge live tier. Promote to S0 only after cost approval.')
-param documentIntelligenceSku string = 'F0'
+@description('Paid S0 tier approved for production multi-page bank-statement extraction.')
+param documentIntelligenceSku string = 'S0'
 
 @description('Dedicated bank-statement worker identity.')
 param workerIdentityName string = 'id-ai7uae-bsa-worker-uaen-001'

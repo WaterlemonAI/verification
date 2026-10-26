@@ -15,6 +15,7 @@ from azure.storage.blob import BlobServiceClient, ContentSettings
 from azure.storage.queue import QueueClient
 
 from .crypto import encrypt, encrypted_json
+from .malware import scan_inputs
 from .run_analysis import run as analyze_directory
 
 
@@ -53,6 +54,18 @@ def _upload(container, name: str, path: Path, content_type: str = "application/o
 def _failure_result(analysis_id: str, reason: str) -> dict:
     return {"analysisId": analysis_id, "status": "failed", "decisionEligible": False,
             "reasonCodes": [reason], "segments": [], "features": {}, "schemaVersion": "bsa-v1.0.0"}
+
+
+def wait_for_malware_scanner() -> None:
+    timeout = max(1, int(os.getenv("BSA_CLAMD_STARTUP_TIMEOUT_SECONDS", "180")))
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            scan_inputs([("application/octet-stream", b"AI7 ClamAV readiness probe")])
+            return
+        except ValueError:
+            time.sleep(1)
+    raise RuntimeError("MALWARE_SCANNER_UNAVAILABLE")
 
 
 def process(payload: dict, container, table) -> None:
@@ -108,6 +121,7 @@ def mark_failed(payload: dict, container, table, reason: str) -> None:
 
 
 def run() -> None:
+    wait_for_malware_scanner()
     container, queue, table = _clients()
     while True:
         received = list(queue.receive_messages(messages_per_page=1, visibility_timeout=int(

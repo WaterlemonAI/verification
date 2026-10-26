@@ -21,7 +21,7 @@ The GitHub deployment identity receives the custom role in `infrastructure/ai7ua
 
 ### Bank statement analysis
 
-The [Bank Statement Analysis module](bank-statement-analysis/README.md) is available in the customer portal and under **Analysis** in the admin console. Its authenticated asynchronous API uses encrypted private Azure Blob/Table/Queue storage, a dedicated scale-to-zero Python worker, and managed-identity access to Azure Document Intelligence in UAE North. The initial live F0 Layout tier is capped at two pages; an S0 promotion requires a separate cost decision. The [engineering handoff](docs/bank-statement-analysis/README.md) and module README document the remaining decision-support limitations.
+The [Bank Statement Analysis module](bank-statement-analysis/README.md) is available in the customer portal and under **Analysis** in the admin console. Its authenticated asynchronous API uses encrypted private Azure Blob/Table/Queue storage, a dedicated scale-to-zero Python worker, and managed-identity access to the paid Azure Document Intelligence S0 tier in UAE North. Managed Layout extraction is bounded to 100 pages and a USD 1.00 ceiling per request at the UAE North retail rate of USD 10 per 1,000 prebuilt pages. A private ClamAV sidecar scans every decrypted upload over localhost before normalization or extraction; a detection, unavailable scanner, or protocol error fails closed. The [engineering handoff](docs/bank-statement-analysis/README.md) and module README document the remaining decision-support limitations.
 
 The provider-neutral API portal and wrapper are served from `api.ai7uae.com`. Current endpoints are:
 
