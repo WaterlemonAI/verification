@@ -88,6 +88,8 @@ Top-level orchestration status and each API's business result are independent. `
 
 Forms currently accept JSON-capable API inputs. Binary trade-licence document uploads remain available through the direct UAE trade-licence endpoint and are intentionally not copied into the queue-backed Forms contract.
 
+The UAE Vendor Due Diligence Form combines every current public API: UAE Trade Licence, IBAN Verification, Comprehensive Entity Search, Global Adverse Media Screening, and Merchant Website Screening. For its IBAN check, the runtime always fixes `docType` to `610`, fixes `requestCategory` to `business`, and derives a unique `transID` from the server-issued Form submission ID. Those control fields are not collected from or shown to the customer.
+
 The admin key stays in browser memory only. Issued customer keys are displayed once, while only SHA-256 hashes are retained. Public catalog responses omit upstream URLs, authentication configuration, Key Vault names, and supplier identity.
 
 Run the contract tests locally with:

@@ -583,9 +583,23 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
   }
 }
 
-async function executeProviderFormService(integration, input, store, fetchImpl) {
+function formsIbanTransactionId(submissionId) {
+  const stableId = String(submissionId || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 48);
+  if (!stableId) throw new Error('form_submission_id_required');
+  return `AI7F-${stableId}`;
+}
+
+async function executeProviderFormService(integration, input, store, fetchImpl, { submissionId } = {}) {
   let requestBody = input;
-  if (integration.id === 'iban-verification') requestBody = { ...requestBody, docType: 610 };
+  if (integration.id === 'iban-verification') {
+    requestBody = {
+      ...requestBody,
+      source: 'API',
+      transID: formsIbanTransactionId(submissionId),
+      docType: 610,
+      requestCategory: 'business'
+    };
+  }
   if (integration.id === 'entity-search') requestBody = { country: '', gender: '', dob: '', ...requestBody };
   const body = Buffer.from(JSON.stringify(requestBody));
   if (integration.adapter === 'encrypted-json-relay') {
@@ -609,7 +623,7 @@ async function executeProviderFormService(integration, input, store, fetchImpl) 
   return { httpStatus: upstream.status, response: parseJsonText(raw) ?? { raw_response: raw } };
 }
 
-async function executeSingleFormService({ service, data, store, fetchImpl, merchantScreener }) {
+async function executeSingleFormService({ service, data, submissionId, store, fetchImpl, merchantScreener }) {
   const integration = await store.getIntegrationById(service.service_id);
   const name = integration?.name || service.service_id;
   const startedAt = new Date().toISOString();
@@ -639,7 +653,7 @@ async function executeSingleFormService({ service, data, store, fetchImpl, merch
         response = { status: 'Error', error: validation.error };
       } else response = await merchantScreener(validation.value);
     } else {
-      const result = await executeProviderFormService(integration, input, store, fetchImpl);
+      const result = await executeProviderFormService(integration, input, store, fetchImpl, { submissionId });
       httpStatus = result.httpStatus;
       response = result.response;
     }
@@ -667,7 +681,7 @@ async function executeSingleFormService({ service, data, store, fetchImpl, merch
 export async function executeFormsJob({ job, store, fetchImpl, merchantScreener = configuredMerchantScreener, reportStore }) {
   const startedAt = new Date().toISOString();
   const services = await Promise.all(job.form.services.map((service) => executeSingleFormService({
-    service, data: job.data, store, fetchImpl, merchantScreener
+    service, data: job.data, submissionId: job.submission_id, store, fetchImpl, merchantScreener
   })));
   const completed = services.filter((service) => service.status === 'completed').length;
   const failed = services.length - completed;
