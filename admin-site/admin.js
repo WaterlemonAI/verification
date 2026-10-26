@@ -24,6 +24,8 @@ function showSignedOut() {
   byId('login-view').hidden = false;
   byId('signin-card').hidden = false;
   byId('setup-card').hidden = true;
+  byId('forgot-card').hidden = true;
+  byId('reset-card').hidden = true;
 }
 
 async function showApp(auth) {
@@ -48,6 +50,11 @@ async function bootstrapAuth() {
     byId('setup-card').hidden = status.configured;
     byId('signin-card').hidden = !status.configured;
     if (!status.configured) return;
+    if (new URLSearchParams(location.search).has('reset')) {
+      byId('signin-card').hidden = true;
+      byId('reset-card').hidden = false;
+      return;
+    }
     const session = await request('/admin/api/auth/session');
     if (session.account) await showApp(session);
   } catch {
@@ -376,6 +383,44 @@ byId('login-form').addEventListener('submit', async (event) => {
   }
 });
 
+byId('show-admin-forgot').addEventListener('click', () => {
+  byId('signin-card').hidden = true;
+  byId('forgot-card').hidden = false;
+});
+document.querySelectorAll('[data-back-to-admin-login]').forEach(button => button.addEventListener('click', () => {
+  history.replaceState(null, '', '/admin');
+  byId('forgot-card').hidden = true;
+  byId('reset-card').hidden = true;
+  byId('signin-card').hidden = false;
+}));
+byId('forgot-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const button = event.currentTarget.querySelector('button[type=submit]');
+  button.disabled = true;
+  try {
+    const result = await request('/admin/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email: byId('forgot-admin-email').value }) });
+    byId('forgot-admin-message').textContent = result.message;
+  } catch (error) { byId('forgot-admin-message').textContent = error.message; }
+  finally { button.disabled = false; }
+});
+byId('reset-admin-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const password = byId('reset-admin-password').value;
+  if (password !== byId('reset-admin-confirm').value) { byId('reset-admin-message').textContent = 'Passwords do not match.'; return; }
+  const button = event.currentTarget.querySelector('button[type=submit]');
+  button.disabled = true;
+  try {
+    const token = new URLSearchParams(location.search).get('reset');
+    const result = await request('/admin/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) });
+    event.currentTarget.reset();
+    history.replaceState(null, '', '/admin');
+    byId('reset-card').hidden = true;
+    byId('signin-card').hidden = false;
+    byId('login-error').textContent = result.message;
+  } catch (error) { byId('reset-admin-message').textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
 byId('setup-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -527,10 +572,11 @@ byId('client-form').addEventListener('submit', async (event) => {
   const form = event.currentTarget;
   byId('client-error').textContent = '';
   try {
-    const result = await request('/admin/api/clients', { method: 'POST', body: JSON.stringify({ name: form.elements.name.value }) });
+    const result = await request('/admin/api/clients', { method: 'POST', body: JSON.stringify({ name: form.elements.name.value, recipient_email: form.elements.recipient_email.value.trim() }) });
     form.reset();
     byId('client-dialog').close();
     byId('new-credential').textContent = result.apiKey;
+    byId('credential-delivery').textContent = result.delivery === 'sent' ? 'Credential emailed to the recipient.' : result.delivery === 'failed' ? 'Email delivery failed. Copy the key now and deliver it securely.' : '';
     byId('credential-dialog').showModal();
     await loadClients();
   } catch (error) { byId('client-error').textContent = error.message; }

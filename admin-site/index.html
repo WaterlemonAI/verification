@@ -9,8 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/admin.css?v=9" />
-    <script src="/admin/admin.js?v=11" defer></script>
+    <link rel="stylesheet" href="/admin/admin.css?v=10" />
+    <script src="/admin/admin.js?v=12" defer></script>
 
   </head>
   <body>
@@ -37,7 +37,30 @@
             <button type="submit">Sign in securely <span>→</span></button>
           </form>
           <p class="error" id="login-error" aria-live="polite"></p>
+          <button type="button" class="text-link" id="show-admin-forgot">Forgot password?</button>
           <small>Protected by an encrypted, HttpOnly session. MFA is not enabled.</small>
+        </div>
+        <div class="login-card" id="forgot-card" hidden>
+          <p class="eyebrow">ACCOUNT RECOVERY</p>
+          <h2>Reset your password</h2>
+          <p>We will email a reset link if this administrator account exists.</p>
+          <form id="forgot-form">
+            <label>Administrator email<input id="forgot-admin-email" type="email" autocomplete="email" required /></label>
+            <button type="submit">Send reset link <span>→</span></button>
+          </form>
+          <p class="error" id="forgot-admin-message" role="status"></p>
+          <button type="button" class="text-link" data-back-to-admin-login>Back to sign in</button>
+        </div>
+        <div class="login-card" id="reset-card" hidden>
+          <p class="eyebrow">ACCOUNT RECOVERY</p>
+          <h2>Set a new password</h2>
+          <form id="reset-admin-form">
+            <label>New password<input id="reset-admin-password" type="password" autocomplete="new-password" minlength="12" required /></label>
+            <label>Confirm password<input id="reset-admin-confirm" type="password" autocomplete="new-password" minlength="12" required /></label>
+            <button type="submit">Update password <span>→</span></button>
+          </form>
+          <p class="error" id="reset-admin-message" role="status"></p>
+          <button type="button" class="text-link" data-back-to-admin-login>Back to sign in</button>
         </div>
         <div class="login-card" id="setup-card" hidden>
           <p class="eyebrow">ONE-TIME SETUP</p>
@@ -227,6 +250,7 @@
         <div class="dialog-head"><div><p class="eyebrow">CUSTOMER ACCESS</p><h2>Issue an API credential</h2></div><button type="button" class="close" data-close="client-dialog">×</button></div>
         <p class="notice">The plaintext credential is displayed once. Only its SHA-256 hash is retained.</p>
         <label>Customer or workspace name<input name="name" placeholder="Customer name" required /></label>
+        <label>Send credential to email (optional)<input name="recipient_email" type="email" placeholder="customer@example.com" autocomplete="off" /></label>
         <p class="error" id="client-error" aria-live="polite"></p>
         <div class="actions"><button type="button" class="secondary" data-close="client-dialog">Cancel</button><button type="submit">Issue credential</button></div>
       </form>
@@ -235,6 +259,7 @@
     <dialog id="credential-dialog" class="credential-dialog">
       <div class="dialog-head"><div><p class="eyebrow">DISPLAYED ONCE</p><h2>Customer API key</h2></div></div>
       <p>Copy this key now. It cannot be recovered after this window closes.</p>
+      <p id="credential-delivery"></p>
       <div class="credential"><code id="new-credential"></code><button id="copy-credential">Copy</button></div>
       <div class="actions"><button id="close-credential">I have stored it securely</button></div>
     </dialog>

@@ -151,3 +151,9 @@ The API Engine manages these records inside the dedicated Key Vault:
 `adverse-media` and `adverse-media-ai` are runtime-managed integrations. Their private credentials are stored separately as `integration-adverse-media-master-key` and `integration-adverse-media-ai-master-key`; either can be set or rotated from the protected administration console. The AI credential is optional and deterministic screening remains available without it.
 
 Do not commit or place plaintext credentials in GitHub variables. Bootstrap the admin hash in the dedicated API vault, then manage integrations and customer credentials through the protected console.
+
+### Platform email and recovery
+
+`notify@kycprobe.com` is the platform sender, with replies directed to `notify@ai7lab.net`. The dedicated API Key Vault secret `platform-smtp-password` supplies the mailbox password to the API Container App; the image and GitHub variables contain no plaintext mailbox credential. The app connects to GoDaddy Professional Email powered by Titan over authenticated TLS on `smtpout.secureserver.net:465`.
+
+Portal and administrator sign-in pages offer password recovery. A valid account receives a signed, 30-minute reset link at its registered email; the request endpoint gives the same response for known and unknown addresses. Resetting changes the account version and invalidates prior sessions and links. Password changes send a security notice. In the administration console, issuing a customer API key can optionally email that one-time credential to a specified recipient; the key is still displayed once, and delivery status is shown. Keep recipient addresses under administrator control because email carries the plaintext key.

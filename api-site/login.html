@@ -9,8 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/api.css?v=9" />
-    <script src="/portal-login.js?v=1" defer></script>
+    <link rel="stylesheet" href="/api.css?v=10" />
+    <script src="/portal-login.js?v=2" defer></script>
   </head>
   <body class="login-page">
     <main class="login-shell">
@@ -41,6 +41,7 @@
             <p class="auth-error" id="login-error" role="alert"></p>
             <button type="submit">Sign in to workspace →</button>
           </form>
+          <button class="auth-link" type="button" id="show-forgot">Forgot password?</button>
 
           <form class="auth-form" id="signup-form" novalidate hidden>
             <label>AI7 API key<input id="signup-key" type="password" autocomplete="off" placeholder="ai7_live_…" required /><small>Your active key is verified once to connect this account to its workspace. It is not stored on your user account.</small></label>
@@ -50,6 +51,18 @@
             <p class="auth-error" id="signup-error" role="alert"></p>
             <button type="submit">Create portal account →</button>
           </form>
+          <form class="auth-form" id="forgot-form" novalidate hidden>
+            <label>Account email<input id="forgot-email" type="email" autocomplete="email" required /></label>
+            <p class="auth-error" id="forgot-message" role="status"></p>
+            <button type="submit">Send reset link →</button>
+          </form>
+          <form class="auth-form" id="reset-form" novalidate hidden>
+            <label>New password<input id="reset-password" type="password" autocomplete="new-password" minlength="12" required /></label>
+            <label>Confirm new password<input id="reset-confirm" type="password" autocomplete="new-password" minlength="12" required /></label>
+            <p class="auth-error" id="reset-message" role="status"></p>
+            <button type="submit">Update password →</button>
+          </form>
+          <button class="auth-link" type="button" id="back-to-login" hidden>Back to sign in</button>
           <p class="login-security">Protected by signed, HttpOnly sessions. API credentials continue to be required for live API requests and are never placed in the portal session.</p>
         </div>
       </section>

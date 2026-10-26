@@ -8,6 +8,8 @@ import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
+import { createPlatformMailer } from './lib/platform-mail.mjs';
+import { createPasswordResetToken, parsePasswordResetToken, RESET_MINUTES } from './lib/password-reset.mjs';
 import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
 import { adverseMediaConfig, presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from './lib/adverse-media.mjs';
 import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, validatePublicCallbackUrl } from './lib/deep-research-queue.mjs';
@@ -914,13 +916,69 @@ function loginThrottleKey(req, email) {
   return `${requestOrigin(req).network_origin}:${String(email || '').trim().toLowerCase()}`;
 }
 
+function validEmail(value) {
+  const email = normalizeAdminEmail(value);
+  return email.length <= 254 && /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(email) ? email : '';
+}
+
+async function requestPasswordReset(req, res, { kind, store, throttle, mailer }) {
+  if (!mailer.configured) return json(res, 503, { status: 'Error', error: 'Password recovery is temporarily unavailable.' });
+  let body;
+  try { body = await readJson(req); }
+  catch { return json(res, 400, { status: 'Error', error: 'The recovery request is invalid.' }); }
+  const email = validEmail(body.email);
+  if (!email) return json(res, 400, { status: 'Error', error: 'Enter a valid email address.' });
+  const key = `reset:${kind}:${loginThrottleKey(req, email)}`;
+  if (!throttle.blocked(key)) {
+    throttle.failed(key);
+    const account = kind === 'admin' ? await store.getAdminAccount() : await store.getPortalUser(email);
+    if (account?.email === email) {
+      const signingKey = kind === 'admin' ? await store.getAdminSessionKey() : await store.getPortalSessionKey();
+      if (signingKey) {
+        const token = createPasswordResetToken({ kind, account, signingKey });
+        const path = kind === 'admin' ? '/admin' : '/login';
+        const url = `${process.env.APP_PUBLIC_BASE_URL || 'https://app.kycprobe.com'}${path}?reset=${encodeURIComponent(token)}`;
+        try { await mailer.sendPasswordReset({ to: email, url, minutes: RESET_MINUTES }); }
+        catch { console.warn('platform_password_reset_email_failed'); }
+      }
+    }
+  }
+  return json(res, 202, { message: 'If that account exists, a password reset link will be sent.' });
+}
+
+async function completePasswordReset(req, res, { kind, store, mailer }) {
+  if (!sameOrigin(req)) return json(res, 403, { status: 'Error', error: 'The request origin is invalid.' });
+  let body;
+  try { body = await readJson(req); }
+  catch { return json(res, 400, { status: 'Error', error: 'The reset request is invalid.' }); }
+  const signingKey = kind === 'admin' ? await store.getAdminSessionKey() : await store.getPortalSessionKey();
+  const reset = parsePasswordResetToken(body.token, { kind, signingKey });
+  if (!reset) return json(res, 400, { status: 'Error', error: 'This reset link is invalid or expired.' });
+  const account = kind === 'admin' ? await store.getAdminAccount({ fresh: true }) : await store.getPortalUser(reset.email, { fresh: true });
+  if (!account || account.email !== reset.email || account.version !== reset.version) {
+    return json(res, 400, { status: 'Error', error: 'This reset link is invalid or expired.' });
+  }
+  try {
+    const updated = kind === 'admin'
+      ? createAdminAccount(account.email, body.password, account)
+      : createPortalAccount(account.email, body.password, { id: account.client_id, name: account.client_name }, account);
+    if (kind === 'admin') await store.setAdminAccount(updated);
+    else await store.setPortalUser(updated);
+    try { await mailer.sendSecurityAlert({ to: account.email, event: 'reset' }); }
+    catch { console.warn('platform_security_alert_failed'); }
+    return json(res, 200, { message: 'Password updated. Sign in with your new password.' });
+  } catch (error) {
+    return json(res, 400, { status: 'Error', error: error.message });
+  }
+}
+
 async function currentPortalSession(req, store) {
   const token = parseCookies(req.headers.cookie)[PORTAL_COOKIE];
   if (!token) return { account: null, session: null };
   try {
     const payload = String(token).split('.')[0];
     const unsigned = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    const account = await store.getPortalUser(normalizeAdminEmail(unsigned.email));
+    const account = await store.getPortalUser(normalizeAdminEmail(unsigned.email), { fresh: true });
     const signingKey = await store.getPortalSessionKey();
     return { account, session: verifyPortalSession(token, account, signingKey) };
   } catch {
@@ -928,10 +986,17 @@ async function currentPortalSession(req, store) {
   }
 }
 
-async function handlePortalApi(req, res, url, store, loginThrottle) {
+async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottle, mailer) {
   if (req.method === 'GET' && url.pathname === '/portal/api/auth/status') {
     const { account, session } = await currentPortalSession(req, store);
     return json(res, 200, { authenticated: Boolean(session), account: session ? safePortalAccount(account) : null });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/portal/api/auth/forgot-password') {
+    return requestPasswordReset(req, res, { kind: 'portal', store, throttle: resetThrottle, mailer });
+  }
+  if (req.method === 'POST' && url.pathname === '/portal/api/auth/reset-password') {
+    return completePasswordReset(req, res, { kind: 'portal', store, mailer });
   }
 
   if (req.method === 'POST' && url.pathname === '/portal/api/auth/signup') {
@@ -1018,7 +1083,7 @@ function portalLoginRedirect(res, pathname, search = '') {
 }
 
 async function currentAdminSession(req, store) {
-  const account = await store.getAdminAccount();
+  const account = await store.getAdminAccount({ fresh: true });
   if (!account) return { account: null, session: null };
   const signingKey = await store.getAdminSessionKey();
   const token = parseCookies(req.headers.cookie)[ADMIN_COOKIE];
@@ -1043,10 +1108,17 @@ async function requireAdmin(req, res, store, { csrf = false } = {}) {
   return { account, session };
 }
 
-async function handleAdminApi(req, res, url, store, loginThrottle) {
+async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer) {
   if (req.method === 'GET' && url.pathname === '/admin/api/auth/status') {
     const account = await store.getAdminAccount();
     return json(res, 200, { configured: Boolean(account) });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/admin/api/auth/forgot-password') {
+    return requestPasswordReset(req, res, { kind: 'admin', store, throttle: resetThrottle, mailer });
+  }
+  if (req.method === 'POST' && url.pathname === '/admin/api/auth/reset-password') {
+    return completePasswordReset(req, res, { kind: 'admin', store, mailer });
   }
 
   if (req.method === 'POST' && url.pathname === '/admin/api/auth/setup') {
@@ -1104,6 +1176,8 @@ async function handleAdminApi(req, res, url, store, loginThrottle) {
       if (!verifyAdminPassword(access.account, access.account.email, body.current_password)) return json(res, 401, { status: 'Error', error: 'Current password is incorrect.' });
       const account = createAdminAccount(access.account.email, body.new_password, access.account);
       await store.setAdminAccount(account);
+      try { await mailer.sendSecurityAlert({ to: account.email, event: 'changed' }); }
+      catch { console.warn('platform_security_alert_failed'); }
       const signingKey = await store.getAdminSessionKey();
       const created = createAdminSession(account, signingKey);
       return json(res, 200, { account: safeAdminAccount(account), csrf_token: created.csrfToken, expires_in: created.expiresIn }, { 'set-cookie': adminCookie(created.token, { secure: secureRequest(req) }) });
@@ -1174,8 +1248,16 @@ async function handleAdminApi(req, res, url, store, loginThrottle) {
       const body = await readJson(req);
       const name = String(body.name || '').trim();
       if (name.length < 2 || name.length > 100) return json(res, 400, { status: 'Error', error: 'Client name must be between 2 and 100 characters.' });
+      const recipient = body.recipient_email ? validEmail(body.recipient_email) : '';
+      if (body.recipient_email && !recipient) return json(res, 400, { status: 'Error', error: 'Enter a valid delivery email address.' });
+      if (recipient && !mailer.configured) return json(res, 503, { status: 'Error', error: 'Credential email is temporarily unavailable.' });
       const created = await store.createClient(name);
-      return json(res, 201, { ...created, notice: 'Copy this API key now. It will not be shown again.' });
+      let delivery = 'not_requested';
+      if (recipient) {
+        try { await mailer.sendCredential({ to: recipient, clientName: name, apiKey: created.apiKey }); delivery = 'sent'; }
+        catch { delivery = 'failed'; console.warn('platform_credential_email_failed'); }
+      }
+      return json(res, 201, { ...created, delivery, notice: 'Copy this API key now. It will not be shown again.' });
     } catch (error) {
       return json(res, error.statusCode || 500, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : 'The client credential could not be created.' });
     }
@@ -1367,9 +1449,10 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
   }
 }
 
-export function createAppServer({ store = createStore(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch, deepResearchQueue = createDeepResearchQueue(), formsQueue = createFormsQueue(), reportStore = createAdverseMediaReportStore(), merchantScreener = configuredMerchantScreener, startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
   const portalLoginThrottle = createLoginThrottle();
+  const resetThrottle = createLoginThrottle();
   if (startWorker && deepResearchQueue) {
     startDeepResearchWorker({
       queue: deepResearchQueue,
@@ -1435,8 +1518,8 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
           cost_guardrail_usd: adverseMediaConfig.costGuardrailUsd
         }, { 'cache-control': 'public, max-age=3600' });
       }
-      if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle);
-      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle);
+      if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle, mailer);
+      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer);
       if (url.pathname === '/admin/bsa-synthetic-combined.pdf') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }
