@@ -104,6 +104,8 @@ The protected endpoints are `GET /admin/api/modules`, `GET|PUT /admin/api/custom
 
 Deep-research queue processing is controlled by `ADVERSE_MEDIA_WORKER_ENABLED`. The deployment template defaults it to `false` so queued legacy jobs can be inspected before resumption; while paused, new deep-research callback submissions return HTTP 503. The dedicated dead-letter queue must exist before enabling it. Do not restore an older API revision with the queue URL present during the [retry incident](docs/adverse-media-retry-incident-2026-10-26.md).
 
+Forms jobs now save each selected API's completed response before PDF creation. A report-storage or callback retry resumes from those saved responses and uses the same report ID. The worker allows at most three execution attempts, five billing-settlement attempts and five callback attempts; exhausted jobs move to the private `forms-submissions-deadletter` queue with their final reason and saved result for operator review. Callback delivery retains its stable `delivery_id` so receivers can deduplicate retries.
+
 `GET https://api.ai7uae.com/service/health` requires `Authorization: Bearer <key>` and returns API transport and enabled-route status. It does not perform an upstream provider probe. `POST https://api.ai7uae.com/service/keys/self/rotate` with the current key as Bearer authentication rotates that key and returns the replacement once. The old key is invalidated. Portal session endpoints `GET /portal/api/keys`, `POST /portal/api/keys`, `POST /portal/api/keys/{id}/rotate`, and `POST /portal/api/keys/{id}/revoke` are available at `app.kycprobe.com` and require the session CSRF token for changes.
 
 ### Forms orchestration

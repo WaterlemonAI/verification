@@ -931,10 +931,21 @@ async function executeSingleFormService({ service, data, submissionId, store, fe
 }
 
 export async function executeFormsJob({ job, store, fetchImpl, merchantScreener = configuredMerchantScreener, reportStore }) {
-  const startedAt = new Date().toISOString();
-  const services = await Promise.all(job.form.services.map((service) => executeSingleFormService({
-    service, data: job.data, submissionId: job.submission_id, store, fetchImpl, merchantScreener
-  })));
+  let saved = null;
+  try {
+    saved = await reportStore.getFormResult({ ownerId: job.owner_id, submissionId: job.submission_id });
+  } catch (error) {
+    if (error.statusCode !== 404) throw error;
+  }
+  if (saved?.stage === 'final') return saved.result;
+  if (saved?.submission_id === job.submission_id && saved.report) return saved;
+  const startedAt = saved?.started_at || new Date().toISOString();
+  const services = saved?.stage === 'services_complete' ? saved.services
+    : await Promise.all(job.form.services.map((service) => executeSingleFormService({
+      service, data: job.data, submissionId: job.submission_id, store, fetchImpl, merchantScreener
+    })));
+  if (!saved) await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
+    result: { stage: 'services_complete', services, started_at: startedAt } });
   const { status, summary } = consolidateFormServiceResults(services);
   const completedAt = new Date().toISOString();
   const processingLog = [
@@ -976,6 +987,8 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
   };
   await reportStore.save({ ownerId: job.owner_id, reportId: report.reportId, bytes: report.bytes, metadata: { ...metadata, report_type: 'forms' } });
   result = { ...result, report: metadata };
+  await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
+    result: { stage: 'final', result } });
   return result;
 }
 

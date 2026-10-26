@@ -360,3 +360,58 @@ test('Forms worker durably retries callback delivery without re-running complete
   assert.equal(completed, true);
   assert.equal(await pendingStore.getFormResult({ ownerId: 'owner-1', submissionId: 's1' }), null);
 });
+
+test('Forms report-storage retry reuses completed supplier responses and a stable report ID', async () => {
+  const job = {
+    submission_id: 'd95f2fd9-a75f-4961-99bf-3a824be8691e',
+    report_id: 'a0d7d73c-72c7-42e2-9da9-23e5a63e82f7',
+    owner_id: 'owner-form-checkpoint', queued_at: new Date().toISOString(),
+    customer_logo_url: '', request_origin: { network_origin: '203.0.113.9', processing_location: 'UAE North' },
+    data: { company_name: 'Acme LLC', country: 'AE' }, form: formDefinition
+  };
+  const pendingStore = new MemoryAdverseMediaReportStore();
+  const originalSave = pendingStore.save.bind(pendingStore);
+  let saves = 0;
+  pendingStore.save = async (input) => {
+    if (++saves === 1) throw new Error('temporary_report_store_failure');
+    return originalSave(input);
+  };
+  let supplierCalls = 0;
+  const options = { job, store, reportStore: pendingStore,
+    fetchImpl: async () => { supplierCalls += 1; return new Response('{"match":true}', {
+      status: 200, headers: { 'content-type': 'application/json' }
+    }); } };
+  await assert.rejects(executeFormsJob(options), /temporary_report_store_failure/);
+  assert.equal(supplierCalls, 1);
+  const result = await executeFormsJob(options);
+  assert.equal(supplierCalls, 1);
+  assert.equal(result.report.report_id, job.report_id);
+  assert.equal((await executeFormsJob(options)).report.report_id, job.report_id);
+  assert.equal(supplierCalls, 1);
+});
+
+test('Forms callback exhaustion dead-letters one saved result without rerunning suppliers', async () => {
+  let available = true;
+  let executions = 0;
+  let deliveries = 0;
+  let deadLettered;
+  const message = { messageId: 'form-callback-retry', popReceipt: 'a', dequeueCount: 1,
+    messageText: JSON.stringify({ submission_id: 's-callback', owner_id: 'owner-callback', callback_url: 'https://8.8.8.8/callback' }) };
+  const queue = {
+    async receive() { if (!available) return null; available = false; return message; },
+    async complete() { throw new Error('callback_must_not_complete'); },
+    async release(_message, job) { message.messageText = JSON.stringify(job); message.dequeueCount += 1; available = true; },
+    async deadLetter(_message, job, reason) { deadLettered = { job, reason }; }
+  };
+  const pendingStore = new MemoryAdverseMediaReportStore();
+  const worker = startFormsWorker({ queue, resultStore: pendingStore,
+    execute: async () => { executions += 1; return { submission_id: 's-callback', completed_at: new Date().toISOString() }; },
+    deliver: async () => { deliveries += 1; throw new Error('callback_failed_503'); } });
+  for (let attempt = 0; attempt < 30 && !deadLettered; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  worker.stop();
+  assert.equal(executions, 1);
+  assert.equal(deliveries, 5);
+  assert.equal(deadLettered.reason, 'callback_failed_503');
+  assert.equal(deadLettered.job.stage_attempts.callback, 5);
+  assert.ok(await pendingStore.getFormResult({ ownerId: 'owner-callback', submissionId: 's-callback' }));
+});
