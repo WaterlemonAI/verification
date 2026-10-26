@@ -552,6 +552,8 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
           maximum_paid_queries: adverseMediaConfig.maxPaidQueries,
           maximum_ai_candidates: adverseMediaConfig.maxAiCandidates,
           default_risk_threshold: adverseMediaConfig.defaultRiskThreshold,
+          default_review_threshold_percent: adverseMediaConfig.defaultReviewThresholdPercent,
+          default_high_risk_threshold_percent: adverseMediaConfig.defaultHighRiskThresholdPercent,
           cost_guardrail_usd: adverseMediaConfig.costGuardrailUsd
         }, { 'cache-control': 'public, max-age=3600' });
       }

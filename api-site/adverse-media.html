@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=6" />
-    <script src="/adverse-media.js?v=5" defer></script>
+    <script src="/adverse-media.js?v=6" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#docs">Skip to documentation</a>
@@ -56,7 +56,8 @@
               <div><strong>countries</strong><span>string[] · optional</span><p>Up to 20 ISO two-letter country codes used for identity context and focused regional coverage.</p></div>
               <div><strong>languages</strong><span>string[] · optional</span><p>Up to five languages. Defaults to English and Arabic. Chinese and Russian also activate their matching country pack.</p></div>
               <div><strong>date_from / date_to</strong><span>date · optional</span><p>Inclusive publication-date search window.</p></div>
-              <div><strong>risk_threshold</strong><span>number · optional</span><p>Scores at or above this 0–1 value require review. Default: <code>0.65</code>.</p></div>
+              <div><strong>high_risk_threshold_percent</strong><span>number · optional</span><p>Scores at or above this percentage are High Risk. Default: <code>90</code>.</p></div>
+              <div><strong>review_threshold_percent</strong><span>number · optional</span><p>Scores from this percentage up to the High Risk boundary require Review. Lower scores are Safe. Default: <code>65</code>.</p></div>
               <div><strong>search_plus</strong><span>boolean · optional</span><p>Actively submits site-restricted searches for selected high-value publishers, prioritising requested countries, and consolidates the results with standard evidence.</p></div>
               <div><strong>max_results</strong><span>integer · optional</span><p>One to 50 results. Default: 25.</p></div>
               <div><strong>deep_research</strong><span>boolean · optional</span><p>Enables asynchronous screening and the optional callback workflow.</p></div>
@@ -75,10 +76,12 @@
               <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
               <div><code>screening_id</code><span>UUID</span><span>Unique screening reference.</span></div>
               <div><code>summary.outcome</code><span>string</span><span>Potential match, no material results, or inconclusive when required processing is incomplete.</span></div>
-              <div><code>summary.risk_level</code><span>string</span><span>High, intermediate, low, no material results, or indeterminate for an incomplete run.</span></div>
+              <div><code>summary.risk_level</code><span>string</span><span>High, review, safe, no material results, or indeterminate for an incomplete run.</span></div>
+              <div><code>summary.thresholds</code><span>object</span><span>The applied High Risk and Review percentages and the Safe boundary.</span></div>
+              <div><code>summary.risk_distribution</code><span>object</span><span>Counts of retained results in the High Risk, Review, and Safe bands.</span></div>
               <div><code>summary.categories</code><span>object</span><span>Count of results by adverse-event category.</span></div>
               <div><code>status</code><span>string</span><span><code>completed</code> only when every configured search and AI review stage succeeds; otherwise <code>partial</code>.</span></div>
-              <div><code>summary.threshold_status</code><span>string</span><span>Review required, within threshold, or incomplete coverage.</span></div>
+              <div><code>summary.threshold_status</code><span>string</span><span>High risk, review required, safe, or incomplete coverage.</span></div>
               <div><code>summary.decision_eligible</code><span>boolean</span><span>False whenever the run is partial and must not be treated as a completed compliance decision.</span></div>
               <div><code>coverage</code><span>object</span><span>Overall completeness, geographic scope, languages, dates, search time, and explicit limitations.</span></div>
               <div><code>coverage.sources</code><span>object[]</span><span>Provider-neutral status for current news, open web, Search+ publisher search, archive, and official-record coverage.</span></div>
@@ -142,7 +145,8 @@
                 <label>Countries <code>countries</code><input id="countries" type="text" placeholder="AE, SA, QA" maxlength="80" /></label>
                 <label>From date <code>date_from</code><input id="date-from" type="date" /></label>
                 <label>To date <code>date_to</code><input id="date-to" type="date" /></label>
-                <label>Acceptable risk threshold <code>risk_threshold</code><input id="risk-threshold" type="number" min="0" max="100" step="1" value="65" /><small class="field-help">Percentage score at or above which review is required.</small></label>
+                <label>High Risk threshold <code>high_risk_threshold_percent</code><input id="high-risk-threshold" type="number" min="1" max="100" step="1" value="90" /><small class="field-help">Results at or above this percentage are High Risk.</small></label>
+                <label>Review threshold <code>review_threshold_percent</code><input id="review-threshold" type="number" min="0" max="100" step="1" value="65" /><small class="field-help">Results from this percentage up to High Risk require Review. Anything lower is Safe.</small></label>
                 <label>Maximum results <code>max_results</code><input id="max-results" type="number" min="1" max="50" value="25" /></label>
                 <label><span>Search+ <code>search_plus</code></span><span><input id="search-plus" type="checkbox" /> Run publisher-targeted searches</span><small class="field-help">Prioritises requested countries and curated specialist sources, and records the exact publishers searched. Provider indexes can omit articles, so this is not a direct crawl of all 1,500 publishers.</small></label>
                 <label><span>Deep research <code>deep_research</code></span><span><input id="deep-research" type="checkbox" /> Queue an asynchronous signed callback</span></label>
