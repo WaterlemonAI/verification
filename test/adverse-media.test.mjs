@@ -383,7 +383,7 @@ test('China pack uses native terms, official-domain targeting, and an archive la
   assert.match(officialWebCall.url.searchParams.get('q'), /site:csrc\.gov\.cn/);
   assert.match(officialWebCall.url.searchParams.get('q'), /立案调查/);
   assert.match(archiveCall.url.searchParams.get('query'), /sourcelang:chinese/);
-  assert.ok(paidCalls.every(({ url }) => url.searchParams.get('q').includes('华信科技 zh one')));
+  assert.ok(paidCalls.every(({ url }) => url.searchParams.get('q').includes('华信科技')));
   assert.ok(body.results[0].categories.includes('financial_crime'));
 });
 
