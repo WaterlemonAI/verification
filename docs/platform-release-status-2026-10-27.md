@@ -15,7 +15,7 @@
 
 ## Verified locally
 
-- Integrated Node suite passed 143/143 before the latest Form checkpoint and target-burst tests. Focused Form suite passed 17/17 and capacity suite passed 7/7 afterward; the full final-SHA suite is running. JavaScript syntax, diff checks and Bicep build passed on the candidate.
+- Integrated Node suite passed 146/146 after the Form checkpoint and target-burst tests. Focused Form suite passed 17/17 and capacity suite passed 7/7. JavaScript syntax, diff checks and Bicep build passed on the candidate. PR #77 now runs a clean GitHub test job on updates; its first run is pending at the time of this record.
 - A controlled failing-callback test causes one screening's provider calls and zero additional Brave/Gemini calls on delivery retries. Form duplicate submission and prepaid tests show one queue write and one USD 0.20 reservation across first acceptance plus replay; failed queue admission is refunded.
 - The 100-request burst mix (10+10+20+30+30) completed in a local capacity harness without exceeding global or service concurrency. This is a capacity test, not a hosted load benchmark or supplier performance guarantee.
 
