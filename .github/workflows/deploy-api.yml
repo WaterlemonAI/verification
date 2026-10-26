@@ -22,6 +22,11 @@ on:
       - infrastructure/api-bank-statement-platform.bicep
       - .github/workflows/deploy-api.yml
   workflow_dispatch:
+    inputs:
+      enableDeepResearchWorker:
+        description: Enable the adverse-media deep-research worker after reviewing legacy jobs and live smoke results
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -128,7 +133,8 @@ jobs:
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
-              appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}"
+              appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}" \
+              enableDeepResearchWorker="${{ inputs.enableDeepResearchWorker && 'true' || 'false' }}"
 
       - name: Deploy digest-pinned API revision
         run: |
@@ -147,6 +153,7 @@ jobs:
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
               appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}" \
+              enableDeepResearchWorker="${{ inputs.enableDeepResearchWorker && 'true' || 'false' }}" \
             --query properties.outputs \
             --output json > api-deployment-outputs.json
 
