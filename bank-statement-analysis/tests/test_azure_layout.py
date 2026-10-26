@@ -138,6 +138,19 @@ def test_layout_requires_provider_result_deletion():
     assert session.calls[-1][0] == "DELETE"
 
 
+def test_layout_uses_managed_identity_bearer_token_without_a_local_key():
+    session = Session()
+    managed = AzureLayoutExtractor(endpoint=ENDPOINT, token_provider=lambda: "managed-token",
+                                   resource_region="uaenorth", approved_region="uaenorth",
+                                   approved=True, max_pages=2, max_cost_usd="0.01",
+                                   estimated_page_cost_usd="0", session=session,
+                                   poll_interval=0, max_polls=2)
+    managed.analyze(DocumentInput(documentId="doc_fixture", data=blank_pdf()))
+    headers = session.calls[0][2]["headers"]
+    assert headers["Authorization"] == "Bearer managed-token"
+    assert "Ocp-Apim-Subscription-Key" not in headers
+
+
 def test_layout_fixture_uses_same_provider_neutral_contract():
     response = layout_payload()["analyzeResult"]
     page = response["pages"][0]

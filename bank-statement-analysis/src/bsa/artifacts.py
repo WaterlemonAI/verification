@@ -58,10 +58,11 @@ def generate(directory: Path, result: dict, *, pdf_requested: bool = False,
 
         output = BytesIO()
         pdf = canvas.Canvas(output, pagesize=A4)
-        pdf.setTitle("AI7 Bank Statement Analysis - Local Audit")
-        lines = ["AI7 BANK STATEMENT ANALYSIS - LOCAL AUDIT",
+        pdf.setTitle("AI7 Bank Statement Analysis - Audit Report")
+        lines = ["AI7 BANK STATEMENT ANALYSIS - AUDIT REPORT",
                  f"Analysis: {result['analysisId']}", f"Status: {result['status']}",
-                 "Decision eligible: no (local demo)",
+                 f"Decision eligible: {'yes' if result.get('decisionEligible') else 'no'}",
+                 f"Processing location: {os.getenv('AZURE_REGION_DISPLAY', 'Microsoft Azure UAE North')}",
                  f"Pages: {result.get('coverage', {}).get('pageCount', 0)}",
                  f"Segments: {len(result.get('segments', []))}",
                  f"Transactions: {result.get('coverage', {}).get('transactionCount', 0)}",

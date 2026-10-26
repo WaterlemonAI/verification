@@ -23,9 +23,15 @@ def configured_layout_extractor():
         max_pages = int(os.getenv("BSA_MANAGED_MAX_PAGES", "0"))
     except ValueError:
         max_pages = 0
+    token_provider = None
+    if not os.getenv("BSA_AZURE_LAYOUT_KEY"):
+        from azure.identity import ManagedIdentityCredential
+        credential = ManagedIdentityCredential(client_id=os.getenv("BSA_WORKER_IDENTITY_CLIENT_ID"))
+        token_provider = lambda: credential.get_token("https://cognitiveservices.azure.com/.default").token
     return AzureLayoutExtractor(
         endpoint=os.getenv("BSA_AZURE_LAYOUT_ENDPOINT"),
         api_key=os.getenv("BSA_AZURE_LAYOUT_KEY"),
+        token_provider=token_provider,
         resource_region=os.getenv("BSA_AZURE_LAYOUT_REGION"),
         approved_region=os.getenv("BSA_APPROVED_PROCESSING_REGION"),
         approved=True, max_pages=max_pages,
@@ -39,7 +45,7 @@ def run(directory: Path) -> None:
     inputs = json.loads((directory / "inputs.json").read_text(encoding="utf-8"))
     files = [(item["mediaType"], decrypt((directory / f"input-{item['index']}.bin").read_bytes())) for item in inputs]
     fields = json.loads(decrypt((directory / "fields.bin").read_bytes()))
-    malware_gate = "not_configured_local_demo"
+    malware_gate = "not_configured" if os.getenv("BSA_AZURE_WORKER") == "1" else "not_configured_local_demo"
     try:
         malware_gate = scan_inputs(files)
         document = normalize_inputs(files)
@@ -80,8 +86,10 @@ def run(directory: Path) -> None:
                 for code in result["reasonCodes"] if code in
                 {"VISUAL_TEXT_LAYER_MISMATCH", "VISUAL_TEXT_CHECK_INCOMPLETE"})
     result.setdefault("quality", {})["malwareGate"] = malware_gate
-    if malware_gate == "not_configured_local_demo":
-        result.setdefault("limitations", []).append("Malware scanning was not configured in this local demo.")
+    if malware_gate in {"not_configured", "not_configured_local_demo"}:
+        result.setdefault("limitations", []).append(
+            "Malware scanning was not configured for this run." if malware_gate == "not_configured"
+            else "Malware scanning was not configured in this local demo.")
     result["creditAssessment"] = assess(result, fields.get("creditModels", []))
     result["artifacts"] = generate(directory, result, pdf_requested=fields.get("getPdf", False),
                                    xlsx_requested=fields.get("getXlsx", False))

@@ -1,13 +1,13 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "AI7 Bank Statement Analysis local demo",
-    "version": "0.1.0-local",
-    "description": "Local development contract only. The BSA API is not deployed or available on api.ai7uae.com. Results are decision support and always decision-ineligible in this demo."
+    "title": "AI7 Bank Statement Analysis API",
+    "version": "1.0.0",
+    "description": "Asynchronous, tenant-isolated bank statement extraction and analysis in Microsoft Azure UAE North. Results are decision support and require human review."
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:18080"
+      "url": "https://api.ai7uae.com"
     }
   ],
   "security": [
@@ -18,7 +18,7 @@
   "paths": {
     "/service/bank_statement_analysis": {
       "post": {
-        "summary": "Queue a local statement analysis",
+        "summary": "Queue a bank statement analysis",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -111,7 +111,7 @@
         },
         "responses": {
           "202": {
-            "description": "Accepted for asynchronous local processing.",
+            "description": "Accepted for asynchronous processing.",
             "content": {
               "application/json": {
                 "schema": {
@@ -121,7 +121,7 @@
             }
           },
           "400": {
-            "description": "Invalid fields or unsupported local option.",
+            "description": "Invalid fields or an unsupported option.",
             "content": {
               "application/json": {
                 "schema": {
@@ -137,7 +137,7 @@
             "description": "Idempotency key reused with a different request."
           },
           "413": {
-            "description": "Upload exceeds the local safety limit."
+            "description": "Upload exceeds the configured safety limit."
           },
           "415": {
             "description": "Unsupported file signature or MIME mismatch."

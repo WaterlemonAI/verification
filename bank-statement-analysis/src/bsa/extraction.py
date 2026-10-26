@@ -133,13 +133,14 @@ class AzureLayoutExtractor:
     model_id = "prebuilt-layout"
     version = "azure-layout-v4-2024-11-30"
 
-    def __init__(self, *, endpoint: str | None = None, api_key: str | None = None,
+    def __init__(self, *, endpoint: str | None = None, api_key: str | None = None, token_provider=None,
                  resource_region: str | None = None, approved_region: str | None = None,
                  approved: bool = False, max_pages: int | None = None,
                  max_cost_usd: str | None = None, estimated_page_cost_usd: str | None = None,
                  session=None, poll_interval: float = 0.5, max_polls: int = 60):
         self.endpoint = (endpoint or "").rstrip("/")
         self.api_key = api_key or ""
+        self.token_provider = token_provider
         self.resource_region = resource_region or ""
         self.approved_region = approved_region or ""
         self.approved = approved
@@ -153,14 +154,14 @@ class AzureLayoutExtractor:
     def _gate(self, document: DocumentInput) -> None:
         if not self.approved or not self.approved_region or self.resource_region != self.approved_region:
             raise ValueError("MANAGED_EXTRACTION_NOT_APPROVED")
-        if not self.api_key or not self.max_pages or self.max_pages < 1:
+        if (not self.api_key and not self.token_provider) or not self.max_pages or self.max_pages < 1:
             raise ValueError("MANAGED_EXTRACTION_NOT_CONFIGURED")
         try:
             ceiling = Decimal(self.max_cost_usd or "")
             page_cost = Decimal(self.estimated_page_cost_usd or "")
         except InvalidOperation as error:
             raise ValueError("MANAGED_EXTRACTION_COST_POLICY_MISSING") from error
-        if not ceiling.is_finite() or not page_cost.is_finite() or ceiling <= 0 or page_cost <= 0:
+        if not ceiling.is_finite() or not page_cost.is_finite() or ceiling <= 0 or page_cost < 0:
             raise ValueError("MANAGED_EXTRACTION_COST_POLICY_MISSING")
         parsed = urlparse(self.endpoint)
         if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
@@ -248,7 +249,11 @@ class AzureLayoutExtractor:
         self._gate(document)
         analyze_url = (f"{self.endpoint}/documentintelligence/documentModels/{self.model_id}:analyze"
                        f"?_overload=analyzeDocument&api-version={self.api_version}")
-        headers = {"Ocp-Apim-Subscription-Key": self.api_key, "Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Ocp-Apim-Subscription-Key"] = self.api_key
+        else:
+            headers["Authorization"] = f"Bearer {self.token_provider()}"
         operation_url = None
         deletion_failed = False
         try:

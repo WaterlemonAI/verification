@@ -112,7 +112,9 @@ test('admin console uses its signed session and CSRF protection for the local de
   assert.match(html, /Bank statements/);
   assert.match(html, /id="bsa-capabilities"/);
   assert.equal((await fetch(`${url}/admin/bsa-synthetic-combined.pdf`)).status, 404);
-  assert.equal((await fetch(`${url}/bank-statement-analysis`)).status, 404);
+  const publicPage = await fetch(`${url}/bank-statement-analysis`);
+  assert.equal(publicPage.status, 200);
+  assert.match(await publicPage.text(), /Bank statement analysis/);
 });
 
 test('local demo assets and routes are hidden when the feature gate is off', async () => {

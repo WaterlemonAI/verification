@@ -26,7 +26,7 @@ import {
   PORTAL_COOKIE, clearPortalCookie, createPortalAccount, createPortalSession,
   portalCookie, safePortalAccount, verifyPortalPassword, verifyPortalSession
 } from './lib/portal-auth.mjs';
-import { bsaLocalEnabled, createBsaJob, getBsaJob, getBsaResult, getBsaArtifact } from './lib/bsa-local-store.mjs';
+import { bsaEnabled, bsaMode, bsaCapabilities, createBsaJob, getBsaJob, getBsaResult, getBsaArtifact } from './lib/bsa-store.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -908,7 +908,7 @@ function wantsHtml(req) {
 }
 
 function protectedPortalPath(pathname) {
-  return ['/', '/iban', '/iban/', '/entity-search', '/entity-search/', '/adverse-media', '/adverse-media/', '/merchant-screening', '/merchant-screening/', '/forms', '/forms/'].includes(pathname);
+  return ['/', '/iban', '/iban/', '/entity-search', '/entity-search/', '/adverse-media', '/adverse-media/', '/merchant-screening', '/merchant-screening/', '/bank-statement-analysis', '/bank-statement-analysis/', '/forms', '/forms/'].includes(pathname);
 }
 
 function portalLoginRedirect(res, pathname, search = '') {
@@ -1106,7 +1106,7 @@ function serveStatic(res, directory, requestPath) {
 }
 
 async function handleBsa(req, res, url, store, adminAccount = null) {
-  if (!bsaLocalEnabled()) return json(res, 503, { status: 'Error', reasonCode: 'BSA_LOCAL_ONLY', error: 'Bank statement analysis is available in the local demo.' });
+  if (!bsaEnabled()) return json(res, 503, { status: 'Error', reasonCode: 'BSA_UNAVAILABLE', error: 'Bank statement analysis is not configured.' });
   if (!/^[0-9a-fA-F]{64}$/.test(process.env.BSA_DATA_KEY_HEX || '')) return json(res, 503, { status: 'Error', reasonCode: 'BSA_ENCRYPTION_UNAVAILABLE' });
   const admin = Boolean(adminAccount);
   const token = admin ? null : bearerToken(req);
@@ -1114,6 +1114,8 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
   const ownerId = reportOwnerId(admin ? `admin:${adminAccount.email}` : token);
   const rootPath = admin ? '/admin/api/bsa' : '/service/bank_statement_analysis';
   if (admin && req.method === 'GET' && url.pathname === `${rootPath}/config`) {
+    const managed = bsaCapabilities();
+    if (managed) return json(res, 200, managed);
     let engines = {};
     let workerOnline = false;
     try {
@@ -1121,7 +1123,7 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
       workerOnline = Date.now() - statSync(path).mtimeMs < 15 * 1000;
       if (workerOnline) engines = JSON.parse(readFileSync(path, 'utf8'));
     } catch { /* Worker has not published readiness. */ }
-    return json(res, 200, { enabled: workerOnline, mode: 'local', engines });
+    return json(res, 200, { enabled: workerOnline, mode: bsaMode(), engines });
   }
   const artifactMatch = new RegExp(`^${rootPath}/(bsa_[0-9a-f-]{36})/artifacts/(ledger\\.json|transactions\\.parquet|audit\\.pdf|analysis\\.xlsx)$`).exec(url.pathname);
   if (req.method === 'GET' && artifactMatch) {
@@ -1318,7 +1320,7 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
         return res.end(spec);
       }
-      if (url.pathname === '/bank-statement-analysis/openapi.json' && bsaLocalEnabled()) {
+      if (url.pathname === '/bank-statement-analysis/openapi.json' && bsaEnabled()) {
         const spec = readFileSync(join(root, 'bank-statement-analysis', 'openapi.local.json'));
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'no-store' });
         return res.end(spec);
@@ -1334,18 +1336,19 @@ export function createAppServer({ store = createStore(), fetchImpl = fetch, deep
         const { session } = await currentPortalSession(req, store);
         if (!session) return portalLoginRedirect(res, url.pathname, url.search);
       }
-      if (url.pathname === '/bank-statement-analysis' || url.pathname === '/bank-statement-analysis/'
+      if ((!bsaEnabled() && (url.pathname === '/bank-statement-analysis' || url.pathname === '/bank-statement-analysis/'))
         || /^\/bsa-demo\.(?:html|css|js)$/.test(url.pathname)
         || url.pathname === '/bsa-synthetic-combined.pdf') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }
-      if (!bsaLocalEnabled() && url.pathname === '/bank-statement-analysis/openapi.json') {
+      if (!bsaEnabled() && url.pathname === '/bank-statement-analysis/openapi.json') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }
       if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
       if (directory.endsWith('api-site') && (url.pathname === '/merchant-screening' || url.pathname === '/merchant-screening/')) return serveStatic(res, directory, '/merchant-screening.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/bank-statement-analysis' || url.pathname === '/bank-statement-analysis/')) return serveStatic(res, directory, '/bank-statement-analysis.html');
       if (directory.endsWith('api-site') && (url.pathname === '/forms' || url.pathname === '/forms/' || /^\/forms\/[a-z0-9-]+\/?$/.test(url.pathname))) return serveStatic(res, directory, '/forms.html');
       return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
     } catch {

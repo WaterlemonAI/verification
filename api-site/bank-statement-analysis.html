@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071412" />
+    <meta name="description" content="AI7 UAE Bank Statement Analysis API documentation and live tester." />
+    <title>AI7 UAE API — Bank Statement Analysis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/api.css?v=7" />
+    <script src="/portal-auth.js?v=2" defer></script>
+    <script src="/bank-statement-analysis.js?v=1" defer></script>
+  </head>
+  <body>
+    <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
+    <a class="skip-link" href="#docs">Skip to documentation</a>
+    <header>
+      <a class="brand" href="https://ai7uae.com" aria-label="KYCProbe home"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a>
+      <span class="status"><i></i> API available</span>
+    </header>
+
+    <main id="docs">
+      <section class="hero">
+        <p class="eyebrow">FINANCIAL DOCUMENT ANALYSIS / UAE</p>
+        <h1>Bank statement<br /><em>analysis.</em></h1>
+        <p>Extract, reconcile, and analyse bank-statement transactions with private asynchronous processing in Microsoft Azure UAE North.</p>
+        <div class="meta"><span>POST</span><code>/service/bank_statement_analysis</code><button class="copy" data-copy="https://api.ai7uae.com/service/bank_statement_analysis">Copy endpoint</button></div>
+      </section>
+
+      <section class="layout">
+        <aside aria-label="On this page">
+          <p>ON THIS PAGE</p>
+          <a href="#authentication">Authentication</a>
+          <a href="#request">Request</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#responses">Responses</a>
+          <a href="#tester">Live tester</a>
+        </aside>
+
+        <div class="content">
+          <article id="authentication">
+            <p class="label">AUTHENTICATION</p>
+            <h2>Use your AI7 credential</h2>
+            <p>Send your personal AI7 API key as a Bearer token. The same credential works across every enabled verification API.</p>
+            <div class="code-block"><code>Authorization: Bearer YOUR_AI7_API_KEY</code><button class="copy" data-copy="Authorization: Bearer YOUR_AI7_API_KEY">Copy</button></div>
+          </article>
+
+          <article id="request">
+            <p class="label">REQUEST</p>
+            <h2>Upload one statement or an image bundle</h2>
+            <p>Use <code>multipart/form-data</code> and a unique <code>Idempotency-Key</code>. Upload one PDF or ordered PNG, JPEG, or TIFF pages. Total upload size is limited to 25 MiB.</p>
+            <div class="field-grid">
+              <div><strong>statement_file</strong><span>binary · required</span><p>One PDF or multiple ordered images.</p></div>
+              <div><strong>country_code</strong><span>string · required</span><p>Currently locked to <code>AE</code>.</p></div>
+              <div><strong>entity_type</strong><span>enum · required</span><p><code>individual</code>, <code>sole_proprietor</code>, or <code>company</code>.</p></div>
+              <div><strong>declared_names</strong><span>JSON array · optional</span><p>Names supplied for comparison; they are not treated as verified facts.</p></div>
+              <div><strong>declared_employer</strong><span>string · optional</span><p>Employer declared by the applicant.</p></div>
+              <div><strong>declared_monthly_income</strong><span>decimal string · optional</span><p>Declared income with a three-letter currency.</p></div>
+              <div><strong>credit_models</strong><span>JSON array · optional</span><p>Selected transparent review models; no automatic credit decision is returned.</p></div>
+              <div><strong>get_pdf / get_xlsx</strong><span>boolean · optional</span><p>Create authenticated audit-report and workbook artifacts.</p></div>
+            </div>
+            <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
+            <div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div>
+            <p><a href="/bank-statement-analysis/openapi.json" target="_blank" rel="noopener">Open the complete OpenAPI 3.1 contract ↗</a></p>
+          </article>
+
+          <article id="workflow">
+            <p class="label">ASYNC WORKFLOW</p>
+            <h2>Submit, poll, then download</h2>
+            <p>The submit endpoint returns <code>202 Accepted</code> with an <code>analysisId</code>, <code>statusUrl</code>, and <code>resultUrl</code>. Poll the result URL until it returns <code>200</code>. A <code>202</code> response means processing is still in progress.</p>
+            <p>Source documents, job state, and artifacts are tenant-isolated and encrypted. Azure Document Intelligence uses managed identity; no supplier access key is exposed to clients or stored in the application.</p>
+          </article>
+
+          <article id="responses">
+            <p class="label">RESPONSE</p>
+            <h2>Reconciled evidence and review signals</h2>
+            <div class="schema-table" aria-label="Bank statement analysis response fields">
+              <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
+              <div><code>analysisId</code><span>string</span><span>Unique analysis reference.</span></div>
+              <div><code>status</code><span>enum</span><span><code>completed</code>, <code>partial</code>, or <code>failed</code>.</span></div>
+              <div><code>decisionEligible</code><span>boolean</span><span>Whether evidence is complete enough for downstream decisioning. Human review remains required.</span></div>
+              <div><code>segments</code><span>object[]</span><span>Account, currency, period, balances, reconciliation, and canonical transactions.</span></div>
+              <div><code>features</code><span>object</span><span>Observed income streams, cash flow, obligations, liquidity, transfers, and duplicates.</span></div>
+              <div><code>findings</code><span>object[]</span><span>Explainable review signals with source evidence.</span></div>
+              <div><code>creditAssessment</code><span>object</span><span>Selected formulas, inputs, observations, and missing-data notices.</span></div>
+              <div><code>artifacts</code><span>object[]</span><span>Authenticated ledger, Parquet, PDF, and XLSX downloads when generated.</span></div>
+              <div><code>reasonCodes</code><span>string[]</span><span>Explicit quality, coverage, or processing limitations.</span></div>
+            </div>
+            <h3>Status codes</h3>
+            <div class="responses">
+              <div><b class="ok">202</b><span>Accepted or still processing</span></div>
+              <div><b class="ok">200</b><span>Status or final result returned</span></div>
+              <div><b>400</b><span>Invalid multipart fields or options</span></div>
+              <div><b>401</b><span>Missing or invalid AI7 API key</span></div>
+              <div><b>409</b><span>Idempotency key reused with different content</span></div>
+              <div><b>413 / 415</b><span>Upload too large or unsupported file type</span></div>
+            </div>
+          </article>
+
+          <article id="tester" class="tester">
+            <p class="label">LIVE TESTER</p>
+            <h2>Run a bank statement analysis</h2>
+            <p>The tester creates a fresh idempotency key, submits the encrypted job, polls the private result, and shows the full JSON response.</p>
+            <form id="bsa-form" novalidate>
+              <label>AI7 API key<input id="api-key" type="password" autocomplete="off" placeholder="Paste your API key" required /></label>
+              <label>Statement file(s) <code>statement_file</code><input id="statement-file" type="file" accept="application/pdf,image/png,image/jpeg,image/tiff" multiple required /></label>
+              <div class="input-grid">
+                <label>Country <code>country_code</code><input id="country-code" value="AE" readonly /></label>
+                <label>Entity type <code>entity_type</code><select id="entity-type"><option value="individual">Individual</option><option value="sole_proprietor">Sole proprietor</option><option value="company">Company</option></select></label>
+                <label>Declared names <code>declared_names</code><textarea id="declared-names" rows="3" placeholder="One name per line"></textarea></label>
+                <label>Declared employer <code>declared_employer</code><input id="declared-employer" maxlength="150" /></label>
+                <label>Declared monthly income <code>declared_monthly_income</code><input id="declared-income" inputmode="decimal" placeholder="25000.00" /></label>
+                <label>Income currency <code>declared_income_currency</code><input id="income-currency" value="AED" maxlength="3" /></label>
+                <label>Customer reference <code>customer_reference</code><input id="customer-reference" maxlength="128" /></label>
+                <label class="inline-toggle"><span>Audit PDF <code>get_pdf</code></span><span><input id="get-pdf" type="checkbox" checked /> Generate PDF</span></label>
+                <label class="inline-toggle"><span>Review workbook <code>get_xlsx</code></span><span><input id="get-xlsx" type="checkbox" /> Generate XLSX</span></label>
+              </div>
+              <fieldset>
+                <legend>Statement-based review models</legend>
+                <div class="input-grid">
+                  <label class="inline-toggle"><span><input name="credit-model" type="checkbox" value="residual_cash_flow" checked /> Residual cash flow</span></label>
+                  <label class="inline-toggle"><span><input name="credit-model" type="checkbox" value="income_variability" checked /> Income variability</span></label>
+                  <label class="inline-toggle"><span><input name="credit-model" type="checkbox" value="liquidity_runway" /> Liquidity runway</span></label>
+                  <label class="inline-toggle"><span><input name="credit-model" type="checkbox" value="uae_dbr" /> UAE DBR observation</span></label>
+                  <label class="inline-toggle"><span><input name="credit-model" type="checkbox" value="business_dscr" /> Business DSCR observation</span></label>
+                </div>
+              </fieldset>
+              <p class="form-error" id="form-error" role="alert"></p>
+              <button type="submit" id="send-request">Start analysis <span>→</span></button>
+            </form>
+            <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
+            <div class="response-actions"><button class="copy" id="copy-response" disabled>Copy JSON</button><span id="artifact-actions"></span></div>
+            <pre id="response-json" aria-live="polite">{
+  "message": "Your JSON response will appear here."
+}</pre>
+          </article>
+        </div>
+      </section>
+    </main>
+    <footer><div><strong>AI7 UAE Verification API</strong><span>AI7LAB Tech Innovation Limited · DIFC, Dubai, UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">Parent company</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a><a href="https://ai7uae.com">ai7uae.com</a></div></footer>
+  </body>
+</html>

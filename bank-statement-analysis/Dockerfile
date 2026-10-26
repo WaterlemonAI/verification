@@ -14,4 +14,4 @@ USER bsa
 ENV PYTHONPATH=/app/src
 ENV BSA_OCR_MODEL_ROOT=/app/models
 ENV BSA_PADDLE_MODEL_ROOT=/app/paddle-models
-CMD ["python", "-m", "bsa.worker", "--watch", "--data-dir", "/data"]
+CMD ["sh", "-c", "if [ \"${BSA_AZURE_WORKER:-0}\" = \"1\" ]; then exec python -m bsa.azure_worker; else exec python -m bsa.worker --watch --data-dir /data; fi"]
