@@ -47,6 +47,15 @@ def test_callback_target_rejects_non_https_credentials_and_private_dns(monkeypat
         callback_module._public_https_target("https://example.com/hook")
 
 
+def test_callback_target_prefers_public_ipv4_for_dual_stack_azure_egress(monkeypatch):
+    monkeypatch.setattr(callback_module.socket, "getaddrinfo", lambda *_args, **_kwargs: [
+        (10, 1, 6, "", ("2606:4700::6810:85e5", 443, 0, 0)),
+        (2, 1, 6, "", ("104.16.133.229", 443)),
+    ])
+    _target, address = callback_module._public_https_target("https://webhook.example/hook")
+    assert address == "104.16.133.229"
+
+
 class _Download:
     def __init__(self, value):
         self.value = value
