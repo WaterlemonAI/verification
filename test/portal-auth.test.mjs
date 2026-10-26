@@ -71,6 +71,9 @@ test('portal signup verifies an AI7 key and creates an email/password session', 
   const loginHtml = await loginPage.text();
   assert.match(loginHtml, /kycprobe-logo-white\.png/);
   assert.match(loginHtml, /kycprobe-logo-dark\.png/);
+  const logo = await fetch(`${baseUrl}/assets/kycprobe-logo-white.png`);
+  assert.equal(logo.headers.get('content-type'), 'image/png');
+  assert.ok((await logo.arrayBuffer()).byteLength > 0);
 
   const badLogin = await fetch(`${baseUrl}/portal/api/auth/login`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
