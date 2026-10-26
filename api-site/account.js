@@ -62,6 +62,7 @@
         const status = document.createElement('span'); status.textContent = check.status;
         row.append(name, status); list.append(row);
       }
+      if (!result.checks.length) list.textContent = 'No APIs are enabled for this workspace.';
     } catch (error) { byId('health-status').textContent = error.message; }
   }
 
