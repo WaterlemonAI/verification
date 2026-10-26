@@ -627,6 +627,32 @@ test('deep research queues an optional signed HTTPS callback without exposing cr
   }
 });
 
+test('all-source outage fails closed with a customer-safe reason and transaction ID', async () => {
+  const failedApp = createAppServer({ store, startWorker: false, deepResearchQueue: null,
+    fetchImpl: async (input) => {
+      const host = new URL(input).hostname;
+      if (host === 'api.search.brave.com') return Response.json({ error: 'billing' }, { status: 402 });
+      if (host === 'api.gdeltproject.org') return new Response('rate limited', { status: 429 });
+      throw new Error('source_offline');
+    } });
+  await new Promise((resolve) => failedApp.listen(0, '127.0.0.1', resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${failedApp.address().port}/service/adverse_media`, {
+      method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ entity_type: 'individual', name: 'Synthetic Outage Subject', languages: ['en'], regions: [] })
+    });
+    assert.equal(response.status, 502);
+    assert.match(response.headers.get('x-ai7-transaction-id'), /^[a-f0-9-]{36}$/);
+    const body = await response.json();
+    assert.equal(body.reason_code, 'SEARCH_SOURCES_UNAVAILABLE');
+    assert.equal(JSON.stringify(body).includes('billing'), false);
+    assert.equal(JSON.stringify(body).includes('Synthetic Outage Subject'), false);
+    assert.equal(JSON.stringify(body).includes('private-search-key'), false);
+  } finally {
+    await new Promise((resolve) => failedApp.close(resolve));
+  }
+});
+
 test('public documentation exposes the complete route without provider or key details', async () => {
   const config = await (await fetch(`${appUrl}/service/adverse_media/config`)).json();
   assert.equal(config.maximum_ai_candidates, 15);

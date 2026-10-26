@@ -7,6 +7,7 @@ process.env.NODE_ENV = 'test';
 process.env.API_PUBLIC_BASE_URL = 'https://api.ai7uae.com';
 const { consolidateFormServiceResults, createAppServer, evaluateFormServiceQualification, executeFormsJob } = await import('../server.mjs');
 const { EnvironmentStore } = await import('../lib/api-store.mjs');
+const { MemoryCustomerUsageStore } = await import('../lib/customer-usage.mjs');
 const { MemoryAdverseMediaReportStore } = await import('../lib/adverse-media-report-store.mjs');
 const { resolveFormServiceInput, validateFormDefinition } = await import('../lib/forms.mjs');
 const { startFormsWorker } = await import('../lib/forms-queue.mjs');
@@ -15,6 +16,7 @@ const adminKey = 'forms_admin_test_key';
 process.env.AI7_ADMIN_KEY_HASHES = createHash('sha256').update(adminKey).digest('hex');
 const store = new EnvironmentStore();
 const reportStore = new MemoryAdverseMediaReportStore();
+const usageStore = new MemoryCustomerUsageStore();
 let queuedJob;
 let app;
 let baseUrl;
@@ -57,6 +59,7 @@ before(async () => {
   app = createAppServer({
     store,
     reportStore,
+    usageStore,
     formsQueue: { async enqueue(job) { queuedJob = job; } },
     startWorker: false,
     fetchImpl: async (_url, options) => new Response(JSON.stringify({ matched: true, received: JSON.parse(options.body) }), {
@@ -120,6 +123,28 @@ test('one customer credential queues one signed multi-API submission', async () 
   assert.equal(queuedJob.data.country, 'AE');
   assert.equal(queuedJob.form.id, 'vendor-onboarding');
   assert.equal(JSON.stringify(queuedJob).includes(issued.apiKey), false);
+});
+
+test('invalid Form input is logged but never billed or queued', async () => {
+  const issued = await store.createClient('Invalid Form customer');
+  const workspaceId = issued.client.workspaceId;
+  const previousJob = queuedJob;
+  const response = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ callback_url: 'https://8.8.8.8/callback', data: {} })
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /Company name is required/);
+  assert.equal(queuedJob, previousJob);
+  const account = await usageStore.account(workspaceId);
+  assert.equal(account.charged_calls, 0);
+  assert.deepEqual(account.counts, {});
+  const logs = await usageStore.logs(workspaceId);
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].response_code, 400);
+  assert.equal(logs[0].cost, '0.000000');
+  assert.equal(logs[0].transaction_id, response.headers.get('x-ai7-transaction-id'));
 });
 
 test('Forms execution returns exact nested responses and creates one permanent typed PDF', async () => {

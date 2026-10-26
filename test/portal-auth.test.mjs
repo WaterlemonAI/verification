@@ -68,6 +68,9 @@ test('one-time customer invitation creates a portal account and initial workspac
   const session = await fetch(`${baseUrl}/portal/api/auth/session`, { headers: { cookie } });
   assert.equal(session.status, 200);
   assert.equal((await session.json()).account.email, 'user@example.com');
+  const entitlements = await (await fetch(`${baseUrl}/portal/api/entitlements`, { headers: { cookie } })).json();
+  assert.equal(entitlements.allowed_modules.includes('bank-statement-analysis'), false);
+  assert.equal(entitlements.available_modules.includes('bank-statement-analysis'), false);
 
   const page = await fetch(`${baseUrl}/adverse-media`, { headers: { accept: 'text/html', cookie } });
   assert.equal(page.status, 200);
@@ -99,6 +102,41 @@ test('one-time customer invitation creates a portal account and initial workspac
   assert.equal(login.status, 200);
   const loginBody = await login.json();
   const loginCookie = sessionCookie(login);
+
+  const keyHeaders = { cookie: loginCookie, 'content-type': 'application/json', 'x-ai7-csrf': loginBody.csrf_token };
+  const noCsrfKey = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST', headers: { cookie: loginCookie, 'content-type': 'application/json' }, body: JSON.stringify({ label: 'Denied' }) });
+  assert.equal(noCsrfKey.status, 403);
+  const newKeyResponse = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST', headers: keyHeaders, body: JSON.stringify({ label: 'Integration test' }) });
+  assert.equal(newKeyResponse.status, 201);
+  const newKey = await newKeyResponse.json();
+  assert.equal(newKey.key.workspaceId, customerId);
+  assert.equal(newKey.key.ownerEmail, 'user@example.com');
+  assert.equal(await store.isClientKey(newKey.api_key), true);
+  assert.equal(await store.isClientKey(signupBody.api_key), true);
+  const rotatedResponse = await fetch(`${baseUrl}/portal/api/keys/${newKey.key.id}/rotate`, { method: 'POST', headers: keyHeaders });
+  assert.equal(rotatedResponse.status, 200);
+  const rotated = await rotatedResponse.json();
+  assert.equal(await store.isClientKey(newKey.api_key), false);
+  assert.equal(await store.isClientKey(rotated.api_key), true);
+  assert.equal(await store.isClientKey(signupBody.api_key), true);
+  const revokedResponse = await fetch(`${baseUrl}/portal/api/keys/${newKey.key.id}/revoke`, { method: 'POST', headers: keyHeaders });
+  assert.equal(revokedResponse.status, 200);
+  assert.equal(await store.isClientKey(rotated.api_key), false);
+  assert.equal(await store.isClientKey(signupBody.api_key), true);
+
+  const otherCustomerId = '0123456789abcdef';
+  const otherKey = await store.createClient('Other Customer', { workspaceId: otherCustomerId, label: 'Separate workspace' });
+  const crossWorkspace = await fetch(`${baseUrl}/portal/api/keys/${otherKey.client.id}/rotate`, { method: 'POST', headers: keyHeaders });
+  assert.equal(crossWorkspace.status, 404);
+  assert.equal(await store.isClientKey(otherKey.apiKey), true);
+
+  for (let index = 0; index < 19; index++) {
+    const response = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST', headers: keyHeaders, body: JSON.stringify({ label: `Limit test ${index}` }) });
+    assert.equal(response.status, 201);
+  }
+  const atLimit = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST', headers: keyHeaders, body: JSON.stringify({ label: 'Should be denied' }) });
+  assert.equal(atLimit.status, 409);
+  assert.equal((await store.listClients()).filter((item) => item.workspaceId === customerId && item.status === 'active').length, 20);
 
   const forbiddenLogout = await fetch(`${baseUrl}/portal/api/auth/logout`, { method: 'POST', headers: { cookie: loginCookie } });
   assert.equal(forbiddenLogout.status, 403);

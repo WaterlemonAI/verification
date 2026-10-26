@@ -33,6 +33,47 @@ test('inclusive rate tiers, prepaid balance, and postpay usage stay consistent',
   assert.equal((await usage.account(id, true)).balance, '0.000000');
 });
 
+test('large inclusive boundaries use the correct tier without making thousands of calls', async () => {
+  const usage = new MemoryCustomerUsageStore();
+  const id = 'aabbccddeeff0011';
+  const policy = validateUsagePolicy({ mode: 'postpay', currency: 'AED', allowed_modules: ['company-search'], rates: {
+    'company-search': [{ up_to: 10000, price: '0.150000' }, { up_to: 20000, price: '0.100001' }, { up_to: null, price: '0' }]
+  } }, new Set(['company-search']));
+  await usage.configure(id, policy, true);
+  for (const [prior, expected] of [[0, '0.150000'], [9999, '0.150000'], [10000, '0.100001'], [19999, '0.100001'], [20000, '0.000000']]) {
+    const account = usage.accounts.get(id);
+    usage.accounts.set(id, { ...account, countsJson: JSON.stringify({ 'company-search': prior }) });
+    const admitted = await usage.admit(id, { transactionId: `boundary-${prior}`, moduleIds: ['company-search'], method: 'POST', path: '/service/company_search' }, true);
+    assert.equal(admitted.allowed, true);
+    assert.equal(admitted.cost, expected);
+    assert.equal((await usage.account(id, true)).counts['company-search'], prior + 1);
+  }
+  assert.equal((await usage.account(id, true)).spent, '0.500002');
+});
+
+test('credit adjustments are auditable and currency stays locked after funding', async () => {
+  const usage = new MemoryCustomerUsageStore();
+  const id = 'bbccddeeff001122';
+  const base = validateUsagePolicy({ mode: 'prepaid', currency: 'AED', allowed_modules: [], rates: {} }, new Set());
+  await usage.configure(id, base, true);
+  await usage.addCredit(id, moneyMicros('0.000001'), true);
+  assert.equal((await usage.account(id, true)).balance, '0.000001');
+  const credits = await usage.credits(id);
+  assert.equal(credits.length, 1);
+  assert.equal(credits[0].amount, '0.000001');
+  assert.equal(credits[0].currency, 'AED');
+  assert.match(credits[0].credited_at, /^\d{4}-\d\d-\d\dT/);
+  await assert.rejects(usage.configure(id, { ...base, currency: 'USD' }, true), /Currency cannot change/);
+  assert.throws(() => moneyMicros('0.0000001'), /six places/);
+  assert.throws(() => moneyMicros('-1'), /non-negative/);
+  await usage.addCredit(id, moneyMicros('0.50'), true, { idempotencyKey: 'credit-test-1', actor: 'admin@example.test' });
+  await usage.addCredit(id, moneyMicros('0.50'), true, { idempotencyKey: 'credit-test-1', actor: 'admin@example.test' });
+  assert.equal((await usage.account(id, true)).balance, '0.500001');
+  assert.equal((await usage.credits(id)).length, 2);
+  assert.equal((await usage.credits(id)).find((item) => item.amount === '0.500000').actor, 'admin@example.test');
+  await assert.rejects(usage.addCredit(id, moneyMicros('0.51'), true, { idempotencyKey: 'credit-test-1' }), /different credit amount/);
+});
+
 test('Form admission reserves each selected module once and rejects missing access atomically', async () => {
   const usage = new MemoryCustomerUsageStore();
   const id = 'fedcba9876543210';
@@ -92,6 +133,42 @@ test('Azure account and log batch admits only one concurrent request against one
   assert.equal(attempts.filter((item) => item.statusCode === 402).length, 1);
   assert.equal((await usage.account(id, true)).balance, '0.000000');
   assert.equal((await usage.account(id, true)).counts['entity-search'], 1);
+});
+
+test('Azure credit adjustment retries are atomic and idempotent', async () => {
+  const entities = new Map();
+  let version = 0;
+  const key = (entity) => `${entity.partitionKey}/${entity.rowKey}`;
+  const fail = (statusCode) => Object.assign(new Error('table_conflict'), { statusCode });
+  const tableClient = {
+    async getEntity(partitionKey, rowKey) {
+      const value = entities.get(`${partitionKey}/${rowKey}`);
+      if (!value) throw fail(404);
+      return { ...value };
+    },
+    async createEntity(entity) {
+      if (entities.has(key(entity))) throw fail(409);
+      entities.set(key(entity), { ...entity, etag: String(++version) });
+    },
+    async submitTransaction(actions) {
+      const [update, create] = actions;
+      const current = entities.get(key(update[1]));
+      if (current.etag !== update[3].etag || entities.has(key(create[1]))) throw fail(412);
+      entities.set(key(update[1]), { ...update[1], etag: String(++version) });
+      entities.set(key(create[1]), { ...create[1], etag: String(++version) });
+    }
+  };
+  const usage = new AzureCustomerUsageStore({ tableClient });
+  const id = 'eeff001122334455';
+  const options = { idempotencyKey: 'stable-credit-request', actor: 'admin@example.test' };
+  const results = await Promise.all([
+    usage.addCredit(id, moneyMicros('1.25'), true, options),
+    usage.addCredit(id, moneyMicros('1.25'), true, options)
+  ]);
+  assert.deepEqual(results.map((item) => item.balance), ['1.250000', '1.250000']);
+  assert.equal([...entities.values()].filter((item) => item.rowKey.startsWith('credit-')).length, 1);
+  assert.equal((await usage.account(id, true)).balance, '1.250000');
+  await assert.rejects(usage.addCredit(id, moneyMicros('1.26'), true, options), /different credit amount/);
 });
 
 test('API admission enforces modules and credit before upstream, preserves response body, and logs HTTP codes', async (t) => {
