@@ -148,7 +148,7 @@ jobs:
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
 
       - name: Deploy isolated document OCR resources
-        if: vars.DOCUMENT_OCR_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.provisionDocumentOcrPlatform)
+        if: vars.DOCUMENT_OCR_ENABLED == 'true' || vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.provisionDocumentOcrPlatform)
         shell: bash
         run: |
           set -euo pipefail
@@ -180,6 +180,7 @@ jobs:
               bankStatementWorkerImage="${{ steps.bank_statement_image.outputs.image }}" \
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
@@ -201,6 +202,7 @@ jobs:
               bankStatementWorkerImage="${{ steps.bank_statement_image.outputs.image }}" \
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \

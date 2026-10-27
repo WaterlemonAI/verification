@@ -18,6 +18,9 @@ param documentOcrWorkerImage string = ''
 @description('Enable the eight document OCR APIs only after all sample and credential validation gates pass.')
 param enableDocumentOcr bool = false
 
+@description('Start the isolated document OCR worker before customer routes are enabled for queue and malware-gate smoke tests.')
+param enableDocumentOcrWorker bool = false
+
 @description('Resource ID of the existing AI7 UAE Container Apps environment.')
 param environmentId string
 
@@ -229,7 +232,7 @@ resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = {
   }
 }
 
-resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (enableDocumentOcr) {
+resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (enableDocumentOcr || enableDocumentOcrWorker) {
   name: 'ca-ai7uae-document-ocr-worker'
   location: location
   identity: {
@@ -291,7 +294,7 @@ resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (enable
   }
 }
 
-resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableDocumentOcr) {
+resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableDocumentOcr || enableDocumentOcrWorker) {
   name: 'caj-ai7uae-document-ocr-purge'
   location: location
   identity: {
