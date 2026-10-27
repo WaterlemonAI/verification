@@ -387,6 +387,33 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
 }
 
 async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore) {
+  const startedAt = Date.now();
+  let screeningResult;
+  let screeningFinishedAt;
+  const logMetrics = (reportStatus) => {
+    if (!screeningResult) return;
+    const usage = screeningResult.usage || {};
+    console.info('adverse_media_request_metrics', JSON.stringify({
+      transaction_id: res.getHeader('x-ai7-transaction-id'),
+      screening_id: screeningResult.screening_id,
+      status: screeningResult.status,
+      report_status: reportStatus,
+      screening_ms: screeningFinishedAt - startedAt,
+      report_ms: Date.now() - screeningFinishedAt,
+      total_ms: Date.now() - startedAt,
+      search_queries: usage.paid_search_queries || 0,
+      search_attempts: usage.paid_search_attempts || 0,
+      search_retries: Math.max(0, (usage.paid_search_attempts || 0) - (usage.paid_search_queries || 0)),
+      failed_search_queries: usage.failed_search_queries || 0,
+      free_search_queries: usage.free_search_queries || 0,
+      failed_free_search_queries: usage.failed_free_search_queries || 0,
+      source_status: screeningResult.coverage?.source_status,
+      classification_status: screeningResult.methodology?.ai_classification?.status,
+      classification_candidates: screeningResult.methodology?.ai_classification?.candidates_reviewed || 0,
+      estimated_variable_cost_usd: usage.estimated_total_variable_cost_usd || 0,
+      cache_hit: usage.cache_hit === true
+    }));
+  };
   const token = bearerToken(req);
   if (!req.ai7Client && !(await store.isClientKey(token))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
@@ -417,6 +444,8 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     const aiApiKey = await store.getMasterKey('adverse-media-ai');
     const costGuard = createScreeningCostGuard(fetchImpl);
     const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, fetchImpl, costGuard });
+    screeningResult = result;
+    screeningFinishedAt = Date.now();
     const response = await finalizeAdverseMediaReport({
       request,
       response: presentAdverseMediaResponse(result),
@@ -426,8 +455,17 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       fetchImpl: costGuard.fetch,
       reportStore
     });
+    logMetrics('completed');
     return json(res, 200, response);
   } catch (error) {
+    if (screeningResult) logMetrics('failed');
+    else console.warn('adverse_media_request_failure', JSON.stringify({
+      transaction_id: res.getHeader('x-ai7-transaction-id'),
+      elapsed_ms: Date.now() - startedAt,
+      failure_stage: error.message === 'search_provider_unavailable' ? 'search' : 'request_or_configuration',
+      provider_status: error.message === 'search_provider_unavailable' ? error.statusCode || 502 : null,
+      source_failures: error.message === 'search_provider_unavailable' ? error.sourceFailures || {} : undefined
+    }));
     if (error.message === 'search_provider_unavailable') {
       console.warn('adverse_media_search_unavailable', JSON.stringify({
         transaction_id: res.getHeader('x-ai7-transaction-id'),
