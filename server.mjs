@@ -390,6 +390,7 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
   const startedAt = Date.now();
   let screeningResult;
   let screeningFinishedAt;
+  let costGuard;
   const logMetrics = (reportStatus) => {
     if (!screeningResult) return;
     const usage = screeningResult.usage || {};
@@ -407,6 +408,10 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       failed_search_queries: usage.failed_search_queries || 0,
       free_search_queries: usage.free_search_queries || 0,
       failed_free_search_queries: usage.failed_free_search_queries || 0,
+      hosted_archive_attempts: usage.hosted_archive_attempts || 0,
+      hosted_archive_retries: usage.hosted_archive_retries || 0,
+      provider_calls: costGuard?.providerCalls || { brave: 0, gemini: 0 },
+      reserved_provider_cost_usd: costGuard?.reservedProviderCostUsd || 0,
       source_status: screeningResult.coverage?.source_status,
       classification_status: screeningResult.methodology?.ai_classification?.status,
       classification_candidates: screeningResult.methodology?.ai_classification?.candidates_reviewed || 0,
@@ -442,7 +447,7 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     const providerKey = await store.getMasterKey('adverse-media');
     if (!providerKey) return providerUnavailable(res);
     const aiApiKey = await store.getMasterKey('adverse-media-ai');
-    const costGuard = createScreeningCostGuard(fetchImpl);
+    costGuard = createScreeningCostGuard(fetchImpl);
     const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, fetchImpl, costGuard });
     screeningResult = result;
     screeningFinishedAt = Date.now();
@@ -464,7 +469,9 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       elapsed_ms: Date.now() - startedAt,
       failure_stage: error.message === 'search_provider_unavailable' ? 'search' : 'request_or_configuration',
       provider_status: error.message === 'search_provider_unavailable' ? error.statusCode || 502 : null,
-      source_failures: error.message === 'search_provider_unavailable' ? error.sourceFailures || {} : undefined
+      source_failures: error.message === 'search_provider_unavailable' ? error.sourceFailures || {} : undefined,
+      provider_calls: costGuard?.providerCalls || { brave: 0, gemini: 0 },
+      reserved_provider_cost_usd: costGuard?.reservedProviderCostUsd || 0
     }));
     if (error.message === 'search_provider_unavailable') {
       console.warn('adverse_media_search_unavailable', JSON.stringify({
