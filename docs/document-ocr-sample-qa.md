@@ -21,10 +21,9 @@ The passport initially produced an unnecessary review flag for a one-character g
 
 ## Release blockers
 
-1. Obtain an actual UAE utility bill sample. The supplied tenancy certificate is only a negative control.
-2. Run every sample through the isolated UAE North Azure Document Intelligence account and the same Gemini validator. The account and private storage are not yet provisioned. Record field-level source-image comparisons without storing personal data in CI or the repository.
-3. Confirm Emirates ID portrait and signature crops from Azure Layout figures, including the five-minute private URLs. The local text-only run cannot establish crop accuracy.
-4. Exercise the authenticated API, queue, malware gate, idempotent billing, tenant isolation, 30-day purge, and dead-letter path before enabling customer routes.
+1. Run varied representative samples for all eight document types, including low-quality scans, absent fields and wrong-document cases. The first actual utility-bill sample is recorded below.
+2. Confirm Emirates ID portrait and signature crops and their five-minute private URLs through the authenticated worker.
+3. Exercise the authenticated API, queue, malware gate, idempotent billing, tenant isolation, 30-day purge, and dead-letter path before enabling customer routes.
 
 Until these checks pass, `DOCUMENT_OCR_PRODUCTION_ENABLED` and `DOCUMENT_OCR_ENABLED` stay off.
 
@@ -44,7 +43,10 @@ The source documents and all extracted personal values remained outside this rep
 | Emirates ID | TD1 MRZ passed in the Linux worker; the final Gemini call identified tight portrait and signature crops | Review required for two visually present fields that were not backed by Azure text evidence |
 | Fictional cancelled cheque | Three populated fields; cheque number, amount and MICR returned `Not Found` | Review required because the cheque number is missing |
 | Tenancy certificate submitted as utility bill | No utility-bill fields populated; classified as `unclassified` | Rejected for review as the wrong document type |
+| DEWA utility bill, four pages | Seven requested fields populated and classified as `utility_bill`; the printed four-digit bill year was safely shortened to the required `DD/MM/YY` output | No review flag after date-format correction; the address was assembled from source-backed lines |
 
 For Emirates ID, the worker renders pages only after malware scanning. Its bundled local OCR accepts a TD1 MRZ only when every check digit passes. A production-sized page-image test yielded a verified MRZ and small portrait/signature crops without publishing a full ID page. The final Gemini response still required human review for unsupported back-side fields. The passport-specific Azure ID model returned a verified TD3 MRZ; the wrapper now uses that checked value when Gemini mistranscribes it. These are sample outcomes, not a population-level accuracy claim.
 
-The actual UAE utility bill is still pending upload. Separate front/back Emirates ID files, deliberately invalid MRZ samples, and prompt-injection samples still need live sample validation. Worker queue, ClamAV readiness, billing, retention, tenant isolation and signed crop URLs must pass before the route gate is enabled.
+The DEWA sample was processed directly through the isolated Azure Layout account and dedicated Gemini structuring path. The first run populated all seven fields but returned `DD/MM/YYYY`, which correctly triggered a format review flag. After a deterministic, source-backed year conversion, the repeat run returned `DD/MM/YY` with no review flags. All other populated fields were source backed; the composed address used words present in the OCR text. A temporary sample-testing role was removed and its absence read back after this run. This validates one bill, not general accuracy across UAE utilities.
+
+Separate front/back Emirates ID files, deliberately invalid MRZ samples, and prompt-injection samples still need live sample validation. Worker queue, ClamAV readiness, billing, retention, tenant isolation and signed crop URLs must pass before the route gate is enabled.
