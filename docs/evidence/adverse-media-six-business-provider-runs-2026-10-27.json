@@ -1,0 +1,1632 @@
+{
+  "run_type": "local updated code with live Brave and Gemini providers",
+  "records": [
+    {
+      "subject": "PT Petrindo Jaya Kreasi Tbk",
+      "input": {
+        "entity_type": "business",
+        "name": "PT Petrindo Jaya Kreasi Tbk",
+        "aliases": [
+          "CUAN"
+        ],
+        "countries": [
+          "ID"
+        ],
+        "languages": [
+          "en",
+          "id"
+        ],
+        "search_plus": true,
+        "max_results": 25,
+        "review_threshold_percent": 65,
+        "high_risk_threshold_percent": 90
+      },
+      "duration_ms": 31012,
+      "provider_calls": {
+        "brave": 12,
+        "gemini": 2
+      },
+      "reserved_provider_cost_upper_bound_usd": 0.088319,
+      "status": "partial",
+      "summary": {
+        "profile_status": "inconclusive",
+        "decision_eligible": false,
+        "media_bucket_counts": {
+          "adverse_media": 4,
+          "general_news_mentions": 21,
+          "no_impact_media": 0
+        }
+      },
+      "coverage": {
+        "complete": false,
+        "reason_codes": [
+          "archive_unavailable",
+          "classification_uncertain"
+        ],
+        "sources": [
+          {
+            "source": "current_news",
+            "status": "complete"
+          },
+          {
+            "source": "open_web",
+            "status": "complete"
+          },
+          {
+            "source": "publisher_search",
+            "status": "complete"
+          },
+          {
+            "source": "archive",
+            "status": "unavailable"
+          },
+          {
+            "source": "official_records",
+            "status": "not_requested"
+          }
+        ],
+        "publisher_batches_completed": 6,
+        "publishers_attempted": 60
+      },
+      "results": {
+        "adverse_media": [
+          {
+            "title": "Kasus IPO CUAN, OJK Beri Sanksi 2 Sekuritas dan Direkturnya",
+            "url": "https://cnbcindonesia.com/market/20261021204229-17-778389/kasus-ipo-cuan-ojk-beri-sanksi-2-sekuritas-dan-direkturnya",
+            "publisher": "cnbcindonesia.com",
+            "excerpt": "OJK menjatuhkan sanksi kepada PT Petrindo Jaya Kreasi Tbk dan pihak terkait atas pelanggaran. Denda Rp100 miliar untuk TC Pte Ltd.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK sanctioned PT Petrindo Jaya Kreasi Tbk and related parties over IPO violations.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Kena Sanksi Rp100 Miliar dari OJK, Begini Respons PT Petrindo Jaya Kreasi Tbk (CUAN) - Olenka",
+            "url": "https://olenka.id/kena-sanksi-rp100-miliar-dari-ojk-begini-respons-pt-petrindo-jaya-kreasi-tbk-cuan",
+            "publisher": "olenka.id",
+            "excerpt": "OJK menjatuhkan denda sebesar total Rp2,1 triliun kepada 3 perusahaan, termasuk PT Petrindo Jaya Kreasi Tbk (CUAN).",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "PT Petrindo Jaya Kreasi Tbk responded to sanctions and fines issued by OJK.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Petrindo Jaya Kreasi Hormati Sanksi OJK, Pastikan Operasional Tetap Normal*",
+            "url": "https://news.fin.co.id/2026/10/17/petrindo-jaya-kreasi-hormati-sanksi-ojk-pastikan-operasional-tetap-normal",
+            "publisher": "news.fin.co.id",
+            "excerpt": "PT Petrindo Jaya Kreasi Tbk (CUAN) menyatakan menghormati keputusan Otoritas Jasa Keuangan (OJK) dan Bursa Efek Indonesia (BEI) terkait penjatuhan sanksi atas dugaan pelanggaran ketentuan pasar modal.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "PT Petrindo Jaya Kreasi Tbk stated it respects OJK and BEI decisions regarding sanctions.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Meski Didenda Rp100 M, Emiten CUAN Klaim Kondisi Keuangan Tak Terganggu",
+            "url": "https://suara.com/bisnis/2026/10/20/095822/meski-didenda-rp100-m-emiten-cuan-klaim-kondisi-keuangan-tak-terganggu",
+            "publisher": "Suara.com",
+            "excerpt": "PT Petrindo Jaya Kreasi Tbk (CUAN) pastikan kondisi keuangan dan likuiditas tetap aman meski OJK jatuhkan sanksi terkait IPO, serta tegaskan operasional berjalan normal.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "CUAN claimed financial condition remains unaffected despite OJK fines related to its IPO.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          }
+        ],
+        "general_news_mentions": [
+          {
+            "title": "OJK Ungkap Manipulasi Saham Masih Dominan Pelanggaran Pasar Modal",
+            "url": "https://suara.com/bisnis/2026/10/25/161716/ojk-ungkap-manipulasi-saham-masih-dominan-pelanggaran-pasar-modal",
+            "publisher": "Suara.com",
+            "excerpt": "OJK tindak tegas manipulasi pasar dengan sanksi rekor Rp2,23 T untuk 166 pihak, termasuk kasus DSSA, BREN, dan CUAN, demi integritas pasar modal.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK imposed record sanctions on multiple parties including cases involving CUAN for capital market violations.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Siaran Pers: Serius dalam Penegakan Hukum OJK Jatuhkan Total Denda Rp2,52 Triliun Pelaku Pelanggaran di Pasar Modal",
+            "url": "https://www.ojk.go.id/id/berita-dan-kegiatan/siaran-pers/Pages/Serius-dalam-Penegakan-Hukum-OJK-Jatuhkan-Total-Denda-Rp2,52-Triliun-Pelaku-Pelanggaran-di-Pasar-Modal.aspx",
+            "publisher": "www.ojk.go.id",
+            "excerpt": "Terbaru, OJK menetapkan sanksi administratif terhadap pihak-pihak yang terbukti melakukan pelanggaran terkait perdagangan saham PT Dian Swastatika Sentosa Tbk (DSSA), serta proses penawaran umum perdana saham PT Barito Renewables Energy Tbk (BREN) dan PT Petrindo Jaya Kreasi Tbk (CUAN).",
+            "subject_role": "related_party",
+            "evidence_assessment": "Official record concerns a related party; direct involvement of the screened subject requires human review.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK fines Dian Swastatika, Barito Renewables and Petrindo Rp2.1 trillion in market crackdown | Indonesia Business Post",
+            "url": "https://indonesiabusinesspost.com/7606/markets-and-finance/ojk-fines-dian-swastatika-barito-renewables-and-petrindo-rp2-1-trillion-in-market-crackdown",
+            "publisher": "indonesiabusinesspost.com",
+            "excerpt": "DSSA faces a Rp1.5 trillion (US$83.1 million) fine over alleged stock trading manipulation, while BREN and CUAN were fined <strong>Rp500 billion (US$27.7 million) and Rp100 billion (US$5.5 million),</strong> respectively, over alleged violations in their initial ...",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK fined various entities over violations in initial public offerings and trading, with CUAN mentioned in connection to fines.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Indonesia hits firms with record fines over stock market violations | News.az",
+            "url": "https://news.az/news/indonesia-hits-firms-with-record-fines-over-stock-market-violations",
+            "publisher": "news.az",
+            "excerpt": "A company identified as AH Ltd was fined 500 billion rupiah for concealing information during the initial public offering (IPO) of geothermal energy company Barito Renewables. Meanwhile, TC Pte Ltd was fined <strong>100 billion rupiah</strong> for a similar ...",
+            "subject_role": "related_party",
+            "evidence_assessment": "Regulatory fines were imposed on specific entities regarding violations in the IPO of Barito Renewables and Petrindo.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Slams DSSA, BREN, CUAN With Rp2.1 Trillion Market Manipulation Fine",
+            "url": "https://www.rancakmedia.com/finance/102463/ojk-slams-dssa-bren-cuan-with-rp2-1-trillion-market-manipulation-fine",
+            "publisher": "www.rancakmedia.com",
+            "excerpt": "Furthermore, parties implicated ... connected to the share allocation of PT Petrindo Jaya Kreasi Tbk (CUAN) face a fine of <strong>Rp100 billion</strong>....",
+            "subject_role": "related_party",
+            "evidence_assessment": "Parties connected to share allocation of PT Petrindo Jaya Kreasi Tbk faced fines by OJK.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "So MSCI Attention, OJK Fines DSSA, BREN, and CUAN Total Rp2.1 Trillion",
+            "url": "https://voi.id/en/economy/598738",
+            "publisher": "voi.id",
+            "excerpt": "JAKARTA - The Financial Services Authority (OJK) has imposed administrative sanctions in the form of fines totaling <strong>Rp. 2.1 trillion</strong> on three issuers, namely PT Dian Swastatika Sentosa Tbk (DSSA), PT Barito Renewables Energy Tbk (BREN), and ...",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK imposed fines on issuers including PT Petrindo Jaya Kreasi Tbk.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Indonesia's OJK Hands Down IDR 2.1 Trillion in Sanctions Over DSSA, BREN and CUAN Shares — BigGo Finance",
+            "url": "https://finance.biggo.com/news/aee6d33d-34d2-494a-8528-31f75a0b5ba2",
+            "publisher": "finance.biggo.com",
+            "excerpt": "Nine brokerage members and eight sales staff were also sanctioned in the DSSA case, while PT HPS and PT BDS were fined in the CUAN case. OJK said it is still reviewing possible additional sanctions against other parties, including 31 stocks with high ownership concentration that show indications of criminal conduct. Indonesia&#x27;s Financial Services Authority (OJK)PT Dian Swastatika Sentosa Tbk (DSSA)PT Barito Renewables Energy Tbk (BREN)PT Petrindo Jaya Kreasi Tbk (CUAN)PT SMTAH LtdTC Pte LtdKhoirul MuttaqienSekar Putih DjarotFriderica Widyasari DewiHasan FawziIndonesian National Police Criminal Investigation Department (Bareskrim Polri)PT HPSPT BDS",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK issued sanctions involving CUAN shares, with brokerages and specific entities fined.",
+            "risk_score": null,
+            "legal_stage": "investigation"
+          },
+          {
+            "title": "Indonesia issues record fines to companies over stock market violations | KLSE Screener",
+            "url": "https://www.klsescreener.com/v2/news/view/1813697/indonesia-issues-record-fines-to-companies-over-stock-market-violations",
+            "publisher": "www.klsescreener.com",
+            "excerpt": "The fines, linked to trading in PT Dian Swastatika Sentosa Tbk, PT Barito Renewables Energy Tbk and PT Petrindo Jaya Kreasi Tbk, were the largest ever imposed by the regulator, known by its Indonesian abbreviation OJK, its chair, Friderica Widyasari Dewi, told reporters.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK issued record fines linked to trading in PT Petrindo Jaya Kreasi Tbk and other entities.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Global Market: Indonesia imposes record $117 million in fines for stock market violations - The Economic Times",
+            "url": "https://economictimes.indiatimes.com/markets/us-stocks/wall-street-guide/global-market-indonesia-imposes-record-117-million-in-fines-for-stock-market-violations/articleshow/135105734.cms",
+            "publisher": "The Economic Times",
+            "excerpt": "Meanwhile, TC Pte Ltd was fined <strong>100 billion rupiah</strong> for a similar violation involving the IPO of energy and minerals company Petrindo Jaya Kreasi, the regulator said, the report stated.",
+            "subject_role": "related_party",
+            "evidence_assessment": "Regulator imposed fines for violations involving the IPO of Petrindo Jaya Kreasi.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Jatuhkan Total Denda Rp2,52 Triliun Sepanjang 2026, Tegaskan Komitmen Integritas Pasar Modal - youngster.id",
+            "url": "https://youngster.id/news/industry-news/ojk-jatuhkan-total-denda-rp252-triliun-sepanjang-2026-tegaskan-komitmen-integritas-pasar-modal",
+            "publisher": "youngster.id",
+            "excerpt": "OJK jatuhkan akumulasi sanksi denda Rp2,52 triliun sepanjang 2026, termasuk kasus DSSA, BREN, dan CUAN. Tegaskan komitmen jaga integritas pasar modal Indonesia.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK accumulated fines in 2026 including cases related to CUAN.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK ungkap pihak-pihak terkait manipulasi saham DSSA, BREN, CUAN | IDNFinancials",
+            "url": "https://idnfinancials.com/id/news/70655/ojk-ungkap-pihak-pihak-terkait-manipulasi-saham-dssa-bren-cuan",
+            "publisher": "idnfinancials.com",
+            "excerpt": "OJK jatuhkan sanksi administratif dan denda triliunan rupiah atas manipulasi saham DSSA, BREN, CUAN.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK revealed related parties in stock manipulation cases involving CUAN and others.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Mengintip Jejak IPO Emiten Prajogo BREN dan CUAN, Disorot OJK hingga Kena Sanksi - Bursa Katadata.co.id",
+            "url": "https://katadata.co.id/finansial/bursa/6ad9f2a3491fb/mengintip-jejak-ipo-emiten-prajogo-bren-dan-cuan-disorot-ojk-hingga-kena-sanksi",
+            "publisher": "katadata.co.id",
+            "excerpt": "OJK menjatuhkan sanksi administratif berupa denda Rp 600 miliar kepada pihak yang melanggar ketentuan penawaran umum perdana saham atau initial public offering (IPO) BREN dan CUAN.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK imposed administrative fines regarding IPO provisions involving BREN and CUAN, though specific penalties targeted other parties.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "11 Broker Kena Sanksi OJK Atas Pelanggaran DSSA & CUAN - Market",
+            "url": "https://bloombergtechnoz.com/detail-news/125361/11-broker-kena-sanksi-ojk-atas-pelanggaran-dssa-cuan",
+            "publisher": "bloombergtechnoz.com",
+            "excerpt": "Adapaun kesembilan broker tersebut adalah sebagai berikut.",
+            "subject_role": "related_party",
+            "evidence_assessment": "Brokers face OJK sanctions related to DSSA and CUAN trading matters.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Gas Pol Penindakan Pasar Modal, Denda Kasus Saham DSSA-BREN-CUAN Capai Rp 2,1 Triliun - Industry.co.id",
+            "url": "https://industry.co.id/read/157906/ojk-gas-pol-penindakan-pasar-modal-denda-kasus-saham-dssa-bren-cuan-capai-rp-21-triliun",
+            "publisher": "industry.co.id",
+            "excerpt": "Besarnya sanksi tersebut mempertegas langkah regulator dalam menindak praktik yang dinilai melanggar ketentuan pasar modal",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK enforcement actions and fines reach significant totals in connection with DSSA, BREN, and CUAN share cases.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Emiten Prajogo Pangestu (CUAN) Buka Suara Pasca Disanksi OJK",
+            "url": "https://cnbcindonesia.com/market/20261020103359-17-777751/emiten-prajogo-pangestu--cuan--buka-suara-pasca-disanksi-ojk",
+            "publisher": "cnbcindonesia.com",
+            "excerpt": "Emiten milik konglomerat Prajogo Pangestu, PT Petrindo Jaya Kreasi Tbk (CUAN), buka suara mengenai dampak pengenaan sanksi oleh Otoritas Jasa Keuangan (OJK).",
+            "subject_role": "related_party",
+            "evidence_assessment": "PT Petrindo Jaya Kreasi Tbk (CUAN) responds following regulatory actions by OJK.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Jatuhkan Denda Rp2,1 Triliun dalam Kasus DSSA, BREN, dan CUAN - Media Alkhairaat",
+            "url": "https://media.alkhairaat.id/ojk-jatuhkan-denda-rp21-triliun-dalam-kasus-dssa-bren-dan-cuan",
+            "publisher": "media.alkhairaat.id",
+            "excerpt": "JAKARTA, MAL — Otoritas Jasa Keuangan (OJK) menjatuhkan sanksi administratif berupa denda dengan total Rp2,1 triliun dalam tiga perkara pasar modal yang berkaitan dengan perdagangan saham PT Dian Swastatika Sentosa Tbk (DSSA), penawaran umum perdana saham PT Barito Renewables Energy Tbk (BREN), ...",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK issued administrative fines in capital market cases related to DSSA, BREN, and CUAN.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Buntut Kasus DSSA, BREN, dan Cuan, OJK Buka Potensi Proses Hukum Pidana",
+            "url": "https://informasi.com/ekonomi/infrms-29194/buntut-kasus-dssa-bren-dan-cuan-ojk-buka-potensi-proses-hukum-pidana",
+            "publisher": "informasi.com",
+            "excerpt": "OJK tidak segan menindaklanjutinya melalui mekanisme penyidikan dan proses hukum sesuai kewenangan serta ketentuan yang berlaku, termasuk dengan memperkuat koordinasi bersama POLRI, Pusat Pelaporan dan Analisis Transaksi Keuangan (PPATK), dan aparat penegak hukum terkait.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK opens potential criminal legal proceedings following cases involving DSSA, BREN, and CUAN.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Ungkap Identitas Pelanggar Kasus DSSA, BREN, CUAN, Ini Daftarnya",
+            "url": "https://bareksa.com/berita/saham/2026-10-22/ojk-ungkap-identitas-pelanggar-kasus-dssa-bren-cuan-ini-daftarnya",
+            "publisher": "bareksa.com",
+            "excerpt": "OJK serahkan surat sanksi ke pelanggar saham DSSA, BREN, dan CUAN. PT SMT didenda Rp1,5 triliun, AH Ltd Rp500 miliar, TC Pte Ltd Rp100 miliar.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK reveals identities of sanctioned parties in DSSA, BREN, and CUAN cases, fining specific entities.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Jejak Dugaan Manipulasi Jatah Saham BREN & CUAN Hingga Sanksi OJK - Market",
+            "url": "https://bloombergtechnoz.com/detail-news/124901/jejak-dugaan-manipulasi-jatah-saham-bren-cuan-hingga-sanksi-ojk",
+            "publisher": "bloombergtechnoz.com",
+            "excerpt": "Kasus dugaan manipulasi dua saham emiten Barito Group, kini resmi berujung pada pengenaan denda oleh Otoritas Jasa Keuangan (OJK).",
+            "subject_role": "related_party",
+            "evidence_assessment": "Alleged share allocation manipulation of BREN and CUAN results in OJK fines.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Mengapa OJK Baru Ungkap Kecurangan DSSA, BREN, dan CUAN setelah Pengumuman MSCI",
+            "url": "https://suara.com/bisnis/2026/10/16/162155/mengapa-ojk-baru-ungkap-kecurangan-dssa-bren-dan-cuan-setelah-pengumuman-msci",
+            "publisher": "Suara.com",
+            "excerpt": "OJK umumkan sanksi bagi DSSA, BREN, dan CUAN karena manipulasi pasar. Keputusan ini melalui proses panjang dan bukan respons mendadak atas pengumuman MSCI.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK announces sanctions for market manipulation concerning DSSA, BREN, and CUAN.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Sampaikan Surat Sanksi Pihak Pelanggaran Perdagangan Saham DSSA, Penawaran Umum Perdana Cuan dan Penawaran Umum Perdana BREN - Keuangan News",
+            "url": "https://keuangannews.id/ojk-sampaikan-surat-sanksi-pihak-pelanggaran-perdagangan-saham-dssa-penawaran-umum-perdana-cuan-dan-penawaran-umum-perdana-bren",
+            "publisher": "keuangannews.id",
+            "excerpt": "KNews.id – Jakarta, 21 Oktober 2026 – Otoritas Jasa Keuangan (OJK) pada tanggal 16 Oktober 2026 telah menetapkan sanksi terhadap pihak-pihak yang melakukan pelanggaran terhadap ketentuan di Pasar Modal yang terkait tiga emiten di Pasar Modal Indonesia yaitu PT Dian Swastatika Sentosa Tbk ...",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK delivers sanction letters regarding trading and IPO violations associated with DSSA, CUAN, and BREN.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          }
+        ],
+        "no_impact_media": []
+      }
+    },
+    {
+      "subject": "PT Dian Swastatika Sentosa Tbk",
+      "input": {
+        "entity_type": "business",
+        "name": "PT Dian Swastatika Sentosa Tbk",
+        "aliases": [
+          "DSSA"
+        ],
+        "countries": [
+          "ID"
+        ],
+        "languages": [
+          "en",
+          "id"
+        ],
+        "search_plus": true,
+        "max_results": 25,
+        "review_threshold_percent": 65,
+        "high_risk_threshold_percent": 90
+      },
+      "duration_ms": 35805,
+      "provider_calls": {
+        "brave": 12,
+        "gemini": 2
+      },
+      "reserved_provider_cost_upper_bound_usd": 0.088019,
+      "status": "partial",
+      "summary": {
+        "profile_status": "inconclusive",
+        "decision_eligible": false,
+        "media_bucket_counts": {
+          "adverse_media": 5,
+          "general_news_mentions": 20,
+          "no_impact_media": 0
+        }
+      },
+      "coverage": {
+        "complete": false,
+        "reason_codes": [
+          "archive_unavailable"
+        ],
+        "sources": [
+          {
+            "source": "current_news",
+            "status": "complete"
+          },
+          {
+            "source": "open_web",
+            "status": "complete"
+          },
+          {
+            "source": "publisher_search",
+            "status": "complete"
+          },
+          {
+            "source": "archive",
+            "status": "unavailable"
+          },
+          {
+            "source": "official_records",
+            "status": "not_requested"
+          }
+        ],
+        "publisher_batches_completed": 6,
+        "publishers_attempted": 60
+      },
+      "results": {
+        "adverse_media": [
+          {
+            "title": "OJK Jatuhkan Denda Rekor Rp1,5 Triliun ke DSSA atas Kasus Manipulasi Pasar : Keuangan : JKN",
+            "url": "https://news.jkn.co.kr/editions/indonesian/post/1031859",
+            "publisher": "news.jkn.co.kr",
+            "excerpt": "Otoritas Jasa Keuangan mengenakan sanksi denda administratif senilai Rp1,5 triliun kepada PT Dian Swastatika Sentosa Tbk atas pelanggaran manipulasi pasar terstruktur.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK imposed an administrative fine on PT Dian Swastatika Sentosa Tbk for structured market manipulation.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "DSSA buka suara soal sanksi manipulasi saham Rp1,5 triliun | IDNFinancials",
+            "url": "https://idnfinancials.com/id/news/70481/dssa-buka-suara-soal-sanksi-manipulasi-saham-rp1-5-triliun",
+            "publisher": "idnfinancials.com",
+            "excerpt": "DSSA menyatakan dugaan manipulasi saham dan sanksi Rp1,5 triliun tak berdampak terhadap keuangan.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "DSSA stated that alleged share manipulation and a reported sanction did not impact its financial condition.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Dian Swastatika (DSSA) Respons Sanksi OJK: Tak Ganggu Operasional dan Keuangan",
+            "url": "https://market.bisnis.com/read/20261019/192/2013785/dian-swastatika-dssa-respons-sanksi-ojk-tak-ganggu-operasional-dan-keuangan",
+            "publisher": "Bisnis Indonesia",
+            "excerpt": "Dian Swastatika Sentosa (DSSA) menyatakan denda OJK Rp1,5 triliun tidak mempengaruhi operasional dan keuangan perusahaan, serta berkomitmen kooperatif.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "DSSA responded to an OJK regulatory fine, stating it does not disrupt operations or finances and affirming cooperation.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Denda Rp1,5 T, DSSA Sebut Sanksi Tak Berdampak Material - periskop.id",
+            "url": "https://periskop.id/pasar-modal/20261021/ojk-denda-rp15-t-dssa-sebut-sanksi-tak-berdampak-material",
+            "publisher": "periskop.id",
+            "excerpt": "DSSA menyatakan denda OJK Rp1,5 triliun dan penyelidikan Polri tidak berdampak material terhadap keuangan dan operasional perusahaan.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "DSSA reported that an OJK fine and police investigation had no material impact on its finances and operations.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Mengapa OJK Baru Ungkap Kecurangan DSSA, BREN, dan CUAN setelah Pengumuman MSCI",
+            "url": "https://suara.com/bisnis/2026/10/16/162155/mengapa-ojk-baru-ungkap-kecurangan-dssa-bren-dan-cuan-setelah-pengumuman-msci",
+            "publisher": "Suara.com",
+            "excerpt": "OJK umumkan sanksi bagi DSSA, BREN, dan CUAN karena manipulasi pasar. Keputusan ini melalui proses panjang dan bukan respons mendadak atas pengumuman MSCI.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK announced sanctions against DSSA and other entities for alleged market manipulation.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          }
+        ],
+        "general_news_mentions": [
+          {
+            "title": "Kena Denda, Ini Rincian Pelanggaran DSSA, BREN, dan CUAN",
+            "url": "https://investor.id/market/459035/kena-denda-ini-rincian-pelanggaran-dssa-bren-dan-cuan",
+            "publisher": "Investor Daily",
+            "excerpt": "OJK menjatuhkan sanksi administratif berupa denda total Rp 2,1 triliun terkait kasus perdagangan saham DSSA, serta IPO BREN dan CUAN.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK imposed administrative fines related to share trading involving PT Dian Swastatika Sentosa Tbk and other issuers.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Siaran Pers: Serius dalam Penegakan Hukum OJK Jatuhkan Total Denda Rp2,52 Triliun Pelaku Pelanggaran di Pasar Modal",
+            "url": "https://www.ojk.go.id/id/berita-dan-kegiatan/siaran-pers/Pages/Serius-dalam-Penegakan-Hukum-OJK-Jatuhkan-Total-Denda-Rp2,52-Triliun-Pelaku-Pelanggaran-di-Pasar-Modal.aspx",
+            "publisher": "www.ojk.go.id",
+            "excerpt": "Terbaru, OJK menetapkan sanksi administratif terhadap pihak-pihak yang terbukti melakukan pelanggaran terkait perdagangan saham PT Dian Swastatika Sentosa Tbk (DSSA), serta proses penawaran umum perdana saham PT Barito Renewables Energy Tbk (BREN) dan PT Petrindo Jaya Kreasi Tbk (CUAN).",
+            "subject_role": "related_party",
+            "evidence_assessment": "Official record concerns a related party; direct involvement of the screened subject requires human review.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK fines Dian Swastatika, Barito Renewables and Petrindo Rp2.1 trillion in market crackdown | Indonesia Business Post",
+            "url": "https://indonesiabusinesspost.com/7606/markets-and-finance/ojk-fines-dian-swastatika-barito-renewables-and-petrindo-rp2-1-trillion-in-market-crackdown",
+            "publisher": "indonesiabusinesspost.com",
+            "excerpt": "Indonesia’s Financial Services Authority (OJK) has imposed administrative fines totaling <strong>Rp2.1 trillion (US$116.7 million)</strong> on three publicly listed companies, PT Dian Swastatika Sentosa Tbk.",
+            "subject_role": "related_party",
+            "evidence_assessment": "Financial Services Authority imposed administrative fines on three listed companies including PT Dian Swastatika Sentosa Tbk.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "So MSCI Attention, OJK Fines DSSA, BREN, and CUAN Total Rp2.1 Trillion",
+            "url": "https://voi.id/en/economy/598738",
+            "publisher": "voi.id",
+            "excerpt": "JAKARTA - The Financial Services Authority (OJK) has imposed administrative sanctions in the form of fines totaling <strong>Rp. 2.1 trillion</strong> on three issuers, namely PT Dian Swastatika Sentosa Tbk (DSSA), PT Barito Renewables Energy Tbk (BREN), and ...",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK imposed administrative sanctions and fines on issuers including PT Dian Swastatika Sentosa Tbk.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Indonesia's OJK Hands Down IDR 2.1 Trillion in Sanctions Over DSSA, BREN and CUAN Shares — BigGo Finance",
+            "url": "https://finance.biggo.com/news/aee6d33d-34d2-494a-8528-31f75a0b5ba2",
+            "publisher": "finance.biggo.com",
+            "excerpt": "Indonesia&#x27;s Financial Services Authority (OJK) has officially delivered sanction letters to a number of parties deemed to have violated capital market rules in connection with trading in shares of PT Dian Swastatika Sentosa Tbk (DSSA), PT Barito Renewables Energy Tbk (BREN) and PT Petrindo Jaya Kreasi Tbk (CUAN).",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK delivered sanction letters to parties violating capital market rules regarding shares of PT Dian Swastatika Sentosa Tbk.",
+            "risk_score": null,
+            "legal_stage": "investigation"
+          },
+          {
+            "title": "Siaran Pers: OJK Putuskan Sanksi Pihak Terkait Emiten DSSA, BREN, dan CUAN",
+            "url": "https://ojk.go.id/id/berita-dan-kegiatan/siaran-pers/Pages/OJK-Putuskan-Sanksi-Pihak-Terkait-Emiten-DSSA-BREN-dan-CUAN.aspx",
+            "publisher": "ojk.go.id",
+            "excerpt": "Otoritas Jasa Keuangan (OJK) menyatakan telah menetapkan sanksi terhadap pihak-pihak yang melakukan pelanggaran terhadap ketentuan di Pasar Modal yang terkait tiga emiten di Pasar Modal Indonesia yaitu PT Dian Swastatika Sentosa Tbk (DSSA), PT Barito Renewables Energy Tbk (BREN) dan PT Petrindo Jaya Kreasi Tbk (CUAN).",
+            "subject_role": "related_party",
+            "evidence_assessment": "Official record concerns a related party; direct involvement of the screened subject requires human review.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Terlibat Pelanggaran DSSA & CUAN, Izin Dua Bos Broker Dibekukan - Market",
+            "url": "https://www.bloombergtechnoz.com/detail-news/125370/terlibat-pelanggaran-dssa-cuan-izin-dua-bos-broker-dibekukan",
+            "publisher": "www.bloombergtechnoz.com",
+            "excerpt": "Keduanya terlibat dalam manipulasi pasar atas saham PT Dian Swastatika Sentosa Tbk (DSSA) dan Petrindo Jaya Kreasi Tbk (CUAN).",
+            "subject_role": "related_party",
+            "evidence_assessment": "Broker licenses suspended following market manipulation involving shares of PT Dian Swastatika Sentosa Tbk.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Bongkar Praktik Manipulasi Saham DSSA serta IPO BREN dan CUAN, Sanksi Denda Fantastis Dijatuhkan - Suara Merdeka Kendal",
+            "url": "https://kendal.suaramerdeka.com/nusantara/amp/103617775787/ojk-bongkar-praktik-manipulasi-saham-dssa-serta-ipo-bren-dan-cuan-sanksi-denda-fantastis-dijatuhkan",
+            "publisher": "Suara Merdeka",
+            "excerpt": "Atas temuan penipuan serta pembentukan harga semu pasar modal tersebut, regulator keuangan resmi menjatuhkan sanksi administratif berupa den",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK uncovered market manipulation and artificial price formation involving PT Dian Swastatika Sentosa Tbk shares.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Ungkap Manipulasi Saham Masih Dominan Pelanggaran Pasar Modal",
+            "url": "https://suara.com/bisnis/2026/10/25/161716/ojk-ungkap-manipulasi-saham-masih-dominan-pelanggaran-pasar-modal",
+            "publisher": "Suara.com",
+            "excerpt": "OJK tindak tegas manipulasi pasar dengan sanksi rekor Rp2,23 T untuk 166 pihak, termasuk kasus DSSA, BREN, dan CUAN, demi integritas pasar modal.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK cracked down on market manipulation with record sanctions including cases tied to PT Dian Swastatika Sentosa Tbk.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK ungkap pihak-pihak terkait manipulasi saham DSSA, BREN, CUAN | IDNFinancials",
+            "url": "https://idnfinancials.com/id/news/70655/ojk-ungkap-pihak-pihak-terkait-manipulasi-saham-dssa-bren-cuan",
+            "publisher": "idnfinancials.com",
+            "excerpt": "OJK jatuhkan sanksi administratif dan denda triliunan rupiah atas manipulasi saham DSSA, BREN, CUAN.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK revealed parties related to share manipulation of PT Dian Swastatika Sentosa Tbk and other issuers.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Serahkan Surat Sanksi Pelanggaran Saham DSSA, BREN, dan CUAN, Denda Capai Rp2,1 Triliun - Garton News",
+            "url": "https://gartonnews.com/nasional/amp/102917812063/ojk-serahkan-surat-sanksi-pelanggaran-saham-dssa-bren-dan-cuan-denda-capai-rp21-triliun",
+            "publisher": "gartonnews.com",
+            "excerpt": "OJK menyerahkan surat sanksi administratif kepada sejumlah pihak yang terbukti melakukan pelanggaran ketentuan pasar modal terkait perdagang",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK served administrative sanction letters regarding capital market violations connected to PT Dian Swastatika Sentosa Tbk.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Jatuhkan Total Denda Rp2,52 Triliun Sepanjang 2026, Tegaskan Komitmen Integritas Pasar Modal - youngster.id",
+            "url": "https://youngster.id/news/industry-news/ojk-jatuhkan-total-denda-rp252-triliun-sepanjang-2026-tegaskan-komitmen-integritas-pasar-modal",
+            "publisher": "youngster.id",
+            "excerpt": "OJK jatuhkan akumulasi sanksi denda Rp2,52 triliun sepanjang 2026, termasuk kasus DSSA, BREN, dan CUAN. Tegaskan komitmen jaga integritas pasar modal Indonesia.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK accumulated fines for 2026 including cases related to PT Dian Swastatika Sentosa Tbk.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Manipulasi Saham PT Dian Swastatika Sentosa Tbk, OJK Sanksi Sembilan Anggota Bursa dan Delapan Sales - Hallobisnis.com",
+            "url": "https://bisnis.hallo.id/finansial/7317801718/manipulasi-saham-pt-dian-swastatika-sentosa-tbk-ojk-sanksi-sembilan-anggota-bursa-dan-delapan-sales&gsessionid=Nb0B2pqSxQIL1K5DSWIRncTn2gRrvZN4XVn1A2qA5AAtbZ7NB-kCtg",
+            "publisher": "bisnis.hallo.id",
+            "excerpt": "OJK menjatuhkan denda Rp1,5 triliun kepada PT SMT terkait manipulasi saham DSSA. Simak rincian sanksi dan pihak yang turut ditindak.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK sanctioned exchange members and sales staff following share manipulation involving PT Dian Swastatika Sentosa Tbk.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "11 Broker Kena Sanksi OJK Atas Pelanggaran DSSA & CUAN - Market",
+            "url": "https://bloombergtechnoz.com/detail-news/125361/11-broker-kena-sanksi-ojk-atas-pelanggaran-dssa-cuan",
+            "publisher": "bloombergtechnoz.com",
+            "excerpt": "Adapaun kesembilan broker tersebut adalah sebagai berikut.",
+            "subject_role": "related_party",
+            "evidence_assessment": "Brokers sanctioned by OJK for violations connected to PT Dian Swastatika Sentosa Tbk and another company.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Gas Pol Penindakan Pasar Modal, Denda Kasus Saham DSSA-BREN-CUAN Capai Rp 2,1 Triliun - Industry.co.id",
+            "url": "https://industry.co.id/read/157906/ojk-gas-pol-penindakan-pasar-modal-denda-kasus-saham-dssa-bren-cuan-capai-rp-21-triliun",
+            "publisher": "industry.co.id",
+            "excerpt": "Besarnya sanksi tersebut mempertegas langkah regulator dalam menindak praktik yang dinilai melanggar ketentuan pasar modal",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK issued large fines regarding capital market violations involving shares of DSSA, BREN, and CUAN.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Ini Dia Pihak-pihak dalam Skandal Transaksi DSSA, BREN, dan CUAN",
+            "url": "https://investor.id/market/458939/ini-dia-pihakpihak-dalam-skandal-transaksi-dssa-bren-dan-cuan",
+            "publisher": "Investor Daily",
+            "excerpt": "OJK resmi layangkan surat sanksi atas skandal manipulasi serta pengaburan informasi saham DSSA, BREN, dan CUAN. Cek rinciannya.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK issued sanction letters regarding market manipulation and information obfuscation involving DSSA, BREN, and CUAN shares.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Daftar Pihak yang Terlibat Pelanggaran DSSA & BREN-CUAN - Market",
+            "url": "https://bloombergtechnoz.com/detail-news/125351/daftar-pihak-yang-terlibat-pelanggaran-dssa-bren-cuan",
+            "publisher": "bloombergtechnoz.com",
+            "excerpt": "OJK memberikan sanksi denda kepada pihak-pihak terkait dalam kasus pelanggaran pasar modal yang melibatkan DSSA, BREN dan CUAN.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK imposed fines on related parties in capital market violation cases involving DSSA, BREN, and CUAN.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Ungkap Identitas Pelanggar Kasus DSSA, BREN, CUAN, Ini Daftarnya",
+            "url": "https://bareksa.com/berita/saham/2026-10-22/ojk-ungkap-identitas-pelanggar-kasus-dssa-bren-cuan-ini-daftarnya",
+            "publisher": "bareksa.com",
+            "excerpt": "OJK serahkan surat sanksi ke pelanggar saham DSSA, BREN, dan CUAN. PT SMT didenda Rp1,5 triliun, AH Ltd Rp500 miliar, TC Pte Ltd Rp100 miliar.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK delivered sanction letters to specific entities including PT SMT and others in connection with DSSA, BREN, and CUAN shares.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Buntut Kasus DSSA, BREN, dan Cuan, OJK Buka Potensi Proses Hukum Pidana",
+            "url": "https://informasi.com/ekonomi/infrms-29194/buntut-kasus-dssa-bren-dan-cuan-ojk-buka-potensi-proses-hukum-pidana",
+            "publisher": "informasi.com",
+            "excerpt": "OJK tidak segan menindaklanjutinya melalui mekanisme penyidikan dan proses hukum sesuai kewenangan serta ketentuan yang berlaku, termasuk dengan memperkuat koordinasi bersama POLRI, Pusat Pelaporan dan Analisis Transaksi Keuangan (PPATK), dan aparat penegak hukum terkait.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK announced potential criminal law procedures and coordination with police and PPATK following the DSSA, BREN, and CUAN case.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Daftar Lengkap Sekuritas yang Disanksi OJK dalam Skandal DSSA-BREN-CUAN – https://www.kalderanews.com",
+            "url": "https://kalderanews.com/2026/10/daftar-lengkap-sekuritas-yang-disanksi-ojk-dalam-skandal-dssa-bren-cuan",
+            "publisher": "kalderanews.com",
+            "excerpt": "OJK dan Bareskrim Polri sanksi belasan sekuritas termasuk Samuel Sekuritas & Henan Putihrai di kasus DSSA, BREN, & CUAN.",
+            "subject_role": "related_party",
+            "evidence_assessment": "OJK and police sanctioned multiple securities firms in connection with the DSSA, BREN, and CUAN matter.",
+            "risk_score": null,
+            "legal_stage": "regulatory_action"
+          }
+        ],
+        "no_impact_media": []
+      }
+    },
+    {
+      "subject": "PT Barito Renewables Energy Tbk",
+      "input": {
+        "entity_type": "business",
+        "name": "PT Barito Renewables Energy Tbk",
+        "aliases": [
+          "BREN"
+        ],
+        "countries": [
+          "ID"
+        ],
+        "languages": [
+          "en",
+          "id"
+        ],
+        "search_plus": true,
+        "max_results": 25,
+        "review_threshold_percent": 65,
+        "high_risk_threshold_percent": 90
+      },
+      "duration_ms": 31654,
+      "provider_calls": {
+        "brave": 12,
+        "gemini": 1
+      },
+      "reserved_provider_cost_upper_bound_usd": 0.074566,
+      "status": "partial",
+      "summary": {
+        "profile_status": "inconclusive",
+        "decision_eligible": false,
+        "media_bucket_counts": {
+          "adverse_media": 15,
+          "general_news_mentions": 0,
+          "no_impact_media": 0
+        }
+      },
+      "coverage": {
+        "complete": false,
+        "reason_codes": [
+          "archive_unavailable"
+        ],
+        "sources": [
+          {
+            "source": "current_news",
+            "status": "complete"
+          },
+          {
+            "source": "open_web",
+            "status": "complete"
+          },
+          {
+            "source": "publisher_search",
+            "status": "complete"
+          },
+          {
+            "source": "archive",
+            "status": "unavailable"
+          },
+          {
+            "source": "official_records",
+            "status": "not_requested"
+          }
+        ],
+        "publisher_batches_completed": 6,
+        "publishers_attempted": 60
+      },
+      "results": {
+        "adverse_media": [
+          {
+            "title": "OJK Ungkap Manipulasi Saham Masih Dominan Pelanggaran Pasar Modal",
+            "url": "https://suara.com/bisnis/2026/10/25/161716/ojk-ungkap-manipulasi-saham-masih-dominan-pelanggaran-pasar-modal",
+            "publisher": "Suara.com",
+            "excerpt": "OJK tindak tegas manipulasi pasar dengan sanksi rekor Rp2,23 T untuk 166 pihak, termasuk kasus DSSA, BREN, dan CUAN, demi integritas pasar modal.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK imposed record administrative fines including against BREN for capital market violations.",
+            "risk_score": 0.917,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK fines Dian Swastatika, Barito Renewables and Petrindo Rp2.1 trillion in market crackdown | Indonesia Business Post",
+            "url": "https://indonesiabusinesspost.com/7606/markets-and-finance/ojk-fines-dian-swastatika-barito-renewables-and-petrindo-rp2-1-trillion-in-market-crackdown",
+            "publisher": "indonesiabusinesspost.com",
+            "excerpt": "DSSA faces a Rp1.5 trillion (US$83.1 million) fine over alleged stock trading manipulation, while BREN and CUAN were fined <strong>Rp500 billion (US$27.7 million) and Rp100 billion (US$5.5 million),</strong> respectively, over alleged violations in their initial ...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK fined Barito Renewables Rp500 billion over alleged initial public offering violations.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Bongkar Praktik Manipulasi Saham DSSA serta IPO BREN dan CUAN, Sanksi Denda Fantastis Dijatuhkan - Suara Merdeka Kendal",
+            "url": "https://kendal.suaramerdeka.com/nusantara/103617775787/ojk-bongkar-praktik-manipulasi-saham-dssa-serta-ipo-bren-dan-cuan-sanksi-denda-fantastis-dijatuhkan",
+            "publisher": "Suara Merdeka",
+            "excerpt": "Atas temuan penipuan serta pembentukan harga semu pasar modal tersebut, regulator keuangan resmi menjatuhkan sanksi administratif berupa den",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Financial regulator imposed administrative fines on BREN following findings of market manipulation and price creation.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Denda Rp500 Miliar, OJK Bongkar Masalah di Balik IPO Saham BREN",
+            "url": "https://www.cnbcindonesia.com/market/20261021202620-17-778381/denda-rp500-miliar-ojk-bongkar-masalah-di-balik-ipo-saham-bren/amp",
+            "publisher": "www.cnbcindonesia.com",
+            "excerpt": "OJK menjatuhkan sanksi kepada PT Barito Renewables Energy Tbk (BREN) dan pihak terkait atas pelanggaran, termasuk denda Rp500 miliar.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK imposed a Rp500 billion fine on PT Barito Renewables Energy Tbk over IPO violations.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Pasardana",
+            "url": "https://pasardana.id/news/2026/10/21/diganjar-denda-jumbo-dan-pembekuan-izin-ini-daftar-pihak-yang-disikat-ojk-dalam-kasus-dssa-bren-dan-cuan",
+            "publisher": "pasardana.id",
+            "excerpt": "Pasardana.id – Otoritas Jasa Keuangan (OJK) menjatuhkan sanksi administratif kepada sejumlah perusahaan, pelaku pasar, dan tenaga pemasaran dalam kasus pelanggaran pasar modal yang melibatkan saham PT Dian Swastatika Sentosa Tbk (IDX: DSSA), PT Barito Renewables Energy Tbk (IDX: BREN), dan PT ...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK issued administrative sanctions to companies including BREN for capital market violations.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Mengintip Jejak IPO Emiten Prajogo BREN dan CUAN, Disorot OJK hingga Kena Sanksi - Bursa Katadata.co.id",
+            "url": "https://katadata.co.id/finansial/bursa/6ad9f2a3491fb/mengintip-jejak-ipo-emiten-prajogo-bren-dan-cuan-disorot-ojk-hingga-kena-sanksi",
+            "publisher": "katadata.co.id",
+            "excerpt": "OJK menjatuhkan sanksi administratif berupa denda Rp 600 miliar kepada pihak yang melanggar ketentuan penawaran umum perdana saham atau initial public offering (IPO) BREN dan CUAN.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK imposed administrative fines on parties violating IPO regulations involving BREN.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Gas Pol Penindakan Pasar Modal, Denda Kasus Saham DSSA-BREN-CUAN Capai Rp 2,1 Triliun - Industry.co.id",
+            "url": "https://www.industry.co.id/read/157906/ojk-gas-pol-penindakan-pasar-modal-denda-kasus-saham-dssa-bren-cuan-capai-rp-21-triliun",
+            "publisher": "www.industry.co.id",
+            "excerpt": "Besarnya sanksi tersebut mempertegas langkah regulator dalam menindak praktik yang dinilai melanggar ketentuan pasar modal",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Regulator enforced capital market penalties including for BREN stock cases.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Jatuhkan Total Denda Rp2,52 Triliun Sepanjang 2026, Tegaskan Komitmen Integritas Pasar Modal - youngster.id",
+            "url": "https://youngster.id/news/industry-news/ojk-jatuhkan-total-denda-rp252-triliun-sepanjang-2026-tegaskan-komitmen-integritas-pasar-modal",
+            "publisher": "youngster.id",
+            "excerpt": "OJK jatuhkan akumulasi sanksi denda Rp2,52 triliun sepanjang 2026, termasuk kasus DSSA, BREN, dan CUAN. Tegaskan komitmen jaga integritas pasar modal Indonesia.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK accumulated penalty enforcement including cases involving BREN.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Manajemen BREN Buka Suara usai Disanksi OJK Terkait Pelanggaran Saham",
+            "url": "https://www.idxchannel.com/amp/market-news/manajemen-bren-buka-suara-usai-disanksi-ojk-terkait-pelanggaran-saham",
+            "publisher": "www.idxchannel.com",
+            "excerpt": "PT Barito Renewables Energy Tbk BREN merespons atas pengenaan sanksi administratif dan denda dari OJK terkait temuan pelanggaran aturan IPO.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Management of BREN responded to administrative sanctions and fines from OJK regarding IPO rules.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Ini Daftar Broker dan Pihak Terkait yang Terseret Kasus DSSA, BREN dan CUAN — Berita TradingView",
+            "url": "https://id.tradingview.com/news/kontan:9b2b7936387ea:0",
+            "publisher": "id.tradingview.com",
+            "excerpt": "Otoritas Jasa Keuangan (OJK) menjatuhkan denda sebesar Rp 2,1 triliun kepada tiga pihak yang terkait kasus pelanggaran di pasar modal yang melibatkan saham PT Dian Seastatika Sentosa Tbk (DSSA), PT Barito Renewables Energy Tbk (BREN) dan PT Petrindo Jaya Kreasi Tbk (CUAN).OJK merinci, sanksi ...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK issued penalties to parties involved in market violations concerning BREN.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Jejak Dugaan Manipulasi Jatah Saham BREN & CUAN Hingga Sanksi OJK - Market",
+            "url": "https://bloombergtechnoz.com/detail-news/124901/jejak-dugaan-manipulasi-jatah-saham-bren-cuan-hingga-sanksi-ojk",
+            "publisher": "bloombergtechnoz.com",
+            "excerpt": "Kasus dugaan manipulasi dua saham emiten Barito Group, kini resmi berujung pada pengenaan denda oleh Otoritas Jasa Keuangan (OJK).",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Alleged share allocation manipulation resulted in OJK fines against Barito Group issuer BREN.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK ungkap pihak-pihak terkait manipulasi saham DSSA, BREN, CUAN | IDNFinancials",
+            "url": "https://idnfinancials.com/id/news/70655/ojk-ungkap-pihak-pihak-terkait-manipulasi-saham-dssa-bren-cuan",
+            "publisher": "idnfinancials.com",
+            "excerpt": "OJK jatuhkan sanksi administratif dan denda triliunan rupiah atas manipulasi saham DSSA, BREN, CUAN.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK levied administrative fines and sanctions over share manipulation involving BREN.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "Prajogo Pangestu Disorot di Tengah Sanksi OJK Rp500 Miliar Terkait BREN, Bagaimana Respons Emiten Grup Baritoi? - Hallobisnis.com",
+            "url": "https://bisnis.hallo.id/finansial/7317782134/prajogo-pangestu-disorot-di-tengah-sanksi-ojk-rp500-miliar-terkait-bren-bagaimana-respons-emiten-grup-baritoi",
+            "publisher": "bisnis.hallo.id",
+            "excerpt": "Konglomerat Prajogo Pangestu dan Grup Barito disorot setelah OJK mengumumkan sanksi terkait BREN. Simak fakta dan respons manajemen.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Prajogo Pangestu and Barito Group faced scrutiny following OJK's Rp500 billion fine regarding BREN.",
+            "risk_score": 0.9,
+            "legal_stage": "regulatory_action"
+          },
+          {
+            "title": "OJK Telisik Dugaan Transaksi Semu BREN & CUAN, Begini Risiko Investor",
+            "url": "https://market.bisnis.com/read/20241010/7/1806349/ojk-telisik-dugaan-transaksi-semu-bren-cuan-begini-risiko-investor",
+            "publisher": "Bisnis Indonesia",
+            "excerpt": "Bisnis.com, JAKARTA — Otoritas Jasa Keuangan (OJK) tengah memeriksa adanya indikasi perdagangan semu atau manipulasi pasar di saham PT Barito Renewables Energy Tbk. (BREN) dan PT Petrindo Jaya Kreasi Tbk. (CUAN). Berdasarkan Undang-Undang No 8 Tahun 1995 Tentang Pasar Modal, praktik perdagangan semu atau manipulasi pasar saham memang dilarang secara tegas. Bab XI menjelaskan berbagai larangan kegiatan perdagangan efek yang mengandung unsur penipuan (fraud), manipulasi pasar (market manipulation), dan perdagangan orang dalam (insider trading).",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "OJK examined BREN for suspected fictitious trading and market manipulation.",
+            "risk_score": 0.9,
+            "legal_stage": "investigation"
+          },
+          {
+            "title": "Top 5 News Bisnisindonesia.id: Dari IPO BUMN, Impor Sapi, Hingga Kasus BREN dan CUAN",
+            "url": "https://market.bisnis.com/read/20241011/7/1806627/top-5-news-bisnisindonesiaid-dari-ipo-bumn-impor-sapi-hingga-kasus-bren-dan-cuan",
+            "publisher": "Bisnis Indonesia",
+            "excerpt": "Serupa tapi Tak Sama antara Kasus BREN dan CUAN dengan Asabri &amp; Jiwasraya · PT Barito Renewables Energy Tbk. (BREN) dan PT Petrindo Jaya Kreasi Tbk. (CUAN) tengah dalam pemeriksaan Otoritas Jasa Keuangan (OJK) karena adanya indikasi perdagangan semu atau manipulasi pasar di saham.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "BREN underwent investigation by OJK over indications of fictitious trading and market manipulation.",
+            "risk_score": 0.9,
+            "legal_stage": "investigation"
+          }
+        ],
+        "general_news_mentions": [],
+        "no_impact_media": []
+      }
+    },
+    {
+      "subject": "Signzy",
+      "input": {
+        "entity_type": "business",
+        "name": "Signzy",
+        "aliases": [],
+        "countries": [
+          "IN"
+        ],
+        "languages": [
+          "en",
+          "hi"
+        ],
+        "search_plus": true,
+        "max_results": 25,
+        "review_threshold_percent": 65,
+        "high_risk_threshold_percent": 90
+      },
+      "duration_ms": 17606,
+      "provider_calls": {
+        "brave": 12,
+        "gemini": 2
+      },
+      "reserved_provider_cost_upper_bound_usd": 0.088777,
+      "status": "partial",
+      "summary": {
+        "profile_status": "inconclusive",
+        "decision_eligible": false,
+        "media_bucket_counts": {
+          "adverse_media": 5,
+          "general_news_mentions": 19,
+          "no_impact_media": 0
+        }
+      },
+      "coverage": {
+        "complete": false,
+        "reason_codes": [
+          "archive_unavailable"
+        ],
+        "sources": [
+          {
+            "source": "current_news",
+            "status": "complete"
+          },
+          {
+            "source": "open_web",
+            "status": "complete"
+          },
+          {
+            "source": "publisher_search",
+            "status": "complete"
+          },
+          {
+            "source": "archive",
+            "status": "unavailable"
+          },
+          {
+            "source": "official_records",
+            "status": "not_requested"
+          }
+        ],
+        "publisher_batches_completed": 6,
+        "publishers_attempted": 60
+      },
+      "results": {
+        "adverse_media": [
+          {
+            "title": "Signzy Customer Data Leak Exposes Growing Cybersecurity Gaps",
+            "url": "https://www.medianama.com/2024/12/223-signzy-customer-data-leak-exposes-growing-cybersecurity-gaps-in-india",
+            "publisher": "MediaNama",
+            "excerpt": "<strong>Online ID verification services provider Signzy has suffered a cyberattack that exposed customer data online</strong>.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Signzy experienced a cyberattack that exposed customer data online.",
+            "risk_score": 0.931,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Vulnerabilities in Zing Food Delivery App Exposes Customer Data",
+            "url": "https://www.medianama.com/2025/06/223-firebase-zing-food-delivery-app-exposes-customer-data",
+            "publisher": "MediaNama",
+            "excerpt": "Data breaches and hacks are also quite common, like identity verification platform Signzy, where hackers used malware to extract the data of two of Signzy’s customers and place them for sale on cybercrime forums.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Reference to a security incident involving Signzy where data was extracted and listed.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "signzy: Latest News & Videos, Photos about signzy | The Economic Times - Page 1",
+            "url": "https://economictimes.indiatimes.com/topic/signzy",
+            "publisher": "The Economic Times",
+            "excerpt": "<strong>Signzy, a regulatory technology firm, suffered a massive data breach, leaking customer data of financial institutions</strong>. This has prompted these institutions to evaluate backup service providers and tighten data-sharing norms.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Signzy suffered a data breach resulting in the leakage of customer data.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Signzy: Financial institutions double down on more checks for tech partners - The Economic Times",
+            "url": "https://economictimes.indiatimes.com/tech/technology/financial-institutions-double-down-on-more-checks-for-tech-partners/articleshow/116115049.cms",
+            "publisher": "The Economic Times",
+            "excerpt": "Bengaluru-based Signzy is a regulatory technology firm which offers digital customer onboarding technology to banks, financial services companies and other businesses. It helps in customer identity verification, processing electronic signatures, bank statement analysis and offersother such services. Its platform is used in account opening, credit disbursal, processing investments and also in the insurance industry. The firm suffered a massive data breach a week ago, resulting in hundreds of gigabytes of data of customers of mutual fund firms, banks and credit card companies getting leaked in multiple hacker forums.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Signzy experienced a significant data breach affecting customers of multiple financial institutions.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "How to Keep up With the New Threats: Sandeep Singh Explains Essential Aspects of Modern Cybersecurity",
+            "url": "https://www.dnaindia.com/insights/report-how-to-keep-up-with-the-new-threats-sandeep-singh-explains-essential-aspects-of-modern-cybersecurity-3147180",
+            "publisher": "Daily News & Analysis",
+            "excerpt": "The second half of 2024 in India was marked by several cybersecurity incidents, such as the Star Health Insurance breach in September, which affected the data of 31 million customers, or a security breach at Signzy fintech startup in December. These events highlight the importance of implementing and constantly improving available cybersecurity standards.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Article references a security breach incident that occurred at fintech startup Signzy in December.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          }
+        ],
+        "general_news_mentions": [
+          {
+            "title": "Signzy’s Video KYC can help fight ID theft and financial fraud | Hindustan Times",
+            "url": "https://www.hindustantimes.com/brand-post/signzys-video-kyc-can-help-fight-id-theft-and-financial-fraud-101614254946028.html",
+            "publisher": "Hindustan Times",
+            "excerpt": "Ankit Ratan, cofounder of Signzy says, “The video-based customer identification process has gained a lot of attention majorly from banking and other financial institutions. The digitalization of the KYC verification process by using video into your onboarding process can save BFSIs significant amounts of time and money.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Article quoting Signzy cofounder regarding video KYC capabilities.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Signzy Featured in the 2023 CB Insights' Fintech 100 List",
+            "url": "https://www.business-standard.com/content/press-releases-ani/signzy-featured-in-the-2023-cb-insights-fintech-100-list-123100401029_1.html",
+            "publisher": "Business Standard",
+            "excerpt": "Signzy <strong>deploys APIs to detect and prevent digital frauds occuring in the digital ecosystem while ensuring the companies are in compliance with regulations</strong>.The company works with more than 250 financial institutions globally, including four largest ...",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy featured in a fintech list and noted for providing fraud prevention APIs.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "data protection: Latest News & Videos, Photos about data protection | The Economic Times - Page 1",
+            "url": "https://economictimes.indiatimes.com/topic/data-protection",
+            "publisher": "The Economic Times",
+            "excerpt": "BLS International has partnered with Signzy to improve its visa and consular services through advanced technology. This collaboration integrates Signzy’s capabilities for document verification and fraud detection. The technology aims to streamline verification processes and enhance accuracy in operations.",
+            "subject_role": "context_only",
+            "evidence_assessment": "BLS International partnered with Signzy to enhance visa services using verification technology.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "BLS International partners with Signzy to enhance fraud detection in visa processing services - The Economic Times",
+            "url": "https://economictimes.indiatimes.com/nri/latest-updates/bls-international-partners-with-signzy-to-enhance-fraud-detection-in-visa-processing-services/articleshow/134787745.cms",
+            "publisher": "The Economic Times",
+            "excerpt": "Visa decisions, however, will continue to remain with governments. Signzy co-founder and business head Arpit Ratan said the partnership would bring its AI-led verification and fraud intelligence capabilities to BLS International’s global visa and citizen services network.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Announcement of partnership between BLS International and Signzy.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "kranti agarwal co founder News and Updates from The Economic Times - Page 3",
+            "url": "https://economictimes.indiatimes.com/topic/kranti-agarwal-co-founder/news/3",
+            "publisher": "The Economic Times",
+            "excerpt": "BLS International has partnered with Signzy to improve its visa and consular services through advanced technology. This collaboration integrates Signzy’s capabilities for document verification and fraud detection. The technology aims to streamline verification processes and enhance accuracy in operations.",
+            "subject_role": "context_only",
+            "evidence_assessment": "News update on BLS International partnering with Signzy for document verification.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "difenz: Digital banking infra provider Signzy acquires Difenz at $5 million valuation - The Economic Times",
+            "url": "https://economictimes.indiatimes.com/tech/startups/digital-banking-infra-provider-signzy-acquires-difenz-at-5-million-valuation/articleshow/107884613.cms",
+            "publisher": "The Economic Times",
+            "excerpt": "Digital banking infrastructure provider Signzy has acquired Bengaluru-based Difenz, a fraud risk management solutions provider, in a cash-and-equity deal at a valuation of $5 million. Founded in 2020 by Madhu Srinivas and Sivaram Jayaraman, Difenz helps financial institutions with compliance solutions.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy acquired fraud risk management firm Difenz.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "data communication: Latest News & Videos, Photos about data communication | The Economic Times - Page 1",
+            "url": "https://economictimes.indiatimes.com/topic/data-communication",
+            "publisher": "The Economic Times",
+            "excerpt": "BLS International has partnered with Signzy to improve its visa and consular services through advanced technology. This collaboration integrates Signzy’s capabilities for document verification and fraud detection. The technology aims to streamline verification processes and enhance accuracy in operations.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Reference to the partnership between BLS International and Signzy.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Signzy acquires 8i funded DIFENZ at a valuation of USD 5 mln, ETBFSI",
+            "url": "https://bfsi.economictimes.indiatimes.com/news/fintech/signzy-acquires-8i-funded-difenz-at-a-valuation-of-usd-5-mln/107877538",
+            "publisher": "The Economic Times",
+            "excerpt": "&quot;Difenz’s product is plug and play, we experienced it first hand when one of our common customers was able to go live within just 2 weeks on their transaction monitoring tool. For anyone who understands Monitoring this is unimaginable speed,&quot; Ankit Ratan, CEO &amp; Co-founder at Signzy highlighted.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy acquisition of Difenz covered in financial media.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Signzy becomes Mastercard's video KYC partner, ETBFSI",
+            "url": "https://bfsi.economictimes.indiatimes.com/news/fintech/signzy-becomes-mastercards-video-kyc-partner/78640657",
+            "publisher": "The Economic Times",
+            "excerpt": "Arpit Ratan, Co-founder of Signzy said, “Mastercard has strongly advocated digital transformation in the financial services space and has led by example. It is a matter of great pride to be chosen as their Video KYC partner.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy selected as Mastercard's video KYC partner.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Regulatory compliance service provider Signzy plans overseas expansion - The HinduBusinessLine",
+            "url": "https://www.thehindubusinessline.com/money-and-banking/regulatory-compliance-service-provider-signzy-plans-overseas-expansion/article67743825.ece",
+            "publisher": "The Hindu Business Line",
+            "excerpt": "Founded in 2015 by <strong>Ankit Ratan, Arpit Ratan and Ankur Pandey</strong>, Signzy’s proprietary tech platform offers over 240 APIs and provides digital solutions that streamline and elevate Know-Your-Customer and Anti-Money Laundering processes.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Background information on Signzy's founding and platform offerings.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Indian fintech regulatory companies welcome RBI move on KYC fraud - The HinduBusinessLine",
+            "url": "https://www.thehindubusinessline.com/companies/indian-fintech-regulatory-companies-welcome-rbi-move-on-kyc-fraud/article67807777.ece",
+            "publisher": "The Hindu Business Line",
+            "excerpt": "Ankit Ratan, CEO and Co-founder, Signzy said that businesses especially those in the BFSI sector, should adopt the risk-based approach introduced by the RBI.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Commentary from Signzy leadership regarding regulatory updates on KYC.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "RBI digital intelligence platform to bolster consumer confidence - The Hindu BusinessLine",
+            "url": "https://www.thehindubusinessline.com/news/rbi-digital-intelligence-platform-to-bolster-consumer-confidence/article68263657.ece",
+            "publisher": "The Hindu Business Line",
+            "excerpt": "Ankit Ratan, Co-founder &amp; CEO, Signzy, said the platform will leverage advanced technologies such as AI and machine learning to identify and mitigate fraud risks, ultimately leading to a safer digital payments’ environment.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy CEO commented on the RBI digital intelligence platform for mitigating fraud risks.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "RBI plans a digital intelligence platform to detect fraud - The HinduBusinessLine",
+            "url": "https://www.thehindubusinessline.com/money-and-banking/rbi-digital-intelligence-platform-to-bolster-consumer-confidence/article68263657.ece",
+            "publisher": "The Hindu Business Line",
+            "excerpt": "Ankit Ratan, Co-founder &amp; CEO, Signzy, said the platform will leverage advanced technologies such as AI and machine learning to identify and mitigate fraud risks, ultimately leading to a safer digital payments’ environment.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy executive discussed RBI plans for a digital intelligence platform to detect fraud.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Tapping into India’s $500bn AI-SaaS opportunity - The Hindu BusinessLine",
+            "url": "https://www.thehindubusinessline.com/opinion/tapping-into-indias-500bn-ai-saas-opportunity/article65048300.ece",
+            "publisher": "The Hindu Business Line",
+            "excerpt": "For example, Signzy helps large financial institutions detect identity fraud. Instead of using a set of static rules to identify a fake driver’s license, the company’s solution does it intelligently, with models updating themselves as they are fed with more data.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy is mentioned for providing solutions that help financial institutions detect identity fraud.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Ankit Ratan, Co-founder & CEO at Signzy: Latest news and Articles, Videos from Ankit Ratan, Co-founder & CEO at Signzy",
+            "url": "https://www.businesstoday.in/author/ankit-ratan-co-founder-ceo-at-signzy",
+            "publisher": "Business Today",
+            "excerpt": "<strong>Ankit Ratan</strong>, Co-founder &amp; CEO at Signzy: Read and find news from <strong>Ankit Ratan</strong>, Co-founder &amp; CEO at Signzy, Videos and articles, photos, information about <strong>Ankit Ratan</strong>, Co-founder &amp; CEO at Signzy.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Directory and article listing page for the Co-founder and CEO of Signzy.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Not a glitch: Govt’s new fraud detection tool may delay some UPI transactions - BusinessToday",
+            "url": "https://www.businesstoday.in/amp/personal-finance/news/story/financial-fraud-risk-indicator-secures-upi-transactions-india-477365-2025-05-22",
+            "publisher": "Business Today",
+            "excerpt": "<strong>This initiative is part of a multi-dimensional analytical approach to prevent cyber fraud</strong>. Gaurav Gupta, Senior Product Manager at Signzy, highlighted FRI as a critical preventive strategy against fraud, noting its importance in maintaining ...",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy senior product manager provided commentary on the government's fraud detection tool.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Stock market veteran Madhusudan Kela falls prey to deepfake; here's how to tackle this issue - BusinessToday",
+            "url": "https://www.businesstoday.in/amp/markets/market-perspective/story/stock-market-veteran-madhusudan-kela-falls-prey-to-deepfake-heres-how-to-tackle-this-issue-421018-2024-03-11",
+            "publisher": "Business Today",
+            "excerpt": "The latest victim of such fraud is Kela, a veteran investor and founder of MK Ventures. These deepfakes are becoming increasingly convincing, blurring the line between what is authentic and what is not, further creating trust deficit in the ecosystem,&quot; said Ankit Ratan, CEO &amp; Co-founder at Signzy.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy CEO commented on deepfake scams affecting investors in the ecosystem.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "How PAN 2.0's QR code can save you from fraud; check why issuing a new PAN card can be useful - BusinessToday",
+            "url": "https://www.businesstoday.in/personal-finance/tax/story/how-pan-20s-qr-code-can-save-you-from-fraud-check-why-issuing-a-new-pan-card-can-be-useful-457819-2024-12-18",
+            "publisher": "Business Today",
+            "excerpt": "According to Ankit Ratan, CEO and Co-founder of Signzy, the introduction of a new PAN design that includes a QR code is a crucial advancement in the fight against fraud and improvement of compliance measures.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy CEO discussed how the new PAN design helps fight fraud and improve compliance.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "PAN 2.0's QR code can save you from fraud: Here's how it can prevent safeguard personal info - BusinessToday",
+            "url": "https://www.businesstoday.in/personal-finance/tax/story/pan-20s-qr-code-can-save-you-from-fraud-heres-how-it-can-prevent-safeguard-personal-info-455656-2024-11-29",
+            "publisher": "Business Today",
+            "excerpt": "This makes duplication or forgery of PAN cards exceedingly difficult, as the QR code can only be decoded by specific software, ensuring the card is legitimate and linked to its rightful owner,&quot; said Ankit Ratan, CEO &amp; Co-founder, Signzy, told the Economic Times.",
+            "subject_role": "context_only",
+            "evidence_assessment": "Signzy executive provided remarks on PAN 2.0 QR codes preventing card forgery.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          }
+        ],
+        "no_impact_media": []
+      }
+    },
+    {
+      "subject": "eMudhra",
+      "input": {
+        "entity_type": "business",
+        "name": "eMudhra",
+        "aliases": [],
+        "countries": [
+          "IN"
+        ],
+        "languages": [
+          "en",
+          "hi"
+        ],
+        "search_plus": true,
+        "max_results": 25,
+        "review_threshold_percent": 65,
+        "high_risk_threshold_percent": 90
+      },
+      "duration_ms": 33691,
+      "provider_calls": {
+        "brave": 12,
+        "gemini": 2
+      },
+      "reserved_provider_cost_upper_bound_usd": 0.089295,
+      "status": "partial",
+      "summary": {
+        "profile_status": "inconclusive",
+        "decision_eligible": false,
+        "media_bucket_counts": {
+          "adverse_media": 24,
+          "general_news_mentions": 1,
+          "no_impact_media": 0
+        }
+      },
+      "coverage": {
+        "complete": false,
+        "reason_codes": [
+          "archive_unavailable"
+        ],
+        "sources": [
+          {
+            "source": "current_news",
+            "status": "complete"
+          },
+          {
+            "source": "open_web",
+            "status": "complete"
+          },
+          {
+            "source": "publisher_search",
+            "status": "complete"
+          },
+          {
+            "source": "archive",
+            "status": "unavailable"
+          },
+          {
+            "source": "official_records",
+            "status": "not_requested"
+          }
+        ],
+        "publisher_batches_completed": 6,
+        "publishers_attempted": 60
+      },
+      "results": {
+        "adverse_media": [
+          {
+            "title": "बैंकिंग और डिजिटल सुरक्षा पर बड़ा खतरा; SBI, HDFC और eMudhra में डेटा लीक की जांच शुरू - sbi probes alleged dark web data leak as hdfc investigates confidential information sharing and emudhra fixes security flaws - Navbharat Times",
+            "url": "https://navbharattimes.indiatimes.com/metro/delhi/other-news/sbi-probes-alleged-dark-web-data-leak-as-hdfc-investigates-confidential-information-sharing-and-emudhra-fixes-security-flaws/articleshow/135107446.cms",
+            "publisher": "The Navbharat Times",
+            "excerpt": "एसबीआई डार्क ... <strong>ईमुध्रा की आठ डिजिटल कीज में कमजोरी सामने आने के बाद सीईआरटी-इन ने सुरक्षा एडवाइजरी जारी की</strong>।...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "CERT-In issued advisory on eMudhra after digital keys weakness and data leak investigations were initiated.",
+            "risk_score": 0.938,
+            "legal_stage": "investigation"
+          },
+          {
+            "title": "Video | Cybersecurity Expert Explains Why The eMudhra Issue Matters Beyond Data Breaches",
+            "url": "https://www.ndtvprofit.com/videos/business/emudhra-certificate-issue-is-a-trust-crisis-not-a-data-breach-says-voyager-infosec-s-jiten-jain-1178502",
+            "publisher": "www.ndtvprofit.com",
+            "excerpt": "The eMudhra certificate controversy is not a traditional data leak but a challenge to the trust infrastructure that helps users verify genuine websites, according to Voyager Infosec Director Jiten Jain. He warns that forged certificates could allow fake websites to appear legitimate, making ...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Experts discuss the eMudhra certificate controversy and trust infrastructure challenges.",
+            "risk_score": 0.931,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "eMudhra, SBI To Reliance Group: Inside 5 Major Data Breach Incidents | Outlook India",
+            "url": "https://www.outlookindia.com/national/emudhra-sbi-to-reliance-group-inside-5-major-data-breach-incidents",
+            "publisher": "Outlook India",
+            "excerpt": "From a cryptographic flaw at eMudhra to alleged data leaks involving banks and sensitive medical records, five incidents highlight the risks of cybersecurity failures.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "eMudhra highlighted among major cybersecurity incidents due to a cryptographic flaw.",
+            "risk_score": 0.917,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "केंद्र ने दिया eMudhra की सुरक्षा चूक में जांच का आदेश",
+            "url": "https://inshorts.com/hi/news/%E0%A4%95--%E0%A4%A6-%E0%A4%B0-%E0%A4%A8--%E0%A4%A6-%E0%A4%AF--emudhra-%E0%A4%95--%E0%A4%B8-%E0%A4%B0%E0%A4%95-%E0%A4%B7--%E0%A4%9A-%E0%A4%95-%E0%A4%AE---%E0%A4%9C--%E0%A4%9A-%E0%A4%95--%E0%A4%86%E0%A4%A6-%E0%A4%B6-1792604973930",
+            "publisher": "inshorts.com",
+            "excerpt": "<strong>केंद्र सरकार ने बेंगलुरु की साइबर सुरक्षा कंपनी eMudhra के मामले में जांच के आदेश देते हुए विशेष टीम गठित की है</strong>...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Central government ordered a probe and formed a special team regarding eMudhra's security lapse.",
+            "risk_score": 0.9,
+            "legal_stage": "investigation"
+          },
+          {
+            "title": "eMudhra Security Incident | IT Ministry Probe & India Cyber Safety",
+            "url": "https://www.bhaskar.com/business/news/emudhra-security-incident-it-ministry-investigation-india-cyber-safety-139445558.html",
+            "publisher": "Dainik Bhaskar",
+            "excerpt": "<strong>डिजिटल सुरक्षा देने वाली कंपनी eMudhra में एक तकनीकी गड़बड़ी सामने आने के बाद IT मंत्रालय ने इसकी जांच के लिए स्पेशल टीम बनाई है</strong>...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "IT Ministry formed a special team to investigate technical flaws found in eMudhra.",
+            "risk_score": 0.9,
+            "legal_stage": "investigation"
+          },
+          {
+            "title": "eMudhra Security Breach: डिजिटल सिग्नेचर में गड़बड़ी पर सरकार की सफाई, आम लोगों पर क्या होगा असर? - CNBC Awaaz",
+            "url": "https://hindi.cnbctv18.com/technology/emudhra-security-breach-government-clarification-digital-signature-esign-services-199884.htm",
+            "publisher": "hindi.cnbctv18.com",
+            "excerpt": "eMudhra Security Breach: <strong>ई-मुद्रा की डिजिटल सुरक्षा से जुड़ी गड़बड़ी सामने आने के बाद सरकार ने इस मामले में जांच शुरू कर दी है</strong>...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Government initiated an investigation following digital security flaws identified at eMudhra.",
+            "risk_score": 0.9,
+            "legal_stage": "investigation"
+          },
+          {
+            "title": "eMudhra डिजिटल सर्टिफिकेट लीक जांच के लिए सरकार ने बनाई स्पेशल टीम",
+            "url": "https://hindi.business-standard.com/companies/industrial/government-investigates-emudhra-digital-certificate-leak-id-561923",
+            "publisher": "Business Standard",
+            "excerpt": "<strong>eMudhra के डिजिटल सर्टिफिकेट लीक मामले में सरकार ने कड़ा रुख अपनाया है</strong>। डेटा सुरक्षा की जांच के लिए ...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Government formed a special team to investigate eMudhra digital certificate leak issues.",
+            "risk_score": 0.9,
+            "legal_stage": "investigation"
+          },
+          {
+            "title": "eMudhra: एक हफ्ते में 36% गिरा स्टॉक, अब रेटिंग पर आई खबर, एजेंसी ने आगे की चुनौतियों का किया जिक्र - CNBC Awaaz",
+            "url": "https://hindi.cnbctv18.com/share-market/icra-retains-emudhra-ratings-at-a-stable-flags-reputational-and-regulatory-risks-after-security-breach-200215.htm",
+            "publisher": "hindi.cnbctv18.com",
+            "excerpt": "एजेंसी के मुताबिक, <strong>कमजोर सिक्योरिटी कीज का अतीत में संभावित दुरुपयोग हुआ है या नहीं, यह स्पष्ट होना बाकी है</strong>...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Stock drops following questions over whether weak security keys at eMudhra were abused.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "सुरक्षा में बड़ी चूक, कंपनी ने मांगी माफी; फिर भी भरभरा कर गिरे eMudhra के शेयर",
+            "url": "https://inshorts.com/hi/news/%E0%A4%B8-%E0%A4%B0%E0%A4%95-%E0%A4%B7--%E0%A4%AE---%E0%A4%AC%E0%A4%A1---%E0%A4%9A-%E0%A4%95--%E0%A4%95-%E0%A4%AA%E0%A4%A8--%E0%A4%A8--%E0%A4%AE--%E0%A4%97--%E0%A4%AE-%E0%A4%AB---%E0%A4%AB-%E0%A4%B0-%E0%A4%AD--%E0%A4%AD%E0%A4%B0%E0%A4%AD%E0%A4%B0--%E0%A4%95%E0%A4%B0-%E0%A4%97-%E0%A4%B0--emudhra-%E0%A4%95--%E0%A4%B6-%E0%A4%AF%E0%A4%B0-1793003504026",
+            "publisher": "inshorts.com",
+            "excerpt": "<strong>साइबर सिक्योरिटी कंपनी eMudhra ने डिजिटल सर्टिफिकेट में खामी के लिए सार्वजनिक माफी मांगी है</strong>। ...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Cybersecurity company eMudhra publicly apologized for flaws in its digital certificates.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "eMudhra certificate keys compromised, cyber fraud risk flagged - Rediff.com",
+            "url": "https://m.rediff.com/amp/news/report/emudhra-certificate-keys-compromised-cyber-fraud-risk-flagged/20261021.htm",
+            "publisher": "m.rediff.com",
+            "excerpt": "Indian digital certification authority eMudhra has reported a compromise of private keys for some of its global TLS and code-signing certificates, according to Cert-In. This incident, while eMudhra states it has limited impact on its Indian operations, could allow cybercriminals to impersonate ...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Cert-In reported private key compromise for global TLS and code-signing certificates at eMudhra.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Govt forms special team to investigate eMudhra digital certificate leak | Industry News - Business Standard",
+            "url": "https://business-standard.com/industry/news/meity-emudhra-private-key-leak-digital-certificates-cert-in-126102200179_1.html",
+            "publisher": "Business Standard",
+            "excerpt": "CERT-In said insufficient cryptographic randomness had compromised private keys, potentially allowing attackers to issue fraudulent certificates and impersonate websites",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Government formed a special team to investigate eMudhra's digital certificate leak involving cryptographic flaws.",
+            "risk_score": 0.9,
+            "legal_stage": "investigation"
+          },
+          {
+            "title": "eMudhra reports digital certificate key compromise; CERT-In warns of fake websites, cyber fraud",
+            "url": "https://psuwatch.com/newsupdates/emudhra-reports-digital-certificate-key-compromise-cert-in-warns-of-fake-websites-cyber-fraud",
+            "publisher": "psuwatch.com",
+            "excerpt": "Cybersecurity incident affects eight certificates in eMudhra’s global business; company rules out breach of Indian digital signature and eSign services as Google and Mozilla take protective action",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "eMudhra reported a digital certificate key compromise, prompting warnings and protective actions from Google and Mozilla.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "eMudhra breach: Netizens react as IT Ministry says…",
+            "url": "https://inkl.com/news/emudhra-breach-netizens-react-as-it-ministry-says-impact-on-indian-sites-very-limited",
+            "publisher": "inkl.com",
+            "excerpt": "Cybersecurity agency CERT-In warned that the compromised keys could let attackers issue fraudulent certificates for domains they do not control, impersonate legitimate websites and carry out attacks that intercept or modify encrypted communications.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "CERT-In warned that compromised keys at eMudhra could allow attackers to issue fraudulent certificates.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "eMudhra Certificate Issue Raises Trust Concerns, Not Data Leak Risks: Voyager Infosec's Jiten Jain",
+            "url": "https://www.ndtvprofit.com/business/emudhra-certificate-issue-raises-trust-concerns-not-data-leak-risks-voyager-infosecs-jiten-jain-12218572",
+            "publisher": "www.ndtvprofit.com",
+            "excerpt": "Speaking to NDTV Profit, Jain said the issue should be viewed as a \"trust incident\" rather than a data leak, as it raises questions about the integrity of the digital certificate ecosystem used to verify the authenticity of websites.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Experts discuss eMudhra certificate issues raising trust concerns within the digital ecosystem.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "SBI data leak to eMudhra security issue: How to keep your personal data safe online - CNBC TV18",
+            "url": "https://www.cnbctv18.com/technology/sbi-data-leak-to-emudhra-security-issue-how-to-keep-your-personal-data-safe-online-20016815.htm",
+            "publisher": "www.cnbctv18.com",
+            "excerpt": "CERT-In warns of cybersecurity issues involving eMudhra, State Bank of India data leak investigations, and PHP flaws. Stay safe with essential tips.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "CERT-In issued warnings regarding cybersecurity issues involving eMudhra and data leak investigations.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Government asks industry bodies to conduct regular cybersecurity audits after emudhra, sbi data leaks - The HinduBusinessLine",
+            "url": "https://www.thehindubusinessline.com/news/government-asks-industry-bodies-to-conduct-regular-cybersecurity-audits-after-emudhra-sbi-data-leaks/article71617232.ece",
+            "publisher": "The Hindu Business Line",
+            "excerpt": "MeitY urges industry bodies to tighten certifications and conduct regular cybersecurity audits to prevent future incidents.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Government urges cybersecurity audits following reported data incidents involving eMudhra and SBI.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Cybersecurity experts flag audit gaps after SBI leak, eMudhra breach",
+            "url": "https://www.deccanherald.com/business/cybersecurity-experts-flag-audit-gaps-after-sbi-leak-emudhra-breach-4191678",
+            "publisher": "Deccan Herald",
+            "excerpt": "Cybersecurity audit: Experts demand independent reviews and strict vendor checks following SBI data leaks and eMudhra weak keys, while CERT-In issues warnings over emerging AI agent threats targeting critical digital infrastructure across India.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Experts flag audit gaps and demand independent reviews following an eMudhra security breach and weak keys.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "डिजिटल इंडिया: डेटा लीक और सुरक्षा पर गंभीर सवाल",
+            "url": "https://prabhatkhabar.com/technology/emudhra-sbi-data-security-digital-india-trust-issue",
+            "publisher": "Prabhat Khabar",
+            "excerpt": "eMudhra डेटा लीक के मामले सरकारी डिजिटल सिस्टम की सुरक्षा पर गंभीर सवाल उठाते हैं. आपका डेटा कितना सुरक्षित है?",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Reports highlight questions regarding digital security following an eMudhra data leak incident.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "ई-मुद्रा डेटा लीक मामले में स्पेशल टीम बनाई: AI से सुरक्षा कोड लीक हुए थे, सरकार ने कहा- भारतीय डिजिटल सिग्नेचर पर कोई असर नहीं",
+            "url": "https://bhaskar.com/business/news/emudhra-security-incident-it-ministry-investigation-india-cyber-safety-139445558.html",
+            "publisher": "Dainik Bhaskar",
+            "excerpt": "eMudhra cyber security incident investigation by IT Ministry. Follow Dainik Bhaskar for Latest Updates. डिजिटल सुरक्षा देने वाली कंपनी eMudhra में एक तकनीकी गड़बड़ी सामने आने के बाद ...",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "IT Ministry forms a special team to investigate a technical security incident involving eMudhra.",
+            "risk_score": 0.9,
+            "legal_stage": "investigation"
+          },
+          {
+            "title": "eMudhra security breach explained: What it is and means for smartphone, internet users - The Times of India",
+            "url": "https://timesofindia.indiatimes.com/technology/tech-news/emudhra-security-breach-explained-what-it-is-and-means-for-smartphone-internet-users/articleshow/135093509.cms",
+            "publisher": "The Times Of India",
+            "excerpt": "Android phones got a similar block through Google Play Services on October 19. eMudhra has revoked the eight certificates, and Cloudflare and other software providers have released fixes.According to the company, there is no evidence so far that the weak keys were used in a cyberattack, though it is not known for certain whether anyone misused them since they were created.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "eMudhra revokes certificates after security weakness identified; company states no evidence of malicious attack.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "eMudhra Security Lapse Raises Questions Over Audits, Cybersecurity Oversight",
+            "url": "https://www.ndtv.com/india-news/emudhra-security-lapse-raises-questions-over-audits-cybersecurity-oversight-12220814",
+            "publisher": "NDTV",
+            "excerpt": "While the incident creates a risk of fraudulent certificates, website impersonation and potentially intercepted communications, there is no publicly confirmed evidence that the keys were exploited by attackers or that any data breach occurred. Experts have also called for greater accountability from eMudhra and the Controller of Certifying Authorities (CCA), which receives the company&#x27;s audit reports.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "eMudhra security lapse raises questions over oversight and audits, though no confirmed exploitation found.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "eMudhra security certificate flaw: What Chrome, Firefox users must know",
+            "url": "https://indianexpress.com/article/explained/explained-sci-tech/emudhra-security-flaw-certificates-blocked-chrome-firefox-10931124",
+            "publisher": "The Indian Express",
+            "excerpt": "The company has maintained that its infrastructure had not been compromised, no data breach had occurred and its physical and logical security controls remained intact. “However, this may have some reputational risks on eMudhra which cannot be quantified,” it added. The company said the incident had no connection with its Indian digital signature certificate and eSign businesses, which operate on separate infrastructure. It also said that the affected global Transport Layer Security (TLS) business accounted for approximately 1% of its revenue, although the incident could carry reputational risks that could not be quantified.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "eMudhra experiences certificate flaw affecting global TLS business, noting potential reputational risks.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "Eight web security keys of eMudhra firm used by Govt. and PSUs leaked - The Hindu",
+            "url": "https://www.thehindu.com/sci-tech/technology/eight-web-security-keys-of-firm-used-by-govt-and-psus-leaked/article71606342.ece",
+            "publisher": "The Hindu",
+            "excerpt": "Eight private keys used to issue web security certificates by Bengaluru-headquartered eMudhra Ltd. have been leaked, sending security teams at major internet browser and operating system developers around the world scrambling to patch their systems to stop trusting the affected certificates. Also Read: Data breach: SBI admits exposure of its customer data on the Dark Web",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Eight web security keys used by eMudhra leaked, prompting global browser developers to patch systems.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          },
+          {
+            "title": "eMudhra to exit website security certification business after security weakness, company says no data breach—All we know | Company Business News",
+            "url": "https://www.livemint.com/companies/news/emudhra-to-exit-website-security-certification-business-after-security-weakness-company-says-no-data-breach-all-we-know-11792721101318.html",
+            "publisher": "MINT",
+            "excerpt": "<strong>eMudhra will exit its SSL/TLS certificate business after weak keys were found in eight of its issuing certification authorities</strong>. The company said it revoked affected authorities within 14 hours and reported no data breach.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "eMudhra exits its website security certification business following weak keys found in issuing authorities.",
+            "risk_score": 0.9,
+            "legal_stage": "media_mention"
+          }
+        ],
+        "general_news_mentions": [
+          {
+            "title": "From eMudhra to Bank of Baroda: 5 major data breaches in recent times | India News",
+            "url": "https://www.hindustantimes.com/india-news/from-emudhra-to-bank-of-baroda-5-major-data-breaches-in-recent-times-php-101792639832783.html",
+            "publisher": "Hindustan Times",
+            "excerpt": "The petition filed by the company alleged a large-scale cyber intrusion involving unauthorised access to highly sensitive personal information, including medical records, insurance claim details, Aadhaar-linked information, and other personally identifiable data. Vitraya detected a coordinated cyberattack in February 2025 involving brute-force login attempts, mass downloading of confidential records, and the extraction of sensitive customer data from its digital infrastructure.",
+            "subject_role": "direct_actor",
+            "evidence_assessment": "Article lists eMudhra alongside other recent data breach cases in a general overview.",
+            "risk_score": null,
+            "legal_stage": "media_mention"
+          }
+        ],
+        "no_impact_media": []
+      }
+    },
+    {
+      "subject": "Smilesville Trading",
+      "input": {
+        "entity_type": "business",
+        "name": "Smilesville Trading",
+        "aliases": [],
+        "countries": [
+          "AE"
+        ],
+        "languages": [
+          "en",
+          "ar"
+        ],
+        "search_plus": true,
+        "max_results": 25,
+        "review_threshold_percent": 65,
+        "high_risk_threshold_percent": 90
+      },
+      "duration_ms": 28499,
+      "provider_calls": {
+        "brave": 12,
+        "gemini": 1
+      },
+      "reserved_provider_cost_upper_bound_usd": 0.073045,
+      "status": "partial",
+      "summary": {
+        "profile_status": "inconclusive",
+        "decision_eligible": false,
+        "media_bucket_counts": {
+          "adverse_media": 0,
+          "general_news_mentions": 0,
+          "no_impact_media": 5
+        }
+      },
+      "coverage": {
+        "complete": false,
+        "reason_codes": [
+          "archive_unavailable"
+        ],
+        "sources": [
+          {
+            "source": "current_news",
+            "status": "complete"
+          },
+          {
+            "source": "open_web",
+            "status": "complete"
+          },
+          {
+            "source": "publisher_search",
+            "status": "complete"
+          },
+          {
+            "source": "archive",
+            "status": "unavailable"
+          },
+          {
+            "source": "official_records",
+            "status": "not_requested"
+          }
+        ],
+        "publisher_batches_completed": 6,
+        "publishers_attempted": 60
+      },
+      "results": {
+        "adverse_media": [],
+        "general_news_mentions": [],
+        "no_impact_media": [
+          {
+            "title": "Southern District of New York | Broker Charged With Insider Trading And Obstruction Of Justice | United States Department of Justice",
+            "url": "https://www.justice.gov/usao-sdny/pr/broker-charged-insider-trading-and-obstruction-justice",
+            "publisher": "www.justice.gov",
+            "excerpt": "As alleged in the Indictment unsealed today in Manhattan federal court:",
+            "subject_role": "namesake",
+            "evidence_assessment": "Article concerns an individual broker charged with insider trading, unrelated to the screened business.",
+            "risk_score": null,
+            "legal_stage": "charged"
+          },
+          {
+            "title": "Broker Charged With Insider Trading And Obstruction Of Justice - Insurance News | InsuranceNewsNet",
+            "url": "https://insurancenewsnet.com/oarticle/broker-charged-with-insider-trading-and-obstruction-of-justice",
+            "publisher": "insurancenewsnet.com",
+            "excerpt": "The office of the U.S. Attorney for the Southern District of New York posted the following news release:. United States Attorney for the Southern District of New York, Jay Clayton, announced today the unsealing of an Indictment charging <strong>RONALD SMITH</strong>...",
+            "subject_role": "namesake",
+            "evidence_assessment": "Article reports on an individual charged with insider trading by the DOJ, unrelated to the screened entity.",
+            "risk_score": null,
+            "legal_stage": "charged"
+          },
+          {
+            "title": "Southern District of New York | Trader Arrested For Stealing Trade Secrets From Global Quantitative Trading Firm | United States Department of Justice",
+            "url": "https://www.justice.gov/usao-sdny/pr/trader-arrested-stealing-trade-secrets-global-quantitative-trading-firm",
+            "publisher": "www.justice.gov",
+            "excerpt": "Edward Y. Kim, the Acting United ... of Investigation (“FBI”), announced today the unsealing of an Indictment charging <strong>CHEUK FUNG</strong> ......",
+            "subject_role": "namesake",
+            "evidence_assessment": "Article reports on a trader arrested for stealing trade secrets, unrelated to the screened company.",
+            "risk_score": null,
+            "legal_stage": "arrested"
+          },
+          {
+            "title": "Enforcement Actions Criminal Civil | Texas State Securities Board",
+            "url": "https://ssb.texas.gov/news-publications/enforcement-actions-criminal-civil",
+            "publisher": "ssb.texas.gov",
+            "excerpt": "On October 15, 2021, a grand jury sitting in Lee County, Texas, indicted <strong>Larry Steve Bassett</strong> for first-degree securities fraud, theft and money laundering. The charges relate to his alleged unlawful sale of investments in a trading program to 15 victims for approximately $1.5M.",
+            "subject_role": "namesake",
+            "evidence_assessment": "Regulatory enforcement action against an individual for securities fraud, unrelated to the screened business.",
+            "risk_score": null,
+            "legal_stage": "charged"
+          },
+          {
+            "title": "Southern District of New York | Two Men Charged In Scheme To Defraud Investors Seeking To Invest In Pre-Ipo Companies And Trading Fund | United States Department of Justice",
+            "url": "https://www.justice.gov/usao-sdny/pr/two-men-charged-scheme-defraud-investors-seeking-invest-pre-ipo-companies-and-trading",
+            "publisher": "www.justice.gov",
+            "excerpt": "United States Attorney for the ... Darnell Edwards, announced today the unsealing of an Indictment charging <strong>JACOB FRANKEL and CHRISTOPHER</strong> ......",
+            "subject_role": "namesake",
+            "evidence_assessment": "DOJ news release regarding individuals charged in an investor fraud scheme, unrelated to the screened entity.",
+            "risk_score": null,
+            "legal_stage": "charged"
+          }
+        ]
+      }
+    }
+  ]
+}
