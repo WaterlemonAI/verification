@@ -6,7 +6,7 @@ function fakeStore(stage = 'queued', serviceId = 'cheque-ocr') {
   const state = { partitionKey: 'a'.repeat(64), rowKey: 'job_ocr_test', jobId: 'ocr_test',
     transactionId: 'synthetic-transaction', serviceId, status: 'queued',
     stage, fileCount: 1, processedFiles: 0, azureCallCount: 0, geminiCallCount: 0 };
-  let ocr = { pages: [], figures: [] };
+  let ocr = { pages: [], figures: [], verifiedMrz: null };
   let result;
   const artifacts = new Map();
   return {
@@ -15,8 +15,8 @@ function fakeStore(stage = 'queued', serviceId = 'cheque-ocr') {
     getInputs: async () => ({ row: state, files: [{ mediaType: 'image/png', bytes: Buffer.from('synthetic') }] }),
     transition: async (_row, nextStage, extra = {}) => Object.assign(state, { stage: nextStage }, extra),
     getOcr: async () => ocr,
-    saveOcr: async (_row, pages, calls, processedFiles, figures = []) => {
-      ocr = { pages, figures };
+    saveOcr: async (_row, pages, calls, processedFiles, figures = [], verifiedMrz = null) => {
+      ocr = { pages, figures, verifiedMrz };
       return Object.assign(state, { stage: 'ocr_complete', azureCallCount: calls, processedFiles });
     },
     saveArtifact: async (_row, name, bytes) => artifacts.set(name, bytes),
@@ -45,19 +45,22 @@ test('a completed OCR job never calls Azure or Gemini again', async () => {
   assert.equal(store.result().processing.provider_calls.gemini, 1);
 });
 
-test('Emirates ID saves only a high-confidence isolated portrait crop', async () => {
+test('Emirates ID saves only a tight crop from a high-confidence page region', async () => {
   const store = fakeStore('queued', 'emirates-id-ocr');
   const portrait = Buffer.from('synthetic-png');
   const options = { store, partitionKey: store.state.partitionKey, jobId: store.state.jobId,
     getGeminiKey: async () => 'synthetic-key', scan: async () => {},
     analyze: async (request) => {
-      assert.equal(request.includeFigures, true);
-      return { pages: [{ page: 1, text: 'ID 784-1234-1234567-1' }],
-        figures: [{ id: '1.1', page: 1, contentType: 'image/png', bytes: portrait }] };
+      assert.equal(request.includeFigures, false);
+      return { pages: [{ page: 1, text: 'ID 784-1234-1234567-1' }], figures: [] };
     },
+    renderIdentity: async () => ({ figures: [{ id: '1.0', page: 1, sourceType: 'page',
+      contentType: 'image/jpeg', bytes: Buffer.from('synthetic-jpeg') }], verifiedMrz: null }),
     structure: async ({ figures }) => ({ data: { emirates_id_number: '784123412345671' }, evidence: [], mrz: null,
-      document_classification: 'emirates_id', figure_roles: [{ id: figures[0].id, role: 'photo', confidence: 'high' }],
-      review_required: false, review_flags: [], model: 'synthetic' })
+      document_classification: 'emirates_id', figure_roles: [],
+      image_regions: [{ id: figures[0].id, role: 'photo', confidence: 'high', x1: 100, y1: 100, x2: 250, y2: 400 }],
+      review_required: false, review_flags: [], model: 'synthetic' }),
+    cropIdentity: async (_image, box) => { assert.equal(box.x2, 250); return portrait; }
   };
   assert.equal((await processDocumentOcrJob(options)).status, 'completed');
   assert.deepEqual(store.artifact('photo'), portrait);

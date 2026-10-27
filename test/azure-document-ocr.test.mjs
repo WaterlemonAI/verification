@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PDFDocument } from 'pdf-lib';
 import { analyzeDocumentWithAzure } from '../lib/azure-document-ocr.mjs';
+import { mrzCheckDigit } from '../lib/icao-mrz.mjs';
 
 const endpoint = 'https://doc-ai7uae-ocr-uaen-001.cognitiveservices.azure.com/';
 const location = `${endpoint}documentintelligence/documentModels/prebuilt-layout/analyzeResults/123e4567-e89b-12d3-a456-426614174000?api-version=2024-11-30`;
@@ -25,6 +26,38 @@ test('Azure Layout uses managed identity, validates its operation URL, and delet
     credential: { getToken: async () => ({ token: 'synthetic-managed-token' }) }, fetchImpl: fetched, pause: async () => {} });
   assert.deepEqual(methods, ['POST', 'GET', 'DELETE']);
   assert.equal(output.pages[0].text, 'License Number TL-123');
+});
+
+test('the passport model appends its exact two MRZ lines as cited OCR evidence', async () => {
+  const first = `P<UTO${'SAMPLE<<ALEX'.padEnd(39, '<')}`;
+  const number = 'AB1234567';
+  const birth = '900101';
+  const expiry = '300101';
+  const prefix = number + mrzCheckDigit(number) + 'UTO' + birth + mrzCheckDigit(birth)
+    + 'M' + expiry + mrzCheckDigit(expiry) + '<'.repeat(14) + '<';
+  const second = prefix + mrzCheckDigit(prefix.slice(0, 10) + prefix.slice(13, 20) + prefix.slice(21, 43));
+  const passportLocation = location.replaceAll('prebuilt-layout', 'prebuilt-idDocument');
+  const methods = [];
+  const fetched = async (url, options) => {
+    methods.push(options.method);
+    if (options.method === 'POST') {
+      assert.match(String(url), /prebuilt-idDocument:analyze/);
+      return new Response(null, { status: 202, headers: { 'operation-location': passportLocation } });
+    }
+    assert.equal(String(url), passportLocation);
+    if (options.method === 'DELETE') return new Response(null, { status: 204 });
+    return new Response(JSON.stringify({ status: 'succeeded', analyzeResult: { modelId: 'prebuilt-idDocument',
+      pages: [{ pageNumber: 1, lines: [{ content: 'PASSPORT' }] }], documents: [{ docType: 'idDocument.passport',
+        boundingRegions: [{ pageNumber: 1 }], fields: { MachineReadableZone: { content: `${first}\n${second}` } } }] } }), { status: 200 });
+  };
+  const output = await analyzeDocumentWithAzure({ bytes: Buffer.from('image'), mediaType: 'image/jpeg',
+    maxPages: 1, endpoint, region: 'uaenorth', approvedRegion: 'uaenorth', model: 'prebuilt-idDocument',
+    credential: { getToken: async () => ({ token: 'synthetic-managed-token' }) }, fetchImpl: fetched });
+  assert.deepEqual(methods, ['POST', 'GET', 'DELETE']);
+  assert.match(output.pages[0].text, new RegExp(`MRZ line 1: ${first}`));
+  assert.match(output.pages[0].text, new RegExp(`MRZ line 2: ${second}`));
+  assert.deepEqual(output.verifiedMrz, { page: 1, lines: [first, second] });
+  assert.equal(output.model, 'prebuilt-idDocument:2024-11-30');
 });
 
 test('page and region gates reject before making an Azure call', async () => {

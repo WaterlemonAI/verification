@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
-import { DOCUMENT_OCR_APIS, DOCUMENT_OCR_BY_ID, geminiExtractionSchema } from '../lib/document-ocr-contracts.mjs';
+import { DOCUMENT_OCR_APIS, DOCUMENT_OCR_BY_ID, documentOcrPublicCatalog, geminiExtractionSchema } from '../lib/document-ocr-contracts.mjs';
 
 test('all eight document APIs have unique routes and closed extraction schemas', () => {
   assert.equal(DOCUMENT_OCR_APIS.length, 8);
@@ -16,6 +16,5 @@ test('all eight document APIs have unique routes and closed extraction schemas',
   assert.equal(DOCUMENT_OCR_BY_ID.get('emirates-id-ocr').maxFiles, 2);
   assert.equal(DOCUMENT_OCR_BY_ID.get('passport-icao-ocr').fields.mrz_lines.type, 'array');
   const published = JSON.parse(readFileSync(new URL('../api-site/document-extraction-catalog.json', import.meta.url), 'utf8'));
-  assert.deepEqual(published, DOCUMENT_OCR_APIS.map(({ id, name, publicPath, fields, maxFiles, maxPages }) =>
-    ({ id, name, publicPath, fields, maxFiles, maxPages })));
+  assert.deepEqual(published, documentOcrPublicCatalog());
 });
