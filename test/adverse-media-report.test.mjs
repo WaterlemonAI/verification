@@ -91,6 +91,36 @@ test('permanent report store retains owner isolation and supports public capabil
   assert.equal(await store.getPublic({ reportId: 'missing' }), null);
 });
 
+test('private entity reports cannot be retrieved through the public report lookup', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  await store.save({ ownerId: 'workspace-a', reportId: 'AI7-PRIVATE12345678',
+    bytes: Buffer.from('%PDF-private'), metadata: { report_type: 'entity_search', filename: 'private.pdf' },
+    publicReport: false });
+  assert.ok(await store.get({ ownerId: 'workspace-a', reportId: 'AI7-PRIVATE12345678' }));
+  assert.equal(await store.get({ ownerId: 'workspace-b', reportId: 'AI7-PRIVATE12345678' }), null);
+  assert.equal(await store.getPublic({ reportId: 'AI7-PRIVATE12345678' }), null);
+});
+
+test('Azure report storage omits public aliases for private entity reports', async () => {
+  const rows = [];
+  const store = new AzureAdverseMediaReportStore({
+    blobServiceUrl: 'https://synthetic.blob.core.windows.net',
+    credential: { getToken: async () => ({ token: 'synthetic', expiresOnTimestamp: Date.now() + 60000 }) }
+  });
+  store.container = { getBlockBlobClient: () => ({ uploadData: async () => {} }) };
+  store.table = {
+    upsertEntity: async row => { rows.push(row); },
+    getEntity: async () => { throw Object.assign(new Error('not_found'), { statusCode: 404 }); },
+    listEntities: async function* () { for (const row of rows) yield row; }
+  };
+  await store.save({ ownerId: 'workspace-a', reportId: 'AI7-PRIVATE12345678', bytes: Buffer.from('%PDF-private'),
+    metadata: { report_type: 'entity_search', filename: 'private.pdf' }, publicReport: false });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].publicReport, false);
+  assert.notEqual(rows[0].partitionKey, 'public');
+  assert.equal(await store.getPublic({ reportId: 'AI7-PRIVATE12345678' }), null);
+});
+
 test('deep-research finalization reuses one saved report after a retry', async () => {
   const store = new MemoryAdverseMediaReportStore();
   let saves = 0;
