@@ -148,7 +148,7 @@ jobs:
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
 
       - name: Deploy isolated document OCR resources
-        if: vars.DOCUMENT_OCR_ENABLED == 'true' || vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.provisionDocumentOcrPlatform)
+        if: github.event_name == 'workflow_dispatch' && inputs.provisionDocumentOcrPlatform
         shell: bash
         run: |
           set -euo pipefail
@@ -167,6 +167,19 @@ jobs:
             --name "ai7uae-ocr-platform-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --template-file infrastructure/api-document-ocr-platform.bicep \
             --parameters apiRuntimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" registryId="${registry_id}" keyVaultId="${vault_id}"
+
+      - name: Verify isolated document OCR resources
+        if: vars.DOCUMENT_OCR_ENABLED == 'true' || vars.DOCUMENT_OCR_WORKER_ENABLED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          group="${{ vars.AZURE_RESOURCE_GROUP }}"
+          account="$(az cognitiveservices account show --resource-group "${group}" --name doc-ai7uae-ocr-uaen-001 --query '{location:location,sku:sku.name,localAuthDisabled:properties.disableLocalAuth}' --output json)"
+          storage="$(az storage account show --resource-group "${group}" --name stai7uaeocruaen001 --query '{location:location,sharedKeyAllowed:allowSharedKeyAccess,publicBlobAllowed:allowBlobPublicAccess}' --output json)"
+          identity="$(az identity show --resource-group "${group}" --name id-ai7uae-ocr-worker-uaen-001 --query '{location:location,principalId:principalId}' --output json)"
+          jq -e '.location == "uaenorth" and .sku == "S0" and .localAuthDisabled == true' <<< "${account}" > /dev/null
+          jq -e '.location == "uaenorth" and .sharedKeyAllowed == false and .publicBlobAllowed == false' <<< "${storage}" > /dev/null
+          jq -e '.location == "uaenorth" and (.principalId | type == "string" and length > 0)' <<< "${identity}" > /dev/null
 
       - name: Preview API infrastructure change
         run: |
