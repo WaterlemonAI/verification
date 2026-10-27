@@ -20,6 +20,7 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
     if (url.hostname === 'api.search.brave.com') {
       const query = url.searchParams.get('q');
       queries.push(query);
+      if (query.includes('site:ojk.go.id')) assert.equal(url.searchParams.get('search_lang'), 'en');
       const results = query.includes('site:ojk.go.id') && query.includes('sanksi') ? [officialResult] : [];
       return url.pathname.includes('/news/') ? Response.json({ results }) : Response.json({ web: { results } });
     }
@@ -83,4 +84,11 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
   assert.equal(searchPlus.summary.threshold_status, 'review_required');
   assert.equal(searchPlus.results.length, 1);
   assert.equal(searchPlus.coverage.sources.find((source) => source.source === 'open_web').status, 'complete');
+  assert.match(searchPlus.coverage.limitation, /does not offer an Indonesian language filter/);
+  assert.deepEqual(searchPlus.coverage.languages_requested.map((item) => item.code), ['en', 'ar', 'ru', 'hi', 'zh']);
+  assert.deepEqual(searchPlus.coverage.languages_not_searched, []);
+  for (const code of ['en', 'ar', 'ru', 'hi', 'zh']) {
+    assert.ok(searchPlus.coverage.languages_searched.some((item) => item.code === code));
+  }
+  assert.ok(searchPlus.coverage.search_plus.publisher_batches_attempted > 0);
 });
