@@ -21,10 +21,19 @@ for (let attempt = 0; attempt < 60 && !controller.signal.aborted; attempt += 1) 
 }
 if (!malwareReady) throw new Error('document_ocr_malware_scanner_unavailable');
 
-await documentStore.recordWorkerCapability({ azure: Boolean(process.env.DOCUMENT_OCR_AZURE_ENDPOINT),
-  paddle: await paddleCapability(), imageDigest: process.env.DOCUMENT_OCR_WORKER_IMAGE || '' });
+async function refreshCapability() {
+  try {
+    await documentStore.recordWorkerCapability({ azure: Boolean(process.env.DOCUMENT_OCR_AZURE_ENDPOINT),
+      paddle: await paddleCapability(), imageDigest: process.env.DOCUMENT_OCR_WORKER_IMAGE || '' });
+  } catch { console.warn('document_ocr_capability_check_failed'); }
+}
+await refreshCapability();
+const capabilityTimer = setInterval(refreshCapability, 5 * 60_000);
+capabilityTimer.unref();
 
-await consumeDocumentOcrQueue({ store: documentStore,
-  usageStore: createCustomerUsageStore(),
-  getGeminiKey: () => credentials.getMasterKey('document-ocr-ai'),
-  stopSignal: controller.signal });
+try {
+  await consumeDocumentOcrQueue({ store: documentStore,
+    usageStore: createCustomerUsageStore(),
+    getGeminiKey: () => credentials.getMasterKey('document-ocr-ai'),
+    stopSignal: controller.signal });
+} finally { clearInterval(capabilityTimer); }

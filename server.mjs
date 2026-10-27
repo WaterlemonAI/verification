@@ -1613,7 +1613,8 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
         const capability = documentOcrStore?.getWorkerCapability ? await documentOcrStore.getWorkerCapability() : null;
         const imageMatches = Boolean(process.env.DOCUMENT_OCR_WORKER_IMAGE
           && capability?.imageDigest === process.env.DOCUMENT_OCR_WORKER_IMAGE);
-        if (!capability?.paddle || (!capability.recent && !imageMatches))
+        if (!capability?.paddle || !capability.recent
+          || (process.env.DOCUMENT_OCR_WORKER_IMAGE && !imageMatches))
           return json(res, 409, { status: 'Error', error: 'PaddleOCR worker capability is not currently verified.' });
       }
       return json(res, 200, await store.setDocumentOcrEngine(engineMatch[1], body.engine, access.account.email));

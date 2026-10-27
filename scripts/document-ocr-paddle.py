@@ -13,7 +13,14 @@ from bsa.paddle_ocr import _engine, _items, verified_paddle_models
 def main():
     if sys.argv[1:] == ["--check"]:
         root = Path(os.environ.get("BSA_PADDLE_MODEL_ROOT", "/nonexistent"))
-        print(json.dumps({"ready": verified_paddle_models(root)}))
+        ready = verified_paddle_models(root)
+        if ready:
+            import numpy as np
+            image = np.zeros((64, 128, 3), dtype=np.uint8)
+            with contextlib.redirect_stdout(sys.stderr):
+                for language in ("english", "arabic"):
+                    list(_engine(language).predict(image))
+        print(json.dumps({"ready": ready}))
         return
     if len(sys.argv) != 3 or sys.argv[1] not in {"application/pdf", "image/png", "image/jpeg"}:
         raise ValueError("PADDLE_INPUT_INVALID")
@@ -27,6 +34,7 @@ def main():
     import numpy as np
     import pymupdf
     from PIL import Image
+    Image.MAX_IMAGE_PIXELS = 25_000_000
 
     if sys.argv[1] == "application/pdf":
         document = pymupdf.open(stream=data, filetype="pdf")
@@ -34,11 +42,16 @@ def main():
             raise ValueError("PADDLE_PAGE_LIMIT")
         def rendered_pages():
             for page in document:
+                if page.rect.width * page.rect.height * 1.7 * 1.7 > 25_000_000:
+                    raise ValueError("PADDLE_IMAGE_LIMIT")
                 pixmap = page.get_pixmap(matrix=pymupdf.Matrix(1.7, 1.7), alpha=False)
                 yield np.asarray(Image.open(io.BytesIO(pixmap.tobytes("png"))).convert("RGB"))
         images = rendered_pages()
     else:
-        image = Image.open(io.BytesIO(data)).convert("RGB")
+        image = Image.open(io.BytesIO(data))
+        if image.width * image.height > 25_000_000:
+            raise ValueError("PADDLE_IMAGE_LIMIT")
+        image = image.convert("RGB")
         images = [np.asarray(image)]
     pages = []
     for number, image in enumerate(images, 1):

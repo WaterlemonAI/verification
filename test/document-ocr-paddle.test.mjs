@@ -77,6 +77,18 @@ test('job snapshot chooses one provider; replay cannot repeat OCR or Gemini', as
   }
 });
 
+test('Paddle coordinates reach the shared structuring path', async () => {
+  const store = workerStore('paddle');
+  let seenPages;
+  await processDocumentOcrJob({ store, partitionKey: store.row.partitionKey, jobId: store.row.jobId,
+    getGeminiKey: async () => 'synthetic', scan: async () => {},
+    analyzePaddle: async () => ({ pages: [{ page: 1, text: 'Cheque',
+      lines: [{ text: 'Cheque', box: [10, 20, 300, 50] }] }] }),
+    structure: async ({ pages }) => { seenPages = pages; return { document_classification: 'cheque',
+      data: {}, evidence: [], mrz: null, review_required: false, review_flags: [], model: 'synthetic' }; } });
+  assert.deepEqual(seenPages[0].lines, [{ text: 'Cheque', box: [10, 20, 300, 50] }]);
+});
+
 test('Paddle in-flight replay and malware rejection make no additional provider calls', async () => {
   const store = workerStore('paddle');
   store.row.stage = 'paddle_in_flight';
@@ -92,4 +104,16 @@ test('Paddle in-flight replay and malware rejection make no additional provider 
   assert.equal((await processDocumentOcrJob({ ...options, store: malware,
     scan: async () => { throw new Error('document_ocr_malware_detected'); } })).status, 'failed');
   assert.equal(calls, 0);
+});
+
+test('unreadable Paddle output fails before Gemini without changing the public failure code', async () => {
+  const store = workerStore('paddle');
+  let gemini = 0;
+  const result = await processDocumentOcrJob({ store, partitionKey: store.row.partitionKey,
+    jobId: store.row.jobId, scan: async () => {},
+    analyzePaddle: async () => ({ pages: [{ page: 1, text: '' }] }),
+    getGeminiKey: async () => { gemini++; return 'synthetic'; } });
+  assert.equal(result.status, 'failed');
+  assert.equal(store.row.reasonCode, 'DOCUMENT_OCR_TEXT_UNAVAILABLE');
+  assert.equal(gemini, 0);
 });

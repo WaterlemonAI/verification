@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { after, before, test } from 'node:test';
 
 process.env.NODE_ENV = 'test';
+process.env.DOCUMENT_OCR_WORKER_IMAGE = 'registry.example/ocr@sha256:test';
 const setupKey = 'ai7_admin_setup_test_key';
 process.env.AI7_ADMIN_KEY_HASHES = createHash('sha256').update(setupKey).digest('hex');
 
@@ -15,11 +16,13 @@ let appUrl;
 let cookie = '';
 let csrf = '';
 let paddleReady = false;
+let capabilityRecent = true;
+let capabilityImage = process.env.DOCUMENT_OCR_WORKER_IMAGE;
 
 before(async () => {
   app = createAppServer({ store, startWorker: false,
     documentOcrStore: { getWorkerCapability: async () => ({ azure: true, paddle: paddleReady,
-      recent: true, checkedAt: new Date().toISOString() }) } });
+      recent: capabilityRecent, imageDigest: capabilityImage, checkedAt: new Date().toISOString() }) } });
   await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
   appUrl = `http://127.0.0.1:${app.address().port}`;
 });
@@ -102,6 +105,12 @@ test('only a signed-in administrator can select a verified OCR engine', async ()
   assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'paddle')).status, 409);
   assert.equal(await store.getDocumentOcrEngine('cheque-ocr'), 'azure');
   paddleReady = true;
+  capabilityRecent = false;
+  assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'paddle')).status, 409);
+  capabilityRecent = true;
+  capabilityImage = 'registry.example/ocr@sha256:other';
+  assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'paddle')).status, 409);
+  capabilityImage = process.env.DOCUMENT_OCR_WORKER_IMAGE;
   const selected = await put({ cookie, 'x-ai7-csrf': csrf }, 'paddle');
   assert.equal(selected.status, 200);
   assert.equal((await selected.json()).extractionEngine, 'paddle');

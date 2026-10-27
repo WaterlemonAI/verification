@@ -236,8 +236,8 @@ async function loadIntegrations() {
     request('/admin/api/document-ocr/capability').catch(() => null)
   ]);
   const capability = capabilityResult?.capability;
-  byId('document-ocr-capability').textContent = capability?.recent || capability?.imageMatches
-    ? `Document OCR worker last checked ${new Date(capability.checkedAt).toLocaleString()}: Azure ${capability.azure ? 'verified' : 'unverified'}, PaddleOCR ${capability.paddle ? 'verified' : 'unverified'}. Current image match: ${capability.imageMatches ? 'yes' : 'unconfirmed'}.`
+  byId('document-ocr-capability').textContent = capability?.recent
+    ? `Document OCR worker last checked ${new Date(capability.checkedAt).toLocaleString()}: Azure ${capability.azure ? 'configured' : 'unconfigured'}, PaddleOCR ${capability.paddle ? 'inference verified' : 'unverified'}. Current image match: ${capability.imageMatches ? 'yes' : 'unconfirmed'}.`
     : 'Document OCR worker capability has not been verified recently. PaddleOCR selection is unavailable.';
   integrationCatalog = data.integrations.filter((item) => item.enabled && item.formsCompatible !== false && item.id !== 'adverse-media-ai');
   const list = byId('integration-list');
@@ -293,7 +293,8 @@ async function loadIntegrations() {
         const option = document.createElement('option');
         option.value = value;
         option.textContent = label;
-        option.disabled = value === 'paddle' && (!(capability?.recent || capability?.imageMatches) || !capability.paddle);
+        option.disabled = value === 'paddle' && (!capability?.recent || !capability.paddle
+          || (capability.imageDigest && !capability.imageMatches));
         selector.append(option);
       }
       selector.value = item.extractionEngine;

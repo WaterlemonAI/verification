@@ -21,3 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build private document OCR worker image
         run: docker build --pull --file Dockerfile.document-ocr --tag document-ocr-pr-check .
+      - name: Verify bundled Paddle inference capability
+        run: |
+          result="$(docker run --rm --entrypoint /opt/document-ocr-python/bin/python document-ocr-pr-check scripts/document-ocr-paddle.py --check)"
+          test "${result}" = '{"ready": true}'
