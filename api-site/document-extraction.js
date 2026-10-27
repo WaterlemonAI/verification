@@ -35,7 +35,7 @@ async function load() {
     box.append(title, type, description);
     return box;
   }));
-  byId('sample-code').textContent = `curl -X POST '${apiOrigin}${service.publicPath}' \\\n  -H 'Authorization: Bearer YOUR_AI7_API_KEY' \\\n  -H 'Idempotency-Key: $(uuidgen)' \\\n  -F 'file=@/path/to/document.pdf'${service.maxFiles > 1 ? ` \\\n  -F 'additional_file=@/path/to/back.jpg'` : ''}`;
+  byId('sample-code').textContent = `curl -X POST '${apiOrigin}${service.publicPath}' \\\n  -H 'Authorization: Bearer YOUR_AI7_API_KEY' \\\n  -H "Idempotency-Key: $(uuidgen)" \\\n  -F 'file=@/path/to/document.pdf'${service.maxFiles > 1 ? ` \\\n  -F 'additional_file=@/path/to/back.jpg'` : ''}`;
   byId('copy-endpoint').addEventListener('click', () => navigator.clipboard.writeText(`${apiOrigin}${service.publicPath}`));
 }
 
