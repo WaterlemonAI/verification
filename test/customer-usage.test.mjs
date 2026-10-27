@@ -242,6 +242,35 @@ test('Azure Table settles a Form before HTTP completion and refunds failed servi
   assert.equal([...tableClient.entities.values()].filter((item) => item.kind === 'refund').length, 1);
 });
 
+test('async extraction failure refunds a 202 reservation exactly once even when worker finishes first', async () => {
+  for (const tableClient of [null, atomicUsageTable()]) {
+    const usage = tableClient ? new AzureCustomerUsageStore({ tableClient }) : new MemoryCustomerUsageStore();
+    const id = 'ocr-async-refund';
+    const policy = validateUsagePolicy({ mode: 'prepaid', currency: 'USD',
+      allowed_modules: ['passport-icao-ocr'], rates: { 'passport-icao-ocr': [{ up_to: null, price: '0.12' }] }
+    }, new Set(['passport-icao-ocr']));
+    await usage.configure(id, policy, true);
+    await usage.addCredit(id, moneyMicros('0.12'), true);
+    const admitted = await usage.admit(id, { transactionId: 'ocr-failed', moduleIds: ['passport-icao-ocr'],
+      method: 'POST', path: '/service/passport_icao_ocr' }, true);
+    await usage.settleAsyncResult(id, admitted.logKey, { successful: false, reason: 'DOCUMENT_OCR_MALWARE_DETECTED' });
+    await usage.complete(id, admitted.logKey, 202);
+    await usage.settleAsyncResult(id, admitted.logKey, { successful: false, reason: 'DOCUMENT_OCR_MALWARE_DETECTED' });
+    const account = await usage.account(id, true);
+    assert.equal(account.balance, '0.120000');
+    assert.equal(account.spent, '0.000000');
+    assert.equal(account.charged_calls, 0);
+    const row = tableClient ? tableClient.entities.get(`usage-${id}/${admitted.logKey}`)
+      : [...usage.rows.values()].find((item) => item.transactionId === 'ocr-failed');
+    assert.equal(row.responseCode, 202);
+    assert.equal(row.state, 'refunded');
+    assert.equal(row.refundMicros, '120000');
+    assert.equal(tableClient
+      ? [...tableClient.entities.values()].filter((item) => item.kind === 'refund' && item.relatedTransactionId === 'ocr-failed').length
+      : [...usage.creditRows.values()].filter((item) => item.related_transaction_id === 'ocr-failed').length, 1);
+  }
+});
+
 test('Azure account and log batch admits only one concurrent request against one credit', async () => {
   const entities = new Map();
   let version = 0;

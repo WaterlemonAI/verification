@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#071412" />
+  <title>KYCProbe — Document extraction API</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/api.css?v=7" />
+  <script src="/portal-auth.js?v=5" defer></script>
+  <script src="/document-extraction.js?v=1" defer></script>
+</head>
+<body>
+  <div class="utility-bar"><span>KYCProbe Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
+  <a class="skip-link" href="#docs">Skip to documentation</a>
+  <header><a class="brand" href="https://kycprobe.com" aria-label="KYCProbe home"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a><span class="status">Workspace API</span></header>
+  <main id="docs">
+    <section class="hero">
+      <p class="eyebrow">DOCUMENT VERIFICATION / STRUCTURED EXTRACTION</p>
+      <h1 id="service-title">Document <em>extraction.</em></h1>
+      <p>Extract named fields from an uploaded document with page-specific evidence and explicit review flags. Machine-readable zones are checked deterministically where applicable.</p>
+      <div class="meta"><span>POST</span><code id="endpoint-path">Loading…</code><button class="copy" id="copy-endpoint">Copy endpoint</button></div>
+    </section>
+    <section class="layout">
+      <aside aria-label="On this page"><p>ON THIS PAGE</p><a href="#authentication">Authentication</a><a href="#request">Request</a><a href="#responses">Responses</a><a href="#security">Data handling</a><a href="#tester">Live tester</a></aside>
+      <div class="content">
+        <article id="authentication"><p class="label">AUTHENTICATION</p><h2>Use your KYCProbe API key</h2><p>Send the API key as a Bearer token. Keep the key on your server. Your workspace must be enabled for this module.</p><div class="code-block"><code>Authorization: Bearer YOUR_AI7_API_KEY</code></div></article>
+        <article id="request"><p class="label">REQUEST</p><h2>Upload and extract</h2><p>Send <code>multipart/form-data</code> with one required <code>file</code>. Emirates ID accepts one optional <code>additional_file</code> for the second side. PDF, PNG and JPEG are supported. The combined upload limit is 25 MiB; the page limit appears below.</p><p><strong id="limits"></strong></p><p>Every submission requires a unique <code>Idempotency-Key</code> header (16–128 allowed characters). Repeating the same key and exact files returns the original job without charging again. The API returns HTTP 202 while processing; poll the status and result URLs.</p><div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div><h3>Returned fields</h3><div class="field-grid" id="fields"></div></article>
+        <article id="responses"><p class="label">RESPONSE</p><h2>Structured data with a trace</h2><div class="schema-table"><div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div><div><code>transaction_id</code><span>UUID</span><span>Unique request reference in the job and result.</span></div><div><code>status</code><span>string</span><span>Queued, completed, review required, or failed.</span></div><div><code>data</code><span>object</span><span>All documented fields. An absent scalar is <code>Not Found</code>; an illegible or unsupported scalar is <code>Not Readable</code>. Absent lists are empty arrays.</span></div><div><code>evidence</code><span>array</span><span>Field, page, and verified verbatim OCR quote for extracted values.</span></div><div><code>mrz</code><span>object or null</span><span>ICAO checksums for passport or Emirates ID MRZ; integrity is distinct from authenticity.</span></div><div><code>review_flags</code><span>array</span><span>Unverified evidence, data mismatch, unreadable fields, document instructions, or failed MRZ checks.</span></div><div><code>processing</code><span>object</span><span>Page count, malware gate, model versions and bounded provider-call counts.</span></div></div><p>HTTP 202 accepts a job; 200 returns its completed result. HTTP 400/413/415 reject invalid files before processing, 401/403 reject unauthorized access, 422 reports a failed job, and 503 reports unavailable capacity or configuration. A <code>review_required</code> result needs a human check before reliance.</p></article>
+        <article id="security"><p class="label">DATA HANDLING</p><h2>Private, time-limited retention</h2><p>Uploaded files, OCR text, structured result, and any image crops are encrypted in private cloud storage and retained for 30 days. Photo and signature crops, where available, use five-minute signed download links. The result can also be fetched with your API key during retention. The input document is treated as untrusted content, and missing information is left empty rather than invented.</p></article>
+        <article id="tester" class="tester"><p class="label">LIVE TESTER</p><h2>Run a document extraction</h2><p>The tester submits to your KYCProbe workspace and shows the JSON result. Your API key remains in this page's memory.</p><form id="ocr-form"><label>API key<input id="api-key" type="password" autocomplete="off" required placeholder="Paste your API key" /></label><div class="input-grid"><label>Document <code>file</code><input id="file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required /></label><label id="additional-file-wrap" hidden>Second side <code>additional_file</code><input id="additional-file" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" /></label></div><p class="form-error" id="form-error" role="alert"></p><button type="submit" id="send-request">Start extraction <span>→</span></button></form><div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div><div class="response-actions"><button class="copy" id="copy-response" disabled>Copy JSON</button></div><pre id="response-json" aria-live="polite">{ "message": "Your JSON response will appear here." }</pre></article>
+      </div>
+    </section>
+  </main>
+  <footer><div><strong>KYCProbe Verification API</strong><span>A brand by AI7Lab UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">Parent company</a><a href="mailto:contact@ai7lab.net">Contact</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
+</body>
+</html>

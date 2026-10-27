@@ -9,9 +9,12 @@ on:
       - lib/**
       - server.mjs
       - test/**
+      - scripts/**
+      - Dockerfile.document-ocr
       - package.json
       - package-lock.json
       - infrastructure/api.bicep
+      - infrastructure/api-document-ocr-platform.bicep
       - .github/workflows/api-pr-checks.yml
 
 permissions:
@@ -30,3 +33,7 @@ jobs:
           find lib test -name '*.mjs' -print0 | xargs -0 -n1 node --check
       - name: Run API contract and queue tests
         run: npm test
+      - name: Validate document OCR Bicep
+        run: |
+          az bicep build --file infrastructure/api.bicep
+          az bicep build --file infrastructure/api-document-ocr-platform.bicep
