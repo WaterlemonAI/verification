@@ -1,6 +1,16 @@
 (() => {
   const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account']);
   const normalizedPath = location.pathname.length > 1 ? location.pathname.replace(/\/$/, '') : '/';
+  const documentApis = [
+    ['uae-trade-license-ocr', 'UAE Trade License OCR'],
+    ['passport-icao-ocr', 'Passport & MRZ'],
+    ['uae-poa-ocr', 'UAE POA OCR'],
+    ['uae-utility-bill-ocr', 'UAE Utility Bill OCR'],
+    ['cheque-ocr', 'Cheque OCR'],
+    ['moa-analysis', 'MOA Analysis'],
+    ['articles-of-association-ocr', 'Articles of Association'],
+    ['emirates-id-ocr', 'Emirates ID OCR']
+  ];
   const pageContext = {
     '/': ['Verification API', 'UAE Trade Licence'],
     '/iban': ['Verification API', 'IBAN Verification'],
@@ -9,7 +19,8 @@
     '/merchant-screening': ['Verification API', 'Merchant Screening'],
     '/bank-statement-analysis': ['Verification API', 'Bank Statement Analysis'],
     '/forms': ['Forms', 'Forms Module'],
-    '/account': ['Workspace', 'Account settings']
+    '/account': ['Workspace', 'Account settings'],
+    ...Object.fromEntries(documentApis.map(([id, name]) => [`/document-extraction/${id}`, ['Document Extraction', name]]))
   };
 
   function escapeHtml(value) {
@@ -21,7 +32,7 @@
   async function loadSession() {
     const response = await fetch('/portal/api/auth/session', { credentials: 'same-origin', headers: { accept: 'application/json' } });
     if (!response.ok) {
-      if (protectedPaths.has(normalizedPath)) location.replace(`/login?next=${encodeURIComponent(location.pathname + location.search + location.hash)}`);
+      if (protectedPaths.has(normalizedPath) || normalizedPath.startsWith('/document-extraction/')) location.replace(`/login?next=${encodeURIComponent(location.pathname + location.search + location.hash)}`);
       return;
     }
     const session = await response.json();
@@ -48,6 +59,10 @@
         <a href="/bank-statement-analysis" data-path="/bank-statement-analysis"><span>06</span> Bank Statement Analysis</a>
       </div>
       <div class="portal-nav-group">
+        <p>DOCUMENT EXTRACTION</p>
+        ${documentApis.map(([id, name], index) => `<a href="/document-extraction/${id}" data-path="/document-extraction/${id}"><span>${String(index + 9).padStart(2, '0')}</span> ${escapeHtml(name)}</a>`).join('')}
+      </div>
+      <div class="portal-nav-group">
         <p>FORMS</p>
         <a href="/forms" data-path="/forms"><span>07</span> Forms Module</a>
       </div>
@@ -62,7 +77,8 @@
         <button type="button" id="portal-sign-out">Sign out</button>
       </div>`;
     sidebar.querySelector(`[data-path="${normalizedPath}"]`)?.classList.add('active');
-    const modules = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/forms': 'forms' };
+    const modules = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/forms': 'forms',
+      ...Object.fromEntries(documentApis.map(([id]) => [`/document-extraction/${id}`, id])) };
     sidebar.querySelectorAll('a[data-path]').forEach((link) => {
       const module = modules[link.dataset.path];
       if (module && ((!entitlements.allowed_modules.includes('*') && !entitlements.allowed_modules.includes(module))
@@ -116,6 +132,6 @@
   }
 
   loadSession().catch(() => {
-    if (protectedPaths.has(normalizedPath)) location.replace('/login');
+    if (protectedPaths.has(normalizedPath) || normalizedPath.startsWith('/document-extraction/')) location.replace('/login');
   });
 })();

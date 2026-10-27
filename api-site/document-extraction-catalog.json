@@ -1,0 +1,656 @@
+[
+  {
+    "id": "uae-trade-license-ocr",
+    "name": "UAE Trade License OCR (All Emirates)",
+    "publicPath": "/service/uae_trade_license_ocr",
+    "fields": {
+      "issuing_authority": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Organization that issued the trade license. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "license_number": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Trade license number exactly as printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "company_name_english": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Company legal name in English, when printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "company_name_arabic": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Company legal name in Arabic, when printed. Preserve Arabic script. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "formation_number": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Company formation or registration number. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "address": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Complete business address from the document. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "issue_date": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "License issue date in DD/MM/YYYY when an unambiguous full date is printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "expiry_date": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "License expiry date in DD/MM/YYYY when an unambiguous full date is printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "managers": {
+        "type": "array",
+        "description": "Names of managers explicitly identified in the document.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "business_activity": {
+        "type": "array",
+        "description": "Business activities printed on the license.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "directors_business_owners": {
+        "type": "array",
+        "description": "Directors, shareholders, or business owners explicitly listed; preserve each shareholding percentage.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Name as printed. Return null when absent, unreadable, or unsupported by the document."
+            },
+            "shareholding_percent": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Printed percentage including the percent sign, or null. Return null when absent, unreadable, or unsupported by the document."
+            }
+          },
+          "required": [
+            "name",
+            "shareholding_percent"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "company_type": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Legal company type, such as sole establishment or limited liability company. Return null when absent, unreadable, or unsupported by the document."
+      }
+    },
+    "maxFiles": 1,
+    "maxPages": 20
+  },
+  {
+    "id": "passport-icao-ocr",
+    "name": "Global Passport ICAO OCR & MRZ Verification",
+    "publicPath": "/service/passport_icao_ocr",
+    "fields": {
+      "document_type": {
+        "type": "string",
+        "enum": [
+          "Passport",
+          "Not Identified as Passport"
+        ]
+      },
+      "issuing_country": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Issuing state as a three-letter ISO/ICAO code printed or encoded in MRZ. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "passport_number": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Passport number exactly as printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "surnames": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Surname or surnames as printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "given_names": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Given name or names as printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "nationality": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Nationality as a three-letter ISO/ICAO code printed or encoded in MRZ. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "date_of_birth": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Date of birth in DD/MM/YYYY only when the century is explicit in the visual zone. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "gender": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "M",
+          "F",
+          "O",
+          null
+        ],
+        "description": "M, F or O only when explicitly printed. An MRZ filler means unspecified, not O."
+      },
+      "date_of_expiry": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Expiry date in DD/MM/YYYY only when the century is explicit in the visual zone. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "date_of_issue": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Issue date in DD/MM/YYYY when printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "place_of_birth": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "City, state or region printed as place of birth. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "mrz_lines": {
+        "type": "array",
+        "description": "Exactly two raw 44-character TD3 MRZ lines copied character for character. Empty if not legible.",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "maxFiles": 1,
+    "maxPages": 4
+  },
+  {
+    "id": "uae-poa-ocr",
+    "name": "UAE POA (All Emirates)",
+    "publicPath": "/service/uae_poa_ocr",
+    "fields": {
+      "power_of_attorney": {
+        "type": "string",
+        "enum": [
+          "POA Determined",
+          "Document can not be classified"
+        ]
+      },
+      "issuing_authority": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Issuing or attesting authority printed on the POA. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "entity": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Name of the principal entity granting power of attorney. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "name_of_poa": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Name of the person or entity receiving power of attorney. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "period": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "From DD/MM/YYYY to DD/MM/YYYY when both dates are printed; otherwise period not found. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "id_number": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "ID number of the attorney-in-fact. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "nationality": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Nationality of the attorney-in-fact as printed. Return null when absent, unreadable, or unsupported by the document."
+      }
+    },
+    "maxFiles": 1,
+    "maxPages": 20
+  },
+  {
+    "id": "uae-utility-bill-ocr",
+    "name": "UAE Utility Bill (All Emirates)",
+    "publicPath": "/service/uae_utility_bill_ocr",
+    "fields": {
+      "utility_service_provider": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Name of utility service provider. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "account_type": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "Residential",
+          "Commercial",
+          "Govt",
+          null
+        ],
+        "description": "Residential, Commercial, or Govt. only when supported by the bill."
+      },
+      "address": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Entire service or billing address as printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "emirate": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "UAE emirate associated with the bill. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "bill_date": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Bill date in DD/MM/YY format. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "bill_issued_to": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Person or entity named as account holder. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "utility_bill_amount": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Total billed amount, with currency if printed. Return null when absent, unreadable, or unsupported by the document."
+      }
+    },
+    "maxFiles": 1,
+    "maxPages": 20
+  },
+  {
+    "id": "cheque-ocr",
+    "name": "Cheque OCR",
+    "publicPath": "/service/cheque_ocr",
+    "fields": {
+      "cheque_number": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Cheque number as printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "bank_name": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Bank name as printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "payee_name": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Payee name as printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "cheque_date": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Cheque date in DD/MM/YYYY when unambiguous. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "amount": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Cheque amount and currency as printed; do not infer a numeric amount from words unless unambiguous. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "micr_number": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "MICR number if present and legible. Return null when absent, unreadable, or unsupported by the document."
+      }
+    },
+    "maxFiles": 1,
+    "maxPages": 2
+  },
+  {
+    "id": "moa-analysis",
+    "name": "MOA Analysis",
+    "publicPath": "/service/moa_analysis",
+    "fields": {
+      "company_name": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Legal company name. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "registration_number": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Company registration number. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "business_objectives": {
+        "type": "array",
+        "description": "Business objectives stated in the memorandum.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "authorized_capital": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Authorized capital and currency, if stated. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "date_of_incorporation": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Incorporation date in DD/MM/YYYY when unambiguous. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "shareholders": {
+        "type": "array",
+        "description": "One row for each explicitly named shareholder.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Shareholder name. Return null when absent, unreadable, or unsupported by the document."
+            },
+            "shareholding_percent": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Shareholding percentage, if printed. Return null when absent, unreadable, or unsupported by the document."
+            },
+            "nationality": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Nationality, if printed. Return null when absent, unreadable, or unsupported by the document."
+            },
+            "id_number": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "ID number, if printed. Return null when absent, unreadable, or unsupported by the document."
+            },
+            "phone_number": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Phone number, if printed. Return null when absent, unreadable, or unsupported by the document."
+            }
+          },
+          "required": [
+            "name",
+            "shareholding_percent",
+            "nationality",
+            "id_number",
+            "phone_number"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "maxFiles": 1,
+    "maxPages": 50
+  },
+  {
+    "id": "articles-of-association-ocr",
+    "name": "Articles of Association OCR",
+    "publicPath": "/service/articles_of_association_ocr",
+    "fields": {
+      "company_name": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Legal company name. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "registration_number": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Company registration number. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "company_rules": {
+        "type": "array",
+        "description": "Key company rules actually stated in the articles.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "share_structure": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Share classes and ownership structure actually stated. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "director_requirements": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Requirements for directors, if stated. Return null when absent, unreadable, or unsupported by the document."
+      }
+    },
+    "maxFiles": 1,
+    "maxPages": 50
+  },
+  {
+    "id": "emirates-id-ocr",
+    "name": "Emirates ID OCR",
+    "publicPath": "/service/emirates_id_ocr",
+    "fields": {
+      "emirates_id_number": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "15-digit Emirates ID number from the front. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "full_name_english": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Cardholder full English name. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "full_name_arabic": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Cardholder full Arabic name, preserving Arabic script. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "nationality_english": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Nationality as printed in English. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "nationality_arabic": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Nationality as printed in Arabic. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "date_of_birth": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Date of birth in DD/MM/YYYY when printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "gender": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Gender as printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "issue_date": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Card issue date in DD/MM/YYYY when printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "expiry_date": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Card expiry date in DD/MM/YYYY when printed. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "card_number": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Physical card number from the back, distinct from Emirates ID number. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "occupation_english": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Occupation in English. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "occupation_arabic": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Occupation in Arabic. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "employer_name_english": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Employer or sponsor in English. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "employer_name_arabic": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Employer or sponsor in Arabic. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "place_of_issue_english": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Place of issue in English. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "place_of_issue_arabic": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Place of issue in Arabic. Return null when absent, unreadable, or unsupported by the document."
+      },
+      "mrz_lines": {
+        "type": "array",
+        "description": "Raw MRZ lines from the back, each copied character for character. Empty if not legible.",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "maxFiles": 2,
+    "maxPages": 4
+  }
+]

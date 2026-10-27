@@ -1,5 +1,5 @@
 import { createReadStream, readFileSync, existsSync, statSync } from 'node:fs';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { createServer } from 'node:http';
 import { get as httpsGet } from 'node:https';
@@ -35,6 +35,8 @@ import {
   portalCookie, safePortalAccount, verifyPortalPassword, verifyPortalSession
 } from './lib/portal-auth.mjs';
 import { bsaEnabled, bsaMode, bsaCapabilities, createBsaJob, getBsaJob, getBsaResult, getBsaArtifact } from './lib/bsa-store.mjs';
+import { DOCUMENT_OCR_BY_PATH } from './lib/document-ocr-contracts.mjs';
+import { createDocumentOcrStore } from './lib/document-ocr-store.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
@@ -83,6 +85,13 @@ async function classifyCustomerApi(req, url, store) {
   };
   if (path === '/service/health') return { moduleIds: [], method: 'GET', billable: false };
   if (path === '/service/keys/self/rotate') return { moduleIds: [], method: 'POST', billable: false };
+  const documentOcr = DOCUMENT_OCR_BY_PATH.get(path);
+  if (documentOcr) return { moduleIds: [documentOcr.id], method: 'POST', billable: true };
+  const documentOcrJob = /^\/service\/([a-z_]+)\/(?:jobs\/)?(ocr_[0-9a-f-]{36})(?:\/(?:result|artifacts\/(?:photo|signature)))?$/.exec(path);
+  if (documentOcrJob) {
+    const definition = DOCUMENT_OCR_BY_PATH.get(`/service/${documentOcrJob[1]}`);
+    if (definition) return { moduleIds: [definition.id], method: 'GET', billable: false };
+  }
   if (fixed[path]) return { moduleIds: [fixed[path]], method: 'POST', billable: true };
   if (path === '/service/adverse_media/config' || /\/service\/(?:adverse_media|merchant_screening|forms)\/reports\//.test(path)
     || /\/service\/merchant_screening\/screenshots\//.test(path)) return null;
@@ -191,7 +200,8 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
     }
     completeUsageBeforeResponse(res, usageStore, workspaceId, '', transactionId, details, false);
   }
-  req.ai7CapacityLane = route.billable ? (route.moduleIds[0] || 'other') : '';
+  req.ai7CapacityLane = route.billable
+    ? (DOCUMENT_OCR_BY_PATH.has(url.pathname) ? 'document-ocr' : route.moduleIds[0] || 'other') : '';
   return true;
 }
 
@@ -1448,7 +1458,8 @@ function portalPagePath(pathname) {
 function protectedPortalPath(pathname) {
   const page = portalPagePath(pathname);
   return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account'].includes(page)
-    || /^\/forms\/[a-z0-9-]+$/.test(page);
+    || /^\/forms\/[a-z0-9-]+$/.test(page)
+    || /^\/document-extraction\/[a-z0-9-]+$/.test(page);
 }
 
 async function serviceHealth(store) {
@@ -1953,10 +1964,132 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
   }
 }
 
+function documentOcrArtifactSignature(workspaceId, jobId, name, expires) {
+  const key = process.env.DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX;
+  if (!/^[a-f0-9]{64}$/i.test(key || '')) throw new Error('document_ocr_download_signing_unavailable');
+  return createHmac('sha256', Buffer.from(key, 'hex')).update(`${workspaceId}\n${jobId}\n${name}\n${expires}`).digest('hex');
+}
+
+function documentOcrArtifactUrl(definition, workspaceId, jobId, name) {
+  const expires = Math.floor(Date.now() / 1000) + 300;
+  const signature = documentOcrArtifactSignature(workspaceId, jobId, name, expires);
+  const origin = process.env.API_PUBLIC_BASE_URL || 'https://api.ai7uae.com';
+  return `${origin}${definition.publicPath}/jobs/${jobId}/artifacts/${name}?workspace_id=${encodeURIComponent(workspaceId)}&expires=${expires}&signature=${signature}`;
+}
+
+function documentOcrSignedAccess(url, jobId, name) {
+  const workspaceId = url.searchParams.get('workspace_id') || '';
+  const expires = Number(url.searchParams.get('expires'));
+  const signature = url.searchParams.get('signature') || '';
+  if (!/^[a-f0-9]{64}$/i.test(signature) || !Number.isSafeInteger(expires) || expires < Math.floor(Date.now() / 1000)
+    || expires > Math.floor(Date.now() / 1000) + 300 || !/^[A-Za-z0-9._:-]{8,128}$/.test(workspaceId)) return null;
+  const expected = documentOcrArtifactSignature(workspaceId, jobId, name, expires);
+  return timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex')) ? workspaceId : null;
+}
+
+async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
+  const definition = DOCUMENT_OCR_BY_PATH.get(url.pathname);
+  const jobMatch = /^\/service\/([a-z_]+)\/jobs\/(ocr_[0-9a-f-]{36})(?:\/(result|artifacts\/(photo|signature)))?$/.exec(url.pathname);
+  const jobDefinition = jobMatch && DOCUMENT_OCR_BY_PATH.get(`/service/${jobMatch[1]}`);
+  if (!definition && !jobDefinition) return false;
+  if ((jobDefinition && req.method !== 'GET') || (definition && req.method !== 'POST')) {
+    json(res, 405, { status: 'Error', error: `Method must be ${jobDefinition ? 'GET' : 'POST'}.` },
+      { allow: jobDefinition ? 'GET' : 'POST' });
+    return true;
+  }
+  if ((definition && !req.ai7Client) || (jobDefinition && !req.ai7Client && !url.searchParams.has('signature'))) {
+    json(res, 401, { status: 'Error', error: 'An active customer API key or signed artifact URL is required.' });
+    return true;
+  }
+  if ((process.env.NODE_ENV !== 'test' && process.env.DOCUMENT_OCR_PRODUCTION_ENABLED !== '1')
+    || !documentStore || !/^[a-f0-9]{64}$/i.test(process.env.DOCUMENT_OCR_DATA_KEY_HEX || '')) {
+    json(res, 503, { status: 'Error', reasonCode: 'DOCUMENT_OCR_UNAVAILABLE' });
+    return true;
+  }
+  if (jobDefinition) {
+    const artifactName = jobMatch[4];
+    const workspaceId = req.ai7Client?.id || (artifactName ? documentOcrSignedAccess(url, jobMatch[2], artifactName) : null);
+    if (!workspaceId) { json(res, 401, { status: 'Error', error: 'An active API key or signed artifact URL is required.' }); return true; }
+    const job = await documentStore.getJob(workspaceId, jobMatch[2]);
+    if (!job || job.service_id !== jobDefinition.id) { json(res, 404, { status: 'Error', error: 'Extraction was not found.' }); return true; }
+    if (artifactName) {
+      const bytes = await documentStore.getArtifact(workspaceId, jobMatch[2], artifactName);
+      if (!bytes) { json(res, 404, { status: 'Error', error: 'Artifact was not found.' }); return true; }
+      res.writeHead(200, { 'content-type': 'image/png', 'content-length': bytes.length,
+        'content-disposition': `attachment; filename="${artifactName}.png"`, 'cache-control': 'private, no-store' });
+      res.end(bytes);
+      return true;
+    }
+    if (jobMatch[3] === 'result') {
+      const record = await documentStore.getResult(workspaceId, jobMatch[2]);
+      if (!record.result) { json(res, record.job.status === 'failed' ? 422 : 202, { job: record.job }); return true; }
+      const result = { ...record.result };
+      if (Array.isArray(result.artifacts)) result.artifacts = result.artifacts.map((item) => ({
+        ...item, download_url: documentOcrArtifactUrl(jobDefinition, workspaceId, jobMatch[2], item.name)
+      }));
+      json(res, 200, result);
+      return true;
+    }
+    json(res, 200, { job });
+    return true;
+  }
+  if (!req.ai7Client) { json(res, 401, { status: 'Error', error: 'An active customer API key is required.' }); return true; }
+  const idempotencyKey = String(req.headers['idempotency-key'] || '').trim();
+  if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) {
+    json(res, 400, { status: 'Error', reasonCode: 'INVALID_IDEMPOTENCY_KEY' }); return true;
+  }
+  if (!String(req.headers['content-type'] || '').startsWith('multipart/form-data;')) {
+    json(res, 400, { status: 'Error', reasonCode: 'MULTIPART_REQUIRED' }); return true;
+  }
+  try {
+    const maxBytes = 25 * 1024 * 1024;
+    const raw = await readBody(req, maxBytes + 262144);
+    const form = await new Request('http://localhost/', { method: 'POST',
+      headers: { 'content-type': req.headers['content-type'] }, body: raw }).formData();
+    const primary = form.getAll('file');
+    const secondary = form.getAll('additional_file');
+    if (primary.length !== 1 || !(primary[0] instanceof File) || secondary.length > definition.maxFiles - 1
+      || secondary.some((item) => !(item instanceof File))) {
+      json(res, 400, { status: 'Error', reasonCode: 'INVALID_DOCUMENT_FILES' }); return true;
+    }
+    const files = [];
+    let totalBytes = 0;
+    for (const upload of [...primary, ...secondary]) {
+      const bytes = Buffer.from(await upload.arrayBuffer());
+      totalBytes += bytes.length;
+      if (!bytes.length || totalBytes > maxBytes) { json(res, 413, { status: 'Error', reasonCode: 'FILE_TOO_LARGE' }); return true; }
+      const mediaType = bytes.subarray(0, 5).toString('ascii') === '%PDF-' ? 'application/pdf'
+        : bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ? 'image/png'
+          : bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? 'image/jpeg' : null;
+      if (!mediaType || (upload.type && upload.type !== mediaType && !(mediaType === 'image/jpeg' && upload.type === 'image/jpg'))) {
+        json(res, 415, { status: 'Error', reasonCode: 'UNSUPPORTED_FILE_TYPE' }); return true;
+      }
+      files.push({ bytes, mediaType });
+    }
+    const created = await documentStore.createJob({ ownerId: req.ai7Client.id, serviceId: definition.id,
+      files, idempotencyKey, transactionId: res.getHeader('x-ai7-transaction-id'),
+      billingLogKey: req.ai7Usage?.logKey || '' });
+    if (created.reused && req.ai7Usage) {
+      await usageStore.settleAsyncResult(req.ai7Usage.workspaceId, req.ai7Usage.logKey, {
+        successful: false, reason: 'idempotency_replay'
+      });
+    }
+    const path = `${definition.publicPath}/jobs/${created.job.id}`;
+    json(res, 202, { ...created.job, reused: created.reused, status_url: path, result_url: `${path}/result` });
+    return true;
+  } catch (error) {
+    if (error.message === 'document_ocr_idempotency_conflict') json(res, 409, { status: 'Error', reasonCode: 'IDEMPOTENCY_CONFLICT' });
+    else if (error.message === 'request_too_large') json(res, 413, { status: 'Error', reasonCode: 'FILE_TOO_LARGE' });
+    else json(res, 503, { status: 'Error', reasonCode: 'DOCUMENT_OCR_SUBMISSION_UNAVAILABLE' });
+    return true;
+  }
+}
+
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
   deepResearchQueue = process.env.ADVERSE_MEDIA_WORKER_ENABLED === 'false' ? null : createDeepResearchQueue(),
   formsQueue = createFormsQueue(), formSubmissionStore = createFormsSubmissionStore(),
   reportStore = createAdverseMediaReportStore(), jsonStore = createAdverseMediaJsonStore(),
+  documentOcrStore = createDocumentOcrStore(),
   usageStore = createCustomerUsageStore(),
   merchantScreener = configuredMerchantScreener, requestCapacity = createRequestCapacity(),
   startWorker = process.env.NODE_ENV !== 'test' } = {}) {
@@ -2054,6 +2187,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return await handleBsa(req, res, url, store);
+      if (await handleDocumentOcr(req, res, url, documentOcrStore, usageStore)) return;
       const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
       if (req.method === 'POST' && formSubmissionMatch) return await submitForm(req, res, formSubmissionMatch[1], store, formsQueue, formSubmissionStore, transactionId);
       const formSchemaMatch = /^\/forms\/([a-z0-9-]+)\/schema$/.exec(url.pathname);
@@ -2133,7 +2267,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         if (!session) return portalLoginRedirect(res, url.pathname, url.search);
         const page = portalPagePath(url.pathname);
         const pageModule = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/forms': 'forms' }[page]
-          || (/^\/forms\/[a-z0-9-]+$/.test(page) ? 'forms' : '');
+          || (/^\/forms\/[a-z0-9-]+$/.test(page) ? 'forms' : '')
+          || (/^\/document-extraction\/[a-z0-9-]+$/.test(page) ? page.split('/').at(-1) : '');
         if (pageModule) {
           const usage = await usageStore.account(account.client_id, Boolean((await store.getCustomer?.(account.client_id))?.usagePolicyVersion));
           if (!usage.allowed_modules.includes('*') && !usage.allowed_modules.includes(pageModule)) {
@@ -2157,6 +2292,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (directory.endsWith('api-site') && (url.pathname === '/merchant-screening' || url.pathname === '/merchant-screening/')) return serveStatic(res, directory, '/merchant-screening.html');
       if (directory.endsWith('api-site') && (url.pathname === '/bank-statement-analysis' || url.pathname === '/bank-statement-analysis/')) return serveStatic(res, directory, '/bank-statement-analysis.html');
       if (directory.endsWith('api-site') && (url.pathname === '/forms' || url.pathname === '/forms/' || /^\/forms\/[a-z0-9-]+\/?$/.test(url.pathname))) return serveStatic(res, directory, '/forms.html');
+      if (directory.endsWith('api-site') && /^\/document-extraction\/[a-z0-9-]+\/?$/.test(url.pathname)) {
+        const id = portalPagePath(url.pathname).split('/').at(-1);
+        if (![...DOCUMENT_OCR_BY_PATH.values()].some((item) => item.id === id)) return json(res, 404, { status: 'Error', error: 'Page was not found.' });
+        return serveStatic(res, directory, '/document-extraction.html');
+      }
       return serveStatic(res, directory, url.pathname.replace(/^\/docs/, '') || '/');
     } catch (error) {
       if (res.headersSent) return;

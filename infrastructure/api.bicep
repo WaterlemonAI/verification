@@ -12,6 +12,12 @@ param merchantScreenshotWorkerImage string
 @description('Digest-pinned bank statement analysis worker image reference.')
 param bankStatementWorkerImage string
 
+@description('Digest-pinned document OCR worker image. Required only when document OCR is enabled.')
+param documentOcrWorkerImage string = ''
+
+@description('Enable the eight document OCR APIs only after all sample and credential validation gates pass.')
+param enableDocumentOcr bool = false
+
 @description('Resource ID of the existing AI7 UAE Container Apps environment.')
 param environmentId string
 
@@ -35,6 +41,15 @@ param bankStatementStorageName string = 'stai7uaebsauaen001'
 
 @description('Azure Document Intelligence endpoint approved in UAE North.')
 param bankStatementDocumentEndpoint string = 'https://doc-ai7uae-bsa-uaen-001.cognitiveservices.azure.com/'
+
+@description('Dedicated document OCR storage account; never reuse the bank statement store.')
+param documentOcrStorageName string = 'stai7uaeocruaen001'
+
+@description('Dedicated S0 Document Intelligence account for the eight extraction APIs.')
+param documentOcrEndpoint string = 'https://doc-ai7uae-ocr-uaen-001.cognitiveservices.azure.com/'
+
+@description('Dedicated document OCR worker identity name.')
+param documentOcrWorkerIdentityName string = 'id-ai7uae-ocr-worker-uaen-001'
 
 @description('Resource ID of the managed certificate for api.ai7uae.com. Leave blank until DNS validation is complete.')
 param apiCertificateId string = ''
@@ -122,6 +137,10 @@ resource bankStatementWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIden
   name: bankStatementWorkerIdentityName
 }
 
+resource documentOcrWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  name: documentOcrWorkerIdentityName
+}
+
 resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = {
   name: bankStatementWorkerName
   location: location
@@ -206,6 +225,103 @@ resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = {
           }
         ]
       }
+    }
+  }
+}
+
+resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (enableDocumentOcr) {
+  name: 'ca-ai7uae-document-ocr-worker'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${documentOcrWorkerIdentity.id}': {} }
+  }
+  properties: {
+    managedEnvironmentId: environmentId
+    configuration: {
+      activeRevisionsMode: 'Single'
+      registries: [ { server: acrLoginServer, identity: documentOcrWorkerIdentity.id } ]
+      secrets: [
+        { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: documentOcrWorkerIdentity.id }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'document-ocr-worker'
+          image: documentOcrWorkerImage
+          env: [
+            { name: 'NODE_ENV', value: 'production' }
+            { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: documentOcrWorkerIdentity.properties.clientId }
+            { name: 'KEY_VAULT_URI', value: keyVaultUri }
+            { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
+            { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
+            { name: 'DOCUMENT_OCR_AZURE_ENDPOINT', value: documentOcrEndpoint }
+            { name: 'DOCUMENT_OCR_AZURE_REGION', value: location }
+            { name: 'DOCUMENT_OCR_APPROVED_REGION', value: location }
+            { name: 'DOCUMENT_OCR_CLAMD_HOST', value: '127.0.0.1' }
+            { name: 'DOCUMENT_OCR_CLAMD_PORT', value: '3310' }
+          ]
+          resources: { cpu: json('2.0'), memory: '4Gi' }
+        }
+        {
+          name: 'clamav'
+          image: bankStatementClamavImage
+          resources: { cpu: json('2.0'), memory: '4Gi' }
+        }
+      ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 2
+        rules: [
+          {
+            name: 'document-ocr-queue'
+            azureQueue: {
+              accountName: documentOcrStorageName
+              queueName: 'document-ocr-jobs'
+              queueLength: 1
+              identity: documentOcrWorkerIdentity.id
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+
+resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableDocumentOcr) {
+  name: 'caj-ai7uae-document-ocr-purge'
+  location: location
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${documentOcrWorkerIdentity.id}': {} }
+  }
+  properties: {
+    environmentId: environmentId
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 3600
+      replicaRetryLimit: 2
+      scheduleTriggerConfig: { cronExpression: '15 * * * *', parallelism: 1, replicaCompletionCount: 1 }
+      registries: [ { server: acrLoginServer, identity: documentOcrWorkerIdentity.id } ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'document-ocr-purge'
+          image: documentOcrWorkerImage
+          command: [ 'node', 'scripts/purge-document-ocr.mjs' ]
+          env: [
+            { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: documentOcrWorkerIdentity.properties.clientId }
+            { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
+          ]
+          resources: { cpu: json('0.5'), memory: '1Gi' }
+        }
+      ]
     }
   }
 }
@@ -309,7 +425,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: environmentId
     configuration: {
       activeRevisionsMode: 'Single'
-      secrets: [
+      secrets: concat([
         {
           name: 'bsa-data-key'
           keyVaultUrl: '${keyVaultUri}secrets/bsa-data-key'
@@ -320,7 +436,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
           keyVaultUrl: '${keyVaultUri}secrets/platform-smtp-password'
           identity: runtimeIdentityResourceId
         }
-      ]
+      ], enableDocumentOcr ? [
+        { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: runtimeIdentityResourceId }
+        { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
+      ] : [])
       ingress: {
         external: true
         allowInsecure: false
@@ -346,7 +465,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'api'
           image: image
-          env: [
+          env: concat([
             { name: 'API_HOSTS', value: 'api.ai7uae.com,app.kycprobe.com' }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
@@ -378,10 +497,15 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BSA_STORAGE_QUEUE', value: 'bank-statement-analysis' }
             { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
-          ]
+            { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: enableDocumentOcr ? '1' : '0' }
+          ], enableDocumentOcr ? [
+            { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
+            { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
+          ] : [])
           resources: {
-            cpu: json('0.25')
-            memory: '0.5Gi'
+            cpu: json(enableDocumentOcr ? '0.5' : '0.25')
+            memory: enableDocumentOcr ? '1Gi' : '0.5Gi'
           }
           probes: [
             {
