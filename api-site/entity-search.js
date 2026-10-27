@@ -286,7 +286,7 @@ byId('entity-search-form').addEventListener('submit', async (event) => {
     responseJson.textContent = formatted;
     copyResponseButton.disabled = false;
     responseStatus.className = response.ok ? 'success' : 'error';
-    responseStatus.textContent = `${response.status} ${response.statusText}`;
+    responseStatus.textContent = `${response.status} ${response.statusText} · submitted threshold ${response.headers.get('x-ai7-submitted-fuzziness') ?? body.fuzziness}`;
     if (byId('get-pdf').checked) {
       try {
         await createAuditPdf({ key, request: body, reportId: response.headers.get('x-ai7-report-id'),

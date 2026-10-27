@@ -356,6 +356,17 @@ test('comprehensive entity search preserves every request field and the exact re
   assert.equal(receivedEntitySearch.headers['x-api-key'], 'private-screening-key');
   assert.equal(receivedEntitySearch.headers.authorization, undefined);
   assert.deepEqual(receivedEntitySearch.body, requestBody);
+  assert.equal(response.headers.get('x-ai7-submitted-fuzziness'), '0.8');
+
+  const zeroThresholdResponse = await fetch(`${appUrl}/service/entity_search`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ ...requestBody, fuzziness: 0 })
+  });
+  assert.equal(zeroThresholdResponse.status, 200);
+  assert.equal(zeroThresholdResponse.headers.get('x-ai7-submitted-fuzziness'), '0');
+  assert.deepEqual(await zeroThresholdResponse.json(), completeEntitySearchResponse);
+  assert.equal(receivedEntitySearch.body.fuzziness, 0);
 
   const requestWithoutBlankRequiredKeys = {
     name: 'Test Person',

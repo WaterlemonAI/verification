@@ -734,6 +734,12 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl, re
       if (parsedBody && typeof parsedBody === 'object' && !Array.isArray(parsedBody)) {
         entityRequest = { country: '', gender: '', dob: '', ...parsedBody };
         body = Buffer.from(JSON.stringify(entityRequest));
+        const submittedFuzziness = Number(parsedBody.fuzziness);
+        if (parsedBody.fuzziness !== undefined && parsedBody.fuzziness !== null
+          && String(parsedBody.fuzziness).trim() !== '' && Number.isFinite(submittedFuzziness)
+          && submittedFuzziness >= 0 && submittedFuzziness <= 1) {
+          res.setHeader('x-ai7-submitted-fuzziness', String(submittedFuzziness));
+        }
       }
     }
 

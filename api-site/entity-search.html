@@ -66,7 +66,7 @@
               <div><strong>sanction_list_ids</strong><span>integer[] · optional</span><p>Sanctions list IDs used to filter results.</p></div>
               <div><strong>search_type</strong><span>string[] · required</span><p>Risk datasets to search.</p></div>
               <div><strong>fields_weightage</strong><span>object[] · required</span><p>Field weights; the values must total exactly 1.</p></div>
-              <div><strong>fuzziness</strong><span>number · required</span><p>Matching threshold from 0 to 1.</p></div>
+              <div><strong>fuzziness</strong><span>number · required</span><p>Minimum matching threshold from 0 to 1. A value of 0 does not make every returned score 0; profiles retain their own supplier match scores. The wrapper returns the submitted value in the <code>x-ai7-submitted-fuzziness</code> response header.</p></div>
               <div><strong>event_stage_score</strong><span>integer · optional</span><p>APC event stage, 1–4. Default 1.</p></div>
               <div><strong>sentiment_confidence</strong><span>number · optional</span><p>APC negative-sentiment threshold, 0–1.</p></div>
               <div><strong>apc_duration</strong><span>integer · conditional</span><p>Past days to retrieve; required for APC-only search.</p></div>
@@ -149,7 +149,7 @@
                   <label>Identifier <code>identifier</code><input class="weight" data-field="identifier" type="number" min="0" max="1" step="0.01" value="0" /></label>
                   <label>Fuzziness <code>fuzziness</code><input id="fuzziness" type="number" min="0" max="1" step="0.01" value="0.8" required /></label>
                 </div>
-                <p class="field-help">With the default weights, only the name contributes to the search score. A submitted country has 0% weight; raise its weight and reduce another field if country should influence matching. The PDF labels returned profiles as unverified until their names, types and source records are reviewed.</p>
+                <p class="field-help">Fuzziness is a minimum match threshold; 0 allows all match scores but does not force low-scoring profiles into the returned set. With the default weights, only the name contributes to the search score. A submitted country has 0% weight; raise its weight and reduce another field if country should influence matching. The PDF labels returned profiles as unverified until their names, types and source records are reviewed.</p>
               </fieldset>
               <fieldset>
                 <legend>APC options <span>Used by APC checks</span></legend>
