@@ -29,6 +29,10 @@ on:
         description: Keep the adverse-media deep-research worker enabled; uncheck only for a controlled pause
         type: boolean
         default: true
+      provisionDocumentOcrPlatform:
+        description: Provision only the isolated document OCR Azure platform; customer OCR routes remain disabled until DOCUMENT_OCR_ENABLED is true
+        type: boolean
+        default: false
 
 # DOCUMENT_OCR_ENABLED is an environment variable set only after all eight
 # sample-based accuracy gates and the dedicated Gemini credential are ready.
@@ -144,7 +148,7 @@ jobs:
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
 
       - name: Deploy isolated document OCR resources
-        if: vars.DOCUMENT_OCR_ENABLED == 'true'
+        if: vars.DOCUMENT_OCR_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.provisionDocumentOcrPlatform)
         shell: bash
         run: |
           set -euo pipefail
