@@ -35,7 +35,7 @@ import {
   portalCookie, safePortalAccount, verifyPortalPassword, verifyPortalSession
 } from './lib/portal-auth.mjs';
 import { bsaEnabled, bsaMode, bsaCapabilities, createBsaJob, getBsaJob, getBsaResult, getBsaArtifact } from './lib/bsa-store.mjs';
-import { DOCUMENT_OCR_BY_PATH } from './lib/document-ocr-contracts.mjs';
+import { DOCUMENT_OCR_BY_ID, DOCUMENT_OCR_BY_PATH } from './lib/document-ocr-contracts.mjs';
 import { createDocumentOcrStore } from './lib/document-ocr-store.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -1513,7 +1513,7 @@ async function requireAdmin(req, res, store, { csrf = false } = {}) {
   return { account, session };
 }
 
-async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore) {
+async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore, documentOcrStore) {
   if (req.method === 'GET' && url.pathname === '/admin/api/auth/status') {
     const account = await store.getAdminAccount();
     return json(res, 200, { configured: Boolean(account) });
@@ -1593,6 +1593,34 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
 
   const access = await requireAdmin(req, res, store, { csrf: !['GET', 'HEAD'].includes(req.method || 'GET') });
   if (!access) return;
+
+  if (req.method === 'GET' && url.pathname === '/admin/api/document-ocr/capability') {
+    if (access.legacy) return json(res, 409, { status: 'Error', error: 'Complete account setup first.' });
+    const capability = documentOcrStore?.getWorkerCapability
+      ? await documentOcrStore.getWorkerCapability() : { azure: false, paddle: false, recent: false, checkedAt: null };
+    capability.imageMatches = Boolean(process.env.DOCUMENT_OCR_WORKER_IMAGE
+      && capability.imageDigest === process.env.DOCUMENT_OCR_WORKER_IMAGE);
+    return json(res, 200, { capability });
+  }
+  const engineMatch = /^\/admin\/api\/document-ocr\/engines\/([a-z0-9-]+)$/.exec(url.pathname);
+  if (req.method === 'PUT' && engineMatch) {
+    if (access.legacy) return json(res, 409, { status: 'Error', error: 'Complete account setup first.' });
+    if (!DOCUMENT_OCR_BY_ID.has(engineMatch[1])) return json(res, 404, { status: 'Error', error: 'OCR API not found.' });
+    try {
+      const body = await readJson(req);
+      if (!['azure', 'paddle'].includes(body.engine)) return json(res, 400, { status: 'Error', error: 'Invalid extraction engine.' });
+      if (body.engine === 'paddle') {
+        const capability = documentOcrStore?.getWorkerCapability ? await documentOcrStore.getWorkerCapability() : null;
+        const imageMatches = Boolean(process.env.DOCUMENT_OCR_WORKER_IMAGE
+          && capability?.imageDigest === process.env.DOCUMENT_OCR_WORKER_IMAGE);
+        if (!capability?.paddle || (!capability.recent && !imageMatches))
+          return json(res, 409, { status: 'Error', error: 'PaddleOCR worker capability is not currently verified.' });
+      }
+      return json(res, 200, await store.setDocumentOcrEngine(engineMatch[1], body.engine, access.account.email));
+    } catch (error) {
+      return json(res, 503, { status: 'Error', error: 'Extraction setting could not be saved.' });
+    }
+  }
 
   if (req.method === 'GET' && url.pathname === '/admin/api/modules') {
     return json(res, 200, { modules: moduleCatalog(await store.listIntegrations({ publicOnly: true })) });
@@ -1987,7 +2015,7 @@ function documentOcrSignedAccess(url, jobId, name) {
   return timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex')) ? workspaceId : null;
 }
 
-async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
+async function handleDocumentOcr(req, res, url, documentStore, usageStore, store) {
   const definition = DOCUMENT_OCR_BY_PATH.get(url.pathname);
   const jobMatch = /^\/service\/([a-z_]+)\/jobs\/(ocr_[0-9a-f-]{36})(?:\/(result|artifacts\/(photo|signature)))?$/.exec(url.pathname);
   const jobDefinition = jobMatch && DOCUMENT_OCR_BY_PATH.get(`/service/${jobMatch[1]}`);
@@ -2066,7 +2094,9 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
       }
       files.push({ bytes, mediaType });
     }
+    const extractionEngine = store.getDocumentOcrEngine ? await store.getDocumentOcrEngine(definition.id) : 'azure';
     const created = await documentStore.createJob({ ownerId: req.ai7Client.id, serviceId: definition.id,
+      extractionEngine,
       files, idempotencyKey, transactionId: res.getHeader('x-ai7-transaction-id'),
       billingLogKey: req.ai7Usage?.logKey || '' });
     if (created.reused && req.ai7Usage) {
@@ -2187,7 +2217,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return await handleBsa(req, res, url, store);
-      if (await handleDocumentOcr(req, res, url, documentOcrStore, usageStore)) return;
+      if (await handleDocumentOcr(req, res, url, documentOcrStore, usageStore, store)) return;
       const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
       if (req.method === 'POST' && formSubmissionMatch) return await submitForm(req, res, formSubmissionMatch[1], store, formsQueue, formSubmissionStore, transactionId);
       const formSchemaMatch = /^\/forms\/([a-z0-9-]+)\/schema$/.exec(url.pathname);
@@ -2220,7 +2250,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         }, { 'cache-control': 'public, max-age=3600' });
       }
       if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle, mailer, usageStore);
-      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore);
+      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore, documentOcrStore);
       if (url.pathname === '/admin/bsa-synthetic-combined.pdf') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }

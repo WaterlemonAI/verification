@@ -3,6 +3,7 @@ import { createDocumentOcrStore } from '../lib/document-ocr-store.mjs';
 import { consumeDocumentOcrQueue } from '../lib/document-ocr-worker.mjs';
 import { createCustomerUsageStore } from '../lib/customer-usage.mjs';
 import { scanDocumentBytes } from '../lib/document-ocr-malware.mjs';
+import { paddleCapability } from '../lib/document-ocr-paddle.mjs';
 
 const documentStore = createDocumentOcrStore();
 if (!documentStore || !process.env.DOCUMENT_OCR_DATA_KEY_HEX || !process.env.DOCUMENT_OCR_AZURE_ENDPOINT
@@ -19,6 +20,9 @@ for (let attempt = 0; attempt < 60 && !controller.signal.aborted; attempt += 1) 
   catch { await new Promise((resolve) => setTimeout(resolve, 3_000)); }
 }
 if (!malwareReady) throw new Error('document_ocr_malware_scanner_unavailable');
+
+await documentStore.recordWorkerCapability({ azure: Boolean(process.env.DOCUMENT_OCR_AZURE_ENDPOINT),
+  paddle: await paddleCapability(), imageDigest: process.env.DOCUMENT_OCR_WORKER_IMAGE || '' });
 
 await consumeDocumentOcrQueue({ store: documentStore,
   usageStore: createCustomerUsageStore(),

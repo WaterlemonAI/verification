@@ -1,12 +1,22 @@
-FROM node:22-alpine
+FROM node:22-bookworm-slim
 
-RUN apk add --no-cache poppler-utils tesseract-ocr-data-eng
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    poppler-utils tesseract-ocr tesseract-ocr-eng python3 python3-venv libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
+RUN python3 -m venv /opt/document-ocr-python && \
+    /opt/document-ocr-python/bin/pip install --no-cache-dir \
+    'paddleocr==3.7.0' 'onnxruntime>=1.20,<2' 'pymupdf>=1.26,<3' 'Pillow>=11,<13'
+COPY bank-statement-analysis/src/bsa/paddle_ocr.py /app/python/bsa/paddle_ocr.py
+COPY bank-statement-analysis/scripts/install_paddle_models.py /app/python/install_paddle_models.py
+RUN PYTHONPATH=/app/python /opt/document-ocr-python/bin/python /app/python/install_paddle_models.py --target /app/paddle-models
 COPY lib/ ./lib/
-COPY scripts/run-document-ocr-worker.mjs scripts/purge-document-ocr.mjs ./scripts/
+COPY scripts/run-document-ocr-worker.mjs scripts/purge-document-ocr.mjs scripts/document-ocr-paddle.py ./scripts/
+
+ENV PYTHONPATH=/app/python BSA_PADDLE_MODEL_ROOT=/app/paddle-models
 
 USER node
 CMD ["node", "scripts/run-document-ocr-worker.mjs"]

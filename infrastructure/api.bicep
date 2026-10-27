@@ -266,6 +266,7 @@ resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (enable
             { name: 'DOCUMENT_OCR_APPROVED_REGION', value: location }
             { name: 'DOCUMENT_OCR_CLAMD_HOST', value: '127.0.0.1' }
             { name: 'DOCUMENT_OCR_CLAMD_PORT', value: '3310' }
+            { name: 'DOCUMENT_OCR_WORKER_IMAGE', value: documentOcrWorkerImage }
           ]
           resources: { cpu: json('2.0'), memory: '4Gi' }
         }
@@ -505,6 +506,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
+            { name: 'DOCUMENT_OCR_WORKER_IMAGE', value: documentOcrWorkerImage }
           ] : [])
           resources: {
             cpu: json(enableDocumentOcr ? '0.5' : '0.25')

@@ -14,9 +14,12 @@ let app;
 let appUrl;
 let cookie = '';
 let csrf = '';
+let paddleReady = false;
 
 before(async () => {
-  app = createAppServer({ store, startWorker: false });
+  app = createAppServer({ store, startWorker: false,
+    documentOcrStore: { getWorkerCapability: async () => ({ azure: true, paddle: paddleReady,
+      recent: true, checkedAt: new Date().toISOString() }) } });
   await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
   appUrl = `http://127.0.0.1:${app.address().port}`;
 });
@@ -88,6 +91,27 @@ test('state-changing admin operations require the session CSRF token', async () 
     method: 'POST', headers: { cookie, 'x-ai7-csrf': csrf, 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Secure Client' })
   });
   assert.equal(created.status, 201);
+});
+
+test('only a signed-in administrator can select a verified OCR engine', async () => {
+  const path = `${appUrl}/admin/api/document-ocr/engines/cheque-ocr`;
+  const put = (headers, engine) => fetch(path, { method: 'PUT', headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify({ engine }) });
+  assert.equal((await put({}, 'paddle')).status, 401);
+  assert.equal((await put({ cookie }, 'paddle')).status, 403);
+  assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'paddle')).status, 409);
+  assert.equal(await store.getDocumentOcrEngine('cheque-ocr'), 'azure');
+  paddleReady = true;
+  const selected = await put({ cookie, 'x-ai7-csrf': csrf }, 'paddle');
+  assert.equal(selected.status, 200);
+  assert.equal((await selected.json()).extractionEngine, 'paddle');
+  assert.equal(await store.getDocumentOcrEngine('cheque-ocr'), 'paddle');
+  assert.equal(store.documentOcrEngineAudit.at(-1).actor, 'admin@example.com');
+  const adminCatalog = await fetch(`${appUrl}/admin/api/integrations`, { headers: { cookie } });
+  assert.equal((await adminCatalog.json()).integrations.find((item) => item.id === 'cheque-ocr').extractionEngine, 'paddle');
+  const publicCatalog = await store.listIntegrations({ publicOnly: true });
+  assert.equal(Object.hasOwn(publicCatalog.find((item) => item.id === 'cheque-ocr'), 'extractionEngine'), false);
+  assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'azure')).status, 200);
 });
 
 test('logout clears the browser session cookie', async () => {

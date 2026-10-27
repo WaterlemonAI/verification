@@ -169,6 +169,23 @@ test('a valid cited passport MRZ can corroborate a one-character gender value', 
   assert.equal(checked.review_flags.includes('EVIDENCE_NOT_FOUND:gender'), false);
 });
 
+test('Gemini cannot verify a checksum-valid MRZ when one source line is unreadable', () => {
+  const passport = DOCUMENT_OCR_BY_ID.get('passport-icao-ocr');
+  const upper = `P<UTO${'SAMPLE<<ALEX'.padEnd(39, '<')}`;
+  const number = 'AB1234567';
+  const birth = '900101';
+  const expiry = '300101';
+  const prefix = number + mrzCheckDigit(number) + 'UTO' + birth + mrzCheckDigit(birth)
+    + 'M' + expiry + mrzCheckDigit(expiry) + '<'.repeat(14) + '<';
+  const lower = prefix + mrzCheckDigit(prefix.slice(0, 10) + prefix.slice(13, 20) + prefix.slice(21, 43));
+  const checked = validateExtraction(passport, { document_classification: 'passport',
+    data: { document_type: 'Passport', mrz_lines: [upper, lower] },
+    evidence: [{ field: 'mrz_lines', page: 1, quote: upper }] },
+  [{ page: 1, text: `${upper}\nMRZ lower line unreadable` }]);
+  assert.equal(checked.mrz.integrity_status, 'NOT_IDENTIFIED');
+  assert.ok(checked.review_flags.includes('MRZ_SOURCE_UNCONFIRMED'));
+});
+
 test('a checksum-valid passport MRZ overrides an AI mistranscription without another model call', async () => {
   const passport = DOCUMENT_OCR_BY_ID.get('passport-icao-ocr');
   const upper = `P<UTO${'SAMPLE<<ALEX'.padEnd(39, '<')}`;
