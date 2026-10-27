@@ -29,3 +29,5 @@ The CI suite verifies schemas, MRZ math, route admission, entitlement, refund, r
 ### Current production state — 27 October 2026
 
 The isolated S0 Azure platform is provisioned in UAE North. Customer routes and the OCR worker remain disabled. The platform workflow's GitHub identity could not create resources or role assignments; a one-time, user-approved Owner-account deployment of the reviewed Bicep completed the 21 new-resource creations with no existing-resource updates or deletions. The temporary sample-testing role was removed. See `docs/document-ocr-sample-qa.md` for sanitized live sample outcomes and remaining release gates.
+
+The deploy identity cannot create a Container Apps Job at resource-group scope. `infrastructure/api-document-ocr-purge-bootstrap.bicep` is a one-time, single-resource bootstrap for the dedicated OCR purge job. Preview this template and require exactly one `Create` for that job with no other creates, modifications or deletions. After it exists, grant the deploy identity only `Microsoft.App/jobs/read` and `Microsoft.App/jobs/write` at that job's resource scope. Subsequent updates use the reviewed main-branch API deployment workflow.
