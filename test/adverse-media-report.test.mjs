@@ -69,7 +69,7 @@ test('report narrative uses a strict single-purpose JSON contract', async () => 
 test('PDF includes a complete multi-page audit artifact and stable integrity metadata', async () => {
   const report = await createAdverseMediaAuditPdf({
     request, response,
-    narrative: { summary: 'A relevant result requires review.', findings: ['One result met the threshold.'], recommendations: ['Perform human review.'] },
+    narrative: { summary: 'A source’s relevant result requires review.', findings: ['One result met the threshold.'], recommendations: ['Perform human review.'] },
     origin: { received_at: '2026-10-26T09:30:00.000Z', network_origin: '203.0.113.10', processing_location: 'Microsoft Azure UAE North' },
     generatedAt: '2026-10-26T09:32:00.000Z'
   });
