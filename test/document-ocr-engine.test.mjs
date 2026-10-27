@@ -73,8 +73,19 @@ test('missing and illegible fields keep their required structure and exact label
   assert.equal(checked.data.license_number, 'Not Found');
   assert.equal(checked.data.company_name_english, 'Not Readable');
   assert.equal(checked.data.company_name_arabic, 'Not Found');
-  assert.deepEqual(checked.data.managers, []);
+  assert.equal(checked.data.managers, 'Not Found');
+  assert.equal(checked.data.directors_business_owners, 'Not Found');
   assert.equal(checked.review_required, true);
+});
+
+test('a visibly present but unreadable list is distinct from an absent list', () => {
+  const checked = validateExtraction(trade, { ...candidate(),
+    unreadable_list_fields: ['directors_business_owners'] }, [{ page: 1, text: 'Trade License' }]);
+  assert.equal(checked.data.directors_business_owners, 'Not Readable');
+  assert.equal(checked.data.managers, 'Not Found');
+  assert.ok(checked.review_flags.includes('LIST_UNREADABLE:directors_business_owners'));
+  assert.throws(() => validateExtraction(trade, { ...candidate(),
+    unreadable_list_fields: ['unlisted_field'] }, [{ page: 1, text: 'Trade License' }]), /invalid_extraction/);
 });
 
 test('document instructions are excluded before Gemini and cannot become extracted facts', async () => {
@@ -134,4 +145,29 @@ test('a valid cited passport MRZ can corroborate a one-character gender value', 
   assert.equal(checked.data.gender, 'M');
   assert.equal(checked.mrz.integrity_status, 'Passed');
   assert.equal(checked.review_flags.includes('EVIDENCE_NOT_FOUND:gender'), false);
+});
+
+test('a checksum-valid passport MRZ overrides an AI mistranscription without another model call', async () => {
+  const passport = DOCUMENT_OCR_BY_ID.get('passport-icao-ocr');
+  const upper = `P<UTO${'SAMPLE<<ALEX'.padEnd(39, '<')}`;
+  const number = 'AB1234567';
+  const birth = '900101';
+  const expiry = '300101';
+  const prefix = number + mrzCheckDigit(number) + 'UTO' + birth + mrzCheckDigit(birth)
+    + 'M' + expiry + mrzCheckDigit(expiry) + '<'.repeat(14) + '<';
+  const lower = prefix + mrzCheckDigit(prefix.slice(0, 10) + prefix.slice(13, 20) + prefix.slice(21, 43));
+  const candidate = { document_classification: 'passport', data: { document_type: 'Passport',
+    nationality: 'Invalid nationality', gender: null, mrz_lines: [] }, evidence: [], figure_roles: [] };
+  let calls = 0;
+  const fetched = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(candidate) }] } }] }), { status: 200 });
+  };
+  const output = await structureDocument({ definition: passport, pages: [{ page: 1, text: `${upper}\n${lower}` }],
+    verifiedMrz: { page: 1, lines: [upper, lower] }, apiKey: 'synthetic-key', fetchImpl: fetched });
+  assert.equal(calls, 1);
+  assert.equal(output.mrz.integrity_status, 'Passed');
+  assert.equal(output.data.nationality, 'UTO');
+  assert.equal(output.data.gender, 'M');
+  assert.equal(output.review_flags.includes('COUNTRY_CODE_INVALID:nationality'), false);
 });

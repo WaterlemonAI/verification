@@ -27,3 +27,24 @@ The passport initially produced an unnecessary review flag for a one-character g
 4. Exercise the authenticated API, queue, malware gate, idempotent billing, tenant isolation, 30-day purge, and dead-letter path before enabling customer routes.
 
 Until these checks pass, `DOCUMENT_OCR_PRODUCTION_ENABLED` and `DOCUMENT_OCR_ENABLED` stay off.
+
+## Isolated Azure S0 sample run — 27 October 2026
+
+The dedicated UAE North OCR account and private storage were provisioned from the reviewed Bicep with a one-time, user-approved Owner-account exception after the GitHub workflow identity was denied resource-creation permissions. The Azure account is S0 with local keys disabled; the storage account has public Blob and shared-key access disabled. The customer route gate read back as `DOCUMENT_OCR_PRODUCTION_ENABLED=0`. A temporary Cognitive Services User assignment for sample testing was removed and verified absent afterward.
+
+The source documents and all extracted personal values remained outside this report. Azure analyze results were deleted after each direct QA call. The live QA observed:
+
+| Case | Azure/model outcome | Review state |
+| --- | --- | --- |
+| UAE trade licence | 11 populated fields; one absent date returned `Not Found` | No review flag |
+| Passport | Passport ID model supplied a checksum-valid TD3 MRZ; 12 populated fields | No review flag |
+| Power of attorney | Six populated fields; absent period returned `Not Found` | No review flag after the bounded Azure submit timeout was raised to 90 seconds |
+| Memorandum of association | Five populated fields; absent registration number returned `Not Found` | No review flag |
+| Articles of association | Five populated fields | No review flag |
+| Emirates ID | TD1 MRZ passed in the Linux worker; the final Gemini call identified tight portrait and signature crops | Review required for two visually present fields that were not backed by Azure text evidence |
+| Fictional cancelled cheque | Three populated fields; cheque number, amount and MICR returned `Not Found` | Review required because the cheque number is missing |
+| Tenancy certificate submitted as utility bill | No utility-bill fields populated; classified as `unclassified` | Rejected for review as the wrong document type |
+
+For Emirates ID, the worker renders pages only after malware scanning. Its bundled local OCR accepts a TD1 MRZ only when every check digit passes. A production-sized page-image test yielded a verified MRZ and small portrait/signature crops without publishing a full ID page. The final Gemini response still required human review for unsupported back-side fields. The passport-specific Azure ID model returned a verified TD3 MRZ; the wrapper now uses that checked value when Gemini mistranscribes it. These are sample outcomes, not a population-level accuracy claim.
+
+The actual UAE utility bill is still pending upload. Separate front/back Emirates ID files, deliberately invalid MRZ samples, and prompt-injection samples still need live sample validation. Worker queue, ClamAV readiness, billing, retention, tenant isolation and signed crop URLs must pass before the route gate is enabled.

@@ -37,22 +37,31 @@
         "description": "License expiry date in DD/MM/YYYY when an unambiguous full date is printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "managers": {
-        "type": "array",
-        "description": "Names of managers explicitly identified in the document.",
+        "type": [
+          "array",
+          "string"
+        ],
+        "description": "Names of managers explicitly identified in the document. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
         "items": {
           "type": "string"
         }
       },
       "business_activity": {
-        "type": "array",
-        "description": "Business activities printed on the license.",
+        "type": [
+          "array",
+          "string"
+        ],
+        "description": "Business activities printed on the license. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
         "items": {
           "type": "string"
         }
       },
       "directors_business_owners": {
-        "type": "array",
-        "description": "Directors, shareholders, or business owners explicitly listed; preserve each shareholding percentage.",
+        "type": [
+          "array",
+          "string"
+        ],
+        "description": "Only people explicitly labeled as directors, shareholders, or business owners. A manager is not an owner unless the document says so. Preserve printed shareholding percentages; return [] if none are listed. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
         "items": {
           "type": "object",
           "properties": {
@@ -140,8 +149,11 @@
         "description": "City, state or region printed as place of birth. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "mrz_lines": {
-        "type": "array",
-        "description": "Exactly two raw 44-character TD3 MRZ lines copied character for character. Empty if not legible.",
+        "type": [
+          "array",
+          "string"
+        ],
+        "description": "Exactly two raw 44-character TD3 MRZ lines copied character for character. Empty if not legible. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
         "items": {
           "type": "string"
         }
@@ -281,8 +293,11 @@
         "description": "Company registration number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "business_objectives": {
-        "type": "array",
-        "description": "Business objectives stated in the memorandum.",
+        "type": [
+          "array",
+          "string"
+        ],
+        "description": "Business objectives stated in the memorandum. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
         "items": {
           "type": "string"
         }
@@ -296,8 +311,11 @@
         "description": "Incorporation date in DD/MM/YYYY when unambiguous. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "shareholders": {
-        "type": "array",
-        "description": "One row for each explicitly named shareholder.",
+        "type": [
+          "array",
+          "string"
+        ],
+        "description": "One row for each explicitly named shareholder. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
         "items": {
           "type": "object",
           "properties": {
@@ -350,8 +368,11 @@
         "description": "Company registration number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "company_rules": {
-        "type": "array",
-        "description": "Key company rules actually stated in the articles.",
+        "type": [
+          "array",
+          "string"
+        ],
+        "description": "Key company rules actually stated in the articles. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
         "items": {
           "type": "string"
         }
@@ -438,8 +459,11 @@
         "description": "Place of issue in Arabic. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "mrz_lines": {
-        "type": "array",
-        "description": "Raw MRZ lines from the back, each copied character for character. Empty if not legible.",
+        "type": [
+          "array",
+          "string"
+        ],
+        "description": "Raw MRZ lines from the back, each copied character for character. Empty if not legible. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
         "items": {
           "type": "string"
         }
