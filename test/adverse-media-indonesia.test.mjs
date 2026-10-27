@@ -24,6 +24,7 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
       return url.pathname.includes('/news/') ? Response.json({ results }) : Response.json({ web: { results } });
     }
     if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    if (url.hostname === 'www.cbr.ru') return Response.json({ Data: [] });
     if (url.hostname === 'generativelanguage.googleapis.com') {
       const prompt = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text);
       assert.equal(prompt.evidence.length, 1);
@@ -64,4 +65,22 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
   assert.equal(conflicting.summary.threshold_status, 'review_required');
   assert.equal(conflicting.results[0].risk_level, 'review');
   assert.match(conflicting.results[0].evidence_assessment, /human review/i);
+
+  // The reported production run used five languages and Search+. Its old
+  // ordering spent the standard budget on news before any official web query.
+  aiDisposition = 'possible';
+  const beforeSearchPlus = queries.length;
+  const searchPlus = presentAdverseMediaResponse(await screenAdverseMedia({
+    request: validateAdverseMediaRequest({
+      entity_type: 'business', name: 'PT Dian Swastatika Sentosa Tbk',
+      languages: ['en', 'ar', 'ru', 'hi', 'zh'], search_plus: true,
+      review_threshold_percent: 80, high_risk_threshold_percent: 91
+    }),
+    apiKey: 'test-search-key', aiApiKey: 'test-ai-key', fetchImpl
+  }));
+  assert.ok(queries.slice(beforeSearchPlus).some((query) => query.includes('site:ojk.go.id')));
+  assert.ok(queries.length - beforeSearchPlus <= 12);
+  assert.equal(searchPlus.summary.threshold_status, 'review_required');
+  assert.equal(searchPlus.results.length, 1);
+  assert.equal(searchPlus.coverage.sources.find((source) => source.source === 'open_web').status, 'complete');
 });
