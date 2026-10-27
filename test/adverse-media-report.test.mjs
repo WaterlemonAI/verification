@@ -4,6 +4,7 @@ import { Readable } from 'node:stream';
 import { PDFDocument } from 'pdf-lib';
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from '../lib/adverse-media-report.mjs';
 import { AzureAdverseMediaReportStore, MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
+import { AzureAdverseMediaJsonStore, MemoryAdverseMediaJsonStore } from '../lib/adverse-media-json-store.mjs';
 
 process.env.NODE_ENV = 'test';
 const { finalizeAdverseMediaReport } = await import('../server.mjs');
@@ -123,11 +124,14 @@ test('Azure report storage omits public aliases for private entity reports', asy
 
 test('deep-research finalization reuses one saved report after a retry', async () => {
   const store = new MemoryAdverseMediaReportStore();
+  const jsonStore = new MemoryAdverseMediaJsonStore();
   let saves = 0;
   const originalSave = store.save.bind(store);
   store.save = async (value) => { saves += 1; return originalSave(value); };
   const reportId = 'e565a72c-c734-4ad5-ab72-7dc5ed8391bb';
+  const rawInput = { ...request, custom_reference: 'original user field' };
   const input = { request, response, ownerId: 'synthetic-owner', reportId, aiApiKey: '',
+    jsonStore, inputPayload: rawInput, transactionId: 'transaction-1',
     origin: { received_at: '2026-10-26T09:30:00.000Z', network_origin: '203.0.113.10',
       processing_location: 'Microsoft Azure UAE North' },
     fetchImpl: async () => { throw new Error('unexpected_provider_call'); }, reportStore: store };
@@ -137,6 +141,70 @@ test('deep-research finalization reuses one saved report after a retry', async (
   assert.equal(second.report.report_id, reportId);
   assert.equal(second.report.transaction_id, response.screening_id);
   assert.equal(saves, 1);
+  const retained = await jsonStore.get({ ownerId: 'synthetic-owner', screeningId: response.screening_id });
+  assert.deepEqual(retained.input, rawInput);
+  assert.deepEqual(retained.response, second);
+  assert.equal(retained.transaction_id, 'transaction-1');
+  assert.equal(await jsonStore.get({ ownerId: 'different-owner', screeningId: response.screening_id }), null);
+});
+
+test('finalization refuses to confirm a screening when private JSON retention fails', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const jsonStore = { save: async () => { throw new Error('synthetic retention outage'); } };
+  await assert.rejects(() => finalizeAdverseMediaReport({ request, response,
+    ownerId: 'synthetic-owner', aiApiKey: '', fetchImpl: async () => { throw new Error('unexpected provider call'); },
+    origin: { received_at: '2026-10-26T09:30:00.000Z', network_origin: '203.0.113.10',
+      processing_location: 'Microsoft Azure UAE North' }, reportStore: store, jsonStore }),
+  /adverse_json_retention_unavailable/);
+});
+
+test('PDF and JSON uploads start together instead of serializing retention after the PDF', async () => {
+  let pdfStarted = false;
+  let jsonStarted = false;
+  let finishPdf;
+  let finishJson;
+  const reportStore = new MemoryAdverseMediaReportStore();
+  const realSave = reportStore.save.bind(reportStore);
+  reportStore.save = async (value) => {
+    pdfStarted = true;
+    await new Promise((resolve) => { finishPdf = resolve; });
+    return realSave(value);
+  };
+  const jsonStore = { save: async () => {
+    jsonStarted = true;
+    await new Promise((resolve) => { finishJson = resolve; });
+  } };
+  const pending = finalizeAdverseMediaReport({ request, response, ownerId: 'synthetic-owner',
+    aiApiKey: '', fetchImpl: async () => { throw new Error('unexpected provider call'); },
+    origin: { received_at: '2026-10-26T09:30:00.000Z', network_origin: '203.0.113.10',
+      processing_location: 'Microsoft Azure UAE North' }, reportStore, jsonStore });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(pdfStarted, true);
+  assert.equal(jsonStarted, true);
+  finishJson();
+  finishPdf();
+  await pending;
+});
+
+test('Azure JSON retention writes only private JSON under an owner-scoped path', async () => {
+  const store = new AzureAdverseMediaJsonStore({
+    blobServiceUrl: 'https://synthetic.blob.core.windows.net',
+    credential: { getToken: async () => ({ token: 'synthetic', expiresOnTimestamp: Date.now() + 60000 }) }
+  });
+  let uploaded;
+  store.container = { getBlockBlobClient: (name) => ({
+    uploadData: async (bytes, options) => { uploaded = { name, bytes: Buffer.from(bytes), options }; }
+  }) };
+  await store.save({ ownerId: 'customer-a', screeningId: response.screening_id,
+    transactionId: 'transaction-1', input: request, response });
+  assert.match(uploaded.name, new RegExp(`/[0-9a-f-]{36}\\.json$`));
+  assert.ok(!uploaded.name.includes('customer-a'));
+  assert.equal(uploaded.options.blobHTTPHeaders.blobContentType, 'application/json');
+  const saved = JSON.parse(uploaded.bytes.toString('utf8'));
+  assert.deepEqual(saved.input, request);
+  assert.deepEqual(saved.response, response);
+  assert.equal(saved.transaction_id, 'transaction-1');
+  assert.ok(!('bytes' in saved));
 });
 
 test('a quota-failed classification cannot trigger another Gemini call for the PDF', async () => {
