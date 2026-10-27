@@ -199,15 +199,15 @@ before(async () => {
         assert.equal(payload.generationConfig.responseJsonSchema.properties.classifications.minItems, undefined);
         assert.equal(payload.generationConfig.responseJsonSchema.properties.classifications.maxItems, undefined);
         assert.equal(payload.generationConfig.responseJsonSchema.properties.classifications.items.properties.result_id.enum, undefined);
-        assert.equal(payload.generationConfig.maxOutputTokens, 2048);
+        assert.equal(payload.generationConfig.maxOutputTokens, 4096);
         assert.equal(payload.generationConfig.thinkingConfig.thinkingLevel, 'minimal');
         assert.equal(prompt.job, 'classify_adverse_media_evidence');
-        assert.deepEqual(Object.keys(prompt.evidence[0]).sort(), ['excerpt', 'result_id', 'title']);
+        assert.deepEqual(Object.keys(prompt.evidence[0]).sort(), ['domain', 'excerpt', 'published_at', 'publisher', 'result_id', 'source_type', 'title']);
         if (prompt.entity.name === 'AI Failure Example') return Response.json({ error: 'temporary' }, { status: 503 });
         if (prompt.entity.name === 'Schema Escape Example') return Response.json({
           candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: [{
             result_id: prompt.evidence[0].result_id,
-            entity_match: 'confirmed', adverse: 'confirmed', categories: ['financial_crime'],
+            entity_match: 'confirmed', subject_role: 'direct_actor', media_bucket: 'adverse_media', adverse: 'confirmed', categories: ['financial_crime'],
             legal_stage: 'charged', confidence: 0.9, summary: 'Evidence summary.',
             unwanted_field: 'This must never reach the API response.'
           }] }) }] } }],
@@ -217,6 +217,8 @@ before(async () => {
           candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: prompt.evidence.map((evidence) => ({
             result_id: evidence.result_id,
             entity_match: 'unlikely',
+            subject_role: 'namesake',
+            media_bucket: 'no_impact_media',
             adverse: 'not_adverse',
             categories: [],
             legal_stage: 'media_mention',
@@ -229,6 +231,8 @@ before(async () => {
           candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: prompt.evidence.map((evidence) => ({
             result_id: evidence.result_id,
             entity_match: 'unlikely',
+            subject_role: 'namesake',
+            media_bucket: 'no_impact_media',
             adverse: 'not_adverse',
             categories: [],
             legal_stage: 'media_mention',
@@ -241,6 +245,8 @@ before(async () => {
           candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: prompt.evidence.map((evidence) => ({
             result_id: evidence.result_id,
             entity_match: 'confirmed',
+            subject_role: 'direct_actor',
+            media_bucket: 'adverse_media',
             adverse: 'confirmed',
             categories: ['financial_crime'],
             legal_stage: 'charged',
@@ -288,7 +294,7 @@ test('adverse media endpoint returns a customer-safe evidence response', async (
   assert.equal(body.summary.threshold_status, 'high_risk');
   assert.equal(body.summary.risk_distribution.high_risk, 1);
   assert.equal(body.results[0].risk_level, 'high');
-  assert.deepEqual(Object.keys(body).sort(), ['completed_at', 'coverage', 'entity', 'report', 'results', 'screening_id', 'status', 'summary']);
+  assert.deepEqual(Object.keys(body).sort(), ['completed_at', 'coverage', 'entity', 'media_buckets', 'report', 'results', 'screening_id', 'status', 'summary']);
   assert.equal(body.report.transaction_id, body.screening_id);
   assert.equal(body.report.retention, 'permanent');
   assert.match(body.report.sha256, /^[0-9a-f]{64}$/);
@@ -401,6 +407,8 @@ test('Russia business pack includes free structured regulatory evidence without 
   assert.equal(response.status, 200);
   assert.equal(paidCalls.length, 4);
   assert.match(archiveCall.url.searchParams.get('query'), /sourcelang:russian/);
+  assert.ok(paidCalls.some(({ url }) => url.pathname.includes('/web/')
+    && url.searchParams.get('q').includes('site:home.treasury.gov')));
   const officialResult = body.results.find((result) => result.source_type === 'official_regulatory');
   assert.ok(officialResult);
   assert.equal(officialResult.publisher, 'cbr.ru');
@@ -444,8 +452,9 @@ test('returns deterministic evidence when optional AI classification is unavaila
   });
   const body = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(body.results.length, 1);
-  assert.equal(body.results[0].ai_classification, undefined);
+  assert.equal(body.results.length, 0);
+  assert.equal(body.media_buckets.general_news_mentions.length, 1);
+  assert.equal(body.media_buckets.general_news_mentions[0].ai_classification, undefined);
   assert.equal(body.status, 'partial');
   assert.equal(body.summary.decision_eligible, false);
   assert.equal(body.summary.threshold_status, 'incomplete_coverage');
@@ -463,16 +472,16 @@ test('does not suppress exact-name adverse evidence using a zero-confidence AI n
   const body = await response.json();
   const paidCalls = requests.slice(beforeCount).filter(({ url }) => url.hostname === 'api.search.brave.com');
   assert.equal(response.status, 200);
-  assert.equal(body.status, 'completed');
-  assert.ok(body.results.length >= 1);
-  assert.ok(body.results.some((result) => /Prabhpreet Singh Gill|Pay10/.test(result.title)));
-  assert.equal(body.summary.potentially_relevant_results, body.results.length);
+  assert.equal(body.status, 'partial');
+  assert.ok(body.media_buckets.no_impact_media.length >= 1);
+  assert.ok(body.media_buckets.no_impact_media.some((result) => /Prabhpreet Singh Gill|Pay10/.test(result.title)));
+  assert.equal(body.summary.potentially_relevant_results, 0);
   assert.equal(body.summary.raw_candidate_results, undefined);
   assert.equal(body.summary.ai_excluded_results, undefined);
-  assert.ok(body.summary.results_at_or_above_threshold >= 1);
-  assert.equal(body.summary.risk_level, 'high');
+  assert.equal(body.summary.results_at_or_above_threshold, 0);
+  assert.equal(body.summary.risk_level, 'indeterminate');
   assert.equal(body.summary.human_review_required, true);
-  assert.equal(body.summary.decision_eligible, true);
+  assert.equal(body.summary.decision_eligible, false);
   assert.ok(paidCalls.length <= 12);
   assert.ok(paidCalls.some(({ url }) => {
     const query = url.searchParams.get('q');
@@ -550,7 +559,8 @@ test('rejects model output containing fields outside the strict classification c
   });
   const body = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(body.results[0].ai_classification, undefined);
+  assert.equal(body.results.length, 0);
+  assert.equal(body.media_buckets.general_news_mentions[0].ai_classification, undefined);
   assert.equal(body.methodology, undefined);
   assert.equal(JSON.stringify(body).includes('unwanted_field'), false);
   assert.equal(JSON.stringify(body).includes('This must never reach'), false);

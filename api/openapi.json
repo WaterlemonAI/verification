@@ -2940,7 +2940,7 @@
       },
       "AdverseMediaResult": {
         "type": "object",
-        "required": ["result_id", "title", "url", "publisher", "published_at", "language", "source_type", "excerpt", "identity_match", "search_plus_match", "risk_score", "risk_level", "categories", "legal_stage", "review_required"],
+        "required": ["result_id", "title", "url", "publisher", "published_at", "language", "source_type", "excerpt", "identity_match", "search_plus_match", "media_bucket", "subject_role", "risk_score", "risk_level", "categories", "legal_stage", "review_required"],
         "properties": {
           "result_id": { "type": "string" },
           "title": { "type": "string" },
@@ -2962,8 +2962,10 @@
             "additionalProperties": false
           },
           "search_plus_match": { "type": "boolean", "description": "True when the evidence URL belongs to the approved Search+ publisher catalog." },
-          "risk_score": { "type": "number", "minimum": 0, "maximum": 1 },
-          "risk_level": { "type": "string", "enum": ["safe", "review", "high"] },
+          "media_bucket": { "type": "string", "enum": ["adverse_media", "general_news_mentions", "no_impact_media"] },
+          "subject_role": { "type": "string", "enum": ["direct_actor", "related_party", "victim", "namesake", "context_only", "unclear", "unresolved"] },
+          "risk_score": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Null outside the Adverse Media bucket." },
+          "risk_level": { "type": "string", "enum": ["safe", "review", "high", "not_applicable"] },
           "categories": { "type": "array", "items": { "type": "string", "enum": ["financial_crime", "crime_and_enforcement", "sanctions_and_security", "regulatory_and_governance", "cybersecurity_and_data_protection", "corporate_misconduct", "governance_and_leadership_dispute", "workforce_and_restructuring", "financial_distress"] } },
           "legal_stage": { "type": "string" },
           "review_required": { "type": "boolean", "description": "True when the retained result is in the Review or High Risk band." }
@@ -2972,7 +2974,7 @@
       },
       "AdverseMediaResponse": {
         "type": "object",
-        "required": ["screening_id", "status", "completed_at", "entity", "summary", "coverage", "results", "report"],
+        "required": ["screening_id", "status", "completed_at", "entity", "summary", "coverage", "results", "media_buckets", "report"],
         "properties": {
           "screening_id": { "type": "string", "format": "uuid" },
           "status": { "type": "string", "enum": ["completed", "partial"] },
@@ -2982,7 +2984,18 @@
           "coverage": { "type": "object", "additionalProperties": true },
           "results": {
             "type": "array",
+            "description": "Adverse Media bucket only; retained for existing consumers.",
             "items": { "$ref": "#/components/schemas/AdverseMediaResult" }
+          },
+          "media_buckets": {
+            "type": "object",
+            "required": ["adverse_media", "general_news_mentions", "no_impact_media"],
+            "properties": {
+              "adverse_media": { "type": "array", "items": { "$ref": "#/components/schemas/AdverseMediaResult" } },
+              "general_news_mentions": { "type": "array", "items": { "$ref": "#/components/schemas/AdverseMediaResult" } },
+              "no_impact_media": { "type": "array", "items": { "$ref": "#/components/schemas/AdverseMediaResult" } }
+            },
+            "additionalProperties": false
           },
           "report": { "$ref": "#/components/schemas/AdverseMediaReport" }
         },
