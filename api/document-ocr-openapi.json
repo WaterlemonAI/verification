@@ -1,0 +1,3668 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "KYCProbe Document Extraction API",
+    "version": "1.0.0",
+    "description": "Eight asynchronous Azure Document Intelligence and Gemini extraction modules. No document data is accepted or returned on unrelated verification routes. Results and original documents are encrypted and retained for 30 days."
+  },
+  "servers": [
+    {
+      "url": "https://api.ai7uae.com",
+      "description": "Live API"
+    }
+  ],
+  "paths": {
+    "/service/uae_trade_license_ocr": {
+      "post": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "UAE Trade License OCR (All Emirates)",
+        "operationId": "submit_uae_trade_license_ocr",
+        "description": "Asynchronous extraction. One file, 20 pages and 25 MiB combined. Encrypted input, OCR text, result and crops are retained 30 days. Missing fields return Not Found; unreadable fields return Not Readable. Human review is required when review_required is true.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique per new submission. Exact replay returns the same job without a second charge.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required PDF, PNG or JPEG document."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job accepted; poll status_url or result_url.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or idempotency key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid credit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Module not enabled for this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds the 25 MiB size limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or admission limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Capacity or processing configuration unavailable; no provider call admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/passport_icao_ocr": {
+      "post": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "Global Passport ICAO OCR & MRZ Verification",
+        "operationId": "submit_passport_icao_ocr",
+        "description": "Asynchronous extraction. One file, 4 pages and 25 MiB combined. Encrypted input, OCR text, result and crops are retained 30 days. Missing fields return Not Found; unreadable fields return Not Readable. Human review is required when review_required is true.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique per new submission. Exact replay returns the same job without a second charge.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required PDF, PNG or JPEG document."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job accepted; poll status_url or result_url.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or idempotency key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid credit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Module not enabled for this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds the 25 MiB size limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or admission limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Capacity or processing configuration unavailable; no provider call admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/uae_poa_ocr": {
+      "post": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "UAE POA (All Emirates)",
+        "operationId": "submit_uae_poa_ocr",
+        "description": "Asynchronous extraction. One file, 20 pages and 25 MiB combined. Encrypted input, OCR text, result and crops are retained 30 days. Missing fields return Not Found; unreadable fields return Not Readable. Human review is required when review_required is true.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique per new submission. Exact replay returns the same job without a second charge.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required PDF, PNG or JPEG document."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job accepted; poll status_url or result_url.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or idempotency key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid credit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Module not enabled for this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds the 25 MiB size limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or admission limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Capacity or processing configuration unavailable; no provider call admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/uae_utility_bill_ocr": {
+      "post": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "UAE Utility Bill (All Emirates)",
+        "operationId": "submit_uae_utility_bill_ocr",
+        "description": "Asynchronous extraction. One file, 20 pages and 25 MiB combined. Encrypted input, OCR text, result and crops are retained 30 days. Missing fields return Not Found; unreadable fields return Not Readable. Human review is required when review_required is true.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique per new submission. Exact replay returns the same job without a second charge.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required PDF, PNG or JPEG document."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job accepted; poll status_url or result_url.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or idempotency key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid credit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Module not enabled for this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds the 25 MiB size limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or admission limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Capacity or processing configuration unavailable; no provider call admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/cheque_ocr": {
+      "post": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "Cheque OCR",
+        "operationId": "submit_cheque_ocr",
+        "description": "Asynchronous extraction. One file, 2 pages and 25 MiB combined. Encrypted input, OCR text, result and crops are retained 30 days. Missing fields return Not Found; unreadable fields return Not Readable. Human review is required when review_required is true.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique per new submission. Exact replay returns the same job without a second charge.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required PDF, PNG or JPEG document."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job accepted; poll status_url or result_url.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or idempotency key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid credit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Module not enabled for this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds the 25 MiB size limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or admission limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Capacity or processing configuration unavailable; no provider call admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/moa_analysis": {
+      "post": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "MOA Analysis",
+        "operationId": "submit_moa_analysis",
+        "description": "Asynchronous extraction. One file, 50 pages and 25 MiB combined. Encrypted input, OCR text, result and crops are retained 30 days. Missing fields return Not Found; unreadable fields return Not Readable. Human review is required when review_required is true.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique per new submission. Exact replay returns the same job without a second charge.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required PDF, PNG or JPEG document."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job accepted; poll status_url or result_url.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or idempotency key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid credit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Module not enabled for this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds the 25 MiB size limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or admission limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Capacity or processing configuration unavailable; no provider call admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/articles_of_association_ocr": {
+      "post": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "Articles of Association OCR",
+        "operationId": "submit_articles_of_association_ocr",
+        "description": "Asynchronous extraction. One file, 50 pages and 25 MiB combined. Encrypted input, OCR text, result and crops are retained 30 days. Missing fields return Not Found; unreadable fields return Not Readable. Human review is required when review_required is true.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique per new submission. Exact replay returns the same job without a second charge.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required PDF, PNG or JPEG document."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job accepted; poll status_url or result_url.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or idempotency key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid credit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Module not enabled for this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds the 25 MiB size limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or admission limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Capacity or processing configuration unavailable; no provider call admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/emirates_id_ocr": {
+      "post": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "Emirates ID OCR",
+        "operationId": "submit_emirates_id_ocr",
+        "description": "Asynchronous extraction. One or two files, 4 pages and 25 MiB combined. Encrypted input, OCR text, result and crops are retained 30 days. Missing fields return Not Found; unreadable fields return Not Readable. Human review is required when review_required is true.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique per new submission. Exact replay returns the same job without a second charge.",
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9._:-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Required PDF, PNG or JPEG document."
+                  },
+                  "additional_file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Optional second side of the Emirates ID."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job accepted; poll status_url or result_url.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or idempotency key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Insufficient prepaid credit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Module not enabled for this workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key reused with different content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Upload exceeds the 25 MiB size limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported file format.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate or admission limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Capacity or processing configuration unavailable; no provider call admitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/{documentService}/jobs/{jobId}": {
+      "get": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "Read extraction job status",
+        "operationId": "getDocumentOcrJob",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "documentService",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "uae_trade_license_ocr",
+                "passport_icao_ocr",
+                "uae_poa_ocr",
+                "uae_utility_bill_ocr",
+                "cheque_ocr",
+                "moa_analysis",
+                "articles_of_association_ocr",
+                "emirates_id_ocr"
+              ]
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^ocr_[0-9a-f-]{36}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current job state and bounded provider-call counts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job is not in this workspace or retention has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/{documentService}/jobs/{jobId}/result": {
+      "get": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "Read completed extraction JSON",
+        "operationId": "getDocumentOcrResult",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "documentService",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "uae_trade_license_ocr",
+                "passport_icao_ocr",
+                "uae_poa_ocr",
+                "uae_utility_bill_ocr",
+                "cheque_ocr",
+                "moa_analysis",
+                "articles_of_association_ocr",
+                "emirates_id_ocr"
+              ]
+            }
+          },
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^ocr_[0-9a-f-]{36}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full structured result; review_required controls reliance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Job still processing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Job is not in this workspace or retention has expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The job failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/service/emirates_id_ocr/jobs/{jobId}/artifacts/{artifactName}": {
+      "get": {
+        "tags": [
+          "Document extraction"
+        ],
+        "summary": "Download a private Emirates ID crop",
+        "operationId": "getEmiratesIdCrop",
+        "description": "Use an API key or the five-minute signed download_url returned with the result. Photo and signature crops are available only when confidently identified.",
+        "security": [
+          {
+            "ApiKey": []
+          },
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^ocr_[0-9a-f-]{36}$"
+            }
+          },
+          {
+            "name": "artifactName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "photo",
+                "signature"
+              ]
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expires",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "signature",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Private PNG crop.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key or valid signed URL required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Artifact unavailable or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentOcrError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Customer API key from Account settings."
+      }
+    },
+    "schemas": {
+      "DocumentOcrJob": {
+        "type": "object",
+        "required": [
+          "id",
+          "service_id",
+          "transaction_id",
+          "status",
+          "stage",
+          "created_at",
+          "expires_at",
+          "provider_calls"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "enum": [
+              "uae-trade-license-ocr",
+              "passport-icao-ocr",
+              "uae-poa-ocr",
+              "uae-utility-bill-ocr",
+              "cheque-ocr",
+              "moa-analysis",
+              "articles-of-association-ocr",
+              "emirates-id-ocr"
+            ]
+          },
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "completed",
+              "review_required",
+              "failed"
+            ]
+          },
+          "stage": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider_calls": {
+            "type": "object",
+            "required": [
+              "azure",
+              "gemini"
+            ],
+            "properties": {
+              "azure": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "gemini": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DocumentOcrAccepted": {
+        "type": "object",
+        "required": [
+          "id",
+          "service_id",
+          "transaction_id",
+          "status",
+          "stage",
+          "created_at",
+          "expires_at",
+          "provider_calls",
+          "reused",
+          "status_url",
+          "result_url"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "enum": [
+              "uae-trade-license-ocr",
+              "passport-icao-ocr",
+              "uae-poa-ocr",
+              "uae-utility-bill-ocr",
+              "cheque-ocr",
+              "moa-analysis",
+              "articles-of-association-ocr",
+              "emirates-id-ocr"
+            ]
+          },
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "completed",
+              "review_required",
+              "failed"
+            ]
+          },
+          "stage": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider_calls": {
+            "type": "object",
+            "required": [
+              "azure",
+              "gemini"
+            ],
+            "properties": {
+              "azure": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2
+              },
+              "gemini": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "reused": {
+            "type": "boolean"
+          },
+          "status_url": {
+            "type": "string"
+          },
+          "result_url": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DocumentOcrStatus": {
+        "type": "object",
+        "required": [
+          "job"
+        ],
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/DocumentOcrJob"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DocumentOcrError": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "Error"
+          },
+          "reasonCode": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
+      "DocumentOcrMrzCheck": {
+        "type": "object",
+        "required": [
+          "observed",
+          "calculated",
+          "status"
+        ],
+        "properties": {
+          "observed": {
+            "type": "string"
+          },
+          "calculated": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "Passed",
+              "FAILED"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "DocumentOcrMrz": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": [
+              "TD3",
+              "TD1"
+            ]
+          },
+          "raw_lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "checks": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DocumentOcrMrzCheck"
+            }
+          },
+          "integrity_status": {
+            "type": "string",
+            "enum": [
+              "Passed",
+              "FAILED",
+              "NOT_IDENTIFIED"
+            ]
+          },
+          "limitation": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "uae_trade_license_ocr_Data": {
+        "type": "object",
+        "required": [
+          "issuing_authority",
+          "license_number",
+          "company_name_english",
+          "company_name_arabic",
+          "formation_number",
+          "address",
+          "issue_date",
+          "expiry_date",
+          "managers",
+          "business_activity",
+          "directors_business_owners",
+          "company_type"
+        ],
+        "properties": {
+          "issuing_authority": {
+            "type": "string",
+            "description": "Organization that issued the trade license. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "license_number": {
+            "type": "string",
+            "description": "Trade license number exactly as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "company_name_english": {
+            "type": "string",
+            "description": "Company legal name in English, when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "company_name_arabic": {
+            "type": "string",
+            "description": "Company legal name in Arabic, when printed. Preserve Arabic script. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "formation_number": {
+            "type": "string",
+            "description": "Company formation or registration number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "address": {
+            "type": "string",
+            "description": "Complete business address from the document. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "issue_date": {
+            "type": "string",
+            "description": "License issue date in DD/MM/YYYY when an unambiguous full date is printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "expiry_date": {
+            "type": "string",
+            "description": "License expiry date in DD/MM/YYYY when an unambiguous full date is printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "managers": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Names of managers explicitly identified in the document. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "string"
+            }
+          },
+          "business_activity": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Business activities printed on the license. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "string"
+            }
+          },
+          "directors_business_owners": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Only people explicitly labeled as directors, shareholders, or business owners. A manager is not an owner unless the document says so. Preserve printed shareholding percentages; return [] if none are listed. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "shareholding_percent": {
+                  "type": "string",
+                  "description": "Printed percentage including the percent sign, if available. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                }
+              },
+              "required": [
+                "name",
+                "shareholding_percent"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "company_type": {
+            "type": "string",
+            "description": "Legal company type, such as sole establishment or limited liability company. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          }
+        },
+        "additionalProperties": false
+      },
+      "uae_trade_license_ocr_Result": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "job_id",
+          "service_id",
+          "status",
+          "processed_at",
+          "document_classification",
+          "data",
+          "evidence",
+          "mrz",
+          "review_required",
+          "review_flags",
+          "artifacts",
+          "processing"
+        ],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "const": "uae-trade-license-ocr"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "review_required"
+            ]
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "document_classification": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/uae_trade_license_ocr_Data"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "page",
+                "quote"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "issuing_authority",
+                    "license_number",
+                    "company_name_english",
+                    "company_name_arabic",
+                    "formation_number",
+                    "address",
+                    "issue_date",
+                    "expiry_date",
+                    "managers",
+                    "business_activity",
+                    "directors_business_owners",
+                    "company_type"
+                  ]
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "mrz": {
+            "$ref": "#/components/schemas/DocumentOcrMrz"
+          },
+          "review_required": {
+            "type": "boolean"
+          },
+          "review_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "content_type",
+                "page",
+                "download_url"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "photo",
+                    "signature"
+                  ]
+                },
+                "content_type": {
+                  "type": "string",
+                  "const": "image/png"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "download_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Private capability URL valid for five minutes."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "processing": {
+            "type": "object",
+            "required": [
+              "ocr_model",
+              "ai_model",
+              "page_count",
+              "malware_gate",
+              "provider_calls"
+            ],
+            "properties": {
+              "ocr_model": {
+                "type": "string"
+              },
+              "ai_model": {
+                "type": "string"
+              },
+              "page_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "malware_gate": {
+                "type": "string",
+                "const": "passed"
+              },
+              "provider_calls": {
+                "$ref": "#/components/schemas/DocumentOcrJob/properties/provider_calls"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "passport_icao_ocr_Data": {
+        "type": "object",
+        "required": [
+          "document_type",
+          "issuing_country",
+          "passport_number",
+          "surnames",
+          "given_names",
+          "nationality",
+          "date_of_birth",
+          "gender",
+          "date_of_expiry",
+          "date_of_issue",
+          "place_of_birth",
+          "mrz_lines"
+        ],
+        "properties": {
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "Passport",
+              "Not Identified as Passport"
+            ]
+          },
+          "issuing_country": {
+            "type": "string",
+            "description": "Issuing state as a three-letter ISO/ICAO code printed or encoded in MRZ. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "passport_number": {
+            "type": "string",
+            "description": "Passport number exactly as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "surnames": {
+            "type": "string",
+            "description": "Surname or surnames as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "given_names": {
+            "type": "string",
+            "description": "Given name or names as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "nationality": {
+            "type": "string",
+            "description": "Nationality as a three-letter ISO/ICAO code printed or encoded in MRZ. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "date_of_birth": {
+            "type": "string",
+            "description": "Date of birth in DD/MM/YYYY only when the century is explicit in the visual zone. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "gender": {
+            "type": "string",
+            "enum": [
+              "M",
+              "F",
+              "O",
+              "Not Found",
+              "Not Readable"
+            ],
+            "description": "M, F or O only when explicitly printed. An MRZ filler means unspecified, not O; use Not Found or Not Readable when appropriate."
+          },
+          "date_of_expiry": {
+            "type": "string",
+            "description": "Expiry date in DD/MM/YYYY only when the century is explicit in the visual zone. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "date_of_issue": {
+            "type": "string",
+            "description": "Issue date in DD/MM/YYYY when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "place_of_birth": {
+            "type": "string",
+            "description": "City, state or region printed as place of birth. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "mrz_lines": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Exactly two raw 44-character TD3 MRZ lines copied character for character. Empty if not legible. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "passport_icao_ocr_Result": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "job_id",
+          "service_id",
+          "status",
+          "processed_at",
+          "document_classification",
+          "data",
+          "evidence",
+          "mrz",
+          "review_required",
+          "review_flags",
+          "artifacts",
+          "processing"
+        ],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "const": "passport-icao-ocr"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "review_required"
+            ]
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "document_classification": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/passport_icao_ocr_Data"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "page",
+                "quote"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "document_type",
+                    "issuing_country",
+                    "passport_number",
+                    "surnames",
+                    "given_names",
+                    "nationality",
+                    "date_of_birth",
+                    "gender",
+                    "date_of_expiry",
+                    "date_of_issue",
+                    "place_of_birth",
+                    "mrz_lines"
+                  ]
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "mrz": {
+            "$ref": "#/components/schemas/DocumentOcrMrz"
+          },
+          "review_required": {
+            "type": "boolean"
+          },
+          "review_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "content_type",
+                "page",
+                "download_url"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "photo",
+                    "signature"
+                  ]
+                },
+                "content_type": {
+                  "type": "string",
+                  "const": "image/png"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "download_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Private capability URL valid for five minutes."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "processing": {
+            "type": "object",
+            "required": [
+              "ocr_model",
+              "ai_model",
+              "page_count",
+              "malware_gate",
+              "provider_calls"
+            ],
+            "properties": {
+              "ocr_model": {
+                "type": "string"
+              },
+              "ai_model": {
+                "type": "string"
+              },
+              "page_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "malware_gate": {
+                "type": "string",
+                "const": "passed"
+              },
+              "provider_calls": {
+                "$ref": "#/components/schemas/DocumentOcrJob/properties/provider_calls"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "uae_poa_ocr_Data": {
+        "type": "object",
+        "required": [
+          "power_of_attorney",
+          "issuing_authority",
+          "entity",
+          "name_of_poa",
+          "period",
+          "id_number",
+          "nationality"
+        ],
+        "properties": {
+          "power_of_attorney": {
+            "type": "string",
+            "enum": [
+              "POA Determined",
+              "Document can not be classified"
+            ]
+          },
+          "issuing_authority": {
+            "type": "string",
+            "description": "Issuing or attesting authority printed on the POA. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "entity": {
+            "type": "string",
+            "description": "Name of the principal entity granting power of attorney. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "name_of_poa": {
+            "type": "string",
+            "description": "Name of the person or entity receiving power of attorney. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "period": {
+            "type": "string",
+            "description": "From DD/MM/YYYY to DD/MM/YYYY when both dates are printed; otherwise Not Found or Not Readable. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "id_number": {
+            "type": "string",
+            "description": "ID number of the attorney-in-fact. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "nationality": {
+            "type": "string",
+            "description": "Nationality of the attorney-in-fact as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          }
+        },
+        "additionalProperties": false
+      },
+      "uae_poa_ocr_Result": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "job_id",
+          "service_id",
+          "status",
+          "processed_at",
+          "document_classification",
+          "data",
+          "evidence",
+          "mrz",
+          "review_required",
+          "review_flags",
+          "artifacts",
+          "processing"
+        ],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "const": "uae-poa-ocr"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "review_required"
+            ]
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "document_classification": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/uae_poa_ocr_Data"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "page",
+                "quote"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "power_of_attorney",
+                    "issuing_authority",
+                    "entity",
+                    "name_of_poa",
+                    "period",
+                    "id_number",
+                    "nationality"
+                  ]
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "mrz": {
+            "$ref": "#/components/schemas/DocumentOcrMrz"
+          },
+          "review_required": {
+            "type": "boolean"
+          },
+          "review_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "content_type",
+                "page",
+                "download_url"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "photo",
+                    "signature"
+                  ]
+                },
+                "content_type": {
+                  "type": "string",
+                  "const": "image/png"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "download_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Private capability URL valid for five minutes."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "processing": {
+            "type": "object",
+            "required": [
+              "ocr_model",
+              "ai_model",
+              "page_count",
+              "malware_gate",
+              "provider_calls"
+            ],
+            "properties": {
+              "ocr_model": {
+                "type": "string"
+              },
+              "ai_model": {
+                "type": "string"
+              },
+              "page_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "malware_gate": {
+                "type": "string",
+                "const": "passed"
+              },
+              "provider_calls": {
+                "$ref": "#/components/schemas/DocumentOcrJob/properties/provider_calls"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "uae_utility_bill_ocr_Data": {
+        "type": "object",
+        "required": [
+          "utility_service_provider",
+          "account_type",
+          "address",
+          "emirate",
+          "bill_date",
+          "bill_issued_to",
+          "utility_bill_amount"
+        ],
+        "properties": {
+          "utility_service_provider": {
+            "type": "string",
+            "description": "Name of utility service provider. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "account_type": {
+            "type": "string",
+            "enum": [
+              "Residential",
+              "Commercial",
+              "Govt",
+              "Not Found",
+              "Not Readable"
+            ],
+            "description": "Residential, Commercial, or Govt. only when supported by the bill; otherwise Not Found or Not Readable."
+          },
+          "address": {
+            "type": "string",
+            "description": "Entire service or billing address as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "emirate": {
+            "type": "string",
+            "description": "UAE emirate associated with the bill. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "bill_date": {
+            "type": "string",
+            "description": "Bill date in DD/MM/YY format. When the bill prints a four-digit year, use its last two digits. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "bill_issued_to": {
+            "type": "string",
+            "description": "Person or entity named as account holder. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "utility_bill_amount": {
+            "type": "string",
+            "description": "Total billed amount, with currency if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          }
+        },
+        "additionalProperties": false
+      },
+      "uae_utility_bill_ocr_Result": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "job_id",
+          "service_id",
+          "status",
+          "processed_at",
+          "document_classification",
+          "data",
+          "evidence",
+          "mrz",
+          "review_required",
+          "review_flags",
+          "artifacts",
+          "processing"
+        ],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "const": "uae-utility-bill-ocr"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "review_required"
+            ]
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "document_classification": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/uae_utility_bill_ocr_Data"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "page",
+                "quote"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "utility_service_provider",
+                    "account_type",
+                    "address",
+                    "emirate",
+                    "bill_date",
+                    "bill_issued_to",
+                    "utility_bill_amount"
+                  ]
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "mrz": {
+            "$ref": "#/components/schemas/DocumentOcrMrz"
+          },
+          "review_required": {
+            "type": "boolean"
+          },
+          "review_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "content_type",
+                "page",
+                "download_url"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "photo",
+                    "signature"
+                  ]
+                },
+                "content_type": {
+                  "type": "string",
+                  "const": "image/png"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "download_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Private capability URL valid for five minutes."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "processing": {
+            "type": "object",
+            "required": [
+              "ocr_model",
+              "ai_model",
+              "page_count",
+              "malware_gate",
+              "provider_calls"
+            ],
+            "properties": {
+              "ocr_model": {
+                "type": "string"
+              },
+              "ai_model": {
+                "type": "string"
+              },
+              "page_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "malware_gate": {
+                "type": "string",
+                "const": "passed"
+              },
+              "provider_calls": {
+                "$ref": "#/components/schemas/DocumentOcrJob/properties/provider_calls"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "cheque_ocr_Data": {
+        "type": "object",
+        "required": [
+          "cheque_number",
+          "bank_name",
+          "payee_name",
+          "cheque_date",
+          "amount",
+          "micr_number"
+        ],
+        "properties": {
+          "cheque_number": {
+            "type": "string",
+            "description": "Cheque number as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "bank_name": {
+            "type": "string",
+            "description": "Bank name as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "payee_name": {
+            "type": "string",
+            "description": "Payee name as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "cheque_date": {
+            "type": "string",
+            "description": "Cheque date in DD/MM/YYYY when unambiguous. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "amount": {
+            "type": "string",
+            "description": "Cheque amount and currency as printed; do not infer a numeric amount from words unless unambiguous. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "micr_number": {
+            "type": "string",
+            "description": "MICR number if present and legible. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          }
+        },
+        "additionalProperties": false
+      },
+      "cheque_ocr_Result": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "job_id",
+          "service_id",
+          "status",
+          "processed_at",
+          "document_classification",
+          "data",
+          "evidence",
+          "mrz",
+          "review_required",
+          "review_flags",
+          "artifacts",
+          "processing"
+        ],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "const": "cheque-ocr"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "review_required"
+            ]
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "document_classification": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/cheque_ocr_Data"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "page",
+                "quote"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "cheque_number",
+                    "bank_name",
+                    "payee_name",
+                    "cheque_date",
+                    "amount",
+                    "micr_number"
+                  ]
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "mrz": {
+            "$ref": "#/components/schemas/DocumentOcrMrz"
+          },
+          "review_required": {
+            "type": "boolean"
+          },
+          "review_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "content_type",
+                "page",
+                "download_url"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "photo",
+                    "signature"
+                  ]
+                },
+                "content_type": {
+                  "type": "string",
+                  "const": "image/png"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "download_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Private capability URL valid for five minutes."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "processing": {
+            "type": "object",
+            "required": [
+              "ocr_model",
+              "ai_model",
+              "page_count",
+              "malware_gate",
+              "provider_calls"
+            ],
+            "properties": {
+              "ocr_model": {
+                "type": "string"
+              },
+              "ai_model": {
+                "type": "string"
+              },
+              "page_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "malware_gate": {
+                "type": "string",
+                "const": "passed"
+              },
+              "provider_calls": {
+                "$ref": "#/components/schemas/DocumentOcrJob/properties/provider_calls"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "moa_analysis_Data": {
+        "type": "object",
+        "required": [
+          "company_name",
+          "registration_number",
+          "business_objectives",
+          "authorized_capital",
+          "date_of_incorporation",
+          "shareholders"
+        ],
+        "properties": {
+          "company_name": {
+            "type": "string",
+            "description": "Legal company name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "registration_number": {
+            "type": "string",
+            "description": "Company registration number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "business_objectives": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Business objectives stated in the memorandum. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "string"
+            }
+          },
+          "authorized_capital": {
+            "type": "string",
+            "description": "Authorized capital and currency, if stated. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "date_of_incorporation": {
+            "type": "string",
+            "description": "Incorporation date in DD/MM/YYYY when unambiguous. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "shareholders": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "One row for each explicitly named shareholder. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Shareholder name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "shareholding_percent": {
+                  "type": "string",
+                  "description": "Shareholding percentage, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "nationality": {
+                  "type": "string",
+                  "description": "Nationality, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "id_number": {
+                  "type": "string",
+                  "description": "ID number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "phone_number": {
+                  "type": "string",
+                  "description": "Phone number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                }
+              },
+              "required": [
+                "name",
+                "shareholding_percent",
+                "nationality",
+                "id_number",
+                "phone_number"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "moa_analysis_Result": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "job_id",
+          "service_id",
+          "status",
+          "processed_at",
+          "document_classification",
+          "data",
+          "evidence",
+          "mrz",
+          "review_required",
+          "review_flags",
+          "artifacts",
+          "processing"
+        ],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "const": "moa-analysis"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "review_required"
+            ]
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "document_classification": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/moa_analysis_Data"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "page",
+                "quote"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "company_name",
+                    "registration_number",
+                    "business_objectives",
+                    "authorized_capital",
+                    "date_of_incorporation",
+                    "shareholders"
+                  ]
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "mrz": {
+            "$ref": "#/components/schemas/DocumentOcrMrz"
+          },
+          "review_required": {
+            "type": "boolean"
+          },
+          "review_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "content_type",
+                "page",
+                "download_url"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "photo",
+                    "signature"
+                  ]
+                },
+                "content_type": {
+                  "type": "string",
+                  "const": "image/png"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "download_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Private capability URL valid for five minutes."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "processing": {
+            "type": "object",
+            "required": [
+              "ocr_model",
+              "ai_model",
+              "page_count",
+              "malware_gate",
+              "provider_calls"
+            ],
+            "properties": {
+              "ocr_model": {
+                "type": "string"
+              },
+              "ai_model": {
+                "type": "string"
+              },
+              "page_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "malware_gate": {
+                "type": "string",
+                "const": "passed"
+              },
+              "provider_calls": {
+                "$ref": "#/components/schemas/DocumentOcrJob/properties/provider_calls"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "articles_of_association_ocr_Data": {
+        "type": "object",
+        "required": [
+          "company_name",
+          "registration_number",
+          "company_rules",
+          "share_structure",
+          "director_requirements"
+        ],
+        "properties": {
+          "company_name": {
+            "type": "string",
+            "description": "Legal company name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "registration_number": {
+            "type": "string",
+            "description": "Company registration number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "company_rules": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Key company rules actually stated in the articles. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "string"
+            }
+          },
+          "share_structure": {
+            "type": "string",
+            "description": "Share classes and ownership structure actually stated. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "director_requirements": {
+            "type": "string",
+            "description": "Requirements for directors, if stated. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          }
+        },
+        "additionalProperties": false
+      },
+      "articles_of_association_ocr_Result": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "job_id",
+          "service_id",
+          "status",
+          "processed_at",
+          "document_classification",
+          "data",
+          "evidence",
+          "mrz",
+          "review_required",
+          "review_flags",
+          "artifacts",
+          "processing"
+        ],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "const": "articles-of-association-ocr"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "review_required"
+            ]
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "document_classification": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/articles_of_association_ocr_Data"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "page",
+                "quote"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "company_name",
+                    "registration_number",
+                    "company_rules",
+                    "share_structure",
+                    "director_requirements"
+                  ]
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "mrz": {
+            "$ref": "#/components/schemas/DocumentOcrMrz"
+          },
+          "review_required": {
+            "type": "boolean"
+          },
+          "review_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "content_type",
+                "page",
+                "download_url"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "photo",
+                    "signature"
+                  ]
+                },
+                "content_type": {
+                  "type": "string",
+                  "const": "image/png"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "download_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Private capability URL valid for five minutes."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "processing": {
+            "type": "object",
+            "required": [
+              "ocr_model",
+              "ai_model",
+              "page_count",
+              "malware_gate",
+              "provider_calls"
+            ],
+            "properties": {
+              "ocr_model": {
+                "type": "string"
+              },
+              "ai_model": {
+                "type": "string"
+              },
+              "page_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "malware_gate": {
+                "type": "string",
+                "const": "passed"
+              },
+              "provider_calls": {
+                "$ref": "#/components/schemas/DocumentOcrJob/properties/provider_calls"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "emirates_id_ocr_Data": {
+        "type": "object",
+        "required": [
+          "emirates_id_number",
+          "full_name_english",
+          "full_name_arabic",
+          "nationality_english",
+          "nationality_arabic",
+          "date_of_birth",
+          "gender",
+          "issue_date",
+          "expiry_date",
+          "card_number",
+          "occupation_english",
+          "occupation_arabic",
+          "employer_name_english",
+          "employer_name_arabic",
+          "place_of_issue_english",
+          "place_of_issue_arabic",
+          "mrz_lines"
+        ],
+        "properties": {
+          "emirates_id_number": {
+            "type": "string",
+            "description": "15-digit Emirates ID number from the front. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "full_name_english": {
+            "type": "string",
+            "description": "Cardholder full English name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "full_name_arabic": {
+            "type": "string",
+            "description": "Cardholder full Arabic name, preserving Arabic script. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "nationality_english": {
+            "type": "string",
+            "description": "Nationality as printed in English. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "nationality_arabic": {
+            "type": "string",
+            "description": "Nationality as printed in Arabic. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "date_of_birth": {
+            "type": "string",
+            "description": "Date of birth in DD/MM/YYYY when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "gender": {
+            "type": "string",
+            "description": "Gender as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "issue_date": {
+            "type": "string",
+            "description": "Card issue date in DD/MM/YYYY when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "expiry_date": {
+            "type": "string",
+            "description": "Card expiry date in DD/MM/YYYY when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "card_number": {
+            "type": "string",
+            "description": "Physical card number from the back, distinct from Emirates ID number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "occupation_english": {
+            "type": "string",
+            "description": "Occupation in English. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "occupation_arabic": {
+            "type": "string",
+            "description": "Occupation in Arabic. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "employer_name_english": {
+            "type": "string",
+            "description": "Employer or sponsor in English. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "employer_name_arabic": {
+            "type": "string",
+            "description": "Employer or sponsor in Arabic. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "place_of_issue_english": {
+            "type": "string",
+            "description": "Place of issue in English. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "place_of_issue_arabic": {
+            "type": "string",
+            "description": "Place of issue in Arabic. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "mrz_lines": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Raw MRZ lines from the back, each copied character for character. Empty if not legible. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "emirates_id_ocr_Result": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "job_id",
+          "service_id",
+          "status",
+          "processed_at",
+          "document_classification",
+          "data",
+          "evidence",
+          "mrz",
+          "review_required",
+          "review_flags",
+          "artifacts",
+          "processing"
+        ],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "const": "emirates-id-ocr"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "review_required"
+            ]
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "document_classification": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/emirates_id_ocr_Data"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "field",
+                "page",
+                "quote"
+              ],
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "emirates_id_number",
+                    "full_name_english",
+                    "full_name_arabic",
+                    "nationality_english",
+                    "nationality_arabic",
+                    "date_of_birth",
+                    "gender",
+                    "issue_date",
+                    "expiry_date",
+                    "card_number",
+                    "occupation_english",
+                    "occupation_arabic",
+                    "employer_name_english",
+                    "employer_name_arabic",
+                    "place_of_issue_english",
+                    "place_of_issue_arabic",
+                    "mrz_lines"
+                  ]
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "mrz": {
+            "$ref": "#/components/schemas/DocumentOcrMrz"
+          },
+          "review_required": {
+            "type": "boolean"
+          },
+          "review_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "content_type",
+                "page",
+                "download_url"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "photo",
+                    "signature"
+                  ]
+                },
+                "content_type": {
+                  "type": "string",
+                  "const": "image/png"
+                },
+                "page": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "download_url": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "Private capability URL valid for five minutes."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "processing": {
+            "type": "object",
+            "required": [
+              "ocr_model",
+              "ai_model",
+              "page_count",
+              "malware_gate",
+              "provider_calls"
+            ],
+            "properties": {
+              "ocr_model": {
+                "type": "string"
+              },
+              "ai_model": {
+                "type": "string"
+              },
+              "page_count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "malware_gate": {
+                "type": "string",
+                "const": "passed"
+              },
+              "provider_calls": {
+                "$ref": "#/components/schemas/DocumentOcrJob/properties/provider_calls"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "DocumentOcrResult": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/uae_trade_license_ocr_Result"
+          },
+          {
+            "$ref": "#/components/schemas/passport_icao_ocr_Result"
+          },
+          {
+            "$ref": "#/components/schemas/uae_poa_ocr_Result"
+          },
+          {
+            "$ref": "#/components/schemas/uae_utility_bill_ocr_Result"
+          },
+          {
+            "$ref": "#/components/schemas/cheque_ocr_Result"
+          },
+          {
+            "$ref": "#/components/schemas/moa_analysis_Result"
+          },
+          {
+            "$ref": "#/components/schemas/articles_of_association_ocr_Result"
+          },
+          {
+            "$ref": "#/components/schemas/emirates_id_ocr_Result"
+          }
+        ]
+      }
+    }
+  }
+}
