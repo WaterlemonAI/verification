@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DOCUMENT_OCR_BY_ID } from '../lib/document-ocr-contracts.mjs';
 import { sanitizeOcrPages, structureDocument, validateExtraction } from '../lib/document-ocr-engine.mjs';
+import { mrzCheckDigit } from '../lib/icao-mrz.mjs';
 
 const trade = DOCUMENT_OCR_BY_ID.get('uae-trade-license-ocr');
 function candidate() {
@@ -115,4 +116,22 @@ test('a model response cannot add instructions or fields outside the schema', ()
   const legalInstructions = sanitizeOcrPages([{ page: 1,
     text: 'The attorney is instructed to sign on behalf of the company.' }]);
   assert.equal(legalInstructions.removedInstructionLines, 0);
+});
+
+test('a valid cited passport MRZ can corroborate a one-character gender value', () => {
+  const passport = DOCUMENT_OCR_BY_ID.get('passport-icao-ocr');
+  const upper = `P<UTO${'SAMPLE<<ALEX'.padEnd(39, '<')}`;
+  const number = 'AB1234567';
+  const birth = '900101';
+  const expiry = '300101';
+  const prefix = number + mrzCheckDigit(number) + 'UTO' + birth + mrzCheckDigit(birth)
+    + 'M' + expiry + mrzCheckDigit(expiry) + '<'.repeat(14) + '<';
+  const lower = prefix + mrzCheckDigit(prefix.slice(0, 10) + prefix.slice(13, 20) + prefix.slice(21, 43));
+  const checked = validateExtraction(passport, {
+    document_classification: 'passport', data: { document_type: 'Passport', gender: 'M', mrz_lines: [upper, lower] },
+    evidence: [{ field: 'mrz_lines', page: 1, quote: upper }], figure_roles: []
+  }, [{ page: 1, text: `${upper}\n${lower}` }]);
+  assert.equal(checked.data.gender, 'M');
+  assert.equal(checked.mrz.integrity_status, 'Passed');
+  assert.equal(checked.review_flags.includes('EVIDENCE_NOT_FOUND:gender'), false);
 });
