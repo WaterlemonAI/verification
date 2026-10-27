@@ -92,3 +92,40 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
   }
   assert.ok(searchPlus.coverage.search_plus.publisher_batches_attempted > 0);
 });
+
+test('a non-adverse official disclosure containing an investigation disclaimer cannot set High Risk', async () => {
+  const disclosure = {
+    title: 'KETERBUKAAN INFORMASI PT DIAN SWASTATIKA SENTOSA TBK',
+    url: 'https://www.idx.co.id/StaticData/NewsAndAnnouncement/announcement.pdf',
+    description: 'KR tidak bertanggung jawab untuk melakukan penyelidikan atas informasi tersebut.',
+    meta_url: { hostname: 'idx.co.id' }
+  };
+  const fetchImpl = async (input, options) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      return url.pathname.includes('/news/')
+        ? Response.json({ results: [] }) : Response.json({ web: { results: [disclosure] } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    if (url.hostname === 'generativelanguage.googleapis.com') {
+      const prompt = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text);
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: [{
+        result_id: prompt.evidence[0].result_id,
+        entity_match: 'confirmed', adverse: 'not_adverse', categories: ['crime_and_enforcement'],
+        legal_stage: 'media_mention', confidence: 0.8,
+        summary: 'This is an ordinary disclosure without adverse conduct.'
+      }] }) }] } }], usageMetadata: { promptTokenCount: 300, candidatesTokenCount: 60 } });
+    }
+    throw new Error(`Unexpected host: ${url.hostname}`);
+  };
+  const result = presentAdverseMediaResponse(await screenAdverseMedia({
+    request: validateAdverseMediaRequest({ entity_type: 'business', name: 'PT Dian Swastatika Sentosa Tbk',
+      countries: ['ID'], languages: ['en'] }),
+    apiKey: 'test-search-key', aiApiKey: 'test-ai-key', fetchImpl
+  }));
+  assert.equal(result.status, 'completed');
+  assert.equal(result.summary.outcome, 'review_required');
+  assert.equal(result.results.length, 1);
+  assert.ok(result.results[0].risk_score < 0.9);
+  assert.match(result.results[0].evidence_assessment, /without adverse conduct/i);
+});
