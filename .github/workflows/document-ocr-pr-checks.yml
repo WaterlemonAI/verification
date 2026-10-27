@@ -1,0 +1,27 @@
+name: Review isolated document OCR image
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile.document-ocr
+      - lib/document-ocr-*.mjs
+      - scripts/document-ocr-paddle.py
+      - scripts/run-document-ocr-worker.mjs
+      - bank-statement-analysis/src/bsa/paddle_ocr.py
+      - bank-statement-analysis/scripts/install_paddle_models.py
+      - .github/workflows/document-ocr-pr-checks.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build private document OCR worker image
+        run: docker build --pull --file Dockerfile.document-ocr --tag document-ocr-pr-check .
+      - name: Verify bundled Paddle inference capability
+        run: |
+          result="$(docker run --rm --entrypoint /opt/document-ocr-python/bin/python document-ocr-pr-check scripts/document-ocr-paddle.py --check)"
+          test "${result}" = '{"ready": true}'

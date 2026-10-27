@@ -86,6 +86,25 @@ test('a source-backed utility bill date with a four-digit year uses the required
   assert.ok(unsupported.review_flags.includes('DATE_FORMAT_INVALID:bill_date'));
 });
 
+test('Paddle coordinates stay separate from contiguous text used for evidence', async () => {
+  const utility = DOCUMENT_OCR_BY_ID.get('uae-utility-bill-ocr');
+  const modelOutput = { document_classification: 'utility_bill', data: { address: 'Street One Dubai' },
+    evidence: [{ field: 'address', page: 1, quote: 'Street One Dubai' }] };
+  const fetched = async (_url, options) => {
+    const payload = JSON.parse(options.body);
+    const source = JSON.parse(payload.contents[0].parts[0].text);
+    assert.match(source.ocr_pages, /Street One\nDubai/);
+    assert.deepEqual(source.ocr_line_boxes, [[1, 1, 0, 0, 400, 100], [1, 2, 0, 110, 300, 200]]);
+    return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(modelOutput) }] } }] });
+  };
+  const result = await structureDocument({ definition: utility, pages: [{ page: 1,
+    text: 'Street One\nDubai', lines: [
+      { text: 'Street One', box: [0, 0, 400, 100] },
+      { text: 'Dubai', box: [0, 110, 300, 200] }
+    ] }], apiKey: 'synthetic', fetchImpl: fetched });
+  assert.equal(result.data.address, 'Street One Dubai');
+});
+
 test('missing and illegible fields keep their required structure and exact labels', () => {
   const checked = validateExtraction(trade, { document_classification: 'trade_license',
     data: { license_number: null, managers: null, company_name_english: 'not readable',
@@ -167,6 +186,23 @@ test('a valid cited passport MRZ can corroborate a one-character gender value', 
   assert.equal(checked.data.gender, 'M');
   assert.equal(checked.mrz.integrity_status, 'Passed');
   assert.equal(checked.review_flags.includes('EVIDENCE_NOT_FOUND:gender'), false);
+});
+
+test('Gemini cannot verify a checksum-valid MRZ when one source line is unreadable', () => {
+  const passport = DOCUMENT_OCR_BY_ID.get('passport-icao-ocr');
+  const upper = `P<UTO${'SAMPLE<<ALEX'.padEnd(39, '<')}`;
+  const number = 'AB1234567';
+  const birth = '900101';
+  const expiry = '300101';
+  const prefix = number + mrzCheckDigit(number) + 'UTO' + birth + mrzCheckDigit(birth)
+    + 'M' + expiry + mrzCheckDigit(expiry) + '<'.repeat(14) + '<';
+  const lower = prefix + mrzCheckDigit(prefix.slice(0, 10) + prefix.slice(13, 20) + prefix.slice(21, 43));
+  const checked = validateExtraction(passport, { document_classification: 'passport',
+    data: { document_type: 'Passport', mrz_lines: [upper, lower] },
+    evidence: [{ field: 'mrz_lines', page: 1, quote: upper }] },
+  [{ page: 1, text: `${upper}\nMRZ lower line unreadable` }]);
+  assert.equal(checked.mrz.integrity_status, 'NOT_IDENTIFIED');
+  assert.ok(checked.review_flags.includes('MRZ_SOURCE_UNCONFIRMED'));
 });
 
 test('a checksum-valid passport MRZ overrides an AI mistranscription without another model call', async () => {
