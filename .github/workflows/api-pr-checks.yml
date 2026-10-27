@@ -15,6 +15,7 @@ on:
       - package-lock.json
       - infrastructure/api.bicep
       - infrastructure/api-document-ocr-platform.bicep
+      - infrastructure/api-document-ocr-purge-bootstrap.bicep
       - .github/workflows/api-pr-checks.yml
 
 permissions:
@@ -37,3 +38,4 @@ jobs:
         run: |
           az bicep build --file infrastructure/api.bicep
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
+          az bicep build --file infrastructure/api-document-ocr-purge-bootstrap.bicep
