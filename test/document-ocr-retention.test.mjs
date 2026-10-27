@@ -1,7 +1,60 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { AzureDocumentOcrStore } from '../lib/document-ocr-store.mjs';
 import { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } from '../lib/customer-usage.mjs';
+
+test('an idempotency race re-enqueues the winning job if its first enqueue was lost', async () => {
+  const previousKey = process.env.DOCUMENT_OCR_DATA_KEY_HEX;
+  process.env.DOCUMENT_OCR_DATA_KEY_HEX = 'a'.repeat(64);
+  try {
+    const sha = (value) => createHash('sha256').update(value).digest('hex');
+    const bytes = Buffer.from('synthetic image');
+    const priorId = 'ocr_33333333-3333-4333-8333-333333333333';
+    const prior = { partitionKey: sha('workspace:race-workspace'), rowKey: `job_${priorId}`,
+      jobId: priorId, serviceId: 'cheque-ocr', transactionId: 'synthetic-transaction',
+      status: 'queued', stage: 'queued', queueSent: false,
+      createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    const requestHash = sha(JSON.stringify({ serviceId: 'cheque-ocr',
+      files: [{ sha256: sha(bytes), mediaType: 'image/png' }] }));
+    let idemLookups = 0;
+    const table = {
+      async getEntity(_partition, key) {
+        if (key.startsWith('idem_')) {
+          if (++idemLookups === 1) throw Object.assign(new Error('not found'), { statusCode: 404 });
+          return { jobId: priorId, requestHash };
+        }
+        if (key === prior.rowKey) return prior;
+        throw Object.assign(new Error('not found'), { statusCode: 404 });
+      },
+      async createEntity() {},
+      async submitTransaction() { throw Object.assign(new Error('conflict'), { statusCode: 409 }); },
+      async updateEntity(patch) { if (patch.rowKey === prior.rowKey) Object.assign(prior, patch); },
+      async deleteEntity() {}
+    };
+    const container = {
+      getBlockBlobClient: () => ({ uploadData: async () => {} }),
+      async *listBlobsFlat() { yield { name: 'abandoned-input.bin' }; },
+      async deleteBlob() {}
+    };
+    let sends = 0;
+    const queue = { async sendMessage(message) {
+      sends += 1;
+      assert.equal(JSON.parse(Buffer.from(message, 'base64').toString()).jobId, priorId);
+    } };
+    const store = new AzureDocumentOcrStore({ container, queue, table });
+    const created = await store.createJob({ ownerId: 'race-workspace', serviceId: 'cheque-ocr',
+      files: [{ bytes, mediaType: 'image/png' }], idempotencyKey: 'ocr-race-request-1234',
+      transactionId: 'synthetic-transaction' });
+    assert.equal(created.reused, true);
+    assert.equal(created.job.id, priorId);
+    assert.equal(sends, 1);
+    assert.equal(prior.queueSent, true);
+  } finally {
+    if (previousKey === undefined) delete process.env.DOCUMENT_OCR_DATA_KEY_HEX;
+    else process.env.DOCUMENT_OCR_DATA_KEY_HEX = previousKey;
+  }
+});
 
 test('stale queued OCR jobs fail and refund credit during hourly reconciliation', async () => {
   const workspaceId = 'ocr-expiry-test';
