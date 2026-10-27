@@ -87,6 +87,7 @@ let latestReportUrl = '';
 const regionPresets = {
   gulf: { countries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'], languages: ['en', 'ar'] },
   india: { countries: ['IN'], languages: ['en', 'hi'] },
+  indonesia: { countries: ['ID'], languages: ['en', 'id'] },
   usa: { countries: ['US'], languages: ['en'] },
   anz: { countries: ['AU', 'NZ'], languages: ['en'] },
   china: { countries: ['CN'], languages: ['zh'] },
