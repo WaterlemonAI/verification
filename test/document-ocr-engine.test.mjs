@@ -64,6 +64,28 @@ test('POA period is explicit when absent and an invented period requires review'
   assert.ok(invalid.review_flags.includes('PERIOD_FORMAT_INVALID'));
 });
 
+test('a source-backed utility bill date with a four-digit year uses the required short-year format', () => {
+  const utility = DOCUMENT_OCR_BY_ID.get('uae-utility-bill-ocr');
+  const source = 'DEWA Residential Bill Date 28/11/2025 Issued to Example LLC';
+  const checked = validateExtraction(utility, { document_classification: 'utility_bill',
+    data: { utility_service_provider: 'DEWA', account_type: 'Residential', bill_date: '28/11/2025',
+      bill_issued_to: 'Example LLC' },
+    evidence: [
+      { field: 'utility_service_provider', page: 1, quote: 'DEWA' },
+      { field: 'account_type', page: 1, quote: 'Residential' },
+      { field: 'bill_date', page: 1, quote: 'Bill Date 28/11/2025' },
+      { field: 'bill_issued_to', page: 1, quote: 'Issued to Example LLC' }
+    ] }, [{ page: 1, text: source }]);
+  assert.equal(checked.data.bill_date, '28/11/25');
+  assert.equal(checked.review_required, false);
+
+  const unsupported = validateExtraction(utility, { document_classification: 'utility_bill',
+    data: { bill_date: '28/11/2025' }, evidence: [{ field: 'bill_date', page: 1, quote: 'Bill Date 27/11/2025' }] },
+  [{ page: 1, text: 'Bill Date 27/11/2025' }]);
+  assert.equal(unsupported.data.bill_date, '28/11/2025');
+  assert.ok(unsupported.review_flags.includes('DATE_FORMAT_INVALID:bill_date'));
+});
+
 test('missing and illegible fields keep their required structure and exact labels', () => {
   const checked = validateExtraction(trade, { document_classification: 'trade_license',
     data: { license_number: null, managers: null, company_name_english: 'not readable',

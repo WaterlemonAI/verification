@@ -232,7 +232,7 @@
       },
       "bill_date": {
         "type": "string",
-        "description": "Bill date in DD/MM/YY format. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+        "description": "Bill date in DD/MM/YY format. When the bill prints a four-digit year, use its last two digits. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "bill_issued_to": {
         "type": "string",
