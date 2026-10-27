@@ -79,6 +79,8 @@
               <div><code>screening_id</code><span>UUID</span><span>Unique screening reference.</span></div>
               <div><code>summary.outcome</code><span>string</span><span>Potential match, no material results, or inconclusive when required processing is incomplete.</span></div>
               <div><code>summary.risk_level</code><span>string</span><span>High, review, safe, no material results, or indeterminate for an incomplete run.</span></div>
+              <div><code>summary.profile_status</code><span>string</span><span>Safe, unsafe, or inconclusive. Only classified adverse-media results may set unsafe; incomplete assessment is inconclusive.</span></div>
+              <div><code>summary.media_bucket_counts</code><span>object</span><span>Counts for Adverse Media, General News Mentions, and No Impact Media.</span></div>
               <div><code>summary.thresholds</code><span>object</span><span>The applied High Risk and Review percentages and the Safe boundary.</span></div>
               <div><code>summary.risk_distribution</code><span>object</span><span>Counts of retained results in the High Risk, Review, and Safe bands.</span></div>
               <div><code>summary.categories</code><span>object</span><span>Count of results by adverse-event category.</span></div>
@@ -102,9 +104,13 @@
               <div><code>results[].source_type</code><span>string</span><span>News index, open web, Search+ publisher search, global archive, or official regulatory evidence.</span></div>
               <div><code>results[].excerpt</code><span>string</span><span>Relevant indexed excerpt.</span></div>
               <div><code>results[].identity_match</code><span>object</span><span>Deterministic identity score, match type, matched input, and customer-readable explanation.</span></div>
+              <div><code>results[].subject_role</code><span>string</span><span>AI-assessed relationship to the event. Top-level results contain only direct adverse findings; other roles remain visible in the classification buckets.</span></div>
+              <div><code>media_buckets.adverse_media[]</code><span>object[]</span><span>Confirmed direct adverse evidence about the screened subject. Only this bucket affects the risk profile and thresholds.</span></div>
+              <div><code>media_buckets.general_news_mentions[]</code><span>object[]</span><span>Neutral, contextual, related-party, or uncertain mentions. They cannot set a high-risk profile.</span></div>
+              <div><code>media_buckets.no_impact_media[]</code><span>object[]</span><span>Victim, namesake, unrelated, or otherwise non-impacting results retained for audit transparency.</span></div>
               <div><code>results[].search_plus_match</code><span>boolean</span><span>True when the evidence URL belongs to the approved Search+ publisher catalog.</span></div>
               <div><code>results[].categories</code><span>string[]</span><span>Detected risk categories, including financial crime, enforcement, sanctions, cybersecurity, corporate misconduct, founder/leadership disputes, workforce restructuring, and financial distress. A restructuring mention is an adverse event lead, not an allegation of fraud.</span></div>
-              <div><code>results[].legal_stage</code><span>string</span><span>Media mention, allegation, investigation, charge, arrest, conviction, or regulatory action.</span></div>
+              <div><code>results[].legal_stage</code><span>string</span><span>Media mention, allegation, investigation, charge, arrest, conviction, regulatory action, settlement, or pardon. A later pardon does not erase the historical case.</span></div>
               <div><code>results[].risk_score</code><span>number</span><span>Combined, explainable prioritisation score.</span></div>
               <div><code>results[].review_required</code><span>boolean</span><span>True when the retained result meets the configured review threshold.</span></div>
               <div><code>report</code><span>object</span><span>Permanent report ID, transaction ID, SHA-256 digest, and public capability URL. Anyone with the unguessable link can download the PDF.</span></div>
@@ -123,13 +129,13 @@
           <article id="methodology">
             <p class="label">METHODOLOGY</p>
             <h2>Designed for review, not automated guilt decisions</h2>
-            <p>The engine normalizes supplied names and aliases, performs a bounded deterministic identity-resolution pass for multi-part individual names, and searches current and archived indexes with controlled retries. AI review runs on the final retrieved evidence only after source collection succeeds or its bounded retries are exhausted. Automatic name transliteration is not used; supply alternate-script aliases when needed. The engine removes duplicate URLs, classifies adverse-event terms, and ranks evidence. The taxonomy distinguishes corporate misconduct from founder/leadership disputes, workforce restructuring, and financial distress; a layoff or founder split is a reviewable event, not automatically a fraud allegation. Search+ reserves part of the fixed 12-query guardrail for explicit publisher-domain batches, prioritises requested countries and high-value editorial categories, and reports the successful and incomplete publisher lists. A successful site-restricted index query proves the query ran; it does not prove the index contained every article published by that outlet. Partial individual-name matches are rejected before classification, while only high-confidence evidence mismatches can suppress a candidate. Any exhausted source or required classification failure makes the run <code>partial</code>, returns an <code>inconclusive</code> outcome, blocks decision eligibility, and requires manual review. A media result is a review lead—not proof of wrongdoing.</p>
+            <p>The engine normalizes supplied names and aliases, performs a bounded deterministic identity-resolution pass for multi-part individual names, and searches current and archived indexes with controlled retries. AI classifies every retained result after source collection succeeds or bounded retries are exhausted. Automatic name transliteration is not used; supply alternate-script aliases when needed. Results are assigned to Adverse Media, General News Mentions, or No Impact Media and all three buckets remain visible for audit. Only confidently confirmed direct adverse conduct affects Safe/Unsafe and configured risk thresholds. A related party, victim, namesake, layoff, or neutral mention cannot by itself make the screened subject unsafe. Search+ reserves part of the fixed 12-query guardrail for publisher-domain searches and reports successful and incomplete publisher lists. A successful query does not prove that the index contained every publication. Any exhausted source, unclassified result, or low-confidence classification makes the run <code>partial</code>, returns an <code>inconclusive</code> outcome, and blocks decision eligibility. A media result is a review lead, not proof of wrongdoing.</p>
           </article>
 
           <article id="tester" class="tester">
             <p class="label">LIVE TESTER</p>
             <h2>Run an adverse media check</h2>
-            <p>The cost guardrail limits each uncached screening to 12 paid search requests plus one bounded AI classification batch. Repeating the same request within 15 minutes uses the cached evidence.</p>
+            <p>The cost guardrail limits each uncached screening to 12 paid search requests and a lifetime provider-cost cap. AI classification uses bounded, checkpointed batches to assess all retained results; repeating the same request within 15 minutes uses cached evidence.</p>
             <form id="adverse-media-form" novalidate>
               <label>AI7 API key<input id="api-key" type="password" autocomplete="off" placeholder="Paste your API key" required /></label>
               <fieldset>

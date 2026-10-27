@@ -32,7 +32,7 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
       return Response.json({
         candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: [{
           result_id: prompt.evidence[0].result_id,
-          entity_match: 'confirmed', adverse: aiDisposition, categories: ['regulatory_and_governance'],
+          entity_match: 'confirmed', subject_role: 'related_party', media_bucket: 'general_news_mentions', adverse: aiDisposition, categories: ['regulatory_and_governance'],
           legal_stage: 'regulatory_action', confidence: 0.94,
           summary: 'The notice concerns trading in DSSA shares; OJK sanctioned parties involved, not the issuer.'
         }] }) }] } }],
@@ -49,12 +49,11 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
   assert.ok(queries.length <= 12);
   assert.equal(response.status, 'completed');
   assert.ok(response.coverage.regional_packs.includes('indonesia'));
-  assert.equal(response.summary.threshold_status, 'review_required');
-  assert.equal(response.summary.human_review_required, true);
-  assert.equal(response.results.length, 1);
-  assert.equal(response.results[0].risk_level, 'review');
-  assert.ok(response.results[0].categories.includes('regulatory_and_governance'));
-  assert.match(response.results[0].evidence_assessment, /not the issuer/i);
+  assert.equal(response.summary.threshold_status, 'safe');
+  assert.equal(response.summary.profile_status, 'safe');
+  assert.equal(response.results.length, 0);
+  assert.equal(response.media_buckets.general_news_mentions.length, 1);
+  assert.match(response.media_buckets.general_news_mentions[0].evidence_assessment, /related party/i);
 
   // A high-confidence model negative must not silently clear an exact-name
   // official enforcement lead. Use a different request key to avoid the cache.
@@ -63,9 +62,9 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
     request: validateAdverseMediaRequest({ entity_type: 'business', name: 'PT Dian Swastatika Sentosa Tbk', countries: ['ID'] }),
     apiKey: 'test-search-key', aiApiKey: 'test-ai-key', fetchImpl
   }));
-  assert.equal(conflicting.summary.threshold_status, 'review_required');
-  assert.equal(conflicting.results[0].risk_level, 'review');
-  assert.match(conflicting.results[0].evidence_assessment, /human review/i);
+  assert.equal(conflicting.summary.threshold_status, 'safe');
+  assert.equal(conflicting.results.length, 0);
+  assert.match(conflicting.media_buckets.general_news_mentions[0].evidence_assessment, /human review/i);
 
   // The reported production run used five languages and Search+. Its old
   // ordering spent the standard budget on news before any official web query.
@@ -81,8 +80,8 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
   }));
   assert.ok(queries.slice(beforeSearchPlus).some((query) => query.includes('site:ojk.go.id')));
   assert.ok(queries.length - beforeSearchPlus <= 12);
-  assert.equal(searchPlus.summary.threshold_status, 'review_required');
-  assert.equal(searchPlus.results.length, 1);
+  assert.equal(searchPlus.summary.threshold_status, 'safe');
+  assert.equal(searchPlus.media_buckets.general_news_mentions.length, 1);
   assert.equal(searchPlus.coverage.sources.find((source) => source.source === 'open_web').status, 'complete');
   assert.match(searchPlus.coverage.limitation, /does not offer an Indonesian language filter/);
   assert.deepEqual(searchPlus.coverage.languages_requested.map((item) => item.code), ['en', 'ar', 'ru', 'hi', 'zh']);
@@ -91,4 +90,39 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
     assert.ok(searchPlus.coverage.languages_searched.some((item) => item.code === code));
   }
   assert.ok(searchPlus.coverage.search_plus.publisher_batches_attempted > 0);
+});
+
+test('a non-adverse official disclosure containing an investigation disclaimer cannot set High Risk', async () => {
+  const disclosure = {
+    title: 'KETERBUKAAN INFORMASI PT DIAN SWASTATIKA SENTOSA TBK',
+    url: 'https://www.idx.co.id/StaticData/NewsAndAnnouncement/announcement.pdf',
+    description: 'KR tidak bertanggung jawab untuk melakukan penyelidikan atas informasi tersebut.',
+    meta_url: { hostname: 'idx.co.id' }
+  };
+  const fetchImpl = async (input, options) => {
+    const url = new URL(input);
+    if (url.hostname === 'api.search.brave.com') {
+      return url.pathname.includes('/news/')
+        ? Response.json({ results: [] }) : Response.json({ web: { results: [disclosure] } });
+    }
+    if (url.hostname === 'api.gdeltproject.org') return Response.json({ articles: [] });
+    if (url.hostname === 'generativelanguage.googleapis.com') {
+      const prompt = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text);
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: [{
+        result_id: prompt.evidence[0].result_id,
+        entity_match: 'confirmed', subject_role: 'context_only', media_bucket: 'general_news_mentions', adverse: 'not_adverse', categories: ['crime_and_enforcement'],
+        legal_stage: 'media_mention', confidence: 0.8,
+        summary: 'This is an ordinary disclosure without adverse conduct.'
+      }] }) }] } }], usageMetadata: { promptTokenCount: 300, candidatesTokenCount: 60 } });
+    }
+    throw new Error(`Unexpected host: ${url.hostname}`);
+  };
+  const result = presentAdverseMediaResponse(await screenAdverseMedia({
+    request: validateAdverseMediaRequest({ entity_type: 'business', name: 'PT Dian Swastatika Sentosa Tbk',
+      countries: ['ID'], languages: ['en'] }),
+    apiKey: 'test-search-key', aiApiKey: 'test-ai-key', fetchImpl
+  }));
+  assert.equal(result.status, 'completed');
+  assert.equal(result.summary.outcome, 'no_material_results');
+  assert.equal(result.results.length, 0);
 });

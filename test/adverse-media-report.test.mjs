@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Readable } from 'node:stream';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFName } from 'pdf-lib';
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from '../lib/adverse-media-report.mjs';
 import { AzureAdverseMediaReportStore, MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { AzureAdverseMediaJsonStore, MemoryAdverseMediaJsonStore } from '../lib/adverse-media-json-store.mjs';
@@ -76,10 +76,29 @@ test('PDF includes a complete multi-page audit artifact and stable integrity met
   assert.equal(report.bytes.subarray(0, 5).toString(), '%PDF-');
   assert.match(report.reportId, /^[0-9a-f-]{36}$/);
   assert.match(report.sha256, /^[0-9a-f]{64}$/);
+  assert.ok(report.bytes.length < 500_000, 'English reports should not embed the optional multilingual fonts');
   const parsed = await PDFDocument.load(report.bytes);
   assert.ok(parsed.getPageCount() >= 2);
   assert.match(parsed.getTitle(), /Adverse Media Screening Result/);
   assert.match(parsed.getSubject(), new RegExp(response.screening_id));
+  assert.equal(parsed.catalog.get(PDFName.of('Names')), undefined, 'public PDF must not embed raw request or response JSON');
+});
+
+test('report remains renderable with Arabic, Hindi, Russian and Chinese evidence', async () => {
+  const titles = ['التحقق من الأخبار السلبية', 'कंपनी के खिलाफ जांच', 'Санкции против компании', '公司受到监管调查'];
+  const items = titles.map((title, index) => ({
+    result_id: `multilingual-${index}`, title, excerpt: title,
+    publisher: 'Example Publisher', url: `https://example.test/${index}`,
+    media_bucket: 'general_news_mentions', subject_role: 'context_only'
+  }));
+  const multilingual = { ...response,
+    entity: { ...response.entity, name: titles[3] },
+    results: [], media_buckets: { adverse_media: [], general_news_mentions: items, no_impact_media: [] } };
+  const report = await createAdverseMediaAuditPdf({ request: { ...request, name: titles[3] },
+    response: multilingual, narrative: { summary: 'Source language review.', findings: [], recommendations: [] },
+    origin: { received_at: '2026-10-26T09:30:00.000Z', processing_location: 'Microsoft Azure UAE North' } });
+  assert.ok((await PDFDocument.load(report.bytes)).getPageCount() >= 3);
+  assert.ok(report.bytes.length > 1_000_000, 'the CJK font must be present for original-script evidence');
 });
 
 test('permanent report store retains owner isolation and supports public capability lookup', async () => {

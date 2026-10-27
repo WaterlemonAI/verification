@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { approvedPublisherCount, approvedPublisherForUrl, selectApprovedPublishers } from '../lib/approved-publishers.mjs';
 import { presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from '../lib/adverse-media.mjs';
 
+const classifiedResults = (response) => Object.values(response.media_buckets).flat();
+
 test('approved catalog matches direct publisher article URLs only', () => {
   assert.equal(approvedPublisherCount, 1500);
   assert.equal(approvedPublisherForUrl('https://www.nytimes.com/2026/10/20/business/story.html')?.name, 'The New York Times');
@@ -119,11 +121,12 @@ test('request-time search returns adverse article URLs about an alias from appro
   };
   const raw = await screenAdverseMedia({ request, apiKey: 'test', fetchImpl });
   const response = presentAdverseMediaResponse(raw);
-  assert.ok(response.results.some((item) => item.url === 'https://www.nytimes.com/2026/10/20/business/fraud.html' && item.search_plus_match));
-  assert.ok(response.results.some((item) => item.url === 'https://example.com/story' && !item.search_plus_match));
-  assert.equal(response.results.find((item) => item.search_plus_match).publisher, 'The New York Times');
-  assert.equal(response.results.find((item) => item.search_plus_match).identity_match.type, 'exact_alias');
-  assert.equal(response.results.find((item) => item.search_plus_match).risk_level, 'high');
+  assert.ok(classifiedResults(response).some((item) => item.url === 'https://www.nytimes.com/2026/10/20/business/fraud.html' && item.search_plus_match));
+  assert.ok(classifiedResults(response).some((item) => item.url === 'https://example.com/story' && !item.search_plus_match));
+  assert.equal(classifiedResults(response).find((item) => item.search_plus_match).publisher, 'The New York Times');
+  assert.equal(classifiedResults(response).find((item) => item.search_plus_match).identity_match.type, 'exact_alias');
+  assert.equal(classifiedResults(response).find((item) => item.search_plus_match).risk_level, 'not_applicable');
+  assert.equal(response.summary.decision_eligible, false);
   assert.equal(response.coverage.search_plus.publisher_catalog_size, 1500);
   assert.ok(response.coverage.search_plus.publishers_screened.length >= 30);
   assert.equal(response.coverage.search_plus.publishers_attempted, response.coverage.search_plus.publishers_screened.length);
@@ -167,9 +170,9 @@ test('results found only by a publisher-targeted query retain their publisher-se
   };
 
   const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
-  assert.equal(response.results.length, 1);
-  assert.equal(response.results[0].source_type, 'publisher_search');
-  assert.equal(response.results[0].publisher, 'The New York Times');
+  assert.equal(classifiedResults(response).length, 1);
+  assert.equal(classifiedResults(response)[0].source_type, 'publisher_search');
+  assert.equal(classifiedResults(response)[0].publisher, 'The New York Times');
   assert.ok(response.coverage.search_plus.matched_publishers.some((publisher) => publisher.domain === 'nytimes.com'));
 });
 
@@ -199,12 +202,11 @@ test('Signzy data-leak coverage targets MediaNama and retains the exact cyber in
   };
 
   const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
-  assert.equal(response.results.length, 1);
-  assert.equal(response.results[0].url, articleUrl.replace(/\/$/, ''));
-  assert.equal(response.results[0].publisher, 'MediaNama');
-  assert.equal(response.results[0].source_type, 'publisher_search');
-  assert.equal(response.results[0].risk_level, 'high');
-  assert.ok(response.results[0].categories.includes('cybersecurity_and_data_protection'));
+  assert.equal(classifiedResults(response).length, 1);
+  assert.equal(classifiedResults(response)[0].url, articleUrl.replace(/\/$/, ''));
+  assert.equal(classifiedResults(response)[0].publisher, 'MediaNama');
+  assert.equal(classifiedResults(response)[0].source_type, 'publisher_search');
+  assert.equal(classifiedResults(response)[0].risk_level, 'not_applicable');
   assert.ok(response.coverage.search_plus.publishers_screened.some((publisher) => publisher.domain === 'medianama.com'));
   assert.ok(response.coverage.search_plus.matched_publishers.some((publisher) => publisher.domain === 'medianama.com'));
   assert.ok(queries.some((query) => query.includes('"data breach"') || query.includes('"data leak"')));
@@ -231,7 +233,7 @@ test('standard screening searches the open web for older Signzy data-leak articl
   };
   const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
   assert.ok(broadWebQuery.includes('Signzy'));
-  assert.ok(response.results.some((item) => item.url === articleUrl.replace(/\/$/, '') && item.source_type === 'open_web'));
+  assert.ok(classifiedResults(response).some((item) => item.url === articleUrl.replace(/\/$/, '') && item.source_type === 'open_web'));
 });
 
 test('corporate event vocabulary detects misconduct, founder disputes, layoffs, and financial distress', async () => {
@@ -260,8 +262,8 @@ test('corporate event vocabulary detects misconduct, founder disputes, layoffs, 
     throw new Error(`unexpected_network_call:${url.hostname}`);
   };
 
-  const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
-  const categoriesBySlug = Object.fromEntries(response.results.map((result) => [result.url.split('/').at(-1), result.categories]));
+  const raw = await screenAdverseMedia({ request, apiKey: 'test', fetchImpl });
+  const categoriesBySlug = Object.fromEntries(raw.results.map((result) => [result.url.split('/').at(-1), result.categories]));
   assert.ok(categoriesBySlug.accounting.includes('corporate_misconduct'));
   assert.ok(categoriesBySlug.founders.includes('governance_and_leadership_dispute'));
   assert.ok(categoriesBySlug.layoffs.includes('workforce_and_restructuring'));
@@ -332,16 +334,14 @@ test('identity scoring separates expanded full names from typo-like near matches
   };
 
   const expanded = await run('Arbaz Siddiqui Uddin');
-  assert.equal(expanded.results[0].identity_match.type, 'expanded_full_name');
-  assert.equal(expanded.results[0].identity_match.score, 1);
-  assert.equal(expanded.results[0].risk_level, 'high');
-  assert.ok(expanded.results[0].risk_score >= 0.9);
+  assert.equal(classifiedResults(expanded)[0].identity_match.type, 'expanded_full_name');
+  assert.equal(classifiedResults(expanded)[0].identity_match.score, 1);
+  assert.equal(classifiedResults(expanded)[0].risk_level, 'not_applicable');
 
   const near = await run('Arban Uddin');
-  assert.equal(near.results[0].identity_match.type, 'near_match');
-  assert.ok(near.results[0].identity_match.score < 0.9);
-  assert.equal(near.results[0].risk_level, 'review');
-  assert.ok(near.results[0].risk_score < 0.9);
+  assert.equal(classifiedResults(near)[0].identity_match.type, 'near_match');
+  assert.ok(classifiedResults(near)[0].identity_match.score < 0.9);
+  assert.equal(classifiedResults(near)[0].risk_level, 'not_applicable');
 });
 
 test('an individual middle initial is required and does not match a different full name', async () => {
@@ -414,7 +414,7 @@ test('identity scoring recognizes unsegmented CJK names inside headlines', async
     throw new Error(`unexpected_network_call:${url.hostname}`);
   };
   const response = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'test', fetchImpl }));
-  assert.equal(response.results[0].identity_match.type, 'exact_name');
-  assert.equal(response.results[0].identity_match.score, 1);
-  assert.equal(response.results[0].risk_level, 'high');
+  assert.equal(classifiedResults(response)[0].identity_match.type, 'exact_name');
+  assert.equal(classifiedResults(response)[0].identity_match.score, 1);
+  assert.equal(classifiedResults(response)[0].risk_level, 'not_applicable');
 });
