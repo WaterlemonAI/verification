@@ -5,7 +5,7 @@ import { createAdverseMediaAuditPdf } from '../lib/adverse-media-report.mjs';
 const output = resolve('output/pdf/adverse-media-screening-sample.pdf');
 const request = {
   entity_type: 'individual', name: 'Sample Customer', aliases: ['S Customer'], countries: ['AE'], languages: ['en', 'ar'],
-  date_from: '2025-01-01', date_to: '', risk_threshold: 0.65,
+  date_from: '2025-01-01', date_to: '', risk_threshold: 0.65, search_plus: true,
   review_threshold_percent: 65, high_risk_threshold_percent: 90, max_results: 25, deep_research: false,
   callback_url: '', customer_logo_url: ''
 };
@@ -13,7 +13,7 @@ const response = {
   screening_id: 'e24db404-2aa3-4019-a86b-f314aeeb6601', status: 'completed', completed_at: '2026-10-26T10:21:16.000Z',
   entity: { entity_type: 'individual', name: 'Sample Customer', aliases: ['S Customer'], countries: ['AE'] },
   summary: {
-    outcome: 'review_required', risk_level: 'review', highest_risk_score: 0.82, potentially_relevant_results: 2,
+    profile_status: 'unsafe', outcome: 'review_required', risk_level: 'review', highest_risk_score: 0.82, potentially_relevant_results: 2,
     categories: { financial_crime: 1, regulatory_and_governance: 1 }, human_review_required: true,
     statement: 'One of two potentially relevant results reached the configured review threshold.', risk_threshold: 0.65,
     thresholds: { high_risk_percent: 90, review_percent: 65, safe_below_percent: 65 },
@@ -25,6 +25,15 @@ const response = {
     sources: [{ source: 'current_news', status: 'complete' }, { source: 'open_web', status: 'complete' }, { source: 'archive', status: 'complete' }, { source: 'official_records', status: 'complete' }],
     reason_codes: [], retryable: false, languages_searched: [{ code: 'en', name: 'English' }, { code: 'ar', name: 'Arabic' }],
     date_from: '2025-01-01', date_to: null, searched_at: '2026-10-26T10:21:16.000Z', archive_window: 'up to one year',
+    search_plus: { requested: true, publisher_catalog_size: 1500, publishers_attempted: 6,
+      matched_results: 1, publishers_screened: [
+        { name: 'Gulf Business', domain: 'gulfbusiness.com', country_code: 'AE' },
+        { name: 'The National', domain: 'thenationalnews.com', country_code: 'AE' },
+        { name: 'Financial Times', domain: 'ft.com', country_code: 'GB' },
+        { name: 'Reuters', domain: 'reuters.com', country_code: 'GB' },
+        { name: 'MediaNama', domain: 'medianama.com', country_code: 'IN' },
+        { name: 'The Economic Times', domain: 'economictimes.indiatimes.com', country_code: 'IN' }
+      ], publishers_not_completed: [] },
     limitation: 'Coverage is limited to indexed, publicly discoverable sources and cannot guarantee every publication.'
   },
   results: [
@@ -41,6 +50,32 @@ const response = {
       risk_score: 0.48, risk_level: 'safe', categories: ['financial_crime'], legal_stage: 'allegation', review_required: false
     }
   ]
+};
+response.results[0].media_bucket = 'adverse_media';
+response.results[0].subject_role = 'direct_actor';
+response.results[0].evidence_assessment = 'The publication describes an investigation involving the screened subject, without reporting a final finding.';
+response.results[0].excerpt = '<strong>The regulator announced an investigation.</strong> No final judgment was reported.';
+response.results[1].media_bucket = 'adverse_media';
+response.results[1].subject_role = 'direct_actor';
+const general = {
+  result_id: 'result-003', title: 'Sample Customer announces new offices &amp; hiring',
+  url: 'https://news.example/company-update', publisher: 'Example News', published_at: '2026-08-20T00:00:00Z',
+  language: 'en', source_type: 'news_index', media_bucket: 'general_news_mentions', subject_role: 'context_only',
+  legal_stage: 'media_mention', excerpt: 'A general corporate announcement with no adverse allegation.',
+  evidence_assessment: 'Routine business coverage.'
+};
+const noImpact = {
+  result_id: 'result-004', title: 'Different namesake in unrelated court case',
+  url: 'https://records.example/namesake', publisher: 'Example Records', published_at: '2026-07-10T00:00:00Z',
+  language: 'en', source_type: 'official_regulatory', media_bucket: 'no_impact_media', subject_role: 'namesake',
+  legal_stage: 'media_mention', excerpt: 'The record concerns a different person with the same name.',
+  evidence_assessment: 'Identity details do not match the screened subject.'
+};
+response.results.push(general, noImpact);
+response.media_buckets = {
+  adverse_media: response.results.slice(0, 2),
+  general_news_mentions: [general],
+  no_impact_media: [noImpact]
 };
 const report = await createAdverseMediaAuditPdf({
   request, response,
