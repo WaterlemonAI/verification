@@ -155,8 +155,8 @@ jobs:
           vault_uri="${{ vars.KEY_VAULT_URI }}"
           vault_name="${vault_uri#https://}"
           vault_name="${vault_name%%.*}"
-          registry_id="$(az acr show --name "${{ vars.ACR_NAME }}" --query id --output tsv)"
-          vault_id="$(az keyvault show --name "${vault_name}" --query id --output tsv)"
+          registry_id="/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.AZURE_RESOURCE_GROUP }}/providers/Microsoft.ContainerRegistry/registries/${{ vars.ACR_NAME }}"
+          vault_id="/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.AZURE_RESOURCE_GROUP }}/providers/Microsoft.KeyVault/vaults/${vault_name}"
           az deployment group what-if \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
             --name "ai7uae-ocr-platform-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
