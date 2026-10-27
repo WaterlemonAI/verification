@@ -149,6 +149,7 @@
                   <label>Identifier <code>identifier</code><input class="weight" data-field="identifier" type="number" min="0" max="1" step="0.01" value="0" /></label>
                   <label>Fuzziness <code>fuzziness</code><input id="fuzziness" type="number" min="0" max="1" step="0.01" value="0.8" required /></label>
                 </div>
+                <p class="field-help">With the default weights, only the name contributes to the search score. A submitted country has 0% weight; raise its weight and reduce another field if country should influence matching. The PDF labels returned profiles as unverified until their names, types and source records are reviewed.</p>
               </fieldset>
               <fieldset>
                 <legend>APC options <span>Used by APC checks</span></legend>
@@ -163,7 +164,7 @@
               <fieldset class="report-options">
                 <legend>Audit report <span>Optional · AI7 wrapper feature</span></legend>
                 <label>Logo URL <code>HTTPS PNG or JPEG · optional</code><input id="report-logo-url" type="url" inputmode="url" placeholder="https://your-company.com/logo.png" /></label>
-                <label class="report-toggle"><input id="get-pdf" type="checkbox" /><span><strong>Create audit PDF</strong><small>Generate a branded, readable report from the server-observed result: dataset outcomes, named returned sources, candidate evidence, transaction details, and integrity hashes. No raw JSON is printed or attached.</small></span></label>
+                <label class="report-toggle"><input id="get-pdf" type="checkbox" /><span><strong>Create audit PDF</strong><small>Generate a branded report from the server-observed result: dataset outcomes, candidate names and relevance checks, named returned sources, transaction details, and integrity hashes. No raw JSON is printed or attached.</small></span></label>
                 <p class="field-help">The logo and report settings stay within AI7 and are not sent to the screening data provider.</p>
                 <p class="field-help">API use: send <code>X-AI7-Generate-Pdf: true</code> with the search, read <code>X-AI7-Report-Id</code>, then POST <code>{"report_id":"AI7-..."}</code> to <code>/reports/entity-search.pdf</code> with a key from the same workspace. The audit report module must be enabled.</p>
               </fieldset>
