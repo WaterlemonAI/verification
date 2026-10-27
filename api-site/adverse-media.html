@@ -87,6 +87,7 @@
               <div><code>summary.decision_eligible</code><span>boolean</span><span>False whenever the run is partial and must not be treated as a completed compliance decision.</span></div>
               <div><code>coverage</code><span>object</span><span>Overall completeness, geographic scope, languages, dates, search time, and explicit limitations.</span></div>
               <div><code>coverage.regional_packs</code><span>string[]</span><span>Focused regional searches that ran, including an automatically recognized Indonesian listed-company name.</span></div>
+              <div><code>coverage.languages_requested / languages_searched / languages_not_searched</code><span>arrays</span><span>Separates selected languages from those actually queried under the fixed search budget. Any omitted requested language blocks decision eligibility.</span></div>
               <div><code>coverage.sources</code><span>object[]</span><span>Provider-neutral status for current news, open web, Search+ publisher search, archive, and official-record coverage.</span></div>
               <div><code>coverage.archive_window</code><span>string</span><span>Actual indexed archive dates, or the hosted archive scope when that fallback completes. The default local archive window is 72 hours with a daily watermark.</span></div>
               <div><code>coverage.archive_snapshot</code><span>object or null</span><span>Indexed coverage start and end, last successful ingest, and data age in hours.</span></div>

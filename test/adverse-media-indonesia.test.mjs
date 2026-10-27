@@ -83,4 +83,10 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
   assert.equal(searchPlus.summary.threshold_status, 'review_required');
   assert.equal(searchPlus.results.length, 1);
   assert.equal(searchPlus.coverage.sources.find((source) => source.source === 'open_web').status, 'complete');
+  assert.deepEqual(searchPlus.coverage.languages_requested.map((item) => item.code), ['en', 'ar', 'ru', 'hi', 'zh']);
+  assert.deepEqual(searchPlus.coverage.languages_not_searched, []);
+  for (const code of ['en', 'ar', 'ru', 'hi', 'zh']) {
+    assert.ok(searchPlus.coverage.languages_searched.some((item) => item.code === code));
+  }
+  assert.ok(searchPlus.coverage.search_plus.publisher_batches_attempted > 0);
 });
