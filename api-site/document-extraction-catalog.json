@@ -5,60 +5,36 @@
     "publicPath": "/service/uae_trade_license_ocr",
     "fields": {
       "issuing_authority": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Organization that issued the trade license. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Organization that issued the trade license. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "license_number": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Trade license number exactly as printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Trade license number exactly as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "company_name_english": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Company legal name in English, when printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Company legal name in English, when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "company_name_arabic": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Company legal name in Arabic, when printed. Preserve Arabic script. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Company legal name in Arabic, when printed. Preserve Arabic script. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "formation_number": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Company formation or registration number. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Company formation or registration number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "address": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Complete business address from the document. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Complete business address from the document. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "issue_date": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "License issue date in DD/MM/YYYY when an unambiguous full date is printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "License issue date in DD/MM/YYYY when an unambiguous full date is printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "expiry_date": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "License expiry date in DD/MM/YYYY when an unambiguous full date is printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "License expiry date in DD/MM/YYYY when an unambiguous full date is printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "managers": {
         "type": "array",
@@ -81,18 +57,12 @@
           "type": "object",
           "properties": {
             "name": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "Name as printed. Return null when absent, unreadable, or unsupported by the document."
+              "type": "string",
+              "description": "Name as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
             },
             "shareholding_percent": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "Printed percentage including the percent sign, or null. Return null when absent, unreadable, or unsupported by the document."
+              "type": "string",
+              "description": "Printed percentage including the percent sign, if available. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
             }
           },
           "required": [
@@ -103,11 +73,8 @@
         }
       },
       "company_type": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Legal company type, such as sole establishment or limited liability company. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Legal company type, such as sole establishment or limited liability company. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       }
     },
     "maxFiles": 1,
@@ -126,80 +93,51 @@
         ]
       },
       "issuing_country": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Issuing state as a three-letter ISO/ICAO code printed or encoded in MRZ. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Issuing state as a three-letter ISO/ICAO code printed or encoded in MRZ. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "passport_number": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Passport number exactly as printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Passport number exactly as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "surnames": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Surname or surnames as printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Surname or surnames as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "given_names": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Given name or names as printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Given name or names as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "nationality": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Nationality as a three-letter ISO/ICAO code printed or encoded in MRZ. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Nationality as a three-letter ISO/ICAO code printed or encoded in MRZ. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "date_of_birth": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Date of birth in DD/MM/YYYY only when the century is explicit in the visual zone. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Date of birth in DD/MM/YYYY only when the century is explicit in the visual zone. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "gender": {
-        "type": [
-          "string",
-          "null"
-        ],
+        "type": "string",
         "enum": [
           "M",
           "F",
           "O",
-          null
+          "Not Found",
+          "Not Readable"
         ],
-        "description": "M, F or O only when explicitly printed. An MRZ filler means unspecified, not O."
+        "description": "M, F or O only when explicitly printed. An MRZ filler means unspecified, not O; use Not Found or Not Readable when appropriate."
       },
       "date_of_expiry": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Expiry date in DD/MM/YYYY only when the century is explicit in the visual zone. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Expiry date in DD/MM/YYYY only when the century is explicit in the visual zone. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "date_of_issue": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Issue date in DD/MM/YYYY when printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Issue date in DD/MM/YYYY when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "place_of_birth": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "City, state or region printed as place of birth. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "City, state or region printed as place of birth. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "mrz_lines": {
         "type": "array",
@@ -225,46 +163,28 @@
         ]
       },
       "issuing_authority": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Issuing or attesting authority printed on the POA. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Issuing or attesting authority printed on the POA. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "entity": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Name of the principal entity granting power of attorney. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Name of the principal entity granting power of attorney. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "name_of_poa": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Name of the person or entity receiving power of attorney. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Name of the person or entity receiving power of attorney. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "period": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "From DD/MM/YYYY to DD/MM/YYYY when both dates are printed; otherwise period not found. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "From DD/MM/YYYY to DD/MM/YYYY when both dates are printed; otherwise Not Found or Not Readable. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "id_number": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "ID number of the attorney-in-fact. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "ID number of the attorney-in-fact. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "nationality": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Nationality of the attorney-in-fact as printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Nationality of the attorney-in-fact as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       }
     },
     "maxFiles": 1,
@@ -276,59 +196,39 @@
     "publicPath": "/service/uae_utility_bill_ocr",
     "fields": {
       "utility_service_provider": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Name of utility service provider. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Name of utility service provider. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "account_type": {
-        "type": [
-          "string",
-          "null"
-        ],
+        "type": "string",
         "enum": [
           "Residential",
           "Commercial",
           "Govt",
-          null
+          "Not Found",
+          "Not Readable"
         ],
-        "description": "Residential, Commercial, or Govt. only when supported by the bill."
+        "description": "Residential, Commercial, or Govt. only when supported by the bill; otherwise Not Found or Not Readable."
       },
       "address": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Entire service or billing address as printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Entire service or billing address as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "emirate": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "UAE emirate associated with the bill. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "UAE emirate associated with the bill. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "bill_date": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Bill date in DD/MM/YY format. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Bill date in DD/MM/YY format. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "bill_issued_to": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Person or entity named as account holder. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Person or entity named as account holder. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "utility_bill_amount": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Total billed amount, with currency if printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Total billed amount, with currency if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       }
     },
     "maxFiles": 1,
@@ -340,46 +240,28 @@
     "publicPath": "/service/cheque_ocr",
     "fields": {
       "cheque_number": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Cheque number as printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Cheque number as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "bank_name": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Bank name as printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Bank name as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "payee_name": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Payee name as printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Payee name as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "cheque_date": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Cheque date in DD/MM/YYYY when unambiguous. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Cheque date in DD/MM/YYYY when unambiguous. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "amount": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Cheque amount and currency as printed; do not infer a numeric amount from words unless unambiguous. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Cheque amount and currency as printed; do not infer a numeric amount from words unless unambiguous. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "micr_number": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "MICR number if present and legible. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "MICR number if present and legible. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       }
     },
     "maxFiles": 1,
@@ -391,18 +273,12 @@
     "publicPath": "/service/moa_analysis",
     "fields": {
       "company_name": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Legal company name. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Legal company name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "registration_number": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Company registration number. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Company registration number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "business_objectives": {
         "type": "array",
@@ -412,18 +288,12 @@
         }
       },
       "authorized_capital": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Authorized capital and currency, if stated. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Authorized capital and currency, if stated. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "date_of_incorporation": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Incorporation date in DD/MM/YYYY when unambiguous. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Incorporation date in DD/MM/YYYY when unambiguous. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "shareholders": {
         "type": "array",
@@ -432,39 +302,24 @@
           "type": "object",
           "properties": {
             "name": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "Shareholder name. Return null when absent, unreadable, or unsupported by the document."
+              "type": "string",
+              "description": "Shareholder name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
             },
             "shareholding_percent": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "Shareholding percentage, if printed. Return null when absent, unreadable, or unsupported by the document."
+              "type": "string",
+              "description": "Shareholding percentage, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
             },
             "nationality": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "Nationality, if printed. Return null when absent, unreadable, or unsupported by the document."
+              "type": "string",
+              "description": "Nationality, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
             },
             "id_number": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "ID number, if printed. Return null when absent, unreadable, or unsupported by the document."
+              "type": "string",
+              "description": "ID number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
             },
             "phone_number": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "description": "Phone number, if printed. Return null when absent, unreadable, or unsupported by the document."
+              "type": "string",
+              "description": "Phone number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
             }
           },
           "required": [
@@ -487,18 +342,12 @@
     "publicPath": "/service/articles_of_association_ocr",
     "fields": {
       "company_name": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Legal company name. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Legal company name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "registration_number": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Company registration number. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Company registration number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "company_rules": {
         "type": "array",
@@ -508,18 +357,12 @@
         }
       },
       "share_structure": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Share classes and ownership structure actually stated. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Share classes and ownership structure actually stated. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "director_requirements": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Requirements for directors, if stated. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Requirements for directors, if stated. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       }
     },
     "maxFiles": 1,
@@ -531,116 +374,68 @@
     "publicPath": "/service/emirates_id_ocr",
     "fields": {
       "emirates_id_number": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "15-digit Emirates ID number from the front. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "15-digit Emirates ID number from the front. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "full_name_english": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Cardholder full English name. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Cardholder full English name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "full_name_arabic": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Cardholder full Arabic name, preserving Arabic script. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Cardholder full Arabic name, preserving Arabic script. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "nationality_english": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Nationality as printed in English. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Nationality as printed in English. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "nationality_arabic": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Nationality as printed in Arabic. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Nationality as printed in Arabic. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "date_of_birth": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Date of birth in DD/MM/YYYY when printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Date of birth in DD/MM/YYYY when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "gender": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Gender as printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Gender as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "issue_date": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Card issue date in DD/MM/YYYY when printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Card issue date in DD/MM/YYYY when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "expiry_date": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Card expiry date in DD/MM/YYYY when printed. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Card expiry date in DD/MM/YYYY when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "card_number": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Physical card number from the back, distinct from Emirates ID number. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Physical card number from the back, distinct from Emirates ID number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "occupation_english": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Occupation in English. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Occupation in English. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "occupation_arabic": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Occupation in Arabic. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Occupation in Arabic. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "employer_name_english": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Employer or sponsor in English. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Employer or sponsor in English. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "employer_name_arabic": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Employer or sponsor in Arabic. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Employer or sponsor in Arabic. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "place_of_issue_english": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Place of issue in English. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Place of issue in English. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "place_of_issue_arabic": {
-        "type": [
-          "string",
-          "null"
-        ],
-        "description": "Place of issue in Arabic. Return null when absent, unreadable, or unsupported by the document."
+        "type": "string",
+        "description": "Place of issue in Arabic. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       },
       "mrz_lines": {
         "type": "array",
