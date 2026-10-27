@@ -17,6 +17,7 @@ import { adverseMediaConfig, presentAdverseMediaResponse, screenAdverseMedia, va
 import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, validatePublicCallbackUrl } from './lib/deep-research-queue.mjs';
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
+import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs';
 import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
@@ -341,15 +342,20 @@ async function createEntitySearchReport(req, res, store, reportStore) {
 }
 
 export async function finalizeAdverseMediaReport({ request, response, ownerId, origin, aiApiKey, fetchImpl, reportStore,
-  reportId = null }) {
+  jsonStore = createAdverseMediaJsonStore(), inputPayload = request, transactionId = null, reportId = null }) {
   try {
     if (reportId) {
       const existing = await reportStore.get({ ownerId, reportId });
       const publicReport = existing && await reportStore.getPublic({ reportId });
       if (publicReport?.metadata.transaction_id === response.screening_id) {
         const reportPath = `/service/adverse_media/reports/${reportId}.pdf`;
-        return { ...response, report: { ...existing.metadata,
+        const finalized = { ...response, report: { ...existing.metadata,
           download_url: process.env.API_PUBLIC_BASE_URL ? new URL(reportPath, process.env.API_PUBLIC_BASE_URL).href : reportPath } };
+        try {
+          await jsonStore.save({ ownerId, screeningId: response.screening_id, transactionId, input: inputPayload,
+            response: finalized });
+        } catch { throw new Error('adverse_json_retention_unavailable'); }
+        return finalized;
       }
     }
     const logo = await fetchPublicLogo(request.customer_logo_url);
@@ -377,16 +383,29 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
       filename: report.filename,
       retention: 'permanent'
     };
-    await reportStore.save({ ownerId, reportId: report.reportId, bytes: report.bytes, metadata: { ...metadata, report_type: 'adverse_media' } });
-    return { ...response, report: metadata };
-  } catch {
+    const finalized = { ...response, report: metadata };
+    const [pdfWrite, jsonWrite] = await Promise.allSettled([
+      reportStore.save({ ownerId, reportId: report.reportId, bytes: report.bytes,
+        metadata: { ...metadata, report_type: 'adverse_media' } }),
+      jsonStore.save({ ownerId, screeningId: response.screening_id, transactionId, input: inputPayload,
+        response: finalized })
+    ]);
+    if (pdfWrite.status === 'rejected') throw new Error('report_service_unavailable');
+    if (jsonWrite.status === 'rejected') throw new Error('adverse_json_retention_unavailable');
+    return finalized;
+  } catch (cause) {
+    if (cause.message === 'adverse_json_retention_unavailable') {
+      const error = new Error('adverse_json_retention_unavailable');
+      error.statusCode = 503;
+      throw error;
+    }
     const error = new Error('report_service_unavailable');
     error.statusCode = 503;
     throw error;
   }
 }
 
-async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore) {
+async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore) {
   const startedAt = Date.now();
   let screeningResult;
   let screeningFinishedAt;
@@ -423,13 +442,20 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
   if (!req.ai7Client && !(await store.isClientKey(token))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
+  if (jsonStore?.ready === false) {
+    return json(res, 503, { status: 'Error', error: 'The screening record service is temporarily unavailable.' });
+  }
   try {
     const input = await readJson(req);
+    if (Buffer.byteLength(JSON.stringify(input)) > 32 * 1024) {
+      return json(res, 413, { status: 'Error', error: 'Adverse-media input must be 32 KiB or smaller.' });
+    }
     const request = validateAdverseMediaRequest(input);
     if (request.deep_research && request.callback_url) {
       if (!deepResearchQueue) return json(res, 503, { status: 'Error', error: 'Deep research callback processing is temporarily unavailable.' });
       await validatePublicCallbackUrl(request.callback_url);
-      const job = makeDeepResearchJob(request, { owner_id: reportOwnerId(token), request_origin: requestOrigin(req) });
+      const job = makeDeepResearchJob(request, { owner_id: reportOwnerId(token), request_origin: requestOrigin(req),
+        input_payload: input, transaction_id: res.getHeader('x-ai7-transaction-id') });
       await deepResearchQueue.enqueue(job);
       return json(res, 202, {
         screening_id: job.screening_id,
@@ -458,7 +484,10 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       origin: requestOrigin(req),
       aiApiKey,
       fetchImpl: costGuard.fetch,
-      reportStore
+      reportStore,
+      jsonStore,
+      inputPayload: input,
+      transactionId: res.getHeader('x-ai7-transaction-id')
     });
     logMetrics('completed');
     return json(res, 200, response);
@@ -482,8 +511,9 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     if (error.statusCode === 400 || (!error.statusCode && error.message !== 'search_provider_unavailable')) {
       return json(res, 400, { status: 'Error', error: error.message || 'The request is invalid.' });
     }
-    if (String(error.message || '').startsWith('report_') || /Blob|Table|storage/i.test(String(error.message || ''))) {
-      return json(res, 503, { status: 'Error', error: 'The screening report service is temporarily unavailable. Please try again shortly.' });
+    if (String(error.message || '').startsWith('report_') || error.message === 'adverse_json_retention_unavailable'
+      || /Blob|Table|storage/i.test(String(error.message || ''))) {
+      return json(res, 503, { status: 'Error', error: 'The screening record service is temporarily unavailable. Please try again shortly.' });
     }
     return json(res, 502, { status: 'Error', reason_code: 'SEARCH_SOURCES_UNAVAILABLE',
       error: 'The media search service is temporarily unavailable. Please try again shortly.' });
@@ -1926,7 +1956,8 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
   deepResearchQueue = process.env.ADVERSE_MEDIA_WORKER_ENABLED === 'false' ? null : createDeepResearchQueue(),
   formsQueue = createFormsQueue(), formSubmissionStore = createFormsSubmissionStore(),
-  reportStore = createAdverseMediaReportStore(), usageStore = createCustomerUsageStore(),
+  reportStore = createAdverseMediaReportStore(), jsonStore = createAdverseMediaJsonStore(),
+  usageStore = createCustomerUsageStore(),
   merchantScreener = configuredMerchantScreener, requestCapacity = createRequestCapacity(),
   startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
@@ -1941,7 +1972,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       present: presentAdverseMediaResponse,
       finalize: async ({ job, response, aiApiKey, costGuard }) => finalizeAdverseMediaReport({
         request: job.request, response, ownerId: job.owner_id, origin: job.request_origin,
-        aiApiKey, fetchImpl: costGuard.fetch, reportStore, reportId: job.report_id
+        aiApiKey, fetchImpl: costGuard.fetch, reportStore, jsonStore, reportId: job.report_id,
+        inputPayload: job.input_payload || job.request, transactionId: job.transaction_id || null
       }),
       fetchImpl
     });
@@ -2018,7 +2050,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           : json(res, 409, { status: 'Error', error: 'The key could not be rotated.' });
       }
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return await createEntitySearchReport(req, res, store, reportStore);
-      if (req.method === 'POST' && url.pathname === '/service/adverse_media') return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
+      if (req.method === 'POST' && url.pathname === '/service/adverse_media')
+        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return await handleBsa(req, res, url, store);
       const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);

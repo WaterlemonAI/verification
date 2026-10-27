@@ -69,6 +69,9 @@ param gdeltStorageName string = 'stai7uaegdeltuaen001'
 @description('Dedicated storage account for permanent adverse-media PDF reports.')
 param reportStorageName string = 'stai7uaereportsuaen001'
 
+@description('Dedicated private storage account for 365-day adverse-media request/response JSON.')
+param adverseJsonStorageName string = 'stai7uaejsonuaen001'
+
 var deepResearchQueueName = 'adverse-media-deep-research'
 var deepResearchDeadLetterQueueName = 'adverse-media-deep-research-deadletter'
 var formsQueueName = 'forms-submissions'
@@ -359,6 +362,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_CONTAINER', value: 'adverse-media-reports' }
             { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
+            { name: 'ADVERSE_MEDIA_JSON_BLOB_URL', value: 'https://${adverseJsonStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'AZURE_REGION_DISPLAY', value: 'Microsoft Azure UAE North' }
             { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
             { name: 'APP_PUBLIC_BASE_URL', value: 'https://app.kycprobe.com' }
