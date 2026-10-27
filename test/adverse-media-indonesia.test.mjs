@@ -7,6 +7,7 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
     entity_type: 'business', name: 'PT Dian Swastatika Sentosa Tbk', max_results: 10
   });
   const queries = [];
+  let aiDisposition = 'possible';
   const officialResult = {
     title: 'OJK Putuskan Sanksi Pihak Terkait Emiten DSSA, BREN, dan CUAN',
     url: 'https://ojk.go.id/id/berita-dan-kegiatan/siaran-pers/Pages/OJK-Putuskan-Sanksi-Pihak-Terkait-Emiten-DSSA-BREN-dan-CUAN.aspx',
@@ -29,7 +30,7 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
       return Response.json({
         candidates: [{ content: { parts: [{ text: JSON.stringify({ classifications: [{
           result_id: prompt.evidence[0].result_id,
-          entity_match: 'confirmed', adverse: 'possible', categories: ['regulatory_and_governance'],
+          entity_match: 'confirmed', adverse: aiDisposition, categories: ['regulatory_and_governance'],
           legal_stage: 'regulatory_action', confidence: 0.94,
           summary: 'The notice concerns trading in DSSA shares; OJK sanctioned parties involved, not the issuer.'
         }] }) }] } }],
@@ -52,4 +53,15 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
   assert.equal(response.results[0].risk_level, 'review');
   assert.ok(response.results[0].categories.includes('regulatory_and_governance'));
   assert.match(response.results[0].evidence_assessment, /not the issuer/i);
+
+  // A high-confidence model negative must not silently clear an exact-name
+  // official enforcement lead. Use a different request key to avoid the cache.
+  aiDisposition = 'not_adverse';
+  const conflicting = presentAdverseMediaResponse(await screenAdverseMedia({
+    request: validateAdverseMediaRequest({ entity_type: 'business', name: 'PT Dian Swastatika Sentosa Tbk', countries: ['ID'] }),
+    apiKey: 'test-search-key', aiApiKey: 'test-ai-key', fetchImpl
+  }));
+  assert.equal(conflicting.summary.threshold_status, 'review_required');
+  assert.equal(conflicting.results[0].risk_level, 'review');
+  assert.match(conflicting.results[0].evidence_assessment, /human review/i);
 });
