@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { after, before, test } from 'node:test';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFName } from 'pdf-lib';
 
 process.env.NODE_ENV = 'test';
 const { createAppServer } = await import('../server.mjs');
@@ -366,10 +366,17 @@ test('comprehensive entity search preserves every request field and the exact re
   };
   const defaultedResponse = await fetch(`${appUrl}/service/entity_search`, {
     method: 'POST',
-    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
+      'x-ai7-generate-pdf': 'true', 'x-ai7-report-logo-url': '' },
     body: JSON.stringify(requestWithoutBlankRequiredKeys)
   });
   assert.equal(defaultedResponse.status, 200);
+  assert.deepEqual(await defaultedResponse.json(), completeEntitySearchResponse);
+  assert.equal(defaultedResponse.headers.get('x-ai7-report-status'), 'ready');
+  const reportId = defaultedResponse.headers.get('x-ai7-report-id');
+  assert.match(reportId, /^AI7-[A-F0-9]{16}$/);
+  assert.equal(receivedEntitySearch.headers['x-ai7-generate-pdf'], undefined);
+  assert.equal(receivedEntitySearch.headers['x-ai7-report-logo-url'], undefined);
   assert.deepEqual(receivedEntitySearch.body, {
     country: '',
     gender: '',
@@ -384,25 +391,37 @@ test('comprehensive entity search preserves every request field and the exact re
   });
   assert.equal(unauthorisedReport.status, 401);
 
+  const forgedReport = await fetch(`${appUrl}/reports/entity-search.pdf`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ request: requestBody, response: { data: { profiles: [] } } })
+  });
+  assert.equal(forgedReport.status, 400);
+
   const reportResponse = await fetch(`${appUrl}/reports/entity-search.pdf`, {
     method: 'POST',
     headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      request: requestBody,
-      response: completeEntitySearchResponse,
-      httpStatus: 200,
-      completedAt: '2026-10-25T18:45:46.000Z'
-    })
+    body: JSON.stringify({ report_id: reportId })
   });
   assert.equal(reportResponse.status, 200);
   assert.equal(reportResponse.headers.get('content-type'), 'application/pdf');
   assert.match(reportResponse.headers.get('content-disposition'), /ai7-entity-search-test-person-\d{4}-\d{2}-\d{2}\.pdf/);
-  assert.match(reportResponse.headers.get('x-ai7-report-id'), /^AI7-[A-F0-9]{16}$/);
+  assert.equal(reportResponse.headers.get('x-ai7-report-id'), reportId);
   const reportBytes = new Uint8Array(await reportResponse.arrayBuffer());
   assert.equal(new TextDecoder().decode(reportBytes.slice(0, 5)), '%PDF-');
   const reportDocument = await PDFDocument.load(reportBytes);
-  assert.ok(reportDocument.getPageCount() >= 3);
-  assert.match(reportDocument.getTitle(), /AI7 UAE Entity Screening Audit/);
+  assert.ok(reportDocument.getPageCount() >= 2);
+  assert.match(reportDocument.getTitle(), /KYCProbe AML Screening/);
+  assert.equal(reportDocument.catalog.get(PDFName.of('Names')), undefined);
+  const another = await (await fetch(`${appUrl}/admin/api/clients`, {
+    method: 'POST', headers: adminHeaders(), body: JSON.stringify({ name: 'Another Entity Customer' })
+  })).json();
+  const otherCustomerReport = await fetch(`${appUrl}/reports/entity-search.pdf`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${another.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ report_id: reportId })
+  });
+  assert.equal(otherCustomerReport.status, 404);
 });
 
 test('entity search docs expose every official response path and no supplier details', async () => {
@@ -462,7 +481,7 @@ test('entity search docs expose every official response path and no supplier det
   assert.equal(script.includes("new Set(['country', 'gender', 'dob'])"), true);
   assert.equal(script.includes("status: 'pending', request: body"), true);
   assert.equal(html.includes('id="response-label"'), true);
-  assert.equal(html.includes('/entity-search.js?v=3'), true);
+  assert.equal(html.includes('/entity-search.js?v=4'), true);
   assert.equal(html.includes('id="copy-response"'), true);
   assert.equal(html.includes('id="report-logo-url"'), true);
   assert.equal(html.includes('id="get-pdf"'), true);

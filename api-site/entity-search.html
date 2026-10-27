@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="/api.css?v=5" />
     <script src="/portal-auth.js?v=4" defer></script>
     <script src="/entity-search-fields.js?v=1" defer></script>
-    <script src="/entity-search.js?v=3" defer></script>
+    <script src="/entity-search.js?v=4" defer></script>
   </head>
   <body>
     <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
@@ -163,8 +163,9 @@
               <fieldset class="report-options">
                 <legend>Audit report <span>Optional · AI7 wrapper feature</span></legend>
                 <label>Logo URL <code>HTTPS PNG or JPEG · optional</code><input id="report-logo-url" type="url" inputmode="url" placeholder="https://your-company.com/logo.png" /></label>
-                <label class="report-toggle"><input id="get-pdf" type="checkbox" /><span><strong>Create audit PDF</strong><small>Generate and download a branded PDF after this search, including execution evidence, separate risk sections, integrity hashes, the complete result appendix, and attached source JSON.</small></span></label>
+                <label class="report-toggle"><input id="get-pdf" type="checkbox" /><span><strong>Create audit PDF</strong><small>Generate a branded, readable report from the server-observed result: dataset outcomes, named returned sources, candidate evidence, transaction details, and integrity hashes. No raw JSON is printed or attached.</small></span></label>
                 <p class="field-help">The logo and report settings stay within AI7 and are not sent to the screening data provider.</p>
+                <p class="field-help">API use: send <code>X-AI7-Generate-Pdf: true</code> with the search, read <code>X-AI7-Report-Id</code>, then POST <code>{"report_id":"AI7-..."}</code> to <code>/reports/entity-search.pdf</code> with a key from the same workspace. The audit report module must be enabled.</p>
               </fieldset>
               <p class="form-error" id="form-error" role="alert"></p>
               <button type="submit" id="send-request">Send request <span>→</span></button>

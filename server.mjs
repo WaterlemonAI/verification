@@ -60,7 +60,7 @@ function securityHeaders(res) {
   res.setHeader('x-content-type-options', 'nosniff');
   res.setHeader('x-frame-options', 'DENY');
   res.setHeader('permissions-policy', 'camera=(), microphone=(), geolocation=()');
-  res.setHeader('access-control-expose-headers', 'x-ai7-transaction-id, x-ai7-queue-wait-ms, retry-after');
+  res.setHeader('access-control-expose-headers', 'x-ai7-transaction-id, x-ai7-queue-wait-ms, x-ai7-report-id, x-ai7-report-status, retry-after');
 }
 
 function moduleCatalog(integrations) {
@@ -307,35 +307,36 @@ function reportFilename(name) {
   return `ai7-entity-search-${slug}-${new Date().toISOString().slice(0, 10)}.pdf`;
 }
 
-async function createEntitySearchReport(req, res, store) {
+async function createEntitySearchReport(req, res, store, reportStore) {
   if (!req.ai7Client && !(await store.isClientKey(bearerToken(req)))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
   try {
-    const body = await readJson(req, 10 * 1024 * 1024);
-    if (!body || typeof body !== 'object' || Array.isArray(body) || !body.request || !Object.hasOwn(body, 'response')) {
-      return json(res, 400, { status: 'Error', error: 'A request and response are required to create the audit PDF.' });
+    const body = await readJson(req, 16 * 1024);
+    const reportId = String(body?.report_id || '');
+    if (!/^AI7-[A-F0-9]{16}$/.test(reportId)) {
+      return json(res, 400, { status: 'Error', error: 'A server-issued report_id is required.' });
     }
-    const logo = await fetchPublicLogo(String(body.logoUrl || '').slice(0, 2048));
-    const report = await createEntitySearchAuditPdf({
-      request: body.request,
-      response: body.response,
-      httpStatus: Number(body.httpStatus) || 0,
-      completedAt: body.completedAt,
-      ...logo
-    });
-    const filename = reportFilename(body.request.name);
+    const ownerId = req.ai7Client?.id ? `workspace-${req.ai7Client.id}` : reportOwnerId(bearerToken(req));
+    const report = await reportStore.get({ ownerId, reportId });
+    if (!report || report.metadata.report_type !== 'entity_search') {
+      return json(res, 404, { status: 'Error', error: 'The report was not found for this workspace.' });
+    }
+    const filename = String(report.metadata.filename || `ai7-entity-search-${reportId}.pdf`).replace(/[^a-zA-Z0-9._-]/g, '-');
     res.writeHead(200, {
       'content-type': 'application/pdf',
       'content-length': report.bytes.length,
       'content-disposition': `attachment; filename="${filename}"`,
       'cache-control': 'no-store',
-      'x-ai7-report-id': report.reportId
+      'content-security-policy': "default-src 'none'; sandbox",
+      'x-robots-tag': 'noindex, nofollow, noarchive',
+      'x-ai7-report-id': reportId,
+      'x-content-sha256': report.metadata.sha256
     });
     res.end(report.bytes);
   } catch (error) {
     if (error.statusCode === 400) return json(res, 400, { status: 'Error', error: 'The report request is too large or invalid.' });
-    return json(res, 500, { status: 'Error', error: 'The audit PDF could not be created.' });
+    return json(res, 503, { status: 'Error', error: 'The screening report service is temporarily unavailable.' });
   }
 }
 
@@ -700,7 +701,7 @@ async function encryptedJsonRelay(res, integration, store, fetchImpl, body) {
   }
 }
 
-async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
+async function proxyIntegration(req, res, url, integration, store, fetchImpl, reportStore) {
   if (!req.ai7Client && !(await store.isClientKey(bearerToken(req)))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
@@ -719,6 +720,7 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
   }
 
   try {
+    let entityRequest;
     if (integration.adapter === 'encrypted-json-relay') {
       if (!contentType.startsWith('application/json')) return json(res, 400, { status: 'Error', error: 'Content-Type must be application/json.' });
       const parsedBody = parseJsonText(body.toString('utf8'));
@@ -730,13 +732,16 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
     if (integration.id === 'entity-search' && contentType.startsWith('application/json')) {
       const parsedBody = parseJsonText(body.toString('utf8'));
       if (parsedBody && typeof parsedBody === 'object' && !Array.isArray(parsedBody)) {
-        body = Buffer.from(JSON.stringify({ country: '', gender: '', dob: '', ...parsedBody }));
+        entityRequest = { country: '', gender: '', dob: '', ...parsedBody };
+        body = Buffer.from(JSON.stringify(entityRequest));
       }
     }
 
     const target = new URL(integration.upstreamUrl);
     target.search = url.search;
     const headers = forwardHeaders(req);
+    delete headers['x-ai7-generate-pdf'];
+    delete headers['x-ai7-report-logo-url'];
     if (integration.authType !== 'none') {
       const masterKey = await store.getMasterKey(integration.id);
       if (!masterKey) return providerUnavailable(res);
@@ -749,6 +754,28 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl) {
       signal: AbortSignal.timeout(Number(process.env.UPSTREAM_TIMEOUT_MS || 120000))
     });
     const responseBody = Buffer.from(await upstream.arrayBuffer());
+    if (integration.id === 'entity-search' && req.headers['x-ai7-generate-pdf'] === 'true' && entityRequest) {
+      try {
+        const parsed = JSON.parse(responseBody.toString('utf8'));
+        const logo = await fetchPublicLogo(String(req.headers['x-ai7-report-logo-url'] || '').slice(0, 2048));
+        const transactionId = String(res.getHeader('x-ai7-transaction-id') || '');
+        const report = await createEntitySearchAuditPdf({ request: entityRequest, response: parsed,
+          httpStatus: upstream.status, completedAt: new Date().toISOString(), transactionId,
+          requestSha256: createHash('sha256').update(body).digest('hex'),
+          responseSha256: createHash('sha256').update(responseBody).digest('hex'), ...logo });
+        const ownerId = req.ai7Client?.id ? `workspace-${req.ai7Client.id}` : reportOwnerId(bearerToken(req));
+        const filename = reportFilename(entityRequest.name);
+        const metadata = { report_id: report.reportId, transaction_id: transactionId,
+          generated_at: report.generatedAt, filename, sha256: createHash('sha256').update(report.bytes).digest('hex'),
+          report_type: 'entity_search', retention: 'permanent' };
+        await reportStore.save({ ownerId, reportId: report.reportId, bytes: report.bytes, metadata, publicReport: false });
+        res.setHeader('x-ai7-report-id', report.reportId);
+        res.setHeader('x-ai7-report-status', 'ready');
+      } catch {
+        res.setHeader('x-ai7-report-status', 'unavailable');
+        console.warn('entity_search_report_failed', JSON.stringify({ transaction_id: res.getHeader('x-ai7-transaction-id') }));
+      }
+    }
     res.writeHead(upstream.status, {
       'content-type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
       'content-length': responseBody.length,
@@ -1939,7 +1966,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return rotated ? json(res, 200, { key: rotated.client, api_key: rotated.apiKey, notice: 'The previous key is invalid. Copy this replacement now.' })
           : json(res, 409, { status: 'Error', error: 'The key could not be rotated.' });
       }
-      if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return await createEntitySearchReport(req, res, store);
+      if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return await createEntitySearchReport(req, res, store, reportStore);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media') return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return await handleBsa(req, res, url, store);
@@ -2012,7 +2039,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       }
 
       const integration = await store.getIntegration(url.pathname, req.method || 'GET');
-      if (integration) return await proxyIntegration(req, res, url, integration, store, fetchImpl);
+      if (integration) return await proxyIntegration(req, res, url, integration, store, fetchImpl, reportStore);
       if (url.pathname.startsWith('/service/')) return json(res, 404, { status: 'Error', error: 'Service was not found.' });
 
       const directory = apiHosts.has(host) || url.pathname.startsWith('/docs') ? join(root, 'api-site') : join(root, 'site');

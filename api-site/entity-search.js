@@ -122,20 +122,14 @@ function reportFilename(disposition, entityName) {
   return `ai7-entity-search-${slug}.pdf`;
 }
 
-async function createAuditPdf({ key, request, response, httpStatus, httpStatusText }) {
+async function createAuditPdf({ key, request, reportId, httpStatus, httpStatusText }) {
+  if (!reportId) throw new Error('The server could not prepare the audit PDF. The JSON response is still available below.');
   responseStatus.className = '';
-  responseStatus.textContent = 'Building PDF…';
+  responseStatus.textContent = 'Downloading PDF…';
   const reportResponse = await fetch('/reports/entity-search.pdf', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      request,
-      response,
-      httpStatus,
-      httpStatusText,
-      completedAt: new Date().toISOString(),
-      logoUrl: byId('report-logo-url').value.trim()
-    })
+    body: JSON.stringify({ report_id: reportId })
   });
   if (!reportResponse.ok) throw new Error('The audit PDF could not be created. The JSON response is still available below.');
   const blob = await reportResponse.blob();
@@ -274,9 +268,14 @@ byId('entity-search-form').addEventListener('submit', async (event) => {
   responseJson.textContent = JSON.stringify({ status: 'pending', request: body }, null, 2);
   responseJson.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   try {
+    const headers = { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
+    if (byId('get-pdf').checked) {
+      headers['X-AI7-Generate-Pdf'] = 'true';
+      if (logoUrl) headers['X-AI7-Report-Logo-Url'] = logoUrl;
+    }
     const response = await fetch('/service/entity_search', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body)
     });
     const text = await response.text();
@@ -290,7 +289,8 @@ byId('entity-search-form').addEventListener('submit', async (event) => {
     responseStatus.textContent = `${response.status} ${response.statusText}`;
     if (byId('get-pdf').checked) {
       try {
-        await createAuditPdf({ key, request: body, response: parsedResponse, httpStatus: response.status, httpStatusText: response.statusText });
+        await createAuditPdf({ key, request: body, reportId: response.headers.get('x-ai7-report-id'),
+          httpStatus: response.status, httpStatusText: response.statusText });
       } catch (error) {
         formError.textContent = error.message;
         responseStatus.className = response.ok ? 'success' : 'error';

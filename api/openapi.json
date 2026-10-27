@@ -201,11 +201,27 @@
     "/service/entity_search": {
       "post": {
         "summary": "Run a comprehensive entity search",
-        "description": "Searches people, organizations, aircraft, vessels, and goods across PEP, sanctions, watchlists, AML, adverse media, and specialist risk datasets.",
+        "description": "Searches people, organizations, aircraft, vessels, and goods across PEP, sanctions, watchlists, AML, adverse media, and specialist risk datasets. The response body preserves the screening provider's JSON. Optional report headers request a private server-generated audit PDF without changing that body.",
         "operationId": "searchEntities",
         "security": [
           {
             "ApiKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-AI7-Generate-Pdf",
+            "required": false,
+            "description": "Set to true to prepare a private audit PDF from the server-observed response. Requires the Entity Search PDF report module.",
+            "schema": { "type": "string", "enum": ["true"] }
+          },
+          {
+            "in": "header",
+            "name": "X-AI7-Report-Logo-Url",
+            "required": false,
+            "description": "Optional public HTTPS PNG or JPEG logo URL for the PDF. Not forwarded to the screening provider.",
+            "schema": { "type": "string", "format": "uri" }
           }
         ],
         "requestBody": {
@@ -221,6 +237,11 @@
         "responses": {
           "200": {
             "description": "Search completed.",
+            "headers": {
+              "X-AI7-Transaction-ID": { "description": "Unique API transaction ID.", "schema": { "type": "string" } },
+              "X-AI7-Report-ID": { "description": "Server-issued report ID when PDF preparation succeeds.", "schema": { "type": "string" } },
+              "X-AI7-Report-Status": { "description": "PDF preparation result when requested.", "schema": { "type": "string", "enum": ["ready", "unavailable"] } }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -259,6 +280,35 @@
               }
             }
           }
+        }
+      }
+    },
+    "/reports/entity-search.pdf": {
+      "post": {
+        "summary": "Download a private Entity Search audit PDF",
+        "description": "Returns only a previously generated server-issued report for the authenticated workspace. Client-submitted screening responses are not accepted. The report contains readable dataset and candidate evidence, not raw JSON.",
+        "operationId": "downloadEntitySearchReport",
+        "security": [{ "ApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["report_id"],
+                "properties": { "report_id": { "type": "string", "pattern": "^AI7-[A-F0-9]{16}$" } },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Workspace-owned PDF report.", "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } } } },
+          "400": { "description": "A valid server-issued report_id is required." },
+          "401": { "description": "API key is missing or invalid." },
+          "403": { "description": "The report module is not enabled for this workspace." },
+          "404": { "description": "The report does not belong to this workspace or does not exist." },
+          "503": { "description": "Report storage is unavailable." }
         }
       }
     },
