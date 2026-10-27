@@ -32,7 +32,8 @@ test('Paddle pages keep Arabic, coordinates, order and multiple pages with bound
   ] }, 2);
   assert.equal(result.pages.length, 2);
   assert.match(result.pages[0].text, /شركة الإمارات/);
-  assert.equal(result.pages[1].text, '[100,200,400,250] Account: 123');
+  assert.equal(result.pages[1].text, 'Account: 123');
+  assert.deepEqual(result.pages[1].lines[0].box, [100, 200, 400, 250]);
   assert.equal(result.verifiedMrz, null);
   assert.throws(() => normalizePaddleResult({ pages: [{ page: 2, lines: [] }] }, 1), /result_invalid/);
   assert.throws(() => normalizePaddleResult({ pages: [{ page: 1, lines: [{ text: 'x', box: [-1, 0, 1, 1] }] }] }, 1), /result_invalid/);
