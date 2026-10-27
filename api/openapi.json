@@ -3,7 +3,7 @@
   "info": {
     "title": "AI7 UAE Verification API",
     "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, merchant-website risk screening, Forms orchestration, and asynchronous bank statement analysis. Every user-facing API response includes the random X-AI7-Transaction-ID header. Signed-in customers can review UTC timestamps, HTTP codes and per-hit costs in Account settings. Modules must be enabled for the workspace (otherwise HTTP 403); prepaid workspaces need sufficient credit (otherwise HTTP 402). Supplier response JSON and HTTP codes are preserved. Supplier HTTP 4xx/5xx results and capacity rejections are refunded and logged. A business-level partial result returned with HTTP 2xx retains its charge. Form submissions reserve one Form hit and one hit per selected API; failed selected API results are refunded, and callback retries are free. Under peak demand, a request can wait in a bounded service lane before execution. If capacity is exhausted, HTTP 503 with reasonCode CAPACITY_BUSY, Retry-After: 5 and the transaction ID means no supplier call occurred and no charge was retained.",
-    "version": "1.8.0"
+    "version": "1.9.0"
   },
   "servers": [
     {
@@ -12,6 +12,17 @@
     }
   ],
   "paths": {
+    "/service/uae_trade_license_ocr": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1uae_trade_license_ocr" },
+    "/service/passport_icao_ocr": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1passport_icao_ocr" },
+    "/service/uae_poa_ocr": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1uae_poa_ocr" },
+    "/service/uae_utility_bill_ocr": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1uae_utility_bill_ocr" },
+    "/service/cheque_ocr": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1cheque_ocr" },
+    "/service/moa_analysis": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1moa_analysis" },
+    "/service/articles_of_association_ocr": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1articles_of_association_ocr" },
+    "/service/emirates_id_ocr": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1emirates_id_ocr" },
+    "/service/{documentService}/jobs/{jobId}": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1{documentService}~1jobs~1{jobId}" },
+    "/service/{documentService}/jobs/{jobId}/result": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1{documentService}~1jobs~1{jobId}~1result" },
+    "/service/emirates_id_ocr/jobs/{jobId}/artifacts/{artifactName}": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1emirates_id_ocr~1jobs~1{jobId}~1artifacts~1{artifactName}" },
     "/service/health": {
       "get": {
         "summary": "Check API transport and enabled routes",

@@ -19,13 +19,13 @@ The seven intended document types were read using their PDF text layer where ava
 
 The passport initially produced an unnecessary review flag for a one-character gender citation. The validator now accepts that value only when a cited, valid TD3 MRZ corroborates it. The rerun passed without that flag. Missing or unsupported scalar values kept the documented `Not Found` and `Not Readable` labels.
 
-## Release blockers
+## Gates before customer enablement
 
 1. Run varied representative samples for all eight document types, including low-quality scans, absent fields and wrong-document cases. The first actual utility-bill sample is recorded below.
 2. Confirm Emirates ID portrait and signature crops and their five-minute private URLs through the authenticated worker.
 3. Exercise the authenticated API, queue, malware gate, idempotent billing, tenant isolation, 30-day purge, and dead-letter path before enabling customer routes.
 
-Until these checks pass, `DOCUMENT_OCR_PRODUCTION_ENABLED` and `DOCUMENT_OCR_ENABLED` stay off.
+The isolated worker, malware sidecar, purge job, and authenticated live API were subsequently exercised as described below. These earlier gates are retained here as the release checklist; the customer gate was enabled only after those checks.
 
 ## Isolated Azure S0 sample run — 27 October 2026
 
@@ -49,4 +49,23 @@ For Emirates ID, the worker renders pages only after malware scanning. Its bundl
 
 The DEWA sample was processed directly through the isolated Azure Layout account and dedicated Gemini structuring path. The first run populated all seven fields but returned `DD/MM/YYYY`, which correctly triggered a format review flag. After a deterministic, source-backed year conversion, the repeat run returned `DD/MM/YY` with no review flags. All other populated fields were source backed; the composed address used words present in the OCR text. A temporary sample-testing role was removed and its absence read back after this run. This validates one bill, not general accuracy across UAE utilities.
 
-Separate front/back Emirates ID files, deliberately invalid MRZ samples, and prompt-injection samples still need live sample validation. Worker queue, ClamAV readiness, billing, retention, tenant isolation and signed crop URLs must pass before the route gate is enabled.
+The dedicated worker later passed a synthetic queue smoke, the ClamAV sidecar became ready with no restarts, and the hourly purge job completed a manual run. Unit and integration tests cover admission, idempotent billing, tenant isolation, bounded provider calls, dead-letter/refund, encryption, signed crop URLs, and expiry handling. The synthetic prompt-injection sample preserved the required schema and set a review flag. Deliberately invalid MRZ documents and varied low-quality scans remain useful additions to the accuracy corpus; no population-wide accuracy rate is claimed from these samples.
+
+## Authenticated production API sample run — 27 October 2026
+
+One disposable key in the existing AI7LAB UAE workspace was used for live submissions of user-provided sample documents. Values and OCR text are deliberately omitted from this record. All eight results used a unique transaction ID, returned the documented field count, passed the malware gate, and showed bounded Azure and Gemini provider counts. Review-required outcomes are not automated approvals.
+
+| Module | Live result | Fields | Source-backed evidence | Review finding |
+| --- | --- | ---: | ---: | --- |
+| UAE trade licence | `review_required` | 12 | 11 | One absent date was `Not Found`; director/owner value requires source review |
+| Passport ICAO OCR | `completed` | 12 | 10 | None; TD3 verification performed |
+| UAE power of attorney | `completed` | 7 | 5 | One absent field was `Not Found` |
+| UAE utility bill | `completed` | 7 | 7 | None |
+| Cheque OCR | `review_required` | 6 | 3 | Fictional sample lacks a cheque number; three fields were `Not Found` |
+| MOA analysis | `completed` | 6 | 6 | One absent field was `Not Found` |
+| Articles of association | `completed` | 5 | 13 | None |
+| Emirates ID | `review_required` | 17 | 13 | Four visually present values were withheld as `Not Readable` because Azure text did not corroborate them; private photo and signature crop links were returned |
+
+The Emirates ID result was intentionally held for review rather than treating image-only or conflicting text as verified data. A second submission with separate front and back PDFs returned HTTP 200 `review_required`, all 17 fields, 16 evidence citations, and private photo and signature crop links. The one unsupported gender value was withheld as `Not Readable`. It used two Azure analyses and one Gemini call, as expected for two files.
+
+After a fresh portal load, all eight modules appeared in the signed-in Document Extraction sidebar and service health listed them as enabled. The customer meter increased its charged-call count by nine for the nine accepted sample submissions; job/result polling generated separate HTTP 202/200 log rows with zero cost and did not increment the charged-call count. The internal test workspace currently has zero-priced rates; these outcomes do not establish customer pricing.

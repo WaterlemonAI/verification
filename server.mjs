@@ -2250,6 +2250,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
         return res.end(spec);
       }
+      if (url.pathname === '/document-extraction/openapi.json') {
+        const spec = readFileSync(join(root, 'api', 'document-ocr-openapi.json'));
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
+        return res.end(spec);
+      }
       if (url.pathname === '/bank-statement-analysis/openapi.json' && bsaEnabled()) {
         const spec = readFileSync(join(root, 'bank-statement-analysis', 'openapi.local.json'));
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'no-store' });
