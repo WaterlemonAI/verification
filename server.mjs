@@ -2203,8 +2203,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         reportStore, requestCapacity, documentOcrStore }),
       onResult: async (job, result) => {
         if (job.idempotency) await formSubmissionStore.accept(job.idempotency);
-        if (job.billing?.workspace_id && job.billing?.log_key)
-          await usageStore.settleFormResult(job.billing.workspace_id, job.billing.log_key, result.services);
+        if (job.billing?.workspace_id && job.billing?.log_key) {
+          if (job.expired_result) await usageStore.settleAsyncResult(job.billing.workspace_id,
+            job.billing.log_key, { successful: false, reason: 'ocr_reference_expired' });
+          else await usageStore.settleFormResult(job.billing.workspace_id, job.billing.log_key, result.services);
+        }
       },
       resultStore: reportStore
     });

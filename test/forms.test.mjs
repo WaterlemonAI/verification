@@ -549,6 +549,49 @@ test('Forms worker durably retries callback delivery without re-running complete
   assert.equal(await pendingStore.getFormResult({ ownerId: 'owner-1', submissionId: 's1' }), null);
 });
 
+test('expired OCR-backed Form settles and sends one customer-safe final callback', async () => {
+  let available = true;
+  let executed = 0;
+  let settled = 0;
+  let delivered = 0;
+  let completed = 0;
+  const job = {
+    submission_id: 'expired-submission', owner_id: 'expired-owner',
+    callback_url: 'https://example.com/callback', callback_secret: 'synthetic-secret',
+    ocr_expires_at: new Date(Date.now() - 1_000).toISOString(),
+    data: { private_value: 'must-not-appear' },
+    form: { id: 'synthetic-form', name: 'Synthetic Form', version: 1,
+      ai_action: { ocr_job_fields: ['ocr_job_id'] } }
+  };
+  const message = { messageId: 'expired', popReceipt: 'a', messageText: JSON.stringify(job) };
+  const queue = {
+    async receive() { if (!available) return null; available = false; return message; },
+    async complete() { completed += 1; },
+    async deadLetter() { throw new Error('expired_job_must_send_final_callback'); }
+  };
+  const worker = startFormsWorker({ queue,
+    execute: async () => { executed += 1; throw new Error('must_not_execute'); },
+    onResult: async (processedJob, result) => {
+      settled += 1;
+      assert.equal(processedJob.expired_result, true);
+      assert.deepEqual(processedJob.data, {});
+      assert.deepEqual(result.services, []);
+    },
+    deliver: async (processedJob, result) => {
+      delivered += 1;
+      assert.equal(result.status, 'failed');
+      assert.equal(result.summary.reason_codes[0], 'ocr_reference_expired');
+      assert.doesNotMatch(JSON.stringify({ processedJob, result }), /must-not-appear/);
+    }
+  });
+  for (let attempt = 0; attempt < 30 && !completed; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  worker.stop();
+  assert.equal(executed, 0);
+  assert.equal(settled, 1);
+  assert.equal(delivered, 1);
+  assert.equal(completed, 1);
+});
+
 test('Forms report-storage retry reuses completed supplier responses and a stable report ID', async () => {
   const job = {
     submission_id: 'd95f2fd9-a75f-4961-99bf-3a824be8691e',
