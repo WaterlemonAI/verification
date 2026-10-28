@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { processDocumentOcrJob } from '../lib/document-ocr-worker.mjs';
+import { consumeDocumentOcrQueue, processDocumentOcrJob } from '../lib/document-ocr-worker.mjs';
 
 function fakeStore(stage = 'queued', serviceId = 'cheque-ocr') {
   const state = { partitionKey: 'a'.repeat(64), rowKey: 'job_ocr_test', jobId: 'ocr_test',
@@ -132,4 +132,34 @@ test('ambiguous PaddleOCR attempt fails closed without a second extraction', asy
   assert.equal(outcome.status, 'failed');
   assert.equal(calls, 0);
   assert.equal(store.state.reasonCode, 'DOCUMENT_OCR_PROVIDER_OUTCOME_UNKNOWN');
+});
+
+test('PaddleOCR receives a longer queue lease while Azure keeps its existing lease', async () => {
+  for (const engine of ['paddleocr', 'azure']) {
+    const controller = new AbortController();
+    const messageText = Buffer.from(JSON.stringify({ version: 1, partitionKey: 'a'.repeat(64),
+      jobId: 'ocr_11111111-1111-4111-8111-111111111111' })).toString('base64');
+    let received = false;
+    let extended = 0;
+    let deletedReceipt;
+    const store = { async getRow() { return { ocrEngine: engine }; }, queue: {
+      async receiveMessages(options) {
+        assert.equal(options.visibilityTimeout, 900);
+        if (received) return { receivedMessageItems: [] };
+        received = true;
+        return { receivedMessageItems: [{ messageId: 'synthetic-message', popReceipt: 'initial', messageText }] };
+      },
+      async updateMessage(_id, receipt, text, options) {
+        assert.equal(receipt, 'initial'); assert.equal(text, messageText);
+        assert.equal(options.visibilityTimeout, 2_400);
+        extended += 1;
+        return { popReceipt: 'extended' };
+      },
+      async deleteMessage(_id, receipt) { deletedReceipt = receipt; }
+    } };
+    await consumeDocumentOcrQueue({ store, stopSignal: controller.signal,
+      processJob: async () => { controller.abort(); return { status: 'completed' }; } });
+    assert.equal(extended, engine === 'paddleocr' ? 1 : 0);
+    assert.equal(deletedReceipt, engine === 'paddleocr' ? 'extended' : 'initial');
+  }
 });
