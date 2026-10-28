@@ -115,3 +115,35 @@ test('expired OCR records remove encrypted blobs, idempotency and due indexes', 
     `ocr-index-pending/${expiresAt}_${jobId}`, `ocr-index-expiry/${expiresAt}_${jobId}`
   ]);
 });
+
+test('OCR retention job purges expired Form PDF and pending callback without touching live data', async () => {
+  const now = new Date('2026-10-28T12:00:00.000Z');
+  const expired = '2026-10-28T11:00:00.000Z';
+  const live = '2026-10-29T12:00:00.000Z';
+  const deleted = [];
+  const table = {
+    async *listEntities() {
+      yield { partitionKey: 'forms-public', rowKey: 'expired-report', reportType: 'forms',
+        blobName: 'forms-ocr-reports/owner/expired-report.pdf', ownerPartition: 'forms-owner', expiresAt: expired };
+      yield { partitionKey: 'forms-public', rowKey: 'live-report', reportType: 'forms',
+        blobName: 'forms-ocr-reports/owner/live-report.pdf', ownerPartition: 'forms-owner', expiresAt: live };
+    },
+    async deleteEntity(partition, key) { deleted.push(`${partition}/${key}`); }
+  };
+  const container = {
+    getBlockBlobClient(name) { return {
+      async getProperties() { return { metadata: { expiresat: name.includes('expired') ? expired : live } }; },
+      async deleteIfExists() { deleted.push(name); }
+    }; },
+    async *listBlobsFlat() {
+      yield { name: 'forms-ocr-pending/owner/expired.json' };
+      yield { name: 'forms-ocr-pending/owner/live.json' };
+    }
+  };
+  const store = new AzureDocumentOcrStore({ container, queue: {}, table });
+  assert.equal(await store.purgeExpiredFormArtifacts(now), 2);
+  assert.deepEqual(deleted, [
+    'forms-ocr-reports/owner/expired-report.pdf', 'forms-owner/expired-report',
+    'forms-public/expired-report', 'forms-ocr-pending/owner/expired.json'
+  ]);
+});

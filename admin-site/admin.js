@@ -1,5 +1,6 @@
 let csrfToken = '';
 let integrationCatalog = [];
+let formsAiCredentialConfigured = false;
 const byId = (id) => document.getElementById(id);
 
 async function request(path, options = {}) {
@@ -232,6 +233,8 @@ function renderBsa(result) {
 
 async function loadIntegrations() {
   const data = await request('/admin/api/integrations');
+  formsAiCredentialConfigured = data.integrations.some((item) => item.id === 'forms-ai-action' && item.masterAuthKeyConfigured);
+  await loadDocumentOcrEngines(data.integrations);
   integrationCatalog = data.integrations.filter((item) => item.enabled && item.formsCompatible !== false && item.id !== 'adverse-media-ai');
   const list = byId('integration-list');
   list.replaceChildren();
@@ -263,8 +266,9 @@ async function loadIntegrations() {
       const isAdverseMedia = item.id === 'adverse-media';
       const isAdverseMediaAi = item.id === 'adverse-media-ai';
       const isDocumentOcrAi = item.id === 'document-ocr-ai';
-      byId('supplier-credential-label').firstChild.textContent = isIban ? 'Supplier username' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi || isDocumentOcrAi) ? 'Private API key' : 'Supplier credential';
-      form.elements.credential.placeholder = isIban ? 'Enter the supplier username' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi || isDocumentOcrAi) ? 'Enter the private API key' : 'Enter the private credential';
+      const isFormsAi = item.id === 'forms-ai-action';
+      byId('supplier-credential-label').firstChild.textContent = isIban ? 'Supplier username' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi || isDocumentOcrAi || isFormsAi) ? 'Private API key' : 'Supplier credential';
+      form.elements.credential.placeholder = isIban ? 'Enter the supplier username' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi || isDocumentOcrAi || isFormsAi) ? 'Enter the private API key' : 'Enter the private credential';
       byId('supplier-credential-help').textContent = isIban
         ? 'The supplied IBAN collection authenticates each internal request with this username header; it does not transmit a password.'
         : isEntitySearch
@@ -274,12 +278,50 @@ async function loadIntegrations() {
           : isAdverseMediaAi
             ? 'This write-only Google AI API key enables bounded AI classification for adverse-media results. The key is never returned or shown again.'
           : isDocumentOcrAi
-            ? 'Use the dedicated document OCR Gemini project key. It is applied only after malware scanning and Azure OCR complete, and is never shown again.'
+            ? 'Use the dedicated document OCR Gemini project key. It is applied only after malware scanning and the selected OCR engine complete, and is never shown again.'
+          : isFormsAi
+            ? 'Use a dedicated Forms AI Action Gemini project key. It is stored write-only in the AI7 UAE Key Vault and is never shown again.'
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });
     list.append(row);
   });
+}
+
+async function loadDocumentOcrEngines(integrations) {
+  const list = byId('ocr-engine-list');
+  list.replaceChildren();
+  byId('ocr-engine-error').textContent = '';
+  try {
+    const config = await request('/admin/api/document-ocr/engines');
+    const capability = config.capability || {};
+    byId('ocr-worker-capability').textContent = capability.paddleocr
+      ? `PaddleOCR models verified for the deployed worker image. Worker ${capability.active ? 'active' : 'scaled to zero'}; last checked ${capability.checked_at || 'unknown'}.`
+      : 'PaddleOCR is unavailable or has not been verified for the deployed worker image. Azure remains the default.';
+    for (const item of integrations.filter((entry) => Object.hasOwn(config.selections, entry.id))) {
+      const row = document.createElement('div'); row.className = 'ocr-engine-row';
+      const label = document.createElement('div');
+      label.append(bsaElement('strong', item.name), bsaElement('small', item.publicPath));
+      const control = document.createElement('label'); control.textContent = 'Extraction engine';
+      const select = document.createElement('select');
+      for (const [value, title] of [['azure', 'Azure Document Intelligence'], ['paddleocr', 'PaddleOCR']]) {
+        const option = document.createElement('option'); option.value = value; option.textContent = title;
+        option.disabled = value === 'paddleocr' && (!config.paddle_enabled || !capability.paddleocr);
+        select.append(option);
+      }
+      select.value = config.selections[item.id];
+      select.addEventListener('change', async () => {
+        const previous = config.selections[item.id]; select.disabled = true;
+        try {
+          await request(`/admin/api/document-ocr/engines/${item.id}`, { method: 'PUT',
+            body: JSON.stringify({ engine: select.value }) });
+          config.selections[item.id] = select.value;
+        } catch (error) { select.value = previous; byId('ocr-engine-error').textContent = error.message; }
+        finally { select.disabled = false; }
+      });
+      control.append(select); row.append(label, control); list.append(row);
+    }
+  } catch (error) { byId('ocr-worker-capability').textContent = error.message; }
 }
 
 function formExamples() {
@@ -309,15 +351,68 @@ function openFormDialog(item) {
   form.elements.default_logo_url.value = item?.default_logo_url || '';
   form.elements.fields.value = JSON.stringify(item?.fields || examples.fields, null, 2);
   form.elements.services.value = JSON.stringify(item?.services || examples.services, null, 2);
+  form.elements.ai_action_enabled.checked = item?.ai_action?.enabled === true;
+  form.elements.ai_action_task.value = item?.ai_action?.task || '';
+  byId('ai-action-options').hidden = !form.elements.ai_action_enabled.checked;
+  refreshAiActionCredentialInput();
+  renderAiActionSources(item?.ai_action);
   form.elements.enabled.checked = item?.enabled !== false;
   byId('form-error').textContent = '';
   byId('form-dialog').showModal();
 }
 
+function refreshAiActionCredentialInput() {
+  const form = byId('form-form');
+  const enabled = form.elements.ai_action_enabled.checked;
+  form.elements.ai_action_credential.required = enabled && !formsAiCredentialConfigured;
+  form.elements.ai_action_credential.placeholder = formsAiCredentialConfigured
+    ? 'Protected key configured; leave blank to keep it' : 'Enter the dedicated Gemini API key';
+  byId('ai-action-credential-status').textContent = formsAiCredentialConfigured
+    ? 'A protected Forms AI Action key is configured. Leave this blank to keep it, or enter a replacement during Form setup.'
+    : 'A dedicated Gemini key is required when enabling AI Action. It is saved write-only in the AI7 UAE Key Vault, never in the Form definition.';
+}
+
+function renderAiActionSources(saved = null) {
+  const form = byId('form-form');
+  let fields, services;
+  try {
+    fields = JSON.parse(form.elements.fields.value);
+    services = JSON.parse(form.elements.services.value);
+    if (!Array.isArray(fields) || !Array.isArray(services)) return;
+  } catch { return; }
+  for (const [containerId, items, valueKey, selected] of [
+    ['ai-action-fields', fields, 'key', saved?.input_fields || checkedAiActionValues('ai-action-fields')],
+    ['ai-action-services', services, 'service_id', saved?.result_services || checkedAiActionValues('ai-action-services')],
+    ['ai-action-ocr-fields', fields.filter((field) => field.type === 'text'), 'key', saved?.ocr_job_fields || checkedAiActionValues('ai-action-ocr-fields')]
+  ]) {
+    const container = byId(containerId); container.replaceChildren();
+    for (const item of items) {
+      const key = item[valueKey]; if (!key) continue;
+      const label = document.createElement('label'); label.className = 'check';
+      const input = document.createElement('input'); input.type = 'checkbox'; input.value = key;
+      input.checked = selected.includes(key);
+      label.append(input, document.createTextNode(item.label || item.service_id || key));
+      container.append(label);
+    }
+  }
+}
+
+function checkedAiActionValues(containerId) {
+  return [...byId(containerId).querySelectorAll('input:checked')].map((input) => input.value);
+}
+
+byId('form-form').elements.ai_action_enabled.addEventListener('change', (event) => {
+  byId('ai-action-options').hidden = !event.target.checked;
+  if (!event.target.checked) event.target.form.elements.ai_action_credential.value = '';
+  refreshAiActionCredentialInput();
+});
+for (const name of ['fields', 'services']) byId('form-form').elements[name].addEventListener('input', () => renderAiActionSources());
+
 async function loadForms() {
   if (!integrationCatalog.length) {
     const catalog = await request('/admin/api/integrations');
-    integrationCatalog = catalog.integrations.filter((item) => item.enabled && item.id !== 'adverse-media-ai');
+    formsAiCredentialConfigured = catalog.integrations.some((item) => item.id === 'forms-ai-action' && item.masterAuthKeyConfigured);
+    integrationCatalog = catalog.integrations.filter((item) => item.enabled && item.formsCompatible !== false);
   }
   const data = await request('/admin/api/forms');
   const list = byId('form-list');
@@ -730,8 +825,26 @@ byId('form-form').addEventListener('submit', async (event) => {
       default_logo_url: form.elements.default_logo_url.value,
       fields: JSON.parse(form.elements.fields.value),
       services: JSON.parse(form.elements.services.value),
+      ...(form.elements.ai_action_enabled.checked ? { ai_action: {
+        enabled: true, task: form.elements.ai_action_task.value,
+        input_fields: checkedAiActionValues('ai-action-fields'),
+        result_services: checkedAiActionValues('ai-action-services'),
+        ocr_job_fields: checkedAiActionValues('ai-action-ocr-fields')
+      } } : {}),
       enabled: form.elements.enabled.checked
     };
+    if (body.ai_action) {
+      const credential = form.elements.ai_action_credential.value.trim();
+      if (!credential && !formsAiCredentialConfigured) throw new Error('Enter the dedicated Gemini API key for AI Action.');
+      if (credential) {
+        try {
+          await request('/admin/api/integrations/forms-ai-action/credential', {
+            method: 'PUT', body: JSON.stringify({ credential })
+          });
+          formsAiCredentialConfigured = true;
+        } finally { form.elements.ai_action_credential.value = ''; }
+      }
+    }
     await request(`/admin/api/forms/${form.elements.id.value}`, { method: 'PUT', body: JSON.stringify(body) });
     byId('form-dialog').close();
     await loadForms();

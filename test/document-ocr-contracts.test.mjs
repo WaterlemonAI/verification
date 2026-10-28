@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { EnvironmentStore } from '../lib/api-store.mjs';
 import { readFileSync } from 'node:fs';
 import { DOCUMENT_OCR_APIS, DOCUMENT_OCR_BY_ID, documentOcrPublicCatalog, geminiExtractionSchema } from '../lib/document-ocr-contracts.mjs';
 
@@ -17,4 +18,18 @@ test('all eight document APIs have unique routes and closed extraction schemas',
   assert.equal(DOCUMENT_OCR_BY_ID.get('passport-icao-ocr').fields.mrz_lines.type, 'array');
   const published = JSON.parse(readFileSync(new URL('../api-site/document-extraction-catalog.json', import.meta.url), 'utf8'));
   assert.deepEqual(published, documentOcrPublicCatalog());
+});
+
+test('all eight engines default to Azure and each admin change is isolated and audited', async () => {
+  const store = new EnvironmentStore();
+  const defaults = await store.getDocumentOcrEngines();
+  assert.equal(Object.keys(defaults).length, 8);
+  assert.ok(Object.values(defaults).every((engine) => engine === 'azure'));
+  await store.setDocumentOcrEngine('cheque-ocr', 'paddleocr', 'synthetic-admin');
+  const changed = await store.getDocumentOcrEngines();
+  assert.equal(changed['cheque-ocr'], 'paddleocr');
+  assert.ok(Object.entries(changed).filter(([id]) => id !== 'cheque-ocr')
+    .every(([, engine]) => engine === 'azure'));
+  assert.deepEqual(store.documentOcrEngineAudit[0].actor, 'synthetic-admin');
+  await assert.rejects(store.setDocumentOcrEngine('unknown', 'paddleocr'), /engine_invalid/);
 });

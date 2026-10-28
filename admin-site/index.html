@@ -113,6 +113,12 @@
             <div class="empty" id="integration-empty">No APIs are configured yet.</div>
             <div class="route-list" id="integration-list"></div>
           </div>
+          <div class="panel" style="margin-top:1rem">
+            <div class="panel-head"><div><p class="eyebrow">DOCUMENT EXTRACTION</p><h2>OCR engine by API</h2></div></div>
+            <p class="field-help" id="ocr-worker-capability">Checking isolated worker capability…</p>
+            <div id="ocr-engine-list" class="ocr-engine-list"></div>
+            <p class="error" id="ocr-engine-error" aria-live="polite"></p>
+          </div>
         </section>
 
         <section id="clients-view" hidden>
@@ -217,7 +223,7 @@
     <dialog id="form-dialog" class="wide-dialog">
       <form id="form-form">
         <div class="dialog-head"><div><p class="eyebrow">MULTI-API ORCHESTRATION</p><h2>Create or update a Form</h2></div><button type="button" class="close" data-close="form-dialog">×</button></div>
-        <p class="notice">A Form collects one JSON payload, maps it into selected AI7 APIs, posts one signed consolidated callback, and creates one permanent audit PDF. Supplier URLs and credentials never enter this configuration.</p>
+        <p class="notice">A Form collects one JSON payload, maps it into selected AI7 APIs, posts one signed consolidated callback, and creates one audit PDF. OCR-backed Form reports expire within 30 days. Supplier URLs and credentials never enter this configuration.</p>
         <div class="grid two">
           <label>Form ID<input name="id" placeholder="vendor-onboarding" pattern="[a-z0-9][a-z0-9-]+" required /></label>
           <label>Display name<input name="name" placeholder="Vendor onboarding verification" required /></label>
@@ -228,6 +234,21 @@
         <p class="field-help">Supported types: text, textarea, email, url, number, date, select, country and boolean.</p>
         <label>APIs and input mappings JSON<textarea name="services" class="code-input" rows="12" spellcheck="false" required></textarea></label>
         <p class="field-help">Use <code>{{field_key}}</code> placeholders. An exact placeholder keeps number and boolean types; embedded placeholders become text.</p>
+        <fieldset class="ai-action-editor">
+          <legend>AI Action (optional)</legend>
+          <label class="check"><input name="ai_action_enabled" type="checkbox" /> Run an AI Action after selected API checks complete</label>
+          <div id="ai-action-options" hidden>
+            <label>AI Action business task<textarea name="ai_action_task" rows="4" maxlength="2000" placeholder="Describe the evidence review task for this Form."></textarea></label>
+            <label>Dedicated Gemini API key<input name="ai_action_credential" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Enter the Forms AI Action key" /></label>
+            <p class="field-help" id="ai-action-credential-status">The key is saved write-only in the AI7 UAE Key Vault during Form setup. It is shared by AI Action Forms and never saved in the Form definition.</p>
+            <p class="field-help">Choose exactly which Form values and completed check results the model may read. OCR references must be job IDs from the same workspace; URLs and document bytes are not accepted.</p>
+            <div class="grid three">
+              <div><strong>Form input fields</strong><div id="ai-action-fields"></div></div>
+              <div><strong>Completed API results</strong><div id="ai-action-services"></div></div>
+              <div><strong>OCR job ID fields</strong><div id="ai-action-ocr-fields"></div></div>
+            </div>
+          </div>
+        </fieldset>
         <label class="check"><input name="enabled" type="checkbox" checked /> Enable the public Form endpoint</label>
         <p class="error" id="form-error" aria-live="polite"></p>
         <div class="actions"><button type="button" class="secondary" data-close="form-dialog">Cancel</button><button type="submit">Save Form</button></div>

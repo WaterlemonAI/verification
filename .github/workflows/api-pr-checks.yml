@@ -11,6 +11,8 @@ on:
       - test/**
       - scripts/**
       - Dockerfile.document-ocr
+      - Dockerfile.api
+      - .dockerignore
       - package.json
       - package-lock.json
       - infrastructure/api.bicep
@@ -34,6 +36,22 @@ jobs:
           find lib test -name '*.mjs' -print0 | xargs -0 -n1 node --check
       - name: Run API contract and queue tests
         run: npm test
+      - name: Build API image
+        run: docker build --pull --file Dockerfile.api --tag ai7uae-api:pr .
+      - name: Build document OCR image
+        run: docker build --pull --file Dockerfile.document-ocr --tag ai7uae-document-ocr:pr .
+      - name: Verify bundled Paddle inference
+        run: |
+          docker run --rm ai7uae-document-ocr:pr /app/paddle-venv/bin/python -c '
+          import sys
+          sys.path.insert(0, "/app/scripts")
+          import numpy as np
+          from document_ocr_paddle import engine, models_ready
+          assert models_ready()
+          image = np.full((64, 128, 3), 255, dtype=np.uint8)
+          for language in ("english", "arabic"):
+              list(engine(language).predict(image))
+          '
       - name: Validate document OCR Bicep
         run: |
           az bicep build --file infrastructure/api.bicep

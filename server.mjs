@@ -25,6 +25,7 @@ import { publicFormDefinition, resolveFormServiceInput, validateFormDefinition, 
 import { createFormsQueue, makeFormsJob, startFormsWorker, validateFormsCallbackUrl } from './lib/forms-queue.mjs';
 import { createFormsSubmissionStore, formSubmissionFingerprint, publicFormQueueReceipt } from './lib/forms-submission-store.mjs';
 import { createFormsAuditPdf } from './lib/forms-report.mjs';
+import { callAiAction, failedAiAction, prepareAiAction } from './lib/forms-ai-action.mjs';
 import { CapacityError, createRequestCapacity } from './lib/request-capacity.mjs';
 import {
   ADMIN_COOKIE, adminCookie, clearAdminCookie, createAdminAccount, createAdminSession,
@@ -128,7 +129,8 @@ function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, trans
   };
 }
 
-async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, transactionId) {
+async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore,
+  transactionId, documentOcrStore) {
   const route = await classifyCustomerApi(req, url, store);
   if (!route) return true;
   const token = bearerToken(req);
@@ -148,7 +150,7 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
   }
   const formMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
   if (formMatch && route.billable) {
-    const prepared = await prepareFormSubmission(req, formMatch[1], store, formsQueue, transactionId);
+    const prepared = await prepareFormSubmission(req, formMatch[1], store, formsQueue, transactionId, documentOcrStore);
     if (prepared.status) {
       await usageStore.record(workspaceId, details, prepared.status);
       json(res, prepared.status, { status: 'Error', error: prepared.error });
@@ -1075,7 +1077,8 @@ async function executeSingleFormService({ service, data, submissionId, store, fe
 }
 
 export async function executeFormsJob({ job, store, fetchImpl, merchantScreener = configuredMerchantScreener,
-  reportStore, requestCapacity = null }) {
+  reportStore, requestCapacity = null, documentOcrStore = null, aiFetchImpl = fetch,
+  aiActionEnabled = process.env.FORMS_AI_ACTION_ENABLED === '1' }) {
   let saved = null;
   try {
     saved = await reportStore.getFormResult({ ownerId: job.owner_id, submissionId: job.submission_id });
@@ -1085,6 +1088,9 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
   if (saved?.stage === 'final') return saved.result;
   if (saved?.submission_id === job.submission_id && saved.report) return saved;
   const startedAt = saved?.started_at || new Date().toISOString();
+  const formExpiry = job.form.ai_action?.ocr_job_fields?.length
+    ? new Date(Math.min(Date.parse(job.queued_at) + 30 * 24 * 60 * 60 * 1_000,
+      Date.parse(job.ocr_expires_at || '') || Infinity)).toISOString() : null;
   const services = Array.isArray(saved?.services) ? [...saved.services] : [];
   for (let index = services.length; index < job.form.services.length; index += 1) {
     const service = job.form.services[index];
@@ -1109,11 +1115,46 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
     } finally { release?.(); }
     services.push(serviceResult);
     await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
-      result: { stage: 'services_partial', services, started_at: startedAt } });
+      result: { stage: 'services_partial', services, started_at: startedAt, expires_at: formExpiry } });
   }
-  if (saved?.stage !== 'services_complete') await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
-    result: { stage: 'services_complete', services, started_at: startedAt } });
+  if (!['services_complete', 'ai_in_flight', 'ai_complete'].includes(saved?.stage)) await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
+    result: { stage: 'services_complete', services, started_at: startedAt, expires_at: formExpiry } });
   const { status, summary } = consolidateFormServiceResults(services);
+  let aiAction = saved?.ai_action;
+  let expiresAt = saved?.expires_at || formExpiry;
+  if (job.form.ai_action?.enabled && !aiAction) {
+    if (saved?.stage === 'ai_in_flight') {
+      aiAction = failedAiAction('AI_ACTION_PROVIDER_OUTCOME_UNKNOWN', 1);
+    } else {
+      let providerStarted = false;
+      try {
+        if (!aiActionEnabled) throw new Error('AI_ACTION_DISABLED');
+        const prepared = await prepareAiAction({ config: job.form.ai_action, data: job.data,
+          services, workspaceId: job.workspace_id, documentStore: documentOcrStore,
+          queuedAt: job.queued_at });
+        expiresAt = job.form.ai_action.ocr_job_fields.length ? prepared.expiresAt : null;
+        const apiKey = await store.getMasterKey('forms-ai-action');
+        if (!apiKey) throw new Error('AI_ACTION_CREDENTIAL_UNAVAILABLE');
+        await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
+          result: { stage: 'ai_in_flight', services, started_at: startedAt, expires_at: expiresAt } });
+        providerStarted = true;
+        aiAction = await callAiAction({ prepared, apiKey, fetchImpl: aiFetchImpl });
+      } catch (error) {
+        const code = /^AI_ACTION_[A-Z_]+$/.test(error.message || '') ? error.message : 'AI_ACTION_UNAVAILABLE';
+        aiAction = failedAiAction(code, providerStarted ? 1 : 0);
+      }
+    }
+    if (job.form.ai_action.ocr_job_fields.length && !expiresAt)
+      expiresAt = new Date(Date.parse(job.queued_at) + 30 * 24 * 60 * 60 * 1_000).toISOString();
+    await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
+      result: { stage: 'ai_complete', services, started_at: startedAt,
+        ai_action: aiAction, expires_at: expiresAt } });
+  }
+  if (aiAction?.status === 'failed') {
+    summary.decision_eligible = false;
+    summary.reason_codes = [...new Set([...(summary.reason_codes || []), 'ai_action_failed'])];
+    summary.reason = 'AI Action did not complete safely. Manual review is required.';
+  }
   const completedAt = new Date().toISOString();
   const processingLog = [
     { at: job.queued_at, stage: 'accepted', message: 'Authenticated submission accepted and queued.' },
@@ -1131,6 +1172,7 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
     form: { id: job.form.id, name: job.form.name, version: job.form.version },
     summary,
     services,
+    ...(aiAction ? { ai_action: aiAction } : {}),
     processing: {
       queued_at: job.queued_at,
       started_at: startedAt,
@@ -1150,24 +1192,37 @@ export async function executeFormsJob({ job, store, fetchImpl, merchantScreener 
     download_url: process.env.API_PUBLIC_BASE_URL ? new URL(reportPath, process.env.API_PUBLIC_BASE_URL).href : reportPath,
     sha256: report.sha256,
     filename: report.filename,
-    retention: 'permanent'
+    retention: expiresAt ? '30_days' : 'permanent',
+    ...(expiresAt ? { expires_at: expiresAt } : {})
   };
   await reportStore.save({ ownerId: job.owner_id, reportId: report.reportId, bytes: report.bytes, metadata: { ...metadata, report_type: 'forms' } });
   result = { ...result, report: metadata };
   await reportStore.saveFormResult({ ownerId: job.owner_id, submissionId: job.submission_id,
-    result: { stage: 'final', result } });
+    result: { stage: 'final', result, expires_at: expiresAt } });
   return result;
 }
 
-async function prepareFormSubmission(req, formId, store, formsQueue, transactionId = '') {
+async function prepareFormSubmission(req, formId, store, formsQueue, transactionId = '', documentOcrStore = null) {
   if (!formsQueue) return { status: 503, error: 'Forms processing is temporarily unavailable.' };
   const form = await store.getForm(formId);
   if (!form || !form.enabled) return { status: 404, error: 'Form was not found.' };
   try {
     const submission = validateFormSubmission(form, await readJson(req, 64 * 1024));
+    let ocrExpiresAt = null;
+    for (const key of form.ai_action?.ocr_job_fields || []) {
+      const id = submission.data[key];
+      if (!documentOcrStore || typeof id !== 'string' || !/^ocr_[0-9a-f-]{36}$/.test(id))
+        throw new Error('ai_action_ocr_reference_invalid');
+      const referenced = await documentOcrStore.getJob(req.ai7Client?.id || '', id);
+      if (!referenced || !['completed', 'review_required'].includes(referenced.status)
+        || Date.parse(referenced.expires_at) <= Date.now()) throw new Error('ai_action_ocr_reference_invalid');
+      ocrExpiresAt = new Date(Math.min(Date.parse(ocrExpiresAt || referenced.expires_at),
+        Date.parse(referenced.expires_at))).toISOString();
+    }
     await validateFormsCallbackUrl(submission.callback_url);
     if (submission.customer_logo_url) await validateFormsCallbackUrl(submission.customer_logo_url);
-    const job = makeFormsJob({ form, submission, ownerId: reportOwnerId(bearerToken(req)), origin: requestOrigin(req),
+    const job = makeFormsJob({ form, submission, ownerId: reportOwnerId(bearerToken(req)),
+      workspaceId: req.ai7Client?.id || '', ocrExpiresAt, origin: requestOrigin(req),
       billing: { workspace_id: req.ai7Client?.id || '', log_key: '0'.repeat(80) } });
     if (transactionId) job.submission_id = transactionId;
     return { form, submission, job };
@@ -1176,6 +1231,7 @@ async function prepareFormSubmission(req, formId, store, formsQueue, transaction
     if (reason === 'callback_url_required') return { status: 400, error: 'A public HTTPS callback_url is required.' };
     if (reason.startsWith('callback_url_')) return { status: 400, error: 'callback_url and customer_logo_url must be public HTTPS URLs.' };
     if (reason === 'form_submission_too_large') return { status: 400, error: 'The mapped Form submission is too large for asynchronous processing.' };
+    if (reason === 'ai_action_ocr_reference_invalid') return { status: 400, error: 'An OCR job reference is unavailable in this workspace.' };
     return { status: 400, error: reason || 'The Form submission is invalid.' };
   }
 }
@@ -1513,7 +1569,7 @@ async function requireAdmin(req, res, store, { csrf = false } = {}) {
   return { account, session };
 }
 
-async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore) {
+async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore, documentOcrStore) {
   if (req.method === 'GET' && url.pathname === '/admin/api/auth/status') {
     const account = await store.getAdminAccount();
     return json(res, 200, { configured: Boolean(account) });
@@ -1636,6 +1692,27 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
     return json(res, 200, { integrations: await store.listIntegrations() });
   }
 
+  if (req.method === 'GET' && url.pathname === '/admin/api/document-ocr/engines') {
+    return json(res, 200, { selections: await store.getDocumentOcrEngines(),
+      paddle_enabled: process.env.DOCUMENT_OCR_PADDLE_ENABLED === '1',
+      capability: documentOcrStore ? await documentOcrStore.getWorkerCapability() : { active: false, paddleocr: false } });
+  }
+
+  if (req.method === 'PUT' && /^\/admin\/api\/document-ocr\/engines\/[a-z0-9-]+$/.test(url.pathname)) {
+    try {
+      const serviceId = url.pathname.split('/').pop();
+      const { engine } = await readJson(req, 1024);
+      if (engine === 'paddleocr' && process.env.DOCUMENT_OCR_PADDLE_ENABLED !== '1')
+        return json(res, 409, { status: 'Error', error: 'PaddleOCR is disabled for this release.' });
+      if (engine === 'paddleocr' && !(await documentOcrStore?.getWorkerCapability?.())?.paddleocr)
+        return json(res, 409, { status: 'Error', error: 'PaddleOCR worker capability has not been verified.' });
+      return json(res, 200, { selections: await store.setDocumentOcrEngine(serviceId, engine,
+        access.account?.email || 'legacy-admin') });
+    } catch (error) {
+      return json(res, 400, { status: 'Error', error: error.message });
+    }
+  }
+
   if (req.method === 'GET' && url.pathname === '/admin/api/forms') {
     return json(res, 200, { forms: await store.listForms() });
   }
@@ -1643,8 +1720,12 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
   if (req.method === 'PUT' && /^\/admin\/api\/forms\/[a-z0-9-]+$/.test(url.pathname)) {
     try {
       const body = await readJson(req, 256 * 1024);
+      if (body.ai_action?.enabled && process.env.FORMS_AI_ACTION_ENABLED !== '1')
+        return json(res, 409, { status: 'Error', error: 'Forms AI Action is disabled for this release.' });
       const id = url.pathname.split('/').pop();
-      const integrations = await store.listIntegrations({ publicOnly: true });
+      const integrations = await store.listIntegrations();
+      if (body.ai_action?.enabled && !integrations.some((item) => item.id === 'forms-ai-action' && item.masterAuthKeyConfigured))
+        return json(res, 409, { status: 'Error', error: 'Set the Forms AI Action credential during Form setup.' });
       const form = validateFormDefinition({ ...body, id }, integrations);
       return json(res, 200, { form: await store.upsertForm(form) });
     } catch (error) {
@@ -1987,7 +2068,7 @@ function documentOcrSignedAccess(url, jobId, name) {
   return timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex')) ? workspaceId : null;
 }
 
-async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
+async function handleDocumentOcr(req, res, url, documentStore, usageStore, store) {
   const definition = DOCUMENT_OCR_BY_PATH.get(url.pathname);
   const jobMatch = /^\/service\/([a-z_]+)\/jobs\/(ocr_[0-9a-f-]{36})(?:\/(result|artifacts\/(photo|signature)))?$/.exec(url.pathname);
   const jobDefinition = jobMatch && DOCUMENT_OCR_BY_PATH.get(`/service/${jobMatch[1]}`);
@@ -2066,9 +2147,15 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
       }
       files.push({ bytes, mediaType });
     }
+    const engine = (await store.getDocumentOcrEngines())[definition.id];
+    if (engine === 'paddleocr') {
+      const capability = await documentStore.getWorkerCapability();
+      if (process.env.DOCUMENT_OCR_PADDLE_ENABLED !== '1' || !capability.paddleocr)
+        throw new Error('document_ocr_paddle_unavailable');
+    }
     const created = await documentStore.createJob({ ownerId: req.ai7Client.id, serviceId: definition.id,
       files, idempotencyKey, transactionId: res.getHeader('x-ai7-transaction-id'),
-      billingLogKey: req.ai7Usage?.logKey || '' });
+      billingLogKey: req.ai7Usage?.logKey || '', engine });
     if (created.reused && req.ai7Usage) {
       await usageStore.settleAsyncResult(req.ai7Usage.workspaceId, req.ai7Usage.logKey, {
         successful: false, reason: 'idempotency_replay'
@@ -2114,11 +2201,15 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   if (startWorker && formsQueue) {
     startFormsWorker({
       queue: formsQueue,
-      execute: (job) => executeFormsJob({ job, store, fetchImpl, merchantScreener, reportStore, requestCapacity }),
+      execute: (job) => executeFormsJob({ job, store, fetchImpl, merchantScreener,
+        reportStore, requestCapacity, documentOcrStore }),
       onResult: async (job, result) => {
         if (job.idempotency) await formSubmissionStore.accept(job.idempotency);
-        if (job.billing?.workspace_id && job.billing?.log_key)
-          await usageStore.settleFormResult(job.billing.workspace_id, job.billing.log_key, result.services);
+        if (job.billing?.workspace_id && job.billing?.log_key) {
+          if (job.expired_result) await usageStore.settleAsyncResult(job.billing.workspace_id,
+            job.billing.log_key, { successful: false, reason: 'ocr_reference_expired' });
+          else await usageStore.settleFormResult(job.billing.workspace_id, job.billing.log_key, result.services);
+        }
       },
       resultStore: reportStore
     });
@@ -2132,7 +2223,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     if (transactionId) res.setHeader('x-ai7-transaction-id', transactionId);
 
     try {
-      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, transactionId))) return;
+      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue,
+        formSubmissionStore, transactionId, documentOcrStore))) return;
       if (req.ai7CapacityLane) {
         const queuedAt = Date.now();
         const cancelled = new AbortController();
@@ -2187,7 +2279,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return await handleBsa(req, res, url, store);
-      if (await handleDocumentOcr(req, res, url, documentOcrStore, usageStore)) return;
+      if (await handleDocumentOcr(req, res, url, documentOcrStore, usageStore, store)) return;
       const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
       if (req.method === 'POST' && formSubmissionMatch) return await submitForm(req, res, formSubmissionMatch[1], store, formsQueue, formSubmissionStore, transactionId);
       const formSchemaMatch = /^\/forms\/([a-z0-9-]+)\/schema$/.exec(url.pathname);
@@ -2220,7 +2312,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         }, { 'cache-control': 'public, max-age=3600' });
       }
       if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle, mailer, usageStore);
-      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore);
+      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore, documentOcrStore);
       if (url.pathname === '/admin/bsa-synthetic-combined.pdf') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }

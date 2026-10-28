@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } from '../lib/customer-usage.mjs';
@@ -9,6 +10,48 @@ process.env.DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX = 'b'.repeat(64);
 const { createAppServer } = await import('../server.mjs');
 
 const jobId = 'ocr_11111111-1111-4111-8111-111111111111';
+
+test('admin engine choice is protected and snapshotted on OCR admission', async (t) => {
+  const adminKey = 'synthetic-ocr-admin-key';
+  const oldHash = process.env.AI7_ADMIN_KEY_HASHES;
+  const oldFlag = process.env.DOCUMENT_OCR_PADDLE_ENABLED;
+  process.env.AI7_ADMIN_KEY_HASHES = createHash('sha256').update(adminKey).digest('hex');
+  process.env.DOCUMENT_OCR_PADDLE_ENABLED = '1';
+  t.after(() => {
+    if (oldHash === undefined) delete process.env.AI7_ADMIN_KEY_HASHES;
+    else process.env.AI7_ADMIN_KEY_HASHES = oldHash;
+    if (oldFlag === undefined) delete process.env.DOCUMENT_OCR_PADDLE_ENABLED;
+    else process.env.DOCUMENT_OCR_PADDLE_ENABLED = oldFlag;
+  });
+  const store = new EnvironmentStore();
+  const issued = await store.createClient('Synthetic OCR workspace');
+  let acceptedEngine;
+  const documentOcrStore = {
+    async getWorkerCapability() { return { active: false, paddleocr: true, image_matched: true }; },
+    async createJob(input) {
+      acceptedEngine = input.engine;
+      return { job: { id: jobId, service_id: input.serviceId, status: 'queued' }, reused: false };
+    }
+  };
+  const server = createAppServer({ store, documentOcrStore, startWorker: false });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const path = `${base}/admin/api/document-ocr/engines/cheque-ocr`;
+  assert.equal((await fetch(path, { method: 'PUT', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ engine: 'paddleocr' }) })).status, 401);
+  const changed = await fetch(path, { method: 'PUT', headers: {
+    authorization: `Bearer ${adminKey}`, 'content-type': 'application/json'
+  }, body: JSON.stringify({ engine: 'paddleocr' }) });
+  assert.equal(changed.status, 200);
+  assert.equal(store.documentOcrEngineAudit[0].engine, 'paddleocr');
+  const form = new FormData();
+  form.set('file', new Blob([new Uint8Array([255, 216, 255])], { type: 'image/jpeg' }), 'synthetic.jpg');
+  const submitted = await fetch(`${base}/service/cheque_ocr`, { method: 'POST',
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'idempotency-key': 'synthetic-ocr-choice-0001' }, body: form });
+  assert.equal(submitted.status, 202);
+  assert.equal(acceptedEngine, 'paddleocr');
+});
 
 test('OCR routes enforce entitlement, accept one file, and refund an idempotent replay', async (t) => {
   const store = new EnvironmentStore();

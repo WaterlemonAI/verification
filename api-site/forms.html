@@ -24,7 +24,7 @@
       <section class="hero forms-hero">
         <p class="eyebrow">MULTI-API ORCHESTRATION</p>
         <h1 id="form-title">One input.<br /><em>One verified result.</em></h1>
-        <p id="form-description">Submit customer data once, run multiple AI7 verification APIs, receive one signed callback, and retain one consolidated audit PDF.</p>
+        <p id="form-description">Submit customer data once, run multiple AI7 verification APIs, receive one signed callback, and receive one consolidated audit PDF.</p>
         <div class="meta" id="endpoint-meta" hidden><span>POST</span><code id="endpoint"></code><button class="copy" id="copy-endpoint">Copy endpoint</button></div>
       </section>
 
@@ -45,6 +45,7 @@
               <li>Store the one-time callback signing secret returned with HTTP 202.</li>
               <li>Verify <code>x-ai7-signature</code> on the callback before trusting its body.</li>
               <li>Inspect every service's transport, coverage, and eligibility result before using the consolidated decision.</li>
+              <li>If this Form includes an AI Action, review its separate evidence result and status. OCR job references must belong to this workspace; an OCR-backed Form report expires within 30 days.</li>
             </ol>
             <div class="service-chips" id="service-list"></div>
             <p id="form-schema-summary" class="field-help"></p>
