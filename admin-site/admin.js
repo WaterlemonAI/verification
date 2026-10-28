@@ -1,5 +1,6 @@
 let csrfToken = '';
 let integrationCatalog = [];
+let formsAiCredentialConfigured = false;
 const byId = (id) => document.getElementById(id);
 
 async function request(path, options = {}) {
@@ -232,6 +233,7 @@ function renderBsa(result) {
 
 async function loadIntegrations() {
   const data = await request('/admin/api/integrations');
+  formsAiCredentialConfigured = data.integrations.some((item) => item.id === 'forms-ai-action' && item.masterAuthKeyConfigured);
   await loadDocumentOcrEngines(data.integrations);
   integrationCatalog = data.integrations.filter((item) => item.enabled && item.formsCompatible !== false && item.id !== 'adverse-media-ai');
   const list = byId('integration-list');
@@ -352,10 +354,22 @@ function openFormDialog(item) {
   form.elements.ai_action_enabled.checked = item?.ai_action?.enabled === true;
   form.elements.ai_action_task.value = item?.ai_action?.task || '';
   byId('ai-action-options').hidden = !form.elements.ai_action_enabled.checked;
+  refreshAiActionCredentialInput();
   renderAiActionSources(item?.ai_action);
   form.elements.enabled.checked = item?.enabled !== false;
   byId('form-error').textContent = '';
   byId('form-dialog').showModal();
+}
+
+function refreshAiActionCredentialInput() {
+  const form = byId('form-form');
+  const enabled = form.elements.ai_action_enabled.checked;
+  form.elements.ai_action_credential.required = enabled && !formsAiCredentialConfigured;
+  form.elements.ai_action_credential.placeholder = formsAiCredentialConfigured
+    ? 'Protected key configured; leave blank to keep it' : 'Enter the dedicated Gemini API key';
+  byId('ai-action-credential-status').textContent = formsAiCredentialConfigured
+    ? 'A protected Forms AI Action key is configured. Leave this blank to keep it, or enter a replacement during Form setup.'
+    : 'A dedicated Gemini key is required when enabling AI Action. It is saved write-only in the AI7 UAE Key Vault, never in the Form definition.';
 }
 
 function renderAiActionSources(saved = null) {
@@ -389,12 +403,15 @@ function checkedAiActionValues(containerId) {
 
 byId('form-form').elements.ai_action_enabled.addEventListener('change', (event) => {
   byId('ai-action-options').hidden = !event.target.checked;
+  if (!event.target.checked) event.target.form.elements.ai_action_credential.value = '';
+  refreshAiActionCredentialInput();
 });
 for (const name of ['fields', 'services']) byId('form-form').elements[name].addEventListener('input', () => renderAiActionSources());
 
 async function loadForms() {
   if (!integrationCatalog.length) {
     const catalog = await request('/admin/api/integrations');
+    formsAiCredentialConfigured = catalog.integrations.some((item) => item.id === 'forms-ai-action' && item.masterAuthKeyConfigured);
     integrationCatalog = catalog.integrations.filter((item) => item.enabled && item.formsCompatible !== false);
   }
   const data = await request('/admin/api/forms');
@@ -816,6 +833,18 @@ byId('form-form').addEventListener('submit', async (event) => {
       } } : {}),
       enabled: form.elements.enabled.checked
     };
+    if (body.ai_action) {
+      const credential = form.elements.ai_action_credential.value.trim();
+      if (!credential && !formsAiCredentialConfigured) throw new Error('Enter the dedicated Gemini API key for AI Action.');
+      if (credential) {
+        try {
+          await request('/admin/api/integrations/forms-ai-action/credential', {
+            method: 'PUT', body: JSON.stringify({ credential })
+          });
+          formsAiCredentialConfigured = true;
+        } finally { form.elements.ai_action_credential.value = ''; }
+      }
+    }
     await request(`/admin/api/forms/${form.elements.id.value}`, { method: 'PUT', body: JSON.stringify(body) });
     byId('form-dialog').close();
     await loadForms();

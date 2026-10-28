@@ -1723,7 +1723,9 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
       if (body.ai_action?.enabled && process.env.FORMS_AI_ACTION_ENABLED !== '1')
         return json(res, 409, { status: 'Error', error: 'Forms AI Action is disabled for this release.' });
       const id = url.pathname.split('/').pop();
-      const integrations = await store.listIntegrations({ publicOnly: true });
+      const integrations = await store.listIntegrations();
+      if (body.ai_action?.enabled && !integrations.some((item) => item.id === 'forms-ai-action' && item.masterAuthKeyConfigured))
+        return json(res, 409, { status: 'Error', error: 'Set the Forms AI Action credential during Form setup.' });
       const form = validateFormDefinition({ ...body, id }, integrations);
       return json(res, 200, { form: await store.upsertForm(form) });
     } catch (error) {

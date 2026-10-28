@@ -99,6 +99,42 @@ test('AI Action is versioned, allowlisted, and absent from the public Form schem
   } }, [{ id: 'company-search', enabled: true, method: 'POST', acceptedContentTypes: ['application/json'] }]), /invalid selection/);
 });
 
+test('AI Action Form setup requires a protected credential and never returns its value', async () => {
+  const previous = process.env.FORMS_AI_ACTION_ENABLED;
+  process.env.FORMS_AI_ACTION_ENABLED = '1';
+  const definition = { ...formDefinition, id: 'ai-action-setup-test', ai_action: {
+    enabled: true, task: 'Review synthetic business evidence.', input_fields: ['company_name'],
+    result_services: ['company-search'], ocr_job_fields: []
+  } };
+  const headers = { authorization: `Bearer ${adminKey}`, 'content-type': 'application/json' };
+  try {
+    const missing = await fetch(`${baseUrl}/admin/api/forms/${definition.id}`, {
+      method: 'PUT', headers, body: JSON.stringify(definition)
+    });
+    assert.equal(missing.status, 409);
+    assert.match((await missing.json()).error, /credential during Form setup/);
+
+    const credential = await fetch(`${baseUrl}/admin/api/integrations/forms-ai-action/credential`, {
+      method: 'PUT', headers, body: JSON.stringify({ credential: 'synthetic-form-setup-key' })
+    });
+    assert.equal(credential.status, 200);
+    const credentialBody = await credential.text();
+    assert.doesNotMatch(credentialBody, /synthetic-form-setup-key/);
+    assert.equal(JSON.parse(credentialBody).integration.masterAuthKeyConfigured, true);
+
+    const saved = await fetch(`${baseUrl}/admin/api/forms/${definition.id}`, {
+      method: 'PUT', headers, body: JSON.stringify(definition)
+    });
+    assert.equal(saved.status, 200);
+    assert.doesNotMatch(await saved.text(), /synthetic-form-setup-key/);
+    const schema = await (await fetch(`${baseUrl}/forms/${definition.id}/schema`)).text();
+    assert.doesNotMatch(schema, /synthetic-form-setup-key|ai_action/);
+  } finally {
+    if (previous === undefined) delete process.env.FORMS_AI_ACTION_ENABLED;
+    else process.env.FORMS_AI_ACTION_ENABLED = previous;
+  }
+});
+
 test('AI Action OCR references require a live completed job in the same workspace', async () => {
   const jobId = 'ocr_12345678-1234-4234-8234-123456789abc';
   const config = { task: 'Review the synthetic OCR evidence.', input_fields: [], result_services: [],

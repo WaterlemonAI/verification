@@ -239,6 +239,8 @@
           <label class="check"><input name="ai_action_enabled" type="checkbox" /> Run an AI Action after selected API checks complete</label>
           <div id="ai-action-options" hidden>
             <label>AI Action business task<textarea name="ai_action_task" rows="4" maxlength="2000" placeholder="Describe the evidence review task for this Form."></textarea></label>
+            <label>Dedicated Gemini API key<input name="ai_action_credential" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Enter the Forms AI Action key" /></label>
+            <p class="field-help" id="ai-action-credential-status">The key is saved write-only in the AI7 UAE Key Vault during Form setup. It is shared by AI Action Forms and never saved in the Form definition.</p>
             <p class="field-help">Choose exactly which Form values and completed check results the model may read. OCR references must be job IDs from the same workspace; URLs and document bytes are not accepted.</p>
             <div class="grid three">
               <div><strong>Form input fields</strong><div id="ai-action-fields"></div></div>
