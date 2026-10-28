@@ -24,6 +24,9 @@ param enableDocumentOcrWorker bool = false
 @description('Allow an administrator to select the validated PaddleOCR worker path. Off by default.')
 param enableDocumentOcrPaddle bool = false
 
+@description('Allow newly configured Forms AI Actions. Off by default.')
+param enableFormsAiAction bool = false
+
 @description('Resource ID of the existing AI7 UAE Container Apps environment.')
 param environmentId string
 
@@ -506,6 +509,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
             { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: enableDocumentOcr ? '1' : '0' }
             { name: 'DOCUMENT_OCR_PADDLE_ENABLED', value: enableDocumentOcrPaddle ? '1' : '0' }
+            { name: 'FORMS_AI_ACTION_ENABLED', value: enableFormsAiAction ? '1' : '0' }
             { name: 'DOCUMENT_OCR_WORKER_IMAGE', value: documentOcrWorkerImage }
           ], enableDocumentOcr ? [
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }

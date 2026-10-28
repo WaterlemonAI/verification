@@ -477,7 +477,7 @@
       "post": {
         "summary": "Submit a configured multi-API Form",
         "operationId": "submitVerificationForm",
-        "description": "Authenticates once, maps collected fields into every API configured for the named Form, and returns HTTP 202. Reuse the same Idempotency-Key and identical request body after a network timeout; an accepted submission returns the same submission ID without another charge or supplier run. If queue admission is uncertain, HTTP 503 SUBMISSION_PENDING requires operator reconciliation and must not be retried under a new key. AI7 later posts one HMAC-SHA256 signed callback containing each exact nested API response and a permanent consolidated PDF capability URL.",
+        "description": "Authenticates once, maps collected fields into every API configured for the named Form, and returns HTTP 202. Reuse the same Idempotency-Key and identical request body after a network timeout; an accepted submission returns the same submission ID without another charge or supplier run. If queue admission is uncertain, HTTP 503 SUBMISSION_PENDING requires operator reconciliation and must not be retried under a new key. AI7 later posts one HMAC-SHA256 signed callback containing each exact nested API response, an optional separate AI Action evidence result, and a consolidated PDF capability URL. A Form that consumes a same-workspace OCR job expires within 30 days; other Form reports retain their existing policy.",
         "security": [{ "ApiKey": [] }],
         "parameters": [{ "name": "formId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,63}$" } }, { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "minLength": 16, "maxLength": 128 }, "description": "One unique request ID per intended Form run; reuse only for retries of identical input." }],
         "requestBody": {
@@ -496,9 +496,9 @@
     },
     "/service/forms/reports/{reportId}.pdf": {
       "get": {
-        "summary": "Download a permanent consolidated Form audit report",
+        "summary": "Download a consolidated Form audit report",
         "operationId": "downloadFormsReport",
-        "description": "Downloads a permanently retained consolidated PDF without an API key. The UUID is an unguessable capability identifier.",
+        "description": "Downloads a consolidated PDF without an API key. The UUID is an unguessable capability identifier. A report backed by an OCR job expires within 30 days and then returns HTTP 404; other Form reports retain their existing permanent policy.",
         "security": [],
         "parameters": [{ "name": "reportId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
         "responses": {
@@ -571,7 +571,7 @@
           "delivery_id": { "type": "string", "format": "uuid" },
           "submission_id": { "type": "string", "format": "uuid" },
           "completed_at": { "type": "string", "format": "date-time" },
-          "data": { "type": "object", "description": "Consolidated result with transport-level completed, partial, or failed status; explicit per-service transport, coverage, eligibility, and customer-safe reasons; every exact nested API response; processing log; and permanent report metadata. decision_eligible is true only when every selected check affirmatively qualifies.", "additionalProperties": true }
+          "data": { "type": "object", "description": "Consolidated result with transport-level completed, partial, or failed status; explicit per-service transport, coverage, eligibility, and customer-safe reasons; every exact nested API response; optional separate ai_action status and quoted evidence; processing log; and report metadata including expires_at for OCR-backed Forms. decision_eligible requires every selected check to qualify and any configured AI Action to complete safely.", "additionalProperties": true }
         },
         "additionalProperties": false
       },
