@@ -232,6 +232,7 @@ function renderBsa(result) {
 
 async function loadIntegrations() {
   const data = await request('/admin/api/integrations');
+  await loadDocumentOcrEngines(data.integrations);
   integrationCatalog = data.integrations.filter((item) => item.enabled && item.formsCompatible !== false && item.id !== 'adverse-media-ai');
   const list = byId('integration-list');
   list.replaceChildren();
@@ -274,12 +275,48 @@ async function loadIntegrations() {
           : isAdverseMediaAi
             ? 'This write-only Google AI API key enables bounded AI classification for adverse-media results. The key is never returned or shown again.'
           : isDocumentOcrAi
-            ? 'Use the dedicated document OCR Gemini project key. It is applied only after malware scanning and Azure OCR complete, and is never shown again.'
+            ? 'Use the dedicated document OCR Gemini project key. It is applied only after malware scanning and the selected OCR engine complete, and is never shown again.'
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });
     list.append(row);
   });
+}
+
+async function loadDocumentOcrEngines(integrations) {
+  const list = byId('ocr-engine-list');
+  list.replaceChildren();
+  byId('ocr-engine-error').textContent = '';
+  try {
+    const config = await request('/admin/api/document-ocr/engines');
+    const capability = config.capability || {};
+    byId('ocr-worker-capability').textContent = capability.paddleocr
+      ? `PaddleOCR models verified for the deployed worker image. Worker ${capability.active ? 'active' : 'scaled to zero'}; last checked ${capability.checked_at || 'unknown'}.`
+      : 'PaddleOCR is unavailable or has not been verified for the deployed worker image. Azure remains the default.';
+    for (const item of integrations.filter((entry) => Object.hasOwn(config.selections, entry.id))) {
+      const row = document.createElement('div'); row.className = 'ocr-engine-row';
+      const label = document.createElement('div');
+      label.append(bsaElement('strong', item.name), bsaElement('small', item.publicPath));
+      const control = document.createElement('label'); control.textContent = 'Extraction engine';
+      const select = document.createElement('select');
+      for (const [value, title] of [['azure', 'Azure Document Intelligence'], ['paddleocr', 'PaddleOCR']]) {
+        const option = document.createElement('option'); option.value = value; option.textContent = title;
+        option.disabled = value === 'paddleocr' && (!config.paddle_enabled || !capability.paddleocr);
+        select.append(option);
+      }
+      select.value = config.selections[item.id];
+      select.addEventListener('change', async () => {
+        const previous = config.selections[item.id]; select.disabled = true;
+        try {
+          await request(`/admin/api/document-ocr/engines/${item.id}`, { method: 'PUT',
+            body: JSON.stringify({ engine: select.value }) });
+          config.selections[item.id] = select.value;
+        } catch (error) { select.value = previous; byId('ocr-engine-error').textContent = error.message; }
+        finally { select.disabled = false; }
+      });
+      control.append(select); row.append(label, control); list.append(row);
+    }
+  } catch (error) { byId('ocr-worker-capability').textContent = error.message; }
 }
 
 function formExamples() {

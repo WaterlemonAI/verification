@@ -21,6 +21,9 @@ param enableDocumentOcr bool = false
 @description('Start the isolated document OCR worker before customer routes are enabled for queue and malware-gate smoke tests.')
 param enableDocumentOcrWorker bool = false
 
+@description('Allow an administrator to select the validated PaddleOCR worker path. Off by default.')
+param enableDocumentOcrPaddle bool = false
+
 @description('Resource ID of the existing AI7 UAE Container Apps environment.')
 param environmentId string
 
@@ -266,6 +269,7 @@ resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (enable
             { name: 'DOCUMENT_OCR_APPROVED_REGION', value: location }
             { name: 'DOCUMENT_OCR_CLAMD_HOST', value: '127.0.0.1' }
             { name: 'DOCUMENT_OCR_CLAMD_PORT', value: '3310' }
+            { name: 'DOCUMENT_OCR_WORKER_IMAGE', value: documentOcrWorkerImage }
           ]
           resources: { cpu: json('2.0'), memory: '4Gi' }
         }
@@ -501,6 +505,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
             { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: enableDocumentOcr ? '1' : '0' }
+            { name: 'DOCUMENT_OCR_PADDLE_ENABLED', value: enableDocumentOcrPaddle ? '1' : '0' }
+            { name: 'DOCUMENT_OCR_WORKER_IMAGE', value: documentOcrWorkerImage }
           ], enableDocumentOcr ? [
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }

@@ -17,7 +17,8 @@ function fakeStore(stage = 'queued', serviceId = 'cheque-ocr') {
     getOcr: async () => ocr,
     saveOcr: async (_row, pages, calls, processedFiles, figures = [], verifiedMrz = null) => {
       ocr = { pages, figures, verifiedMrz };
-      return Object.assign(state, { stage: 'ocr_complete', azureCallCount: calls, processedFiles });
+      return Object.assign(state, { stage: 'ocr_complete', azureCallCount: calls.azure,
+        paddleCallCount: calls.paddleocr, processedFiles });
     },
     saveArtifact: async (_row, name, bytes) => artifacts.set(name, bytes),
     complete: async (_row, value) => { result = value; Object.assign(state, { status: value.status, stage: 'finished' }); },
@@ -101,4 +102,34 @@ test('malware gate failure makes no provider calls', async () => {
   assert.equal(result.status, 'failed');
   assert.equal(store.state.reasonCode, 'DOCUMENT_OCR_MALWARE_DETECTED');
   assert.equal(calls, 0);
+});
+
+test('PaddleOCR selection is snapshotted and never calls Azure on queue replay', async () => {
+  const store = fakeStore();
+  store.state.ocrEngine = 'paddleocr';
+  let azureCalls = 0;
+  let paddleCalls = 0;
+  const options = { store, partitionKey: store.state.partitionKey, jobId: store.state.jobId,
+    getGeminiKey: async () => 'synthetic-key', scan: async () => {},
+    analyze: async () => { azureCalls += 1; throw new Error('azure_must_not_run'); },
+    analyzePaddle: async () => { paddleCalls += 1; return { pages: [{ page: 1, text: 'Cheque number 42' }] }; },
+    structure: async () => ({ data: {}, evidence: [], mrz: null,
+      document_classification: 'cheque', review_required: false, review_flags: [], model: 'synthetic' }) };
+  assert.equal((await processDocumentOcrJob(options)).status, 'completed');
+  assert.equal((await processDocumentOcrJob(options)).status, 'completed');
+  assert.deepEqual([azureCalls, paddleCalls], [0, 1]);
+  assert.equal(store.result().processing.provider_calls.paddleocr, 1);
+  assert.equal(store.result().processing.provider_calls.azure, 0);
+});
+
+test('ambiguous PaddleOCR attempt fails closed without a second extraction', async () => {
+  const store = fakeStore('paddle_in_flight');
+  store.state.ocrEngine = 'paddleocr';
+  let calls = 0;
+  const outcome = await processDocumentOcrJob({ store, partitionKey: store.state.partitionKey,
+    jobId: store.state.jobId, getGeminiKey: async () => 'synthetic-key',
+    analyzePaddle: async () => { calls += 1; } });
+  assert.equal(outcome.status, 'failed');
+  assert.equal(calls, 0);
+  assert.equal(store.state.reasonCode, 'DOCUMENT_OCR_PROVIDER_OUTCOME_UNKNOWN');
 });

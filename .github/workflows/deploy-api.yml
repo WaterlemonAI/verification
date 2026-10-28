@@ -194,6 +194,7 @@ jobs:
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableDocumentOcrPaddle="${{ vars.DOCUMENT_OCR_PADDLE_ENABLED == 'true' && 'true' || 'false' }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
@@ -216,6 +217,7 @@ jobs:
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableDocumentOcrPaddle="${{ vars.DOCUMENT_OCR_PADDLE_ENABLED == 'true' && 'true' || 'false' }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \

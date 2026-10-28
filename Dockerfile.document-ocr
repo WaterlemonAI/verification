@@ -1,12 +1,22 @@
-FROM node:22-alpine
+FROM node:22-bookworm-slim
 
-RUN apk add --no-cache poppler-utils tesseract-ocr-data-eng
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-venv poppler-utils tesseract-ocr-eng libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
+COPY scripts/document_ocr_paddle.py scripts/install-document-ocr-paddle-models.py ./scripts/
+RUN python3 -m venv /app/paddle-venv \
+    && /app/paddle-venv/bin/pip install --no-cache-dir \
+      'paddleocr==3.7.0' 'onnxruntime>=1.20,<2' 'pymupdf>=1.26,<3' \
+      'Pillow>=11,<13' 'numpy<3' \
+    && /app/paddle-venv/bin/python scripts/install-document-ocr-paddle-models.py --target /app/paddle-models
 COPY lib/ ./lib/
 COPY scripts/run-document-ocr-worker.mjs scripts/purge-document-ocr.mjs ./scripts/
 
+ENV DOCUMENT_OCR_PYTHON=/app/paddle-venv/bin/python
+ENV DOCUMENT_OCR_PADDLE_MODEL_ROOT=/app/paddle-models
 USER node
 CMD ["node", "scripts/run-document-ocr-worker.mjs"]

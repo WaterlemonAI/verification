@@ -1513,7 +1513,7 @@ async function requireAdmin(req, res, store, { csrf = false } = {}) {
   return { account, session };
 }
 
-async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore) {
+async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore, documentOcrStore) {
   if (req.method === 'GET' && url.pathname === '/admin/api/auth/status') {
     const account = await store.getAdminAccount();
     return json(res, 200, { configured: Boolean(account) });
@@ -1634,6 +1634,27 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
 
   if (req.method === 'GET' && url.pathname === '/admin/api/integrations') {
     return json(res, 200, { integrations: await store.listIntegrations() });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/admin/api/document-ocr/engines') {
+    return json(res, 200, { selections: await store.getDocumentOcrEngines(),
+      paddle_enabled: process.env.DOCUMENT_OCR_PADDLE_ENABLED === '1',
+      capability: documentOcrStore ? await documentOcrStore.getWorkerCapability() : { active: false, paddleocr: false } });
+  }
+
+  if (req.method === 'PUT' && /^\/admin\/api\/document-ocr\/engines\/[a-z0-9-]+$/.test(url.pathname)) {
+    try {
+      const serviceId = url.pathname.split('/').pop();
+      const { engine } = await readJson(req, 1024);
+      if (engine === 'paddleocr' && process.env.DOCUMENT_OCR_PADDLE_ENABLED !== '1')
+        return json(res, 409, { status: 'Error', error: 'PaddleOCR is disabled for this release.' });
+      if (engine === 'paddleocr' && !(await documentOcrStore?.getWorkerCapability?.())?.paddleocr)
+        return json(res, 409, { status: 'Error', error: 'PaddleOCR worker capability has not been verified.' });
+      return json(res, 200, { selections: await store.setDocumentOcrEngine(serviceId, engine,
+        access.account?.email || 'legacy-admin') });
+    } catch (error) {
+      return json(res, 400, { status: 'Error', error: error.message });
+    }
   }
 
   if (req.method === 'GET' && url.pathname === '/admin/api/forms') {
@@ -1987,7 +2008,7 @@ function documentOcrSignedAccess(url, jobId, name) {
   return timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex')) ? workspaceId : null;
 }
 
-async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
+async function handleDocumentOcr(req, res, url, documentStore, usageStore, store) {
   const definition = DOCUMENT_OCR_BY_PATH.get(url.pathname);
   const jobMatch = /^\/service\/([a-z_]+)\/jobs\/(ocr_[0-9a-f-]{36})(?:\/(result|artifacts\/(photo|signature)))?$/.exec(url.pathname);
   const jobDefinition = jobMatch && DOCUMENT_OCR_BY_PATH.get(`/service/${jobMatch[1]}`);
@@ -2066,9 +2087,15 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
       }
       files.push({ bytes, mediaType });
     }
+    const engine = (await store.getDocumentOcrEngines())[definition.id];
+    if (engine === 'paddleocr') {
+      const capability = await documentStore.getWorkerCapability();
+      if (process.env.DOCUMENT_OCR_PADDLE_ENABLED !== '1' || !capability.paddleocr)
+        throw new Error('document_ocr_paddle_unavailable');
+    }
     const created = await documentStore.createJob({ ownerId: req.ai7Client.id, serviceId: definition.id,
       files, idempotencyKey, transactionId: res.getHeader('x-ai7-transaction-id'),
-      billingLogKey: req.ai7Usage?.logKey || '' });
+      billingLogKey: req.ai7Usage?.logKey || '', engine });
     if (created.reused && req.ai7Usage) {
       await usageStore.settleAsyncResult(req.ai7Usage.workspaceId, req.ai7Usage.logKey, {
         successful: false, reason: 'idempotency_replay'
@@ -2187,7 +2214,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return await handleBsa(req, res, url, store);
-      if (await handleDocumentOcr(req, res, url, documentOcrStore, usageStore)) return;
+      if (await handleDocumentOcr(req, res, url, documentOcrStore, usageStore, store)) return;
       const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
       if (req.method === 'POST' && formSubmissionMatch) return await submitForm(req, res, formSubmissionMatch[1], store, formsQueue, formSubmissionStore, transactionId);
       const formSchemaMatch = /^\/forms\/([a-z0-9-]+)\/schema$/.exec(url.pathname);
@@ -2220,7 +2247,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         }, { 'cache-control': 'public, max-age=3600' });
       }
       if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle, mailer, usageStore);
-      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore);
+      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore, documentOcrStore);
       if (url.pathname === '/admin/bsa-synthetic-combined.pdf') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }
