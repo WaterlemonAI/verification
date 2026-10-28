@@ -10,7 +10,7 @@ const { EnvironmentStore } = await import('../lib/api-store.mjs');
 const { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } = await import('../lib/customer-usage.mjs');
 const { AzureAdverseMediaReportStore, MemoryAdverseMediaReportStore } = await import('../lib/adverse-media-report-store.mjs');
 const { resolveFormServiceInput, validateFormDefinition } = await import('../lib/forms.mjs');
-const { startFormsWorker } = await import('../lib/forms-queue.mjs');
+const { formsDeadLetterTtl, startFormsWorker } = await import('../lib/forms-queue.mjs');
 const { CapacityError } = await import('../lib/request-capacity.mjs');
 const { prepareAiAction, callAiAction, validateAiActionOutput } = await import('../lib/forms-ai-action.mjs');
 
@@ -678,6 +678,21 @@ test('AI Action failure blocks decision eligibility without a second model call'
   assert.ok(result.summary.reason_codes.includes('ai_action_failed'));
   assert.equal((await executeFormsJob(options)).ai_action.status, 'failed');
   assert.equal(calls, 1);
+});
+
+test('OCR-backed Form dead letters expire within the queue service limit and source lifetime', () => {
+  const now = Date.now();
+  const job = { queued_at: new Date(now).toISOString(),
+    ocr_expires_at: new Date(now + 30 * 24 * 60 * 60 * 1_000).toISOString(),
+    form: { ai_action: { ocr_job_fields: ['ocr_job_id'] } } };
+  assert.equal(formsDeadLetterTtl(job, now), 7 * 24 * 60 * 60);
+  job.ocr_expires_at = new Date(now + 5_000).toISOString();
+  assert.equal(formsDeadLetterTtl(job, now), 5);
+  job.ocr_expires_at = new Date(now - 1_000).toISOString();
+  assert.equal(formsDeadLetterTtl(job, now), 1);
+  job.ocr_expires_at = 'invalid';
+  assert.equal(formsDeadLetterTtl(job, now), 1);
+  assert.equal(formsDeadLetterTtl({ form: {} }, now), -1);
 });
 
 test('ordinary Form reports remain readable when the OCR account is unavailable', async () => {
