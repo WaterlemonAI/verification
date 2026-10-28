@@ -8,7 +8,7 @@ process.env.API_PUBLIC_BASE_URL = 'https://api.ai7uae.com';
 const { consolidateFormServiceResults, createAppServer, evaluateFormServiceQualification, executeFormsJob } = await import('../server.mjs');
 const { EnvironmentStore } = await import('../lib/api-store.mjs');
 const { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } = await import('../lib/customer-usage.mjs');
-const { MemoryAdverseMediaReportStore } = await import('../lib/adverse-media-report-store.mjs');
+const { AzureAdverseMediaReportStore, MemoryAdverseMediaReportStore } = await import('../lib/adverse-media-report-store.mjs');
 const { resolveFormServiceInput, validateFormDefinition } = await import('../lib/forms.mjs');
 const { startFormsWorker } = await import('../lib/forms-queue.mjs');
 const { CapacityError } = await import('../lib/request-capacity.mjs');
@@ -678,6 +678,26 @@ test('AI Action failure blocks decision eligibility without a second model call'
   assert.ok(result.summary.reason_codes.includes('ai_action_failed'));
   assert.equal((await executeFormsJob(options)).ai_action.status, 'failed');
   assert.equal(calls, 1);
+});
+
+test('ordinary Form reports remain readable when the OCR account is unavailable', async () => {
+  const reports = new AzureAdverseMediaReportStore({ blobServiceUrl: 'https://reports.blob.core.windows.net',
+    ocrBlobServiceUrl: 'https://ocr.blob.core.windows.net', credential: { async getToken() { return { token: 'synthetic' }; } } });
+  const unavailable = Object.assign(new Error('synthetic OCR outage'), { statusCode: 503 });
+  reports.ocrTable = { async getEntity() { throw unavailable; } };
+  reports.ocrContainer = { getBlockBlobClient() { return { async download() { throw unavailable; } }; } };
+  reports.table = { async getEntity() { return { blobName: 'owner/ordinary.pdf', reportType: 'forms',
+    publicReport: true, retention: 'permanent' }; } };
+  reports.container = {
+    getBlobClient() { return { async download() { return { readableStreamBody: (async function* () {
+      yield Buffer.from('synthetic-pdf');
+    })() }; } }; },
+    getBlockBlobClient() { return { async download() { return { readableStreamBody: (async function* () {
+      yield Buffer.from('{"stage":"final","result":{"synthetic":true}}');
+    })() }; } }; }
+  };
+  assert.equal((await reports.getPublic({ reportId: 'ordinary-report' })).bytes.toString(), 'synthetic-pdf');
+  assert.equal((await reports.getFormResult({ ownerId: 'owner', submissionId: 'ordinary' })).result.synthetic, true);
 });
 
 test('Form admission rejects cross-workspace and expired OCR IDs before billing', async (t) => {
