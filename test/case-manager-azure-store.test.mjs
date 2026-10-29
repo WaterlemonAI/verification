@@ -82,3 +82,27 @@ test('workspace retirement advances a bounded cursor after parallel deletion', a
   assert.deepEqual(last, { done: true, cursor: '' });
   assert.deepEqual(deleted.sort(), ['case-a', 'case-b', 'case-c']);
 });
+
+test('Azure purge retains the expiry marker until a failed row deletion can be retried', async () => {
+  const table = new FakeTable();
+  const store = new AzureCaseManagerStore({ table,
+    container: { getBlockBlobClient: () => ({ deleteIfExists: async () => {} }) }, queue: {} });
+  const intent = await store.createIntent({ workspaceId: 'synthetic-workspace', serviceId: 'synthetic-service',
+    transactionId: 'tx', acceptedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+  const row = await store.row('synthetic-workspace', intent.id);
+  const originalDelete = table.deleteEntity.bind(table);
+  let failed = false;
+  table.deleteEntity = async (partitionKey, rowKey) => {
+    if (!failed && rowKey === row.rowKey) {
+      failed = true;
+      throw Object.assign(new Error('temporary table failure'), { statusCode: 503 });
+    }
+    return originalDelete(partitionKey, rowKey);
+  };
+  await assert.rejects(store.deleteCaseRow(row), /temporary table failure/);
+  assert.ok(table.entities.has(table.key('expiry', `${row.expiresAt}-${row.caseId}`)));
+  await store.deleteCaseRow(row);
+  assert.equal(table.entities.has(table.key('expiry', `${row.expiresAt}-${row.caseId}`)), false);
+  assert.equal(table.entities.has(table.key(row.partitionKey, row.rowKey)), false);
+});
