@@ -28,7 +28,8 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     allowBlobPublicAccess: false
     allowSharedKeyAccess: false
     defaultToOAuthAuthentication: true
-    publicNetworkAccess: 'Enabled'
+    // No customer QA until the API runtime has a reviewed VNet/private-endpoint path.
+    publicNetworkAccess: 'Disabled'
   }
 }
 

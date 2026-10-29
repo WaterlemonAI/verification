@@ -3,6 +3,9 @@
   const labels = { passed: 'Passed', failed: 'Failed', review_required: 'Review required',
     extracted: 'Extracted', pending: 'Pending', not_run: 'Not run',
     could_not_complete: 'Could not complete', unclassified: 'Unclassified' };
+  const outcomeLabel = (item) => item.outcome === 'passed'
+    && ['adverse-media', 'merchant-screening'].includes(item.service_id)
+    ? 'No material findings' : labels[item.outcome] || 'Unclassified';
   let cursor = null;
   let selected = null;
 
@@ -64,7 +67,7 @@
       card.append(text('small', label), text('strong', value)); cards.append(card);
     };
     const yesNo = (value) => typeof value === 'boolean' ? value ? 'Yes' : 'No' : null;
-    add('Business outcome', labels[item.outcome] || 'Unclassified');
+    add('Business outcome', outcomeLabel(item));
     add('Service', item.service_id);
     if (response && typeof response === 'object' && !Array.isArray(response)) {
       if (item.service_id === 'adverse-media') {
@@ -140,7 +143,7 @@
       for (const item of result.cases) {
         const button = document.createElement('button');
         button.type = 'button'; button.className = 'case-list-item';
-        button.append(text('strong', item.service_id), text('span', labels[item.outcome] || 'Unclassified', `case-badge case-${item.outcome}`),
+        button.append(text('strong', item.service_id), text('span', outcomeLabel(item), `case-badge case-${item.outcome}`),
           text('small', `${new Date(item.accepted_at).toLocaleString()} · ${item.state}`));
         button.addEventListener('click', () => loadDetail(item.id));
         $('case-list').append(button);
@@ -160,7 +163,10 @@
       if (selected !== id) return;
       const item = result.case;
       panel.replaceChildren();
-      panel.append(text('p', item.service_id, 'label'), text('h2', labels[item.outcome] || 'Unclassified'));
+      panel.append(text('p', item.service_id, 'label'), text('h2', outcomeLabel(item)));
+      if (outcomeLabel(item) === 'No material findings') {
+        panel.append(text('p', 'No material findings within completed screening coverage. This is not legal or credit clearance.'));
+      }
       const meta = document.createElement('dl'); meta.className = 'case-meta';
       for (const [name, value] of [['Accepted', item.accepted_at], ['Expires', item.expires_at],
         ['State', item.state], ['Transaction IDs', item.attempt_ids.join(', ') || 'None'],

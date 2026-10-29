@@ -18,7 +18,7 @@
         <label>Through <input id="case-to" type="date" required /></label>
         <label>Service ID <input id="case-service" type="text" maxlength="80" placeholder="All services" pattern="[a-z0-9-]*" /></label>
         <label>Transaction ID <input id="case-transaction" type="text" maxlength="36" placeholder="Optional exact ID" pattern="[0-9a-fA-F-]*" /></label>
-        <label>Business outcome <select id="case-outcome"><option value="">All outcomes</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="review_required">Review required</option><option value="extracted">Extracted</option><option value="pending">Pending</option><option value="not_run">Not run</option><option value="could_not_complete">Could not complete</option><option value="unclassified">Unclassified</option></select></label>
+        <label>Business outcome <select id="case-outcome"><option value="">All outcomes</option><option value="passed">No material findings</option><option value="failed">Failed</option><option value="review_required">Review required</option><option value="extracted">Extracted</option><option value="pending">Pending</option><option value="not_run">Not run</option><option value="could_not_complete">Could not complete</option><option value="unclassified">Unclassified</option></select></label>
         <button type="submit">Apply filters</button>
       </form>
       <div class="cases-layout"><section aria-label="Cases"><div id="case-list" class="case-list"></div><button id="cases-more" type="button" hidden>Load more</button></section>

@@ -35,7 +35,7 @@ on:
         type: boolean
         default: false
       provisionCaseManagerPlatform:
-        description: Provision the isolated Case Manager storage only; API capture stays off
+        description: BLOCKED pending reviewed private-network path; selecting this fails closed
         type: boolean
         default: false
 
@@ -162,21 +162,11 @@ jobs:
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
           az bicep build --file infrastructure/api-case-manager-platform.bicep
 
-      - name: Provision isolated Case Manager storage
-        if: github.event_name == 'workflow_dispatch' && inputs.provisionCaseManagerPlatform && steps.case_manager_state.outputs.enabled != 'true'
-        shell: bash
+      - name: Block Case Manager provisioning until private connectivity is reviewed
+        if: github.event_name == 'workflow_dispatch' && inputs.provisionCaseManagerPlatform
         run: |
-          set -euo pipefail
-          az deployment group what-if \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --name "ai7uae-case-platform-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
-            --template-file infrastructure/api-case-manager-platform.bicep \
-            --parameters apiRuntimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}"
-          az deployment group create \
-            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
-            --name "ai7uae-case-platform-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
-            --template-file infrastructure/api-case-manager-platform.bicep \
-            --parameters apiRuntimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}"
+          echo 'Case Manager provisioning is blocked until the API runtime has a reviewed VNet and private Blob, Table and Queue endpoints.' >&2
+          exit 1
 
       - name: Deploy isolated document OCR resources
         if: github.event_name == 'workflow_dispatch' && inputs.provisionDocumentOcrPlatform
@@ -219,8 +209,10 @@ jobs:
           set -euo pipefail
           test "${{ steps.case_manager_state.outputs.maintenance }}" = 'true'
           storage="$(az storage account show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name stai7uaecasesuaen001 \
-            --query '{location:location,sharedKeyAllowed:allowSharedKeyAccess,publicBlobAllowed:allowBlobPublicAccess}' --output json)"
-          jq -e '.location == "uaenorth" and .sharedKeyAllowed == false and .publicBlobAllowed == false' <<< "${storage}" > /dev/null
+            --query '{location:location,sharedKeyAllowed:allowSharedKeyAccess,publicBlobAllowed:allowBlobPublicAccess,publicNetworkAccess:publicNetworkAccess}' --output json)"
+          jq -e '.location == "uaenorth" and .sharedKeyAllowed == false and .publicBlobAllowed == false and .publicNetworkAccess == "Disabled"' <<< "${storage}" > /dev/null
+          subnet="$(az containerapp env show --ids "${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" --query properties.vnetConfiguration.infrastructureSubnetId --output tsv)"
+          test -n "${subnet}" && test "${subnet}" != 'None'
 
       - name: Preview API infrastructure change
         run: |

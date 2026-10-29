@@ -7,13 +7,16 @@ Case Manager is an optional copy of verification results. Keep the global captur
 - Workspace access: every signed-in user of the same workspace can read its cases, raw final responses and recorded artifacts. API keys alone cannot read case history. Approved by the product owner on 2026-10-30.
 - Successful UAE trade licence, IBAN, entity search and dynamic integration responses remain `Unclassified` until their business response contracts are reviewed. Approved by the product owner on 2026-10-30.
 - Customer text states that Case Manager TTL applies only to its copy. Adverse-media JSON, OCR source data, BSA source data and public or permanent PDFs follow separate retention. Approved by the product owner on 2026-10-30.
-- Record the approved adverse-media and merchant screening badge wording, storage network posture, physical deletion target, peak traffic and added-latency objective. The code and synthetic results alone do not settle these items.
+- Completed eligible adverse-media and merchant screenings display **No material findings**; partial coverage remains **Review required**. This wording was approved on 2026-10-30 and does not assert legal or credit clearance.
+- Storage must be accessible only through private endpoints before any Case Manager QA. The current Container Apps environment lacks VNet attachment, so provisioning is blocked until a new private runtime path, private Blob/Table/Queue endpoints and DNS are reviewed and verified. No public-network exception is approved.
+- Reads stop immediately at expiry or opt-out; physically delete Case Manager copies within 24 hours. This target was approved on 2026-10-30 and must be demonstrated in Azure-backed QA.
+- Peak traffic and added-latency objective remain provisional. The code and synthetic results alone do not settle these items.
 
 ## Packaging and Azure preview
 
 1. Confirm the reviewed PR head, clean worktree, passing exact-head CI, and immutable API image digest. Do not substitute a mutable image tag.
-2. Run the dedicated Case Manager platform Bicep what-if in the intended UAE North resource group. Verify that only isolated Case Manager resources and their scoped role assignments are created. Provisioning is a separate reviewed action while capture remains off.
-3. Create the dedicated Case Manager encryption key in Key Vault through the approved secret process. Verify managed-identity access, disabled shared-key authorization, disabled public Blob access, and the approved network posture. Do not print the key.
+2. First design and verify VNet-integrated API runtime connectivity, private endpoints for Blob, Table and Queue, private DNS resolution, ingress and rollback. The present workflow intentionally rejects Case Manager provisioning. After a reviewed network implementation, run the dedicated Case Manager platform Bicep what-if in the intended UAE North resource group. Verify that only isolated Case Manager resources and scoped role assignments are created. Provisioning is a separate reviewed action while capture remains off.
+3. Create the dedicated Case Manager encryption key in Key Vault through the approved secret process. Verify managed-identity access, disabled shared-key authorization, disabled public Blob access, disabled public storage network access, and runtime data-plane access over the private endpoints. Do not print the key.
 4. Run the API infrastructure what-if with the exact release digest and the intended values of `CASE_MANAGER_DESIRED_ENABLED`, `CASE_MANAGER_EMERGENCY_OFF`, and `CASE_MANAGER_MAINTENANCE_ENABLED`. Review every proposed change to the existing API and jobs before promotion.
 
 ## Disposable workspace QA
@@ -31,7 +34,7 @@ Use synthetic subjects and documents. Enable one disposable workspace with a one
 ## Load, retention and rollback gates
 
 - Run Azure-backed sustained traffic at twice the approved peak with representative response sizes and a mix of synchronous, OCR, BSA and Form jobs. Record API p95/p99 added latency, capture failures, queue age p95/p99/max, dead letters, cost and storage growth. The memory-store benchmark is not this gate.
-- Prove the expiry purge keeps up with the approved arrival rate and meets the physical deletion target. Check encrypted Blob, case metadata, transaction indexes and due tasks after deletion; source stores remain untouched.
+- Prove the expiry purge keeps up with the approved arrival rate and physically deletes Case Manager copies within 24 hours of expiry or opt-out. Check encrypted Blob, case metadata, transaction indexes and due tasks after deletion; source stores remain untouched.
 - Test a routine deployment after capture has been enabled. It must preserve the approved desired state. Test `CASE_MANAGER_EMERGENCY_OFF=true` as rollback while `CASE_MANAGER_MAINTENANCE_ENABLED=true` keeps deletion and reconciliation running. Confirm the prior immutable digest can be restored and no case storage is deleted during rollback.
 
 ## Customer support

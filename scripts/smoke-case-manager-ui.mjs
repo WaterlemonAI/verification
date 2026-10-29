@@ -40,6 +40,17 @@ for (const [serviceId, response] of [
   await caseStore.captureFinal(workspaceId, sample.id, { response, contentType: 'application/json',
     httpStatus: 200, outcome: 'unclassified' });
 }
+for (const [serviceId, response] of [
+  ['adverse-media', { status: 'completed', entity: { name: 'Synthetic Individual' },
+    summary: { risk_level: 'no_material_results', decision_eligible: true }, coverage: { complete: true }, results: [] }],
+  ['merchant-screening', { status: 'completed', merchant_identity: { names: ['Synthetic Merchant'] },
+    summary: { risk_level: 'safe', decision_eligible: true }, findings: [] }]
+]) {
+  const sample = await caseStore.createIntent({ workspaceId, serviceId, transactionId: `synthetic-${serviceId}`,
+    acceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+  await caseStore.captureFinal(workspaceId, sample.id, { response, contentType: 'application/json',
+    httpStatus: 200, outcome: 'passed' });
+}
 const server = createAppServer({ store, usageStore, caseStore, startWorker: false, deepResearchQueue: null, formsQueue: null });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -81,6 +92,14 @@ try {
     ]) {
       await page.locator('.case-list-item', { hasText: serviceId }).click();
       await page.locator('.case-summary').getByText(expected).waitFor();
+    }
+    for (const serviceId of ['adverse-media', 'merchant-screening']) {
+      const caseButton = page.locator('.case-list-item', { hasText: serviceId });
+      await caseButton.getByText('No material findings').waitFor();
+      await caseButton.click();
+      await page.locator('#case-detail h2').getByText('No material findings').waitFor();
+      await page.locator('#case-detail').getByText('No material findings within completed screening coverage. This is not legal or credit clearance.').waitFor();
+      await page.locator('.case-summary').getByText('No material findings').waitFor();
     }
     results.push(result);
     await context.close();
