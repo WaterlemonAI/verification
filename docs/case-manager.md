@@ -1,0 +1,47 @@
+# Case Manager contract (schema v1)
+
+Case Manager is an opt-in copy of customer-visible check results. The global `CASE_MANAGER_ENABLED` gate and every workspace policy default off. There is no backfill. A signed-in workspace administrator can enable capture for future accepted checks and choose an integer TTL from 1 to 45 days. Bearer API keys can submit checks; they do not grant case-history access. The case is owned by the verified portal workspace ID, not by the API key ID. Every signed-in administrator of that workspace may read its cases, raw final response and recorded artifacts. This access model needs product and privacy approval before customer enablement.
+
+## What creates a case
+
+One authenticated, accepted business submission creates one logical case. Its `case_id` is an opaque UUID. `accepted_at` is the admission timestamp. The first transaction ID and later replay transaction IDs form `attempt_ids`; a replay retains the original `case_id` and expiry. Failed authentication creates no tenant case. Authenticated method, validation, entitlement and capacity rejections are auditable attempts with `not_run` or `could_not_complete` as appropriate; they are not successful checks. Polls, callback retries, downloads, key rotation, report generation and Form child calls create no additional verification case.
+
+| Direct POST route | Service ID | Completion | TTL cap |
+|---|---|---|---|
+| `/service/uae_tlv` | `uae-tlv` | synchronous final response | 45 days |
+| `/service/iban_verification` | `iban-verification` | synchronous final response | 45 days |
+| `/service/entity_search` | `entity-search` | synchronous final response | 45 days |
+| `/service/adverse_media` | `adverse-media` | synchronous, or saved deep-research final result | 45 days |
+| `/service/merchant_screening` | `merchant-screening` | synchronous final response | 45 days |
+| `/service/bank_statement_analysis` | `bank-statement-analysis` | saved asynchronous final result | 45 days |
+| `/service/uae_trade_license_ocr` | `uae-trade-license-ocr` | saved asynchronous final result | 30 days |
+| `/service/passport_icao_ocr` | `passport-icao-ocr` | saved asynchronous final result | 30 days |
+| `/service/uae_poa_ocr` | `uae-poa-ocr` | saved asynchronous final result | 30 days |
+| `/service/uae_utility_bill_ocr` | `uae-utility-bill-ocr` | saved asynchronous final result | 30 days |
+| `/service/cheque_ocr` | `cheque-ocr` | saved asynchronous final result | 30 days |
+| `/service/moa_analysis` | `moa-analysis` | saved asynchronous final result | 30 days |
+| `/service/articles_of_association_ocr` | `articles-of-association-ocr` | saved asynchronous final result | 30 days |
+| `/service/emirates_id_ocr` | `emirates-id-ocr` | saved asynchronous final result | 30 days |
+
+`POST /forms/{formId}/submissions` creates one Form case with all child results in its final response. Its TTL cap is 30 days if any selected child is OCR, including a future administrator-configured child. An administrator-configured integration creates one generic case when its registered public route is submitted; its business outcome remains `unclassified` until a reviewed adapter exists. An entity-search PDF generated with the original entity-search response is recorded as that case's artifact. `POST /reports/entity-search.pdf` only downloads that existing report and never creates another verification case. A PDF made without a Case Manager capture remains outside Case Manager.
+
+## Schema, outcome and artifacts
+
+`lib/case-manager-contract.mjs` exports schema version 1. The encrypted payload records workspace ID, service ID, acceptance and expiry, state, outcome and reason codes, attempt IDs, final HTTP status and content type, the exact final customer-visible response, and internal artifact references. A `202` receipt is an attempt, not a final result. Pending cases become `complete` only after the saved final response is captured. Capture failure leaves `incomplete` with a sanitized error code and an alert. No repair path can rerun a supplier or AI call.
+
+The outcome vocabulary is `pending`, `passed`, `failed`, `review_required`, `extracted`, `not_run`, `could_not_complete`, and `unclassified`. HTTP 2xx does not imply `passed`; HTTP status belongs in technical details. Partial adverse-media and merchant coverage requires review. OCR completion means `extracted`, never identity verification. Bank-statement decision eligibility is not credit approval. Unknown dynamic integrations are `unclassified`. A reviewed service mapping must assign any automatic `passed` or `failed` label. All response fields, including nested arrays and unknown future fields, remain available in readable and formatted JSON views. Non-JSON supplier bodies stay text, never fabricated JSON. One-time callback secrets, credentials, and private configuration are removed before storage; uploaded document binaries are not duplicated.
+
+Artifact references contain internal owner and report IDs, stored only in the encrypted payload. A case PDF endpoint first authorizes the signed-in workspace and unexpired case, then uses its recorded original owner to fetch the private artifact. It must never authorize through a public-report lookup or a caller-supplied owner ID. Existing public capability URLs remain independently accessible.
+OCR final responses retain their original five-minute signed artifact URLs as result fields; those links expire independently of the case. The case-scoped artifact endpoint remains available until case expiry.
+
+## Retention and failure boundaries
+
+Case Manager TTL starts at `accepted_at`; OCR and OCR-containing Forms use `min(workspace TTL, 30 days)`. Reads reject a case at `expires_at` even when physical purge is late. Shortening TTL or opting out raises a monotonic visibility floor, so later re-enablement cannot resurrect old cases. A dedicated retirement message schedules early deletion. The expiry-index purge job runs every 15 minutes and targets physical deletion within 24 hours; hitting its per-run cap or a storage error alerts operations. Deletion counts contain no PII. An expiry during pending processing prevents later capture from making the case readable.
+
+This TTL governs only the Case Manager copy. Adverse-media JSON has its own 365-day retention. OCR source data has its own 30-day retention. BSA source retention is separate and does not yet have a final deletion schedule. Some PDFs are permanent and have public capability URLs; Case Manager TTL does not revoke those URLs. Disabling Case Manager does not change these source stores or existing service behavior.
+
+No names, document text, credentials, full responses or signed URLs belong in Table indexes, queues, logs or alerts. The payload is application-encrypted with a versioned key and stored in a private dedicated UAE North Blob account. Filters use workspace-scoped indexed date, service and outcome metadata. Errors in indexing, encryption or final capture are sanitized and auditable. Global feature off makes no Case Manager storage calls and leaves API responses, billing, callbacks and supplier-call counts unchanged.
+
+The current Container Apps environment has no VNet attachment. The dedicated storage account therefore uses a public network endpoint with managed-identity data authorization, disabled shared-key access and private Blob containers. A private endpoint and network isolation require an approved VNet design before this can be described as network-private storage.
+
+Before enabling capture for a disposable QA workspace, set the deployment environment's `CASE_MANAGER_MAINTENANCE_ENABLED=true` and keep it set during any capture rollback. This keeps purge, reconciliation and alerts active while `CASE_MANAGER_ENABLED=false` stops new captures. Do not remove the dedicated storage account during rollback.

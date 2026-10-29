@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#071f43" /><title>KYCProbe — Case Manager</title>
+  <link rel="stylesheet" href="/api.css?v=13" />
+  <script src="/portal-auth.js?v=5" defer></script><script src="/cases.js?v=1" defer></script>
+</head>
+<body>
+  <div class="utility-bar"><span>KYCProbe Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
+  <header><a class="brand" href="https://kycprobe.com"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a><span class="status"><i></i> API available</span></header>
+  <main class="cases-main">
+    <section class="cases-hero"><p class="eyebrow">WORKSPACE CASES</p><h1>Case <em>Manager.</em></h1><p>Review saved results from checks submitted after your workspace enabled Case Manager.</p></section>
+    <div class="cases-content">
+      <p id="cases-notice" role="status"></p>
+      <form id="cases-filters" class="cases-filters" hidden>
+        <label>From <input id="case-from" type="date" required /></label>
+        <label>Through <input id="case-to" type="date" required /></label>
+        <label>Service ID <input id="case-service" type="text" maxlength="80" placeholder="All services" pattern="[a-z0-9-]*" /></label>
+        <label>Business outcome <select id="case-outcome"><option value="">All outcomes</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="review_required">Review required</option><option value="extracted">Extracted</option><option value="pending">Pending</option><option value="not_run">Not run</option><option value="could_not_complete">Could not complete</option><option value="unclassified">Unclassified</option></select></label>
+        <button type="submit">Apply filters</button>
+      </form>
+      <div class="cases-layout"><section aria-label="Cases"><div id="case-list" class="case-list"></div><button id="cases-more" type="button" hidden>Load more</button></section>
+        <section id="case-detail" class="case-detail" aria-label="Selected case"><p>Select a case to review its result.</p></section></div>
+      <p class="cases-retention">Case Manager retention applies only to its saved copy. OCR case copies expire after at most 30 days. Existing adverse-media JSON, OCR and BSA source data, and permanent or public PDF reports follow separate retention rules. Disabling Case Manager does not revoke public report links.</p>
+    </div>
+  </main>
+</body>
+</html>

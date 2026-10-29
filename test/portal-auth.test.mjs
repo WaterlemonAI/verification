@@ -3,6 +3,7 @@ import test from 'node:test';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { createInvitation } from '../lib/customer-invitation.mjs';
 import { MemoryCustomerUsageStore, validateUsagePolicy } from '../lib/customer-usage.mjs';
+import { MemoryCaseManagerStore } from '../lib/case-manager-store.mjs';
 
 process.env.NODE_ENV = 'test';
 const { createAppServer } = await import('../server.mjs');
@@ -18,7 +19,8 @@ test('one-time customer invitation creates a portal account and initial workspac
   const invitation = createInvitation(customerId);
   await store.setCustomer({ id: customerId, name: 'Regulated Institution', adminEmail: 'user@example.com', status: 'pending', usagePolicyVersion: 1,
     invitationHash: invitation.tokenHash, invitationExpiresAt: invitation.expiresAt });
-  const server = createAppServer({ store, usageStore, startWorker: false, deepResearchQueue: null, formsQueue: null });
+  const server = createAppServer({ store, usageStore, caseStore: new MemoryCaseManagerStore(),
+    startWorker: false, deepResearchQueue: null, formsQueue: null });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
@@ -117,6 +119,33 @@ test('one-time customer invitation creates a portal account and initial workspac
   assert.equal(login.status, 200);
   const loginBody = await login.json();
   const loginCookie = sessionCookie(login);
+
+  const caseSettingsUrl = `${baseUrl}/portal/api/case-manager/settings`;
+  const defaultCaseSettings = await (await fetch(caseSettingsUrl, { headers: { cookie: loginCookie } })).json();
+  assert.deepEqual(defaultCaseSettings, { available: false, policy: { version: 0, visible_from_version: 0, enabled: false, ttl_days: null } });
+  const disabledUpdate = await fetch(caseSettingsUrl, { method: 'PUT', headers: {
+    cookie: loginCookie, 'content-type': 'application/json', 'x-ai7-csrf': loginBody.csrf_token
+  }, body: JSON.stringify({ version: 0, enabled: true, ttl_days: 30 }) });
+  assert.equal(disabledUpdate.status, 503);
+  process.env.CASE_MANAGER_ENABLED = 'true';
+  t.after(() => { delete process.env.CASE_MANAGER_ENABLED; });
+  const missingCaseCsrf = await fetch(caseSettingsUrl, { method: 'PUT', headers: { cookie: loginCookie,
+    'content-type': 'application/json' }, body: JSON.stringify({ version: 0, enabled: true, ttl_days: 30 }) });
+  assert.equal(missingCaseCsrf.status, 403);
+  const invalidCaseTtl = await fetch(caseSettingsUrl, { method: 'PUT', headers: {
+    cookie: loginCookie, 'content-type': 'application/json', 'x-ai7-csrf': loginBody.csrf_token
+  }, body: JSON.stringify({ version: 0, enabled: true, ttl_days: 46 }) });
+  assert.equal(invalidCaseTtl.status, 400);
+  const savedCaseSettings = await fetch(caseSettingsUrl, { method: 'PUT', headers: {
+    cookie: loginCookie, 'content-type': 'application/json', 'x-ai7-csrf': loginBody.csrf_token
+  }, body: JSON.stringify({ version: 0, enabled: true, ttl_days: 30 }) });
+  assert.equal(savedCaseSettings.status, 200);
+  assert.deepEqual((await savedCaseSettings.json()).policy, { version: 1, visible_from_version: 1, enabled: true, ttl_days: 30 });
+  const staleCaseSettings = await fetch(caseSettingsUrl, { method: 'PUT', headers: {
+    cookie: loginCookie, 'content-type': 'application/json', 'x-ai7-csrf': loginBody.csrf_token
+  }, body: JSON.stringify({ version: 0, enabled: false }) });
+  assert.equal(staleCaseSettings.status, 409);
+  delete process.env.CASE_MANAGER_ENABLED;
 
   const keyHeaders = { cookie: loginCookie, 'content-type': 'application/json', 'x-ai7-csrf': loginBody.csrf_token };
   const noCsrfKey = await fetch(`${baseUrl}/portal/api/keys`, { method: 'POST', headers: { cookie: loginCookie, 'content-type': 'application/json' }, body: JSON.stringify({ label: 'Denied' }) });

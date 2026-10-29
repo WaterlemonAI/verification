@@ -21,6 +21,7 @@ on:
       - infrastructure/merchant-screenshot-platform.bicep
       - infrastructure/api-bank-statement-platform.bicep
       - infrastructure/api-document-ocr-platform.bicep
+      - infrastructure/api-case-manager-platform.bicep
       - Dockerfile.document-ocr
       - .github/workflows/deploy-api.yml
   workflow_dispatch:
@@ -31,6 +32,14 @@ on:
         default: true
       provisionDocumentOcrPlatform:
         description: Provision only the isolated document OCR Azure platform; customer OCR routes remain disabled until DOCUMENT_OCR_ENABLED is true
+        type: boolean
+        default: false
+      provisionCaseManagerPlatform:
+        description: Provision the isolated Case Manager storage only; API capture stays off
+        type: boolean
+        default: false
+      enableCaseManager:
+        description: Enable Case Manager only after reviewed storage, key, privacy, and QA gates
         type: boolean
         default: false
 
@@ -146,6 +155,23 @@ jobs:
         run: |
           az bicep build --file infrastructure/api.bicep
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
+          az bicep build --file infrastructure/api-case-manager-platform.bicep
+
+      - name: Provision isolated Case Manager storage
+        if: github.event_name == 'workflow_dispatch' && inputs.provisionCaseManagerPlatform && !inputs.enableCaseManager
+        shell: bash
+        run: |
+          set -euo pipefail
+          az deployment group what-if \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "ai7uae-case-platform-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/api-case-manager-platform.bicep \
+            --parameters apiRuntimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}"
+          az deployment group create \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "ai7uae-case-platform-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/api-case-manager-platform.bicep \
+            --parameters apiRuntimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}"
 
       - name: Deploy isolated document OCR resources
         if: github.event_name == 'workflow_dispatch' && inputs.provisionDocumentOcrPlatform
@@ -181,6 +207,16 @@ jobs:
           jq -e '.location == "uaenorth" and .sharedKeyAllowed == false and .publicBlobAllowed == false' <<< "${storage}" > /dev/null
           jq -e '.location == "uaenorth" and (.principalId | type == "string" and length > 0)' <<< "${identity}" > /dev/null
 
+      - name: Verify Case Manager release prerequisites
+        if: github.event_name == 'workflow_dispatch' && inputs.enableCaseManager
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ vars.CASE_MANAGER_MAINTENANCE_ENABLED }}" = 'true'
+          storage="$(az storage account show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name stai7uaecasesuaen001 \
+            --query '{location:location,sharedKeyAllowed:allowSharedKeyAccess,publicBlobAllowed:allowBlobPublicAccess}' --output json)"
+          jq -e '.location == "uaenorth" and .sharedKeyAllowed == false and .publicBlobAllowed == false' <<< "${storage}" > /dev/null
+
       - name: Preview API infrastructure change
         run: |
           az deployment group what-if \
@@ -194,6 +230,8 @@ jobs:
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableCaseManager="${{ github.event_name == 'workflow_dispatch' && inputs.enableCaseManager && 'true' || 'false' }}" \
+              maintainCaseManagerData="${{ vars.CASE_MANAGER_MAINTENANCE_ENABLED == 'true' && 'true' || 'false' }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
@@ -216,6 +254,8 @@ jobs:
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableCaseManager="${{ github.event_name == 'workflow_dispatch' && inputs.enableCaseManager && 'true' || 'false' }}" \
+              maintainCaseManagerData="${{ vars.CASE_MANAGER_MAINTENANCE_ENABLED == 'true' && 'true' || 'false' }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \

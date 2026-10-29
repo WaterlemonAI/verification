@@ -1,6 +1,7 @@
 (() => {
   const byId = (id) => document.getElementById(id);
   let csrf = '';
+  let casePolicyVersion = 0;
 
   async function request(path, options = {}) {
     const response = await fetch(path, { ...options, credentials: 'same-origin', headers: {
@@ -84,6 +85,33 @@
     } catch (error) { byId('usage-status').textContent = error.message; }
   }
 
+  async function loadCaseSettings() {
+    const settings = await request('/portal/api/case-manager/settings');
+    if (!settings.available) return;
+    byId('case-settings-section').hidden = false;
+    casePolicyVersion = settings.policy.version;
+    byId('case-enabled').checked = settings.policy.enabled;
+    byId('case-ttl').value = settings.policy.ttl_days || 30;
+  }
+
+  byId('case-settings-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector('button');
+    button.disabled = true;
+    byId('case-settings-message').textContent = '';
+    try {
+      const enabled = byId('case-enabled').checked;
+      const ttlDays = Number(byId('case-ttl').value);
+      const result = await request('/portal/api/case-manager/settings', { method: 'PUT',
+        body: JSON.stringify({ version: casePolicyVersion, enabled, ttl_days: ttlDays }) });
+      casePolicyVersion = result.policy.version;
+      byId('case-settings-message').textContent = enabled
+        ? `Case Manager is enabled for new checks. Copies expire after ${ttlDays} days (30 days at most for OCR).`
+        : 'Case Manager is disabled. Earlier copies are retired and will be purged.';
+    } catch (error) { byId('case-settings-message').textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+
   byId('create-key-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -115,6 +143,6 @@
     byId('account-identity').textContent = `${session.account.client_name} · ${session.account.email}`;
     const initial = sessionStorage.getItem('ai7_new_api_key');
     if (initial) { sessionStorage.removeItem('ai7_new_api_key'); showNewKey(initial); }
-    await Promise.all([loadKeys(), loadHealth(), loadUsage()]);
+    await Promise.all([loadKeys(), loadHealth(), loadUsage(), loadCaseSettings()]);
   }).catch(() => location.replace('/login?next=%2Faccount'));
 })();

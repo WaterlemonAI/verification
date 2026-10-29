@@ -48,6 +48,15 @@ param bankStatementDocumentEndpoint string = 'https://doc-ai7uae-bsa-uaen-001.co
 @description('Dedicated document OCR storage account; never reuse the bank statement store.')
 param documentOcrStorageName string = 'stai7uaeocruaen001'
 
+@description('Dedicated Case Manager storage account. Provision separately before enabling.')
+param caseManagerStorageName string = 'stai7uaecasesuaen001'
+
+@description('Enable Case Manager only after storage, key, policy, and QA gates are reviewed.')
+param enableCaseManager bool = false
+
+@description('Keep purge, reconciliation and alerts running for existing cases when API capture is disabled.')
+param maintainCaseManagerData bool = false
+
 @description('Dedicated S0 Document Intelligence account for the eight extraction APIs.')
 param documentOcrEndpoint string = 'https://doc-ai7uae-ocr-uaen-001.cognitiveservices.azure.com/'
 
@@ -329,6 +338,89 @@ resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableDocumen
   }
 }
 
+resource caseManagerPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableCaseManager || maintainCaseManagerData) {
+  name: 'caj-ai7uae-case-manager-purge'
+  location: location
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
+  properties: {
+    environmentId: environmentId
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 3600
+      replicaRetryLimit: 2
+      scheduleTriggerConfig: { cronExpression: '*/15 * * * *', parallelism: 1, replicaCompletionCount: 1 }
+      registries: [ { server: acrLoginServer, identity: runtimeIdentityResourceId } ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'case-manager-purge'
+          image: image
+          command: [ 'node', 'scripts/purge-cases.mjs' ]
+          env: [
+            { name: 'CASE_MANAGER_ENABLED', value: 'true' }
+            { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
+            { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
+          ]
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+        }
+      ]
+    }
+  }
+}
+
+resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (enableCaseManager || maintainCaseManagerData) {
+  name: 'caj-ai7uae-case-manager-reconcile'
+  location: location
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
+  properties: {
+    environmentId: environmentId
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 900
+      replicaRetryLimit: 2
+      scheduleTriggerConfig: { cronExpression: '*/2 * * * *', parallelism: 1, replicaCompletionCount: 1 }
+      secrets: concat([
+        { name: 'case-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/case-manager-data-key-v1', identity: runtimeIdentityResourceId }
+        { name: 'bsa-data-key', keyVaultUrl: '${keyVaultUri}secrets/bsa-data-key', identity: runtimeIdentityResourceId }
+      ], enableDocumentOcr ? [
+        { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: runtimeIdentityResourceId }
+      ] : [])
+      registries: [ { server: acrLoginServer, identity: runtimeIdentityResourceId } ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'case-manager-reconcile'
+          image: image
+          command: [ 'node', 'scripts/reconcile-cases.mjs' ]
+          env: concat([
+            { name: 'CASE_MANAGER_ENABLED', value: 'true' }
+            { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
+            { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_DATA_KEY_V1_HEX', secretRef: 'case-data-key-v1' }
+            { name: 'CASE_MANAGER_ACTIVE_KEY_VERSION', value: '1' }
+            { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'BSA_PRODUCTION_ENABLED', value: '1' }
+            { name: 'BSA_DATA_KEY_HEX', secretRef: 'bsa-data-key' }
+            { name: 'BSA_STORAGE_BLOB_URL', value: 'https://${bankStatementStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'BSA_STORAGE_CONTAINER', value: 'bank-statement-analysis' }
+            { name: 'BSA_STORAGE_QUEUE', value: 'bank-statement-analysis' }
+            { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
+          ], enableDocumentOcr ? [
+            { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
+          ] : [])
+          resources: { cpu: json('0.5'), memory: '1Gi' }
+        }
+      ]
+    }
+  }
+}
+
 resource merchantScreenshotWorker 'Microsoft.App/containerApps@2024-03-01' = {
   name: merchantScreenshotWorkerName
   location: location
@@ -442,6 +534,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       ], enableDocumentOcr ? [
         { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: runtimeIdentityResourceId }
         { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
+      ] : [], enableCaseManager ? [
+        { name: 'case-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/case-manager-data-key-v1', identity: runtimeIdentityResourceId }
       ] : [])
       ingress: {
         external: true
@@ -501,10 +595,17 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
             { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: enableDocumentOcr ? '1' : '0' }
+            { name: 'CASE_MANAGER_ENABLED', value: enableCaseManager ? 'true' : 'false' }
           ], enableDocumentOcr ? [
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
+          ] : [], enableCaseManager ? [
+            { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_DATA_KEY_V1_HEX', secretRef: 'case-data-key-v1' }
+            { name: 'CASE_MANAGER_ACTIVE_KEY_VERSION', value: '1' }
           ] : [])
           resources: {
             cpu: json(enableDocumentOcr ? '0.5' : '0.25')
@@ -628,6 +729,45 @@ resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-0
     actions: { actionGroups: [ apiAlerts.id ] }
   }
 }
+
+var caseManagerAlertSignals = [
+  { name: 'capture', signal: 'case_manager_capture_failed' }
+  { name: 'intent', signal: 'case_manager_intent_failed' }
+  { name: 'storage', signal: 'case_manager_storage_error' }
+  { name: 'pending', signal: 'case_manager_aged_pending' }
+  { name: 'expiry', signal: 'case_manager_expiry_backlog' }
+  { name: 'deadletters', signal: 'case_manager_dead_letters' }
+  { name: 'retirement', signal: 'case_manager_retirement_schedule_failed' }
+]
+
+resource caseManagerAlerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert in caseManagerAlertSignals: if (enableCaseManager || maintainCaseManagerData) {
+  name: 'alert-ai7uae-case-manager-${alert.name}'
+  location: location
+  kind: 'LogAlert'
+  properties: {
+    description: 'Case Manager ${alert.name} requires operations review.'
+    displayName: 'KYCProbe Case Manager ${alert.name}'
+    severity: 2
+    enabled: true
+    scopes: [ apiLogWorkspace.id ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: 'ContainerAppConsoleLogs_CL | where Log_s has "${alert.signal}" | summarize failures = count()'
+          metricMeasureColumn: 'failures'
+          timeAggregation: 'Total'
+          operator: 'GreaterThanOrEqual'
+          threshold: 1
+          failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
+        }
+      ]
+    }
+    actions: { actionGroups: [ apiAlerts.id ] }
+  }
+}]
 
 output fqdn string = api.properties.configuration.ingress.fqdn
 output customDomainVerificationId string = api.properties.customDomainVerificationId

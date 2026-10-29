@@ -463,8 +463,9 @@ test('Forms worker durably retries callback delivery without re-running complete
   const worker = startFormsWorker({
     queue,
     execute: async () => { executions += 1; return { submission_id: 's1', completed_at: new Date().toISOString() }; },
-    onResult: async () => { settlements += 1; },
-    deliver: async () => { deliveries += 1; if (deliveries === 1) throw new Error('temporary_callback_failure'); },
+    onResult: async (_job, result) => { assert.equal(result.submission_id, 's1'); settlements += 1; },
+    deliver: async () => { assert.ok(settlements >= 1); deliveries += 1;
+      if (deliveries === 1) throw new Error('temporary_callback_failure'); },
     resultStore: pendingStore
   });
   await new Promise((resolve) => setTimeout(resolve, 60));

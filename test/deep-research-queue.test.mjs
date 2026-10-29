@@ -109,6 +109,7 @@ test('failed callbacks reuse the saved screening and make zero additional Brave 
   let screenCalls = 0;
   let braveCalls = 0;
   let deliveries = 0;
+  let finalCaptures = 0;
   const callbackTimestamps = [];
   let releases = 0;
   let controller;
@@ -135,7 +136,12 @@ test('failed callbacks reuse the saved screening and make zero additional Brave 
         return { status: 'completed', summary: { decision_eligible: true } };
       },
       finalize: async ({ response }) => ({ ...response, report: { report_id: 'saved-once' } }),
+      onFinal: async (_job, response) => {
+        assert.equal(response.report.report_id, 'saved-once');
+        finalCaptures += 1;
+      },
       deliver: async (deliveryJob) => {
+        assert.ok(finalCaptures >= 1);
         deliveries += 1;
         callbackTimestamps.push(deliveryJob.callback_completed_at);
         if (deliveries < 3) throw new Error('callback_failed_503');
@@ -146,6 +152,7 @@ test('failed callbacks reuse the saved screening and make zero additional Brave 
   assert.equal(screenCalls, 1);
   assert.equal(braveCalls, 2);
   assert.equal(deliveries, 3);
+  assert.equal(finalCaptures, 3);
   assert.equal(new Set(callbackTimestamps).size, 1);
   assert.equal(releases, 2);
   assert.equal((await resultStore.getDeepResearchUsage({ ownerId: job.owner_id, screeningId: job.screening_id })).providerCalls.brave, 2);

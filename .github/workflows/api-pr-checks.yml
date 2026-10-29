@@ -16,6 +16,7 @@ on:
       - infrastructure/api.bicep
       - infrastructure/api-document-ocr-platform.bicep
       - infrastructure/api-document-ocr-purge-bootstrap.bicep
+      - infrastructure/api-case-manager-platform.bicep
       - .github/workflows/api-pr-checks.yml
 
 permissions:
@@ -31,7 +32,7 @@ jobs:
       - name: Verify JavaScript syntax
         run: |
           node --check server.mjs
-          find lib test -name '*.mjs' -print0 | xargs -0 -n1 node --check
+          find lib test scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check
       - name: Run API contract and queue tests
         run: npm test
       - name: Validate document OCR Bicep
@@ -39,3 +40,4 @@ jobs:
           az bicep build --file infrastructure/api.bicep
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
           az bicep build --file infrastructure/api-document-ocr-purge-bootstrap.bicep
+          az bicep build --file infrastructure/api-case-manager-platform.bicep

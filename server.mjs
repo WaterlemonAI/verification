@@ -1,5 +1,5 @@
 import { createReadStream, readFileSync, existsSync, statSync } from 'node:fs';
-import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { createServer } from 'node:http';
 import { get as httpsGet } from 'node:https';
@@ -9,7 +9,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
 import { createPlatformMailer } from './lib/platform-mail.mjs';
-import { createCustomerUsageStore, moneyMicros, validateUsagePolicy } from './lib/customer-usage.mjs';
+import { createCustomerUsageStore, moneyMicros, validateUsagePolicy, validateCasePolicy } from './lib/customer-usage.mjs';
 import { createInvitation, invitationCustomerId, validInvitation, publicCustomer, INVITATION_HOURS } from './lib/customer-invitation.mjs';
 import { createPasswordResetToken, parsePasswordResetToken, RESET_MINUTES } from './lib/password-reset.mjs';
 import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
@@ -34,14 +34,20 @@ import {
   PORTAL_COOKIE, clearPortalCookie, createPortalAccount, createPortalSession,
   portalCookie, safePortalAccount, verifyPortalPassword, verifyPortalSession
 } from './lib/portal-auth.mjs';
-import { bsaEnabled, bsaMode, bsaCapabilities, createBsaJob, getBsaJob, getBsaResult, getBsaArtifact } from './lib/bsa-store.mjs';
+import { bsaEnabled, bsaMode, bsaCapabilities, createBsaJob, getBsaJob, getBsaResult, getBsaArtifact, presentBsaResult } from './lib/bsa-store.mjs';
 import { DOCUMENT_OCR_BY_PATH } from './lib/document-ocr-contracts.mjs';
 import { createDocumentOcrStore } from './lib/document-ocr-store.mjs';
+import { CASE_OUTCOMES, caseExpiresAt, classifyCaseSubmission } from './lib/case-manager-contract.mjs';
+import { caseOutcome } from './lib/case-manager-outcomes.mjs';
+import { createCaseManagerStore } from './lib/case-manager-store.mjs';
+import { documentOcrArtifactUrl, documentOcrSignedAccess } from './lib/document-ocr-artifact-url.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
 const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 15 * 1024 * 1024);
 const apiHosts = new Set((process.env.API_HOSTS || 'api.ai7uae.com,app.kycprobe.com,localhost,127.0.0.1').split(',').map((v) => v.trim().toLowerCase()));
+const reconciledCaseServices = new Set(['bank-statement-analysis', ...[...DOCUMENT_OCR_BY_PATH.values()].map((item) => item.id)]);
+const caseRouteIsReconciled = (serviceId) => reconciledCaseServices.has(serviceId);
 
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon',
@@ -110,7 +116,7 @@ async function classifyCustomerApi(req, url, store) {
   return null;
 }
 
-function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, transactionId, details, billable) {
+function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, transactionId, details, billable, capture = null) {
   const originalEnd = res.end;
   let called = false;
   res.end = function (...args) {
@@ -121,14 +127,15 @@ function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, trans
       ? usageStore.complete(workspaceId, logKey, status, this.ai7BillingReason || '')
       : usageStore.record(workspaceId, { ...details, transactionId }, status);
     let timer;
-    Promise.race([operation, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('usage_log_timeout')), 5000); timer.unref?.(); })])
+    const completion = capture ? Promise.all([operation, capture(this, args)]) : operation;
+    Promise.race([completion, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('usage_log_timeout')), 5000); timer.unref?.(); })])
       .catch(() => console.warn('customer_usage_completion_failed'))
       .finally(() => { clearTimeout(timer); originalEnd.apply(this, args); });
     return this;
   };
 }
 
-async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, transactionId) {
+async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, caseStore, transactionId) {
   const route = await classifyCustomerApi(req, url, store);
   if (!route) return true;
   const token = bearerToken(req);
@@ -138,12 +145,37 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
   }
   if (!client) return true; // The existing route returns its unchanged 401 body.
   req.ai7Client = client;
+  req.ai7OriginalArtifactOwner = reportOwnerId(token);
   const workspaceId = client.id;
   const details = { transactionId, keyId: client.key_id || '', moduleIds: route.moduleIds, method: req.method || 'GET', path: url.pathname };
   const managed = Boolean((await store.getCustomer?.(workspaceId))?.usagePolicyVersion);
+  const captureRejectedAttempt = async (status, body, policySnapshot = null) => {
+    if (process.env.CASE_MANAGER_ENABLED !== 'true' || !caseStore) return;
+    try {
+      const policy = policySnapshot || await usageStore.casePolicy(workspaceId, managed);
+      if (!policy.enabled) return;
+      const caseRoute = classifyCaseSubmission(route.method, url.pathname,
+        url.pathname.startsWith('/service/')
+          ? { id: route.moduleIds[0], publicPath: url.pathname, method: route.method, enabled: true } : null);
+      if (!caseRoute) return;
+      const acceptedAt = new Date().toISOString();
+      const formHasOcr = caseRoute.service === 'forms' && route.moduleIds.some((id) =>
+        [...DOCUMENT_OCR_BY_PATH.values()].some((definition) => definition.id === id));
+      const intent = await caseStore.createIntent({ workspaceId, serviceId: caseRoute.service, transactionId, acceptedAt,
+        expiresAt: caseExpiresAt(acceptedAt, policy.ttl_days, { ocr: Boolean(caseRoute.ocr), formHasOcr }),
+        policyVersion: policy.version });
+      const mapping = caseOutcome(caseRoute.service, body, { httpStatus: status });
+      await caseStore.captureFinal(workspaceId, intent.id, { response: body, contentType: 'application/json',
+        httpStatus: status, outcome: mapping.outcome, reasonCodes: mapping.reasonCodes });
+    } catch {
+      console.warn('case_manager_rejected_attempt_capture_failed', JSON.stringify({ transaction_id: transactionId }));
+    }
+  };
   if (req.method !== route.method) {
     await usageStore.record(workspaceId, details, 405);
-    json(res, 405, { status: 'Error', error: `Method must be ${route.method}.` }, { allow: route.method });
+    const body = { status: 'Error', error: `Method must be ${route.method}.` };
+    await captureRejectedAttempt(405, body);
+    json(res, 405, body, { allow: route.method });
     return false;
   }
   const formMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
@@ -151,13 +183,17 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
     const prepared = await prepareFormSubmission(req, formMatch[1], store, formsQueue, transactionId);
     if (prepared.status) {
       await usageStore.record(workspaceId, details, prepared.status);
-      json(res, prepared.status, { status: 'Error', error: prepared.error });
+      const body = { status: 'Error', error: prepared.error };
+      await captureRejectedAttempt(prepared.status, body);
+      json(res, prepared.status, body);
       return false;
     }
     const idempotencyKey = String(req.headers['idempotency-key'] || '').trim();
     if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) {
       await usageStore.record(workspaceId, details, 400);
-      json(res, 400, { status: 'Error', error: 'Idempotency-Key must contain 16–128 letters, digits, dots, underscores, colons or hyphens.' });
+      const body = { status: 'Error', error: 'Idempotency-Key must contain 16–128 letters, digits, dots, underscores, colons or hyphens.' };
+      await captureRejectedAttempt(400, body);
+      json(res, 400, body);
       return false;
     }
     const claim = await formSubmissionStore.claim({ workspaceId, form: prepared.form, idempotencyKey,
@@ -165,6 +201,18 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
     if (claim.status !== 'new') {
       const status = claim.status === 'replayed' ? 202 : claim.status === 'conflict' ? 409 : 503;
       await usageStore.record(workspaceId, details, status);
+      if (claim.status === 'replayed' && process.env.CASE_MANAGER_ENABLED === 'true' && caseStore) {
+        const policy = await usageStore.casePolicy(workspaceId, managed);
+        if (policy.enabled) {
+          try {
+            const acceptedAt = new Date().toISOString();
+            await caseStore.createIntent({ workspaceId, serviceId: 'forms', transactionId, acceptedAt,
+              expiresAt: caseExpiresAt(acceptedAt, policy.ttl_days, {
+                formHasOcr: route.moduleIds.some((id) => [...DOCUMENT_OCR_BY_PATH.values()].some((definition) => definition.id === id))
+              }), policyVersion: policy.version, logicalKey: `${url.pathname}:${idempotencyKey}` });
+          } catch { console.warn('case_manager_replay_attempt_failed', JSON.stringify({ transaction_id: transactionId })); }
+        }
+      }
       if (claim.status === 'replayed') json(res, 202, publicFormQueueReceipt(claim.row));
       else json(res, status, { status: 'Error', reasonCode: claim.status === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'SUBMISSION_PENDING',
         error: claim.status === 'conflict' ? 'This Idempotency-Key was used with different input.' : 'Submission admission is pending reconciliation. No additional check was queued or charged.' },
@@ -184,12 +232,85 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
     }
     if (!admission.allowed) {
       if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
-      json(res, admission.statusCode, { status: 'Error', error: admission.reason });
+      const body = { status: 'Error', error: admission.reason };
+      await captureRejectedAttempt(admission.statusCode, body, admission.casePolicy);
+      json(res, admission.statusCode, body);
       return false;
+    }
+    if (process.env.CASE_MANAGER_ENABLED === 'true' && admission.casePolicy?.enabled) {
+      const caseRoute = classifyCaseSubmission(req.method, url.pathname,
+        url.pathname.startsWith('/service/')
+          ? { id: route.moduleIds[0], publicPath: url.pathname, method: route.method, enabled: route.billable } : null);
+      if (caseRoute) {
+        if (!caseStore) {
+          await usageStore.complete(workspaceId, admission.logKey, 503, 'case_manager_unavailable');
+          if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
+          json(res, 503, { status: 'Error', error: 'Case Manager is temporarily unavailable.' });
+          return false;
+        }
+        const acceptedAt = new Date().toISOString();
+        const formHasOcr = caseRoute.service === 'forms' && route.moduleIds.some((id) =>
+          [...DOCUMENT_OCR_BY_PATH.values()].some((definition) => definition.id === id));
+        try {
+          req.ai7Case = await caseStore.createIntent({ workspaceId, serviceId: caseRoute.service,
+            transactionId, acceptedAt, expiresAt: caseExpiresAt(acceptedAt, admission.casePolicy.ttl_days,
+              { ocr: Boolean(caseRoute.ocr), formHasOcr }), policyVersion: admission.casePolicy.version,
+            logicalKey: (reconciledCaseServices.has(caseRoute.service) || caseRoute.service === 'forms')
+              && req.headers['idempotency-key'] ? `${url.pathname}:${String(req.headers['idempotency-key'])}` : '' });
+          if (req.ai7PreparedForm) req.ai7PreparedForm.job.case_id = req.ai7Case.id;
+        } catch {
+          console.warn('case_manager_intent_failed', JSON.stringify({ transaction_id: transactionId }));
+          await usageStore.complete(workspaceId, admission.logKey, 503, 'case_manager_intent_failed');
+          if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
+          json(res, 503, { status: 'Error', error: 'Case Manager is temporarily unavailable.' });
+          return false;
+        }
+      }
     }
     req.ai7Usage = { workspaceId, logKey: admission.logKey };
     if (req.ai7PreparedForm) req.ai7PreparedForm.job.billing.log_key = admission.logKey;
-    completeUsageBeforeResponse(res, usageStore, workspaceId, admission.logKey, transactionId, details, true);
+    const capture = req.ai7Case ? async (response, args) => {
+      const status = response.statusCode;
+      if (req.ai7Case.reused && status < 500) return;
+      const raw = Buffer.isBuffer(args[0]) ? args[0].toString('utf8') : String(args[0] ?? '');
+      const contentType = String(response.getHeader('content-type') || '');
+      let finalResponse = raw;
+      if (contentType.toLowerCase().includes('json')) {
+        try { finalResponse = JSON.parse(raw); } catch { /* preserve non-JSON bytes as text */ }
+      }
+      if (status === 202) {
+        if (caseRouteIsReconciled(req.ai7Case.service_id)) {
+          const sourceId = req.ai7Case.service_id === 'bank-statement-analysis'
+            ? finalResponse?.analysisId : finalResponse?.id;
+          try {
+            await caseStore.linkAsync(workspaceId, req.ai7Case.id, { sourceId,
+              originalOwner: req.ai7Case.service_id === 'bank-statement-analysis'
+                ? req.ai7OriginalArtifactOwner : workspaceId });
+          } catch {
+            await caseStore.markIncomplete(workspaceId, req.ai7Case.id).catch(() => {});
+            console.warn('case_manager_reconcile_link_failed', JSON.stringify({ case_id: req.ai7Case.id }));
+          }
+        }
+        return;
+      }
+      const mapping = caseOutcome(route.moduleIds[0] === 'forms' ? 'forms' : route.moduleIds[0], finalResponse,
+        { httpStatus: status });
+      const reportId = finalResponse?.report?.report_id || String(response.getHeader('x-ai7-report-id') || '');
+      const artifactRefs = (/^[0-9a-f-]{36}$/i.test(reportId) || /^AI7-[A-F0-9]{16}$/.test(reportId))
+        ? [{ type: req.ai7Case.service_id, report_id: reportId }] : [];
+      const originalArtifactOwner = req.ai7Case.service_id === 'entity-search'
+        ? `workspace-${workspaceId}` : req.ai7OriginalArtifactOwner;
+      try {
+        await caseStore.captureFinal(workspaceId, req.ai7Case.id, { response: finalResponse, contentType,
+          httpStatus: status, outcome: mapping.outcome, reasonCodes: mapping.reasonCodes,
+          originalArtifactOwner, artifactRefs });
+      } catch {
+        console.warn('case_manager_capture_failed', JSON.stringify({ transaction_id: transactionId }));
+        await caseStore.markIncomplete(workspaceId, req.ai7Case.id).catch(() =>
+          console.warn('case_manager_incomplete_mark_failed', JSON.stringify({ transaction_id: transactionId })));
+      }
+    } : null;
+    completeUsageBeforeResponse(res, usageStore, workspaceId, admission.logKey, transactionId, details, true, capture);
   } else {
     const profile = await usageStore.account(workspaceId, managed);
     const allowed = profile.allowed_modules;
@@ -466,6 +587,10 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       await validatePublicCallbackUrl(request.callback_url);
       const job = makeDeepResearchJob(request, { owner_id: reportOwnerId(token), request_origin: requestOrigin(req),
         input_payload: input, transaction_id: res.getHeader('x-ai7-transaction-id') });
+      if (req.ai7Case) {
+        job.case_id = req.ai7Case.id;
+        job.case_workspace_id = req.ai7Client.id;
+      }
       await deepResearchQueue.enqueue(job);
       return json(res, 202, {
         screening_id: job.screening_id,
@@ -1299,7 +1424,8 @@ async function currentPortalSession(req, store) {
   }
 }
 
-async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore) {
+async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore,
+  caseStore = null, reportStore = null, documentOcrStore = null) {
   if (req.method === 'GET' && url.pathname === '/portal/api/auth/status') {
     const { account, session } = await currentPortalSession(req, store);
     return json(res, 200, { authenticated: Boolean(session), account: session ? safePortalAccount(account) : null });
@@ -1385,6 +1511,115 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
     return json(res, 200, { signed_out: true }, { 'set-cookie': clearPortalCookie({ secure: secureRequest(req) }) });
   }
 
+  if (url.pathname === '/portal/api/case-manager/settings') {
+    const { account, session } = await currentPortalSession(req, store);
+    if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' }, { 'cache-control': 'no-store' });
+    const globalEnabled = process.env.CASE_MANAGER_ENABLED === 'true';
+    const managed = Boolean((await store.getCustomer?.(account.client_id))?.usagePolicyVersion);
+    if (req.method === 'GET') {
+      const policy = await usageStore.casePolicy(account.client_id, managed);
+      return json(res, 200, { available: globalEnabled, policy }, { 'cache-control': 'no-store' });
+    }
+    if (req.method !== 'PUT') return json(res, 405, { status: 'Error', error: 'Method must be GET or PUT.' }, { allow: 'GET, PUT' });
+    if (!sameOrigin(req) || String(req.headers['x-ai7-csrf'] || '') !== session.csrf) {
+      return json(res, 403, { status: 'Error', error: 'The security token is missing or invalid.' });
+    }
+    if (!globalEnabled || !caseStore) return json(res, 503, { status: 'Error', error: 'Case Manager is not available.' });
+    try {
+      const policy = validateCasePolicy(await readJson(req));
+      const before = await usageStore.casePolicy(account.client_id, managed);
+      const saved = await usageStore.updateCasePolicy(account.client_id, policy, managed);
+      let retirementScheduled = true;
+      if (saved.visible_from_version > before.visible_from_version) {
+        try { await caseStore?.scheduleRetirement(account.client_id, saved.visible_from_version); }
+        catch { retirementScheduled = false; console.warn('case_manager_retirement_schedule_failed'); }
+      }
+      return json(res, 200, { available: true, policy: saved, retirement_scheduled: retirementScheduled }, { 'cache-control': 'no-store' });
+    } catch (error) {
+      const stale = /policy changed/.test(error.message);
+      return json(res, stale ? 409 : 400, { status: 'Error', error: stale ? 'Settings changed. Reload and try again.' : error.message });
+    }
+  }
+
+  if (url.pathname === '/portal/api/cases' || url.pathname.startsWith('/portal/api/cases/')) {
+    if (process.env.CASE_MANAGER_ENABLED !== 'true' || !caseStore) {
+      return json(res, 404, { status: 'Error', error: 'Case Manager is not available.' }, { 'cache-control': 'no-store' });
+    }
+    const { account, session } = await currentPortalSession(req, store);
+    if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' }, { 'cache-control': 'no-store' });
+    if (req.method !== 'GET') return json(res, 405, { status: 'Error', error: 'Method must be GET.' }, { allow: 'GET' });
+    const workspaceId = account.client_id;
+    const policy = await usageStore.casePolicy(workspaceId);
+    if (!policy.enabled) return json(res, 404, { status: 'Error', error: 'Case Manager is not enabled.' }, { 'cache-control': 'no-store' });
+    if (url.pathname === '/portal/api/cases') {
+      const from = url.searchParams.get('from') || new Date(Date.now() - 45 * 86_400_000).toISOString();
+      const to = url.searchParams.get('to') || new Date().toISOString();
+      const serviceId = url.searchParams.get('service') || '';
+      const outcome = url.searchParams.get('outcome') || '';
+      const limit = Number(url.searchParams.get('limit') || 25);
+      const rawCursor = url.searchParams.get('cursor') || '';
+      let cursor = '';
+      try { cursor = rawCursor ? Buffer.from(rawCursor, 'base64url').toString('utf8') : ''; }
+      catch { return json(res, 400, { status: 'Error', error: 'Invalid cursor.' }); }
+      if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(from)
+        || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(to)
+        || !Number.isFinite(Date.parse(from)) || !Number.isFinite(Date.parse(to)) || Date.parse(from) > Date.parse(to)
+        || Date.parse(to) - Date.parse(from) > 45 * 86_400_000 || !Number.isInteger(limit) || limit < 1 || limit > 100
+        || (serviceId && !/^[a-z0-9-]{1,80}$/.test(serviceId))
+        || (outcome && !CASE_OUTCOMES.includes(outcome)) || cursor.length > 256) {
+        return json(res, 400, { status: 'Error', error: 'Invalid case filters.' });
+      }
+      const page = await caseStore.listCases(workspaceId, { from, to, serviceId, outcome, limit, cursor,
+        activePolicyVersion: policy.visible_from_version });
+      return json(res, 200, { cases: page.cases,
+        next_cursor: page.next_cursor ? Buffer.from(page.next_cursor).toString('base64url') : null }, { 'cache-control': 'no-store' });
+    }
+    const match = /^\/portal\/api\/cases\/([0-9a-f-]{36})(?:\/(json|artifacts\/([0-9]{1,2})))?$/.exec(url.pathname);
+    if (!match) return json(res, 404, { status: 'Error', error: 'Case was not found.' });
+    const record = await caseStore.getCase(workspaceId, match[1], { activePolicyVersion: policy.visible_from_version });
+    if (!record) return json(res, 404, { status: 'Error', error: 'Case was not found.' }, { 'cache-control': 'no-store' });
+    if (match[2] === 'json') {
+      if (!record.payload) return json(res, 202, { status: 'Pending', error: 'The final result is not yet available.' });
+      const body = record.payload.final_response;
+      if (typeof body === 'string') {
+        const bytes = Buffer.from(body);
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'content-length': bytes.length,
+          'cache-control': 'private, no-store' });
+        return res.end(bytes);
+      }
+      return json(res, 200, body, { 'cache-control': 'private, no-store' });
+    }
+    if (match[3] != null) {
+      const item = record.payload?.artifact_refs?.[Number(match[3])];
+      if (!item || !record.payload.original_artifact_owner) {
+        return json(res, 404, { status: 'Error', error: 'Artifact was not found.' });
+      }
+      let bytes = null;
+      let mime = 'application/octet-stream';
+      if (item.report_id && (/^[0-9a-f-]{36}$/i.test(item.report_id) || /^AI7-[A-F0-9]{16}$/.test(item.report_id))) {
+        bytes = (await reportStore.get({ ownerId: record.payload.original_artifact_owner, reportId: item.report_id }))?.bytes || null;
+        mime = 'application/pdf';
+      } else if (record.service_id === 'bank-statement-analysis' && record.payload.source_id
+        && ['audit.pdf', 'analysis.xlsx'].includes(item.name)) {
+        bytes = await getBsaArtifact(record.payload.source_id, record.payload.original_artifact_owner, item.name);
+        mime = item.name.endsWith('.pdf') ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      } else if (reconciledCaseServices.has(record.service_id) && record.payload.source_id
+        && ['photo', 'signature'].includes(item.name)) {
+        bytes = await documentOcrStore.getArtifact(workspaceId, record.payload.source_id, item.name);
+        mime = 'image/png';
+      }
+      if (!bytes) return json(res, 404, { status: 'Error', error: 'Artifact was not found.' });
+      res.writeHead(200, { 'content-type': mime, 'content-length': bytes.length,
+        'content-disposition': `attachment; filename="case-artifact-${match[3]}${mime === 'application/pdf' ? '.pdf' : mime === 'image/png' ? '.png' : '.xlsx'}"`,
+        'cache-control': 'private, no-store' });
+      return res.end(bytes);
+    }
+    const { payload, ...publicRecord } = record;
+    return json(res, 200, { case: publicRecord, response: payload?.final_response ?? null,
+      artifacts: payload?.artifact_refs?.map((item, index) => ({ index, type: item.type,
+        name: item.name || (item.report_id ? 'PDF report' : 'Artifact') })) || [] }, { 'cache-control': 'private, no-store' });
+  }
+
   if (url.pathname === '/portal/api/keys' || /^\/portal\/api\/keys\/[a-f0-9]{16}\/(rotate|revoke)$/.test(url.pathname)) {
     const { account, session } = await currentPortalSession(req, store);
     if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
@@ -1457,7 +1692,7 @@ function portalPagePath(pathname) {
 
 function protectedPortalPath(pathname) {
   const page = portalPagePath(pathname);
-  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account'].includes(page)
+  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account', '/cases'].includes(page)
     || /^\/forms\/[a-z0-9-]+$/.test(page)
     || /^\/document-extraction\/[a-z0-9-]+$/.test(page);
 }
@@ -1839,9 +2074,7 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
     if (!record?.job) return json(res, 404, { status: 'Error', error: 'Analysis was not found.' });
     if (match[2]) {
       if (!record.result) return json(res, 202, { analysisId: match[1], status: record.job.status });
-      return json(res, 200, { ...record.result, callback: record.job.callback || { requested: false, status: 'not_requested' },
-        artifacts: (record.result.artifacts || []).map((item) => ({ ...item,
-          downloadUrl: `${rootPath}/${match[1]}/artifacts/${item.filename}` })) });
+      return json(res, 200, presentBsaResult(record, match[1], rootPath));
     }
     return json(res, 200, { analysisId: match[1], status: record.job.status, receivedAt: record.job.receivedAt,
       completedAt: record.job.completedAt || null, reasonCodes: record.job.reasonCodes || [],
@@ -1964,29 +2197,6 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
   }
 }
 
-function documentOcrArtifactSignature(workspaceId, jobId, name, expires) {
-  const key = process.env.DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX;
-  if (!/^[a-f0-9]{64}$/i.test(key || '')) throw new Error('document_ocr_download_signing_unavailable');
-  return createHmac('sha256', Buffer.from(key, 'hex')).update(`${workspaceId}\n${jobId}\n${name}\n${expires}`).digest('hex');
-}
-
-function documentOcrArtifactUrl(definition, workspaceId, jobId, name) {
-  const expires = Math.floor(Date.now() / 1000) + 300;
-  const signature = documentOcrArtifactSignature(workspaceId, jobId, name, expires);
-  const origin = process.env.API_PUBLIC_BASE_URL || 'https://api.ai7uae.com';
-  return `${origin}${definition.publicPath}/jobs/${jobId}/artifacts/${name}?workspace_id=${encodeURIComponent(workspaceId)}&expires=${expires}&signature=${signature}`;
-}
-
-function documentOcrSignedAccess(url, jobId, name) {
-  const workspaceId = url.searchParams.get('workspace_id') || '';
-  const expires = Number(url.searchParams.get('expires'));
-  const signature = url.searchParams.get('signature') || '';
-  if (!/^[a-f0-9]{64}$/i.test(signature) || !Number.isSafeInteger(expires) || expires < Math.floor(Date.now() / 1000)
-    || expires > Math.floor(Date.now() / 1000) + 300 || !/^[A-Za-z0-9._:-]{8,128}$/.test(workspaceId)) return null;
-  const expected = documentOcrArtifactSignature(workspaceId, jobId, name, expires);
-  return timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex')) ? workspaceId : null;
-}
-
 async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
   const definition = DOCUMENT_OCR_BY_PATH.get(url.pathname);
   const jobMatch = /^\/service\/([a-z_]+)\/jobs\/(ocr_[0-9a-f-]{36})(?:\/(result|artifacts\/(photo|signature)))?$/.exec(url.pathname);
@@ -2091,6 +2301,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   reportStore = createAdverseMediaReportStore(), jsonStore = createAdverseMediaJsonStore(),
   documentOcrStore = createDocumentOcrStore(),
   usageStore = createCustomerUsageStore(),
+  caseStore = createCaseManagerStore(),
   merchantScreener = configuredMerchantScreener, requestCapacity = createRequestCapacity(),
   startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
@@ -2108,7 +2319,20 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         aiApiKey, fetchImpl: costGuard.fetch, reportStore, jsonStore, reportId: job.report_id,
         inputPayload: job.input_payload || job.request, transactionId: job.transaction_id || null
       }),
-      fetchImpl
+      fetchImpl,
+      onFinal: async (job, response) => {
+        if (process.env.CASE_MANAGER_ENABLED !== 'true' || !caseStore || !job.case_id || !job.case_workspace_id) return;
+        const mapping = caseOutcome('adverse-media', response, { httpStatus: 200 });
+        try {
+          await caseStore.captureFinal(job.case_workspace_id, job.case_id, { response, contentType: 'application/json',
+            httpStatus: 200, outcome: mapping.outcome, reasonCodes: mapping.reasonCodes,
+            originalArtifactOwner: job.owner_id,
+            artifactRefs: response.report?.report_id ? [{ type: 'adverse_media', report_id: response.report.report_id }] : [] });
+        } catch {
+          await caseStore.markIncomplete(job.case_workspace_id, job.case_id).catch(() => {});
+          console.warn('case_manager_capture_failed', JSON.stringify({ case_id: job.case_id }));
+        }
+      }
     });
   }
   if (startWorker && formsQueue) {
@@ -2119,6 +2343,18 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         if (job.idempotency) await formSubmissionStore.accept(job.idempotency);
         if (job.billing?.workspace_id && job.billing?.log_key)
           await usageStore.settleFormResult(job.billing.workspace_id, job.billing.log_key, result.services);
+        if (process.env.CASE_MANAGER_ENABLED === 'true' && caseStore && job.case_id && job.billing?.workspace_id) {
+          const mapping = caseOutcome('forms', result, { httpStatus: 200 });
+          try {
+            await caseStore.captureFinal(job.billing.workspace_id, job.case_id, { response: result,
+              contentType: 'application/json', httpStatus: 200, outcome: mapping.outcome, reasonCodes: mapping.reasonCodes,
+              originalArtifactOwner: job.owner_id,
+              artifactRefs: result.report?.report_id ? [{ type: 'forms', report_id: result.report.report_id }] : [] });
+          } catch {
+            await caseStore.markIncomplete(job.billing.workspace_id, job.case_id).catch(() => {});
+            console.warn('case_manager_capture_failed', JSON.stringify({ case_id: job.case_id }));
+          }
+        }
       },
       resultStore: reportStore
     });
@@ -2132,7 +2368,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     if (transactionId) res.setHeader('x-ai7-transaction-id', transactionId);
 
     try {
-      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, transactionId))) return;
+      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, caseStore, transactionId))) return;
       if (req.ai7CapacityLane) {
         const queuedAt = Date.now();
         const cancelled = new AbortController();
@@ -2219,7 +2455,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           cost_guardrail_usd: adverseMediaConfig.costGuardrailUsd
         }, { 'cache-control': 'public, max-age=3600' });
       }
-      if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle, mailer, usageStore);
+      if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle,
+        mailer, usageStore, caseStore, reportStore, documentOcrStore);
       if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore);
       if (url.pathname === '/admin/bsa-synthetic-combined.pdf') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
@@ -2292,6 +2529,10 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       }
       if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
       if (directory.endsWith('api-site') && (url.pathname === '/account' || url.pathname === '/account/')) return serveStatic(res, directory, '/account.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/cases' || url.pathname === '/cases/')) {
+        if (process.env.CASE_MANAGER_ENABLED !== 'true') return json(res, 404, { status: 'Error', error: 'Page was not found.' });
+        return serveStatic(res, directory, '/cases.html');
+      }
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
       if (directory.endsWith('api-site') && (url.pathname === '/merchant-screening' || url.pathname === '/merchant-screening/')) return serveStatic(res, directory, '/merchant-screening.html');

@@ -6,8 +6,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/api.css?v=12" />
-  <script src="/portal-auth.js?v=4" defer></script><script src="/account.js?v=3" defer></script>
+  <link rel="stylesheet" href="/api.css?v=13" />
+  <script src="/portal-auth.js?v=5" defer></script><script src="/account.js?v=4" defer></script>
 </head>
 <body>
   <div class="utility-bar"><span>KYCProbe Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
@@ -15,6 +15,14 @@
   <main class="account-main">
     <section class="account-hero"><p class="eyebrow">WORKSPACE ACCESS</p><h1>Account <em>settings.</em></h1><p>Manage API credentials for your workspace. Every key works across the APIs enabled for your account.</p><div id="account-identity"></div></section>
     <section class="account-content">
+      <section id="case-settings-section" class="case-settings" hidden>
+        <div class="account-section-head"><div><p class="label">OPTIONAL CASE HISTORY</p><h2>Case Manager</h2><p>Save future verification results for a limited time in this workspace.</p></div><a href="/cases">Open cases</a></div>
+        <form id="case-settings-form"><label class="case-toggle"><input id="case-enabled" type="checkbox" /> Enable Case Manager for new checks</label>
+          <label>Keep Case Manager copies for <input id="case-ttl" type="number" min="1" max="45" step="1" required value="30" /> days</label>
+          <button type="submit">Save Case Manager settings</button></form>
+        <p id="case-settings-message" role="status"></p>
+        <p class="case-settings-note">OCR and Forms containing OCR expire after at most 30 days. Disabling retires existing case copies; enabling again does not restore them. Adverse-media JSON, OCR and BSA source data, and permanent or public PDFs have separate retention. Case Manager expiry does not revoke public PDF links.</p>
+      </section>
       <div class="account-section-head"><div><p class="label">API CREDENTIALS</p><h2>Your API keys</h2><p>Keys are displayed only when created or rotated. Store the full value in your own secret manager.</p></div></div>
       <div id="new-key-panel" class="account-key-reveal" hidden><strong>New key — copy now</strong><code id="new-key-value"></code><button id="copy-new-key" type="button">Copy key</button><p>The old key stops working immediately after rotation.</p></div>
       <form id="create-key-form" class="account-create-form"><label>Key label<input id="key-label" maxlength="60" placeholder="Production integration" required /></label><button type="submit">Create API key</button></form>
