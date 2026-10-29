@@ -73,6 +73,9 @@ try {
     await page.locator('.case-meta').getByText(transactionId).waitFor();
     await page.locator('.case-result').getByText('<img src=x onerror=window.__caseXss=1>').waitFor();
     await page.locator('.case-summary').getByText('Review required').waitFor();
+    if (viewport.width < 761) {
+      await page.waitForFunction(() => document.querySelector('#case-detail').getBoundingClientRect().top <= 80);
+    }
     await page.getByRole('button', { name: 'Final response JSON' }).click();
     await page.locator('.case-json').waitFor();
     const result = await page.evaluate(() => ({ viewport: innerWidth,
@@ -104,6 +107,23 @@ try {
     results.push(result);
     await context.close();
   }
+  const dateContext = await browser.newContext({ timezoneId: 'Asia/Dubai' });
+  await dateContext.addCookies([{ name: PORTAL_COOKIE,
+    value: encodeURIComponent(createPortalSession(account, signingKey).token), url: base }]);
+  const datePage = await dateContext.newPage();
+  await datePage.clock.install({ time: new Date('2026-10-29T22:15:00.000Z') });
+  await datePage.goto(`${base}/cases`);
+  await datePage.locator('#case-to').waitFor({ state: 'visible' });
+  if (await datePage.locator('#case-to').inputValue() !== '2026-10-30') {
+    throw new Error('Case Manager default date is not the viewer\'s local date');
+  }
+  const filterRequest = datePage.waitForRequest((request) => request.url().includes('/portal/api/cases?'));
+  await datePage.getByRole('button', { name: 'Apply filters' }).click();
+  const query = new URL((await filterRequest).url()).searchParams;
+  if (query.get('to') !== '2026-10-30T19:59:59.999Z') {
+    throw new Error(`Case Manager local end-of-day filter is wrong: ${query.get('to')}`);
+  }
+  await dateContext.close();
   console.log(JSON.stringify(results, null, 2));
 } finally {
   await browser.close();

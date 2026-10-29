@@ -125,8 +125,8 @@
     const from = $('case-from').value;
     const through = $('case-to').value;
     const transactionId = $('case-transaction').value.trim();
-    if (!transactionId && from) query.set('from', `${from}T00:00:00.000Z`);
-    if (!transactionId && through) query.set('to', `${through}T23:59:59.999Z`);
+    if (!transactionId && from) query.set('from', new Date(`${from}T00:00:00.000`).toISOString());
+    if (!transactionId && through) query.set('to', new Date(`${through}T23:59:59.999`).toISOString());
     if ($('case-service').value.trim()) query.set('service', $('case-service').value.trim());
     if (transactionId) query.set('transaction_id', transactionId);
     if ($('case-outcome').value) query.set('outcome', $('case-outcome').value);
@@ -207,6 +207,7 @@
         ? result.response : JSON.stringify(result.response, null, 2));
         copy.textContent = 'Copied'; });
       tabs.append(readable, raw, copy); panel.append(tabs, view); showReadable();
+      if (window.matchMedia('(max-width: 760px)').matches) panel.scrollIntoView({ block: 'start' });
     } catch (error) { panel.replaceChildren(text('p', error.message)); }
   }
 
@@ -220,8 +221,11 @@
         return;
       }
       const now = new Date();
-      $('case-to').value = now.toISOString().slice(0, 10);
-      $('case-from').value = new Date(now.getTime() - 44 * 86_400_000).toISOString().slice(0, 10);
+      const localDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const firstDay = new Date(now);
+      firstDay.setDate(firstDay.getDate() - 44);
+      $('case-to').value = localDate(now);
+      $('case-from').value = localDate(firstDay);
       $('cases-filters').hidden = false;
       await loadCases();
     } catch { location.replace('/login?next=%2Fcases'); }
