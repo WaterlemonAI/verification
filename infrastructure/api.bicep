@@ -377,12 +377,15 @@ resource caseManagerPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (caseManagerMa
           name: 'case-manager-purge'
           image: image
           command: [ 'node', 'scripts/purge-cases.mjs' ]
-          env: [
+          env: concat([
             { name: 'CASE_MANAGER_ENABLED', value: 'true' }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
             { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
-          ]
+          ], parallelDeployment && parallelCaseManagerQa ? [
+            { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
+            { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }
+          ] : [])
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
         }
       ]
@@ -436,6 +439,11 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManag
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
             { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
+          ] : [], parallelDeployment && parallelCaseManagerQa ? [
+            { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
+            { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }
+            { name: 'CASE_MANAGER_RECONCILE_QUEUE_NAME', value: 'case-manager-qa-reconcile' }
+            { name: 'CASE_MANAGER_DEAD_LETTER_QUEUE_NAME', value: 'case-manager-qa-dead-letter' }
           ] : [])
           resources: { cpu: json('0.5'), memory: '1Gi' }
         }
@@ -630,6 +638,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_DATA_KEY_V1_HEX', secretRef: 'case-data-key-v1' }
             { name: 'CASE_MANAGER_ACTIVE_KEY_VERSION', value: '1' }
+          ] : [], parallelDeployment && parallelCaseManagerQa ? [
+            { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
+            { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }
+            { name: 'CASE_MANAGER_RECONCILE_QUEUE_NAME', value: 'case-manager-qa-reconcile' }
           ] : [])
           resources: {
             cpu: json(enableDocumentOcr ? '0.5' : '0.25')

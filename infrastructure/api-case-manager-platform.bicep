@@ -97,6 +97,12 @@ resource probeContainer 'Microsoft.Storage/storageAccounts/blobServices/containe
   properties: { publicAccess: 'None' }
 }
 
+resource qaContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'case-manager-qa-private'
+  properties: { publicAccess: 'None' }
+}
+
 resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
   parent: storage
   name: 'default'
@@ -114,6 +120,15 @@ resource probeQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023
   name: 'case-manager-probe'
 }
 
+resource qaReconcileQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queueService
+  name: 'case-manager-qa-reconcile'
+}
+resource qaDeadLetters 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queueService
+  name: 'case-manager-qa-dead-letter'
+}
+
 resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2023-05-01' = {
   parent: storage
   name: 'default'
@@ -125,6 +140,11 @@ resource metadata 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-0
 resource probeTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
   parent: tableService
   name: 'CaseManagerProbe'
+}
+
+resource qaMetadata 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  parent: tableService
+  name: 'CaseManagerQaMetadata'
 }
 
 resource apiBlobAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {

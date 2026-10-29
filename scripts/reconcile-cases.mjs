@@ -117,8 +117,8 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   const queueUrl = process.env.CASE_MANAGER_QUEUE_URL;
   if (!queueUrl) throw new Error('case_manager_queue_unavailable');
   const credential = new ContainerAppsManagedIdentityCredential();
-  const queue = new QueueClient(`${queueUrl.replace(/\/$/, '')}/case-manager-reconcile`, credential);
-  const deadLetterQueue = new QueueClient(`${queueUrl.replace(/\/$/, '')}/case-manager-dead-letter`, credential);
+  const queue = new QueueClient(`${queueUrl.replace(/\/$/, '')}/${process.env.CASE_MANAGER_RECONCILE_QUEUE_NAME || 'case-manager-reconcile'}`, credential);
+  const deadLetterQueue = new QueueClient(`${queueUrl.replace(/\/$/, '')}/${process.env.CASE_MANAGER_DEAD_LETTER_QUEUE_NAME || 'case-manager-dead-letter'}`, credential);
   const counts = await drainCaseReconciliation({ queue, deadLetterQueue,
     caseStore: createCaseManagerStore(), usageStore: createCustomerUsageStore(),
     documentOcrStore: createDocumentOcrStore() });

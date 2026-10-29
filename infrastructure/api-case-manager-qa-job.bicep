@@ -73,6 +73,10 @@ resource qaJob 'Microsoft.App/jobs@2024-03-01' = {
             { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
+            { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }
+            { name: 'CASE_MANAGER_RECONCILE_QUEUE_NAME', value: 'case-manager-qa-reconcile' }
+            { name: 'CASE_MANAGER_DEAD_LETTER_QUEUE_NAME', value: 'case-manager-qa-dead-letter' }
             { name: 'CASE_MANAGER_DATA_KEY_V1_HEX', secretRef: 'case-data-key-v1' }
             { name: 'CASE_MANAGER_ACTIVE_KEY_VERSION', value: '1' }
           ]

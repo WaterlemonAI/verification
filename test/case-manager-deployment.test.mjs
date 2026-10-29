@@ -51,4 +51,13 @@ test('parallel VNet preview creates new app names with shared queue consumers di
   assert.match(api, /var caseManagerRuntimeEnabled = \(!parallelDeployment && enableCaseManager\) \|\| \(parallelDeployment && parallelCaseManagerQa\)/);
   assert.match(api, /external: !parallelDeployment/);
   assert.match(api, /parallelDeployment \? \[\] : \[\s*\{ name: 'ADVERSE_MEDIA_QUEUE_URL'/);
+  const platform = readFileSync(new URL('../infrastructure/api-case-manager-platform.bicep', import.meta.url), 'utf8');
+  const qaJob = readFileSync(new URL('../infrastructure/api-case-manager-qa-job.bicep', import.meta.url), 'utf8');
+  for (const name of ['CaseManagerQaMetadata', 'case-manager-qa-private', 'case-manager-qa-reconcile']) {
+    assert.ok(api.includes(name));
+    assert.ok(platform.includes(name));
+    assert.ok(qaJob.includes(name));
+  }
+  assert.match(qaJob, /triggerType: 'Manual'/);
+  assert.match(qaJob, /name: 'NODE_ENV', value: 'test'/);
 });
