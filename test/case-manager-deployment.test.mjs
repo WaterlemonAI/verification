@@ -46,7 +46,9 @@ test('parallel VNet preview creates new app names with shared queue consumers di
   assert.match(workflow, /Block parallel mode on the existing live environment/);
   assert.match(workflow, /test -z "\$\{API_CERTIFICATE_RESOURCE_ID\}"/);
   assert.match(api, /resource bankStatementWorker [^\n]+ = if \(!parallelDeployment\)/);
-  assert.match(api, /resource caseManagerReconcileJob [^\n]+ = if \(!parallelDeployment/);
+  assert.match(api, /param parallelCaseManagerQa bool = false/);
+  assert.match(api, /resource caseManagerReconcileJob [^\n]+ = if \(caseManagerMaintenanceEnabled\)/);
+  assert.match(api, /var caseManagerRuntimeEnabled = \(!parallelDeployment && enableCaseManager\) \|\| \(parallelDeployment && parallelCaseManagerQa\)/);
   assert.match(api, /external: !parallelDeployment/);
   assert.match(api, /parallelDeployment \? \[\] : \[\s*\{ name: 'ADVERSE_MEDIA_QUEUE_URL'/);
 });

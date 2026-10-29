@@ -60,6 +60,9 @@ param maintainCaseManagerData bool = false
 @description('Parallel VNet preflight: new API and screenshot app only, internal ingress, all shared queue consumers and Case Manager capture off.')
 param parallelDeployment bool = false
 
+@description('Enable synthetic-only Case Manager capture and its dedicated maintenance jobs on the internal parallel API after private-path proof. Shared source queue consumers stay off.')
+param parallelCaseManagerQa bool = false
+
 @description('Dedicated S0 Document Intelligence account for the eight extraction APIs.')
 param documentOcrEndpoint string = 'https://doc-ai7uae-ocr-uaen-001.cognitiveservices.azure.com/'
 
@@ -139,6 +142,8 @@ resource formsDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/q
 }
 // Cisco Talos ClamAV 1.4.6 LTS, mirrored into the private ACR and pinned to the amd64 manifest.
 var bankStatementClamavImage = '${acrLoginServer}/ai7uae-clamav@sha256:6ba4e78b29853b2fc7e3c111389596e2cad5ec4ed5f0fd2cb663d29ab6b0e6a3'
+var caseManagerRuntimeEnabled = (!parallelDeployment && enableCaseManager) || (parallelDeployment && parallelCaseManagerQa)
+var caseManagerMaintenanceEnabled = (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) || (parallelDeployment && parallelCaseManagerQa)
 var customDomains = parallelDeployment ? [] : concat(
   empty(apiCertificateId) ? [] : [
     {
@@ -353,7 +358,7 @@ resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDepl
   }
 }
 
-resource caseManagerPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) {
+resource caseManagerPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (caseManagerMaintenanceEnabled) {
   name: caseManagerPurgeJobName
   location: location
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
@@ -385,7 +390,7 @@ resource caseManagerPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDepl
   }
 }
 
-resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) {
+resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManagerMaintenanceEnabled) {
   name: caseManagerReconcileJobName
   location: location
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
@@ -552,7 +557,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       ], enableDocumentOcr ? [
         { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: runtimeIdentityResourceId }
         { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
-      ] : [], enableCaseManager ? [
+      ] : [], caseManagerRuntimeEnabled ? [
         { name: 'case-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/case-manager-data-key-v1', identity: runtimeIdentityResourceId }
       ] : [])
       ingress: {
@@ -609,7 +614,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
             { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: !parallelDeployment && enableDocumentOcr ? '1' : '0' }
-            { name: 'CASE_MANAGER_ENABLED', value: !parallelDeployment && enableCaseManager ? 'true' : 'false' }
+            { name: 'CASE_MANAGER_ENABLED', value: caseManagerRuntimeEnabled ? 'true' : 'false' }
           ], parallelDeployment ? [] : [
             { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
             { name: 'ADVERSE_MEDIA_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchDeadLetterQueueName}' }
@@ -619,7 +624,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
-          ] : [], !parallelDeployment && enableCaseManager ? [
+          ] : [], caseManagerRuntimeEnabled ? [
             { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }

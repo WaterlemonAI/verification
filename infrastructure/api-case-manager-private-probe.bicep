@@ -25,7 +25,7 @@ param caseManagerStorageName string = 'stai7uaecasesuaen001'
 param privateEndpointCidr string = '10.244.2.0/27'
 
 resource privateProbe 'Microsoft.App/jobs@2024-03-01' = {
-  name: 'caj-ai7uae-case-manager-private-probe'
+  name: 'caj-ai7uae-cm-private-probe'
   location: location
   identity: {
     type: 'UserAssigned'

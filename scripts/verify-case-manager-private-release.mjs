@@ -39,7 +39,7 @@ export function verifyPrivateReleaseSnapshot({ environment, storage, endpoints, 
 
 export function verifyPrivateReleaseFromAzure({ resourceGroup, environmentId, endpointSubnetId,
   runtimeIdentityResourceId, storageName = 'stai7uaecasesuaen001',
-  probeJobName = 'caj-ai7uae-case-manager-private-probe', runAz = (args) =>
+  probeJobName = 'caj-ai7uae-cm-private-probe', runAz = (args) =>
     JSON.parse(execFileSync('az', [...args, '-o', 'json'], { encoding: 'utf8' })) } = {}) {
   if (!resourceGroup || !environmentId || !endpointSubnetId || !runtimeIdentityResourceId) {
     throw new Error('case_manager_private_configuration_missing');
