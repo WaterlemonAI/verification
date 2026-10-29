@@ -138,6 +138,14 @@ test('one-time customer invitation creates a portal account and initial workspac
     cookie: loginCookie, 'content-type': 'application/json', 'x-ai7-csrf': loginBody.csrf_token
   }, body: JSON.stringify({ version: 0, enabled: true, ttl_days: 46 }) });
   assert.equal(invalidCaseTtl.status, 400);
+  const prepareRetirement = caseStore.prepareRetirement.bind(caseStore);
+  caseStore.prepareRetirement = async () => { throw new Error('synthetic_table_unavailable'); };
+  const unavailableCaseSettings = await fetch(caseSettingsUrl, { method: 'PUT', headers: {
+    cookie: loginCookie, 'content-type': 'application/json', 'x-ai7-csrf': loginBody.csrf_token
+  }, body: JSON.stringify({ version: 0, enabled: true, ttl_days: 30 }) });
+  assert.equal(unavailableCaseSettings.status, 503);
+  assert.equal((await usageStore.casePolicy(customerId)).version, 0);
+  caseStore.prepareRetirement = prepareRetirement;
   const savedCaseSettings = await fetch(caseSettingsUrl, { method: 'PUT', headers: {
     cookie: loginCookie, 'content-type': 'application/json', 'x-ai7-csrf': loginBody.csrf_token
   }, body: JSON.stringify({ version: 0, enabled: true, ttl_days: 30 }) });
@@ -156,7 +164,7 @@ test('one-time customer invitation creates a portal account and initial workspac
   assert.equal((await caseStore.getCase(customerId, intent.id, { activePolicyVersion: 2 })), null);
   assert.equal(caseStore.rows.has(intent.id), true);
   const retirement = await recoverCaseRetirements({ usageStore, caseStore });
-  assert.equal(retirement.completed, 1);
+  assert.equal(retirement.completed, 2);
   assert.equal(caseStore.rows.has(intent.id), false);
   assert.equal(caseStore.payloads.has(intent.id), false);
   const staleCaseSettings = await fetch(caseSettingsUrl, { method: 'PUT', headers: {

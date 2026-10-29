@@ -13,6 +13,7 @@ async function fixture() {
     acceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
   await caseStore.captureFinal(workspaceId, intent.id, { response: { synthetic: true },
     contentType: 'application/json', httpStatus: 200, outcome: 'unclassified' });
+  await caseStore.prepareRetirement(workspaceId, 2);
   await usageStore.updateCasePolicy(workspaceId, validateCasePolicy({ version: 1, enabled: false }));
   return { usageStore, caseStore, workspaceId, intent };
 }
@@ -27,7 +28,7 @@ test('durable policy floor recovers physical deletion when the queue is unavaila
   assert.equal(counts.retirement_recovered, 1);
   assert.equal(caseStore.rows.has(intent.id), false);
   assert.equal(caseStore.payloads.has(intent.id), false);
-  assert.deepEqual(await usageStore.pendingCaseRetirements(), []);
+  assert.deepEqual(await caseStore.pendingRetirements(), []);
   assert.equal((await usageStore.casePolicy(workspaceId)).enabled, false);
 });
 
@@ -37,7 +38,9 @@ test('retirement dead letter retains the minimal identifiers needed for replay',
   caseStore.retireWorkspaceCases = async () => { throw new Error('synthetic_storage_outage'); };
   const deadLetters = [];
   const message = { version: 1, kind: 'retire', workspaceId, beforeVersion: 2, cursor: 'case-previous', attempt: 11 };
-  const queue = { async receiveMessages() { return { receivedMessageItems: [{ messageId: 'm', popReceipt: 'p',
+  let delivered = false;
+  const queue = { async receiveMessages() { if (delivered) return { receivedMessageItems: [] }; delivered = true;
+    return { receivedMessageItems: [{ messageId: 'm', popReceipt: 'p',
     messageText: Buffer.from(JSON.stringify(message)).toString('base64') }] }; },
   async deleteMessage() {} };
   const counts = await drainCaseReconciliation({ usageStore, caseStore, queue,
@@ -48,6 +51,8 @@ test('retirement dead letter retains the minimal identifiers needed for replay',
     cursor: 'case-previous', attempt: 12, reason: 'retirement_exhausted' });
   assert.equal(caseStore.rows.has(intent.id), true);
   caseStore.retireWorkspaceCases = originalRetire;
+  const [deferred] = caseStore.retirementTasks.values();
+  await caseStore.advanceRetirementTask(deferred, { done: false, cursor: deferred.cursor }, { delayMs: 0 });
   const recovered = await drainCaseReconciliation({ usageStore, caseStore,
     queue: { async receiveMessages() { return { receivedMessageItems: [] }; } },
     deadLetterQueue: { async sendMessage() {} }, documentOcrStore: null });

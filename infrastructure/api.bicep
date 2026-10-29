@@ -744,6 +744,7 @@ var caseManagerAlertSignals = [
   { name: 'expiry', signal: 'case_manager_expiry_backlog' }
   { name: 'deadletters', signal: 'case_manager_dead_letters' }
   { name: 'retirement', signal: 'case_manager_retirement_schedule_failed' }
+  { name: 'retirement-task', signal: 'case_manager_retirement_task_failed' }
 ]
 
 resource caseManagerAlerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert in caseManagerAlertSignals: if (enableCaseManager || maintainCaseManagerData) {

@@ -49,18 +49,17 @@ test('Azure policy update uses the account ETag and rejects stale versions', asy
     { version: 1, visible_from_version: 1, enabled: true, ttl_days: 1 });
   await assert.rejects(usage.updateCasePolicy('workspace-a', validateCasePolicy({ version: 0, enabled: false })), /changed/);
   assert.equal((await usage.casePolicy('workspace-a')).ttl_days, 1);
-  assert.deepEqual(await usage.pendingCaseRetirements(), [{ workspaceId: 'workspace-a', beforeVersion: 1, cursor: '' }]);
-  assert.equal(await usage.recordCaseRetirementProgress('workspace-a', 1, { done: true }), true);
-  assert.deepEqual(await usage.pendingCaseRetirements(), []);
   await usage.updateCasePolicy('workspace-a', validateCasePolicy({ version: 1, enabled: false }));
-  assert.deepEqual(await usage.pendingCaseRetirements(), [{ workspaceId: 'workspace-a', beforeVersion: 2, cursor: '' }]);
+  assert.deepEqual(await usage.casePolicy('workspace-a'),
+    { version: 2, visible_from_version: 2, enabled: false, ttl_days: 1 });
 });
 
-test('a newer visibility floor resets retirement progress and rejects stale completion', async () => {
+test('a newer visibility floor cannot be lowered by re-enablement', async () => {
   const usage = new MemoryCustomerUsageStore();
   await usage.updateCasePolicy('workspace-a', validateCasePolicy({ version: 0, enabled: true, ttl_days: 45 }));
-  assert.equal(await usage.recordCaseRetirementProgress('workspace-a', 1, { done: false, cursor: 'case-900' }), true);
   await usage.updateCasePolicy('workspace-a', validateCasePolicy({ version: 1, enabled: true, ttl_days: 30 }));
-  assert.equal(await usage.recordCaseRetirementProgress('workspace-a', 1, { done: true }), false);
-  assert.deepEqual(await usage.pendingCaseRetirements(), [{ workspaceId: 'workspace-a', beforeVersion: 2, cursor: '' }]);
+  await usage.updateCasePolicy('workspace-a', validateCasePolicy({ version: 2, enabled: false }));
+  await usage.updateCasePolicy('workspace-a', validateCasePolicy({ version: 3, enabled: true, ttl_days: 30 }));
+  assert.deepEqual(await usage.casePolicy('workspace-a'),
+    { version: 4, visible_from_version: 4, enabled: true, ttl_days: 30 });
 });

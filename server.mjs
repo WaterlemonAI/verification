@@ -1528,6 +1528,16 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
     try {
       const policy = validateCasePolicy(await readJson(req));
       const before = await usageStore.casePolicy(account.client_id, managed);
+      if (policy.version !== before.version) throw new Error('Case Manager policy changed; reload and try again.');
+      const raisesFloor = !policy.enabled || !before.enabled
+        || (policy.ttlDays != null && policy.ttlDays < Number(before.ttl_days || 0));
+      if (raisesFloor) {
+        try { await caseStore.prepareRetirement(account.client_id, policy.version + 1); }
+        catch {
+          console.warn('case_manager_retirement_task_failed');
+          return json(res, 503, { status: 'Error', error: 'Case Manager settings are temporarily unavailable.' });
+        }
+      }
       const saved = await usageStore.updateCasePolicy(account.client_id, policy, managed);
       let retirementScheduled = true;
       if (saved.visible_from_version > before.visible_from_version) {
