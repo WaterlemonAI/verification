@@ -12,8 +12,10 @@ export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStor
   maxMessages = 512, maxBatches = 16, maxRunMs = 10 * 60_000 } = {}) {
   const counts = { captured: 0, pending: 0, retired: 0, dead_lettered: 0, errors: 0,
     retirement_recovered: 0, retirement_continuing: 0, messages_processed: 0,
-    batches_received: 0, queue_age_seconds_max: 0 };
+    batches_received: 0, queue_age_seconds_p95: 0, queue_age_seconds_p99: 0,
+    queue_age_seconds_max: 0, run_ms: 0 };
   const startedAt = Date.now();
+  const queueAges = [];
   for (let batches = 0; batches < maxBatches && counts.messages_processed < maxMessages
     && Date.now() - startedAt < maxRunMs; batches++) {
     let batch;
@@ -28,8 +30,7 @@ export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStor
       counts.messages_processed++;
       const insertedAt = Date.parse(item.insertedOn || '');
       if (Number.isFinite(insertedAt)) {
-        counts.queue_age_seconds_max = Math.max(counts.queue_age_seconds_max,
-          Math.max(0, Math.round((Date.now() - insertedAt) / 1000)));
+        queueAges.push(Math.max(0, Math.round((Date.now() - insertedAt) / 1000)));
       }
       let message;
       try { message = JSON.parse(Buffer.from(item.messageText, 'base64').toString('utf8')); }
@@ -99,6 +100,13 @@ export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStor
     counts.retirement_continuing = recovery.continuing;
     counts.errors += recovery.errors;
   } catch { counts.errors++; }
+  if (queueAges.length) {
+    queueAges.sort((a, b) => a - b);
+    counts.queue_age_seconds_p95 = queueAges[Math.ceil(queueAges.length * 0.95) - 1];
+    counts.queue_age_seconds_p99 = queueAges[Math.ceil(queueAges.length * 0.99) - 1];
+    counts.queue_age_seconds_max = queueAges.at(-1);
+  }
+  counts.run_ms = Date.now() - startedAt;
   return counts;
 }
 

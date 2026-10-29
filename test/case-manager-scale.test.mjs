@@ -79,7 +79,10 @@ test('one scheduled run drains two minutes of synthetic 180 QPM arrivals and obs
   assert.equal(counts.messages_processed, 360);
   assert.equal(counts.batches_received, 12);
   assert.equal(counts.captured, 360);
+  assert.equal(counts.queue_age_seconds_p95, 114);
+  assert.equal(counts.queue_age_seconds_p99, 119);
   assert.equal(counts.queue_age_seconds_max, 120);
+  assert.ok(counts.run_ms >= 0);
   assert.equal(deleted, 360);
   assert.equal(arrivals.length, 0);
 });
