@@ -20,6 +20,12 @@
     return element;
   }
 
+  function displayKey(key) {
+    const words = String(key).replace(/([a-z\d])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim();
+    return words.replace(/\b(id|iban|mrz|pdf|url|api|ocr|aml|kyc|bsa)\b/gi, (word) => word.toUpperCase())
+      .replace(/^./, (letter) => letter.toUpperCase());
+  }
+
   function renderValue(value, depth = 0) {
     if (value == null || typeof value !== 'object') return text('span', value == null ? 'null' : value, 'case-value');
     const entries = Array.isArray(value) ? value.map((item, index) => [String(index + 1), item]) : Object.entries(value);
@@ -36,7 +42,7 @@
       for (const [key, item] of entries) {
         const row = document.createElement('div');
         row.className = 'case-field';
-        row.append(text('strong', key), renderValue(item, depth + 1));
+        row.append(text('strong', Array.isArray(value) ? `Item ${key}` : displayKey(key)), renderValue(item, depth + 1));
         content.append(row);
       }
       if (!entries.length) content.append(text('span', 'No fields'));
@@ -62,12 +68,35 @@
     add('Service', item.service_id);
     if (response && typeof response === 'object' && !Array.isArray(response)) {
       if (item.service_id === 'adverse-media') {
+        add('Subject', response.entity?.name);
+        add('Risk level', response.summary?.risk_level);
+        add('Results', Array.isArray(response.results) ? response.results.length : null);
         add('Coverage complete', yesNo(response.coverage?.complete));
         add('Decision eligible', yesNo(response.summary?.decision_eligible));
         add('Human review required', yesNo(response.summary?.human_review_required));
       } else if (item.service_id === 'merchant-screening') {
+        add('Merchant', response.merchant_identity?.names?.[0]);
+        add('Domain', response.domain?.domain);
         add('Risk level', typeof response.summary?.risk_level === 'string' ? response.summary.risk_level : null);
+        add('Findings', Array.isArray(response.findings) ? response.findings.length : null);
         add('Decision eligible', yesNo(response.summary?.decision_eligible));
+      } else if (item.service_id === 'uae-tlv') {
+        const licence = response.uae_tl_verification || response.trade_licence_verification_api || {};
+        add('Company', licence.licence_registration_name || licence.company_name);
+        add('Licence number', licence.uae_licence_number || licence.license_number);
+        add('Emirate', licence.emirate_name);
+        add('Licence status', licence.license_status);
+      } else if (item.service_id === 'iban-verification') {
+        const match = response.data?.results || {};
+        add('Verification result', match.result || response.msg);
+        add('Country', match.country);
+        add('Bank match', match.bank);
+        add('Account number match', match.bankAccountNumber);
+      } else if (item.service_id === 'entity-search') {
+        add('Search result', response.message);
+        add('Profiles found', Array.isArray(response.data?.profiles) ? response.data.profiles.length : null);
+        add('Profiles search complete', yesNo(response.profiles_success));
+        add('Adverse public content complete', yesNo(response.apc_success));
       } else if (item.service_id === 'bank-statement-analysis') {
         add('Analysis status', typeof response.status === 'string' ? response.status : null);
         add('Decision eligible', yesNo(response.decisionEligible));
@@ -81,7 +110,7 @@
         add('Extracted fields', response.data && typeof response.data === 'object' ? Object.keys(response.data).length : null);
         add('Artifacts', Array.isArray(response.artifacts) ? response.artifacts.length : null);
       } else {
-        add('Supplier status', typeof response.status === 'string' ? response.status : null);
+        add('Response status', typeof response.status === 'string' ? response.status : null);
       }
     }
     section.append(cards);
@@ -92,9 +121,11 @@
     const query = new URLSearchParams();
     const from = $('case-from').value;
     const through = $('case-to').value;
-    if (from) query.set('from', `${from}T00:00:00.000Z`);
-    if (through) query.set('to', `${through}T23:59:59.999Z`);
+    const transactionId = $('case-transaction').value.trim();
+    if (!transactionId && from) query.set('from', `${from}T00:00:00.000Z`);
+    if (!transactionId && through) query.set('to', `${through}T23:59:59.999Z`);
     if ($('case-service').value.trim()) query.set('service', $('case-service').value.trim());
+    if (transactionId) query.set('transaction_id', transactionId);
     if ($('case-outcome').value) query.set('outcome', $('case-outcome').value);
     query.set('limit', '25');
     if (cursor) query.set('cursor', cursor);
@@ -132,7 +163,8 @@
       panel.append(text('p', item.service_id, 'label'), text('h2', labels[item.outcome] || 'Unclassified'));
       const meta = document.createElement('dl'); meta.className = 'case-meta';
       for (const [name, value] of [['Accepted', item.accepted_at], ['Expires', item.expires_at],
-        ['State', item.state], ['HTTP status', item.final_http_status || 'Pending'],
+        ['State', item.state], ['Transaction IDs', item.attempt_ids.join(', ') || 'None'],
+        ['HTTP status', item.final_http_status || 'Pending'],
         ['Reason codes', item.outcome_reason_codes.join(', ') || 'None']]) {
         meta.append(text('dt', name), text('dd', value));
       }

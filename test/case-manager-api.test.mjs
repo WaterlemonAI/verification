@@ -71,8 +71,9 @@ test('portal cases and PDFs require the signed workspace; expired and retired ca
   await store.setPortalUser(b);
   await usageStore.updateCasePolicy('workspace-a', validateCasePolicy({ version: 0, enabled: true, ttl_days: 1 }));
   await usageStore.updateCasePolicy('workspace-b', validateCasePolicy({ version: 0, enabled: true, ttl_days: 1 }));
+  const transactionId = '33333333-3333-4333-8333-333333333333';
   const intent = await caseStore.createIntent({ workspaceId: 'workspace-a', serviceId: 'adverse-media',
-    transactionId: 'synthetic-tx', acceptedAt: new Date().toISOString(),
+    transactionId, acceptedAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
   const reportId = '11111111-1111-4111-8111-111111111111';
   await reportStore.save({ ownerId: 'original-key-owner', reportId, bytes: Buffer.from('%PDF-synthetic'),
@@ -95,10 +96,21 @@ test('portal cases and PDFs require the signed workspace; expired and retired ca
   const detailJson = await detail.json();
   assert.equal(detailJson.response.status, 'completed');
   assert.equal(JSON.stringify(detailJson).includes('original-key-owner'), false);
+  const lookup = await fetch(`${base}?transaction_id=${transactionId}`, { headers: { cookie: cookie(a) } });
+  assert.equal(lookup.status, 200);
+  assert.deepEqual((await lookup.json()).cases.map((item) => item.id), [intent.id]);
+  const unfiltered = await fetch(base, { headers: { cookie: cookie(a) } });
+  assert.equal(unfiltered.status, 200);
+  assert.deepEqual((await unfiltered.json()).cases.map((item) => item.id), [intent.id]);
+  const otherWorkspaceLookup = await fetch(`${base}?transaction_id=${transactionId}`, { headers: { cookie: cookie(b) } });
+  assert.deepEqual((await otherWorkspaceLookup.json()).cases, []);
+  assert.equal((await fetch(`${base}?transaction_id=invalid`, { headers: { cookie: cookie(a) } })).status, 400);
   const pdf = await fetch(`${path}/artifacts/0`, { headers: { cookie: cookie(a) } });
   assert.equal(pdf.status, 200);
   assert.equal(await pdf.text(), '%PDF-synthetic');
   assert.equal((await fetch(`${path}/artifacts/0`, { headers: { cookie: cookie(b) } })).status, 404);
   caseStore.rows.get(intent.id).expiresAt = new Date(Date.now() - 1).toISOString();
   assert.equal((await fetch(path, { headers: { cookie: cookie(a) } })).status, 404);
+  const expiredLookup = await fetch(`${base}?transaction_id=${transactionId}`, { headers: { cookie: cookie(a) } });
+  assert.deepEqual((await expiredLookup.json()).cases, []);
 });

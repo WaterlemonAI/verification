@@ -21,7 +21,7 @@
           <label>Keep Case Manager copies for <input id="case-ttl" type="number" min="1" max="45" step="1" required value="30" /> days</label>
           <button type="submit">Save Case Manager settings</button></form>
         <p id="case-settings-message" role="status"></p>
-        <p class="case-settings-note">OCR and Forms containing OCR expire after at most 30 days. Disabling retires existing case copies; enabling again does not restore them. Adverse-media JSON, OCR and BSA source data, and permanent or public PDFs have separate retention. Case Manager expiry does not revoke public PDF links.</p>
+        <p class="case-settings-note">This setting controls only the Case Manager copy. OCR cases, including Forms with OCR, expire after at most 30 days. Disabling Case Manager retires its existing copies; enabling it again does not restore them. Separately, adverse-media JSON is retained for 365 days, OCR source data for 30 days, and bank-statement source data currently has no fixed deletion schedule. Some PDFs are permanent and publicly accessible by link. This setting does not delete those separate copies or revoke their links.</p>
       </section>
       <div class="account-section-head"><div><p class="label">API CREDENTIALS</p><h2>Your API keys</h2><p>Keys are displayed only when created or rotated. Store the full value in your own secret manager.</p></div></div>
       <div id="new-key-panel" class="account-key-reveal" hidden><strong>New key — copy now</strong><code id="new-key-value"></code><button id="copy-new-key" type="button">Copy key</button><p>The old key stops working immediately after rotation.</p></div>

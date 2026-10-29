@@ -1,10 +1,13 @@
 # Case Manager contract (schema v1)
 
-Case Manager is an opt-in copy of customer-visible check results. The global `CASE_MANAGER_ENABLED` gate and every workspace policy default off. There is no backfill. A signed-in workspace administrator can enable capture for future accepted checks and choose an integer TTL from 1 to 45 days. Bearer API keys can submit checks; they do not grant case-history access. The case is owned by the verified portal workspace ID, not by the API key ID. Every signed-in administrator of that workspace may read its cases, raw final response and recorded artifacts. This access model needs product and privacy approval before customer enablement.
+Case Manager is an opt-in copy of customer-visible check results. The global `CASE_MANAGER_ENABLED` gate and every workspace policy default off. There is no backfill. A signed-in workspace user can enable capture for future accepted checks and choose an integer TTL from 1 to 45 days. Bearer API keys can submit checks; they do not grant case-history access. The case is owned by the verified portal workspace ID, not by the API key ID. Every signed-in user of that workspace may read its cases, raw final response and recorded artifacts. The product owner approved this workspace-wide access model on 2026-10-30; the portal currently has no finer customer roles.
 
 ## What creates a case
 
 One authenticated, accepted business submission creates one logical case. Its `case_id` is an opaque UUID. `accepted_at` is the admission timestamp. The first transaction ID and later replay transaction IDs form `attempt_ids`; a replay retains the original `case_id` and expiry. Failed authentication creates no tenant case. Authenticated method, validation, entitlement and capacity rejections are auditable attempts with `not_run` or `could_not_complete` as appropriate; they are not successful checks. Polls, callback retries, downloads, key rotation, report generation and Form child calls create no additional verification case.
+
+A workspace-scoped hashed transaction index supports exact lookup from an API log's transaction ID. It is removed with the case, including its replay attempt IDs.
+The signed-in portal can filter `/portal/api/cases` with `transaction_id=<UUID>`; this remains subject to the workspace, policy version, expiry, service, outcome and time filters.
 
 | Direct POST route | Service ID | Completion | TTL cap |
 |---|---|---|---|
@@ -36,16 +39,18 @@ The outcome vocabulary is `pending`, `passed`, `failed`, `review_required`, `ext
 | Adverse media | `passed` only for completed, complete coverage, decision-eligible, safe/no-material-results and no human review; otherwise `review_required` | Confirm that this is a suitable screening outcome, not a legal clearance. |
 | Merchant screening | `passed` only for completed, decision-eligible, safe risk and no human review; otherwise `review_required` | Confirm risk terminology and failed/unsafe treatment. |
 | Document OCR and MOA | `extracted` on completed extraction, `review_required` on OCR review status | Confirm that extraction is never shown as verification. |
-| Bank statement analysis | Partial or ineligible result is `review_required`; otherwise `unclassified` | Define analysis outcome separately from credit approval. |
+| Bank statement analysis | A terminal failed job is `could_not_complete`; partial or ineligible result is `review_required`; otherwise `unclassified` | Define analysis outcome separately from credit approval. |
 | Forms | Partial/ineligible result is `review_required`; otherwise `unclassified` | Define how child outcomes combine. |
-| UAE TLV, IBAN, entity search and dynamic integrations | `unclassified` on successful transport | Approve service-specific passed/failed mappings from real response contracts. |
+| UAE TLV, IBAN, entity search and dynamic integrations | `unclassified` on successful transport | Product owner approved retaining `unclassified` pending response-contract review on 2026-10-30. |
 
-These are review candidates, not authorization to enable customer workspaces. The dashboard shows a service-specific summary and retains every field in the expandable result and separate raw-response view.
+The remaining outcome rows are review candidates, not authorization to enable customer workspaces. The dashboard shows service-specific summary cards and retains every field in the expandable result and separate raw-response view.
 
 Artifact references contain internal owner and report IDs, stored only in the encrypted payload. A case PDF endpoint first authorizes the signed-in workspace and unexpired case, then uses its recorded original owner to fetch the private artifact. It must never authorize through a public-report lookup or a caller-supplied owner ID. Existing public capability URLs remain independently accessible.
 OCR final responses retain their original five-minute signed artifact URLs as result fields; those links expire independently of the case. The case-scoped artifact endpoint remains available until case expiry.
 
 ## Retention and failure boundaries
+
+The product owner approved explicit customer-facing wording about separate source copies on 2026-10-30. The account and case pages state the current adverse-media, OCR, BSA and public-PDF retention boundaries; the selected TTL only governs the Case Manager copy.
 
 Case Manager TTL starts at `accepted_at`; OCR and OCR-containing Forms use `min(workspace TTL, 30 days)`. Reads reject a case at `expires_at` even when physical purge is late. Shortening TTL or opting out raises a monotonic visibility floor, so later re-enablement cannot resurrect old cases. A dedicated retirement message schedules early deletion. The expiry-index purge job runs every 15 minutes and targets physical deletion within 24 hours; hitting its per-run cap or a storage error alerts operations. Deletion counts contain no PII. An expiry during pending processing prevents later capture from making the case readable.
 

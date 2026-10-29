@@ -22,11 +22,11 @@ class FakeTable {
       this.failFinalUpdate = false;
       throw Object.assign(new Error('temporary table failure'), { statusCode: 503 });
     }
-    for (const [verb, entity] of actions) {
+    for (const [verb, entity, mode] of actions) {
       const key = this.key(entity.partitionKey, entity.rowKey);
       if (verb === 'create') this.entities.set(key, { ...entity, etag: '1' });
       if (verb === 'delete') this.entities.delete(key);
-      if (verb === 'update') this.entities.set(key, { ...entity, etag: '2' });
+      if (verb === 'update') this.entities.set(key, { ...(mode === 'Merge' ? this.entities.get(key) : {}), ...entity, etag: '2' });
     }
   }
 }
@@ -64,6 +64,25 @@ test('an interrupted Azure finalization keeps the first encrypted response on re
     if (previousKey === undefined) delete process.env.CASE_MANAGER_DATA_KEY_V1_HEX;
     else process.env.CASE_MANAGER_DATA_KEY_V1_HEX = previousKey;
   }
+});
+
+test('Azure transaction index resolves original and replay attempts only inside their workspace', async () => {
+  const table = new FakeTable();
+  const store = new AzureCaseManagerStore({ table,
+    container: { getBlockBlobClient: () => ({ deleteIfExists: async () => {} }) }, queue: {} });
+  const input = { workspaceId: 'workspace-a', serviceId: 'synthetic-service', transactionId: 'tx-original',
+    logicalKey: 'logical-check', acceptedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 };
+  const first = await store.createIntent(input);
+  const replay = await store.createIntent({ ...input, transactionId: 'tx-replay' });
+  assert.equal(replay.id, first.id);
+  assert.equal((await store.findByTransaction('workspace-a', 'tx-original', { activePolicyVersion: 1 })).id, first.id);
+  assert.equal((await store.findByTransaction('workspace-a', 'tx-replay', { activePolicyVersion: 1 })).id, first.id);
+  assert.equal(await store.findByTransaction('workspace-b', 'tx-original'), null);
+  assert.equal(await store.findByTransaction('workspace-a', 'tx-original', { activePolicyVersion: 2 }), null);
+  await store.deleteCaseRow(await store.row('workspace-a', first.id));
+  assert.equal(await store.findByTransaction('workspace-a', 'tx-original'), null);
+  assert.equal(await store.findByTransaction('workspace-a', 'tx-replay'), null);
 });
 
 test('workspace retirement advances a bounded cursor after parallel deletion', async () => {

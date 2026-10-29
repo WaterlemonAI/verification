@@ -18,6 +18,9 @@ test('workspace-scoped intents, replay attempts, exact expiry, and final content
   const replay = await store.createIntent({ ...input, transactionId: 'tx-2' });
   assert.equal(replay.id, first.id);
   assert.deepEqual(replay.attempt_ids, ['tx-1', 'tx-2']);
+  assert.equal((await store.findByTransaction('workspace-a', 'tx-1', { activePolicyVersion: 1 })).id, first.id);
+  assert.equal((await store.findByTransaction('workspace-a', 'tx-2', { activePolicyVersion: 1 })).id, first.id);
+  assert.equal(await store.findByTransaction('workspace-b', 'tx-1'), null);
   const final = { status: 'partial', evidence: [{ name: '<img onerror=alert(1)>', reason: 'sample' }], callback_signing_secret: 'hide' };
   await store.captureFinal('workspace-a', first.id, { response: final, contentType: 'application/json', httpStatus: 200,
     outcome: 'review_required', reasonCodes: ['PARTIAL_COVERAGE'] });
@@ -33,4 +36,6 @@ test('workspace-scoped intents, replay attempts, exact expiry, and final content
   assert.equal((await store.listCases('workspace-a')).cases.length, 0);
   assert.equal(await store.purgeExpired(), 1);
   assert.equal(store.payloads.has(first.id), false);
+  assert.equal(await store.findByTransaction('workspace-a', 'tx-1'), null);
+  assert.equal(await store.findByTransaction('workspace-a', 'tx-2'), null);
 });

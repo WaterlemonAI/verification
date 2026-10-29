@@ -1,0 +1,39 @@
+# Case Manager release and support checklist
+
+Case Manager is an optional copy of verification results. Keep the global capture flag and every workspace policy off until the checks below pass. This checklist does not authorize a deployment or change retention in the original service stores.
+
+## Decisions to record before enabling customer workspaces
+
+- Workspace access: every signed-in user of the same workspace can read its cases, raw final responses and recorded artifacts. API keys alone cannot read case history. Approved by the product owner on 2026-10-30.
+- Successful UAE trade licence, IBAN, entity search and dynamic integration responses remain `Unclassified` until their business response contracts are reviewed. Approved by the product owner on 2026-10-30.
+- Customer text states that Case Manager TTL applies only to its copy. Adverse-media JSON, OCR source data, BSA source data and public or permanent PDFs follow separate retention. Approved by the product owner on 2026-10-30.
+- Record the approved adverse-media and merchant screening badge wording, storage network posture, physical deletion target, peak traffic and added-latency objective. The code and synthetic results alone do not settle these items.
+
+## Packaging and Azure preview
+
+1. Confirm the reviewed PR head, clean worktree, passing exact-head CI, and immutable API image digest. Do not substitute a mutable image tag.
+2. Run the dedicated Case Manager platform Bicep what-if in the intended UAE North resource group. Verify that only isolated Case Manager resources and their scoped role assignments are created. Provisioning is a separate reviewed action while capture remains off.
+3. Create the dedicated Case Manager encryption key in Key Vault through the approved secret process. Verify managed-identity access, disabled shared-key authorization, disabled public Blob access, and the approved network posture. Do not print the key.
+4. Run the API infrastructure what-if with the exact release digest and the intended values of `CASE_MANAGER_DESIRED_ENABLED`, `CASE_MANAGER_EMERGENCY_OFF`, and `CASE_MANAGER_MAINTENANCE_ENABLED`. Review every proposed change to the existing API and jobs before promotion.
+
+## Disposable workspace QA
+
+Use synthetic subjects and documents. Enable one disposable workspace with a one-day TTL; leave other workspaces off.
+
+1. Confirm no backfill. Submit one check with Case Manager off, then opt in and submit another. Only the later check should appear.
+2. Submit one direct check from each current service, one administrator-configured integration, and one Form with multiple children. Verify the case count, final body, status badge, attempt IDs, and original API response remain correct. A Form child must not create a separate case.
+3. Exercise OCR and bank-statement `202` receipts through completed and failed terminal states. Check the saved final response, source-independent case artifact link, and no extra supplier, OCR, Brave or Gemini calls. A failed BSA job should finish as `Could not complete` with its public 422 response.
+4. Force a callback failure after a saved adverse-media or Form result. Retry delivery, then verify there is one logical case, one provider run, and one final result. Retry an idempotent submission and find the same case by both transaction IDs.
+5. Verify the case list filters by time, service, outcome and exact transaction ID. Open the readable view, raw JSON, copy action and PDF or other artifact on desktop and mobile. Render hostile strings as text.
+6. Sign in to a second workspace. Its session must get 404 or an empty list for the first workspace's case, transaction ID and artifact. A Bearer API key alone must not access case-history routes.
+7. Shorten the TTL and opt out. Reads must stop immediately; the due retirement task must delete only the Case Manager copies. Re-enable later and confirm old cases do not reappear. Inject a queue failure and verify the durable due task still completes physical deletion.
+
+## Load, retention and rollback gates
+
+- Run Azure-backed sustained traffic at twice the approved peak with representative response sizes and a mix of synchronous, OCR, BSA and Form jobs. Record API p95/p99 added latency, capture failures, queue age p95/p99/max, dead letters, cost and storage growth. The memory-store benchmark is not this gate.
+- Prove the expiry purge keeps up with the approved arrival rate and meets the physical deletion target. Check encrypted Blob, case metadata, transaction indexes and due tasks after deletion; source stores remain untouched.
+- Test a routine deployment after capture has been enabled. It must preserve the approved desired state. Test `CASE_MANAGER_EMERGENCY_OFF=true` as rollback while `CASE_MANAGER_MAINTENANCE_ENABLED=true` keeps deletion and reconciliation running. Confirm the prior immutable digest can be restored and no case storage is deleted during rollback.
+
+## Customer support
+
+Ask for the transaction ID from the API response header or usage log and search for it in the signed-in workspace portal. A missing case may mean capture was off at admission, the selected TTL expired, an opt-out retired it, or capture was marked incomplete. Check sanitized intent, capture, reconciliation and purge metrics without copying customer response bodies, documents, credentials or signed URLs into tickets or logs. An HTTP 200 is transport success; use the case outcome and coverage fields for the screening result.

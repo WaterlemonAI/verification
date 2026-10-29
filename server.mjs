@@ -1563,10 +1563,12 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
     const policy = await usageStore.casePolicy(workspaceId);
     if (!policy.enabled) return json(res, 404, { status: 'Error', error: 'Case Manager is not enabled.' }, { 'cache-control': 'no-store' });
     if (url.pathname === '/portal/api/cases') {
-      const from = url.searchParams.get('from') || new Date(Date.now() - 45 * 86_400_000).toISOString();
-      const to = url.searchParams.get('to') || new Date().toISOString();
+      const currentTime = Date.now();
+      const from = url.searchParams.get('from') || new Date(currentTime - 45 * 86_400_000).toISOString();
+      const to = url.searchParams.get('to') || new Date(currentTime).toISOString();
       const serviceId = url.searchParams.get('service') || '';
       const outcome = url.searchParams.get('outcome') || '';
+      const transactionIdFilter = url.searchParams.get('transaction_id') || '';
       const limit = Number(url.searchParams.get('limit') || 25);
       const rawCursor = url.searchParams.get('cursor') || '';
       let cursor = '';
@@ -1577,8 +1579,19 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
         || !Number.isFinite(Date.parse(from)) || !Number.isFinite(Date.parse(to)) || Date.parse(from) > Date.parse(to)
         || Date.parse(to) - Date.parse(from) > 45 * 86_400_000 || !Number.isInteger(limit) || limit < 1 || limit > 100
         || (serviceId && !/^[a-z0-9-]{1,80}$/.test(serviceId))
-        || (outcome && !CASE_OUTCOMES.includes(outcome)) || cursor.length > 256) {
+        || (outcome && !CASE_OUTCOMES.includes(outcome))
+        || (transactionIdFilter && !/^[0-9a-f-]{36}$/i.test(transactionIdFilter))
+        || (transactionIdFilter && cursor) || cursor.length > 256) {
         return json(res, 400, { status: 'Error', error: 'Invalid case filters.' });
+      }
+      if (transactionIdFilter) {
+        const found = await caseStore.findByTransaction(workspaceId, transactionIdFilter,
+          { activePolicyVersion: policy.visible_from_version });
+        const matches = found && (!serviceId || found.service_id === serviceId)
+          && (!outcome || found.outcome === outcome)
+          && found.accepted_at >= from && found.accepted_at <= to;
+        return json(res, 200, { cases: matches ? [found] : [], next_cursor: null },
+          { 'cache-control': 'no-store' });
       }
       const page = await caseStore.listCases(workspaceId, { from, to, serviceId, outcome, limit, cursor,
         activePolicyVersion: policy.visible_from_version });

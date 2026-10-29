@@ -60,3 +60,27 @@ test('BSA reconciliation records the same public final fields without rerunning 
   assert.equal(saved.payload.final_response.artifacts[0].downloadUrl,
     `/service/bank_statement_analysis/${sourceId}/artifacts/audit.pdf`);
 });
+
+test('failed BSA job is captured as its terminal public 422 response without repeating analysis', async () => {
+  const caseStore = new MemoryCaseManagerStore();
+  const usageStore = new MemoryCustomerUsageStore();
+  await usageStore.updateCasePolicy('workspace-a', validateCasePolicy({ version: 0, enabled: true, ttl_days: 30 }));
+  const intent = await caseStore.createIntent({ workspaceId: 'workspace-a', serviceId: 'bank-statement-analysis',
+    transactionId: 'tx-failed-bsa', acceptedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+  const sourceId = 'bsa_22222222-2222-4222-8222-222222222222';
+  const failedJob = { id: sourceId, status: 'failed', reasonCode: 'UNREADABLE_STATEMENT' };
+  let reads = 0;
+  const message = { version: 1, workspaceId: 'workspace-a', caseId: intent.id,
+    serviceId: 'bank-statement-analysis', sourceId, originalOwner: 'original-key-owner' };
+  const dependencies = { caseStore, usageStore, documentOcrStore: null,
+    getBsaResult: async () => { reads++; return { job: failedJob, result: null }; } };
+  assert.equal(await reconcileCaseMessage(message, dependencies), 'captured');
+  assert.equal(await reconcileCaseMessage(message, dependencies), 'captured');
+  assert.equal(reads, 1);
+  const saved = await caseStore.getCase('workspace-a', intent.id);
+  assert.equal(saved.outcome, 'could_not_complete');
+  assert.deepEqual(saved.outcome_reason_codes, ['BSA_FAILED']);
+  assert.equal(saved.final_http_status, 422);
+  assert.deepEqual(saved.payload.final_response, { job: failedJob });
+});
