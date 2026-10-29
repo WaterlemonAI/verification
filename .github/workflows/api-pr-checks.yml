@@ -17,6 +17,9 @@ on:
       - infrastructure/api-document-ocr-platform.bicep
       - infrastructure/api-document-ocr-purge-bootstrap.bicep
       - infrastructure/api-case-manager-platform.bicep
+      - infrastructure/api-case-manager-network.bicep
+      - infrastructure/api-case-manager-private-probe.bicep
+      - .github/workflows/deploy-api.yml
       - .github/workflows/api-pr-checks.yml
 
 permissions:
@@ -41,3 +44,5 @@ jobs:
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
           az bicep build --file infrastructure/api-document-ocr-purge-bootstrap.bicep
           az bicep build --file infrastructure/api-case-manager-platform.bicep
+          az bicep build --file infrastructure/api-case-manager-network.bicep
+          az bicep build --file infrastructure/api-case-manager-private-probe.bicep

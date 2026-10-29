@@ -9,6 +9,9 @@ param storageAccountName string = 'stai7uaecasesuaen001'
 @description('Existing API runtime managed identity resource ID; provisioning is a separate reviewed action.')
 param apiRuntimeIdentityResourceId string
 
+@description('Private-endpoint subnet ID from the separately previewed KYCProbe VNet environment. Required; no public storage fallback.')
+param privateEndpointSubnetId string
+
 var blobContributorRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
 var tableContributorRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')
 var queueContributorRole = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '974c5e8b-45b9-4653-ba55-5f855dd0fb88')
@@ -33,6 +36,44 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
 }
 
+var endpointGroups = [ 'blob', 'table', 'queue' ]
+var privateZoneNames = [
+  'privatelink.blob.${environment().suffixes.storage}'
+  'privatelink.table.${environment().suffixes.storage}'
+  'privatelink.queue.${environment().suffixes.storage}'
+]
+
+resource privateZones 'Microsoft.Network/privateDnsZones@2024-06-01' existing = [for zone in privateZoneNames: {
+  name: zone
+}]
+
+resource privateEndpoints 'Microsoft.Network/privateEndpoints@2024-05-01' = [for (group, index) in endpointGroups: {
+  name: 'pe-ai7uae-cases-${group}-uaen-001'
+  location: location
+  properties: {
+    subnet: { id: privateEndpointSubnetId }
+    privateLinkServiceConnections: [
+      {
+        name: 'case-manager-${group}'
+        properties: {
+          privateLinkServiceId: storage.id
+          groupIds: [group]
+        }
+      }
+    ]
+  }
+}]
+
+resource privateDnsGroups 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01' = [for (group, index) in endpointGroups: {
+  parent: privateEndpoints[index]
+  name: 'default'
+  properties: {
+    privateDnsZoneConfigs: [
+      { name: group, properties: { privateDnsZoneId: privateZones[index].id } }
+    ]
+  }
+}]
+
 // Versioning and soft delete are disabled so an expired case cannot survive in a recoverable blob version.
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storage
@@ -50,6 +91,12 @@ resource cases 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-0
   properties: { publicAccess: 'None' }
 }
 
+resource probeContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'case-manager-probe'
+  properties: { publicAccess: 'None' }
+}
+
 resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
   parent: storage
   name: 'default'
@@ -62,6 +109,10 @@ resource deadLetters 'Microsoft.Storage/storageAccounts/queueServices/queues@202
   parent: queueService
   name: 'case-manager-dead-letter'
 }
+resource probeQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queueService
+  name: 'case-manager-probe'
+}
 
 resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2023-05-01' = {
   parent: storage
@@ -70,6 +121,10 @@ resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2023-05-0
 resource metadata 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
   parent: tableService
   name: 'CaseManagerMetadata'
+}
+resource probeTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  parent: tableService
+  name: 'CaseManagerProbe'
 }
 
 resource apiBlobAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -93,3 +148,4 @@ output tableUrl string = storage.properties.primaryEndpoints.table
 output queueUrl string = storage.properties.primaryEndpoints.queue
 output containerName string = cases.name
 output tableName string = metadata.name
+output privateEndpointIds array = [for (group, index) in endpointGroups: privateEndpoints[index].id]

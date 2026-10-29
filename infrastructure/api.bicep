@@ -57,11 +57,26 @@ param enableCaseManager bool = false
 @description('Keep purge, reconciliation and alerts running for existing cases when API capture is disabled.')
 param maintainCaseManagerData bool = false
 
+@description('Parallel VNet preflight: new API and screenshot app only, internal ingress, all shared queue consumers and Case Manager capture off.')
+param parallelDeployment bool = false
+
 @description('Dedicated S0 Document Intelligence account for the eight extraction APIs.')
 param documentOcrEndpoint string = 'https://doc-ai7uae-ocr-uaen-001.cognitiveservices.azure.com/'
 
 @description('Dedicated document OCR worker identity name.')
 param documentOcrWorkerIdentityName string = 'id-ai7uae-ocr-worker-uaen-001'
+
+@description('Document OCR worker name. Use a distinct name in the new VNet environment after the queue handoff.')
+param documentOcrWorkerName string = 'ca-ai7uae-document-ocr-worker'
+
+@description('Document OCR purge job name. Use a distinct name during the environment migration.')
+param documentOcrPurgeJobName string = 'caj-ai7uae-document-ocr-purge'
+
+@description('Case Manager purge job name. Never run two scheduled consumers against the same case store.')
+param caseManagerPurgeJobName string = 'caj-ai7uae-case-manager-purge'
+
+@description('Case Manager reconciliation job name. Never run two scheduled consumers against the same queue.')
+param caseManagerReconcileJobName string = 'caj-ai7uae-case-manager-reconcile'
 
 @description('Resource ID of the managed certificate for api.ai7uae.com. Leave blank until DNS validation is complete.')
 param apiCertificateId string = ''
@@ -113,18 +128,18 @@ resource deepResearchQueueService 'Microsoft.Storage/storageAccounts/queueServic
   name: 'default'
 }
 
-resource deepResearchDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+resource deepResearchDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = if (!parallelDeployment) {
   parent: deepResearchQueueService
   name: deepResearchDeadLetterQueueName
 }
 
-resource formsDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+resource formsDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = if (!parallelDeployment) {
   parent: deepResearchQueueService
   name: formsDeadLetterQueueName
 }
 // Cisco Talos ClamAV 1.4.6 LTS, mirrored into the private ACR and pinned to the amd64 manifest.
 var bankStatementClamavImage = '${acrLoginServer}/ai7uae-clamav@sha256:6ba4e78b29853b2fc7e3c111389596e2cad5ec4ed5f0fd2cb663d29ab6b0e6a3'
-var customDomains = concat(
+var customDomains = parallelDeployment ? [] : concat(
   empty(apiCertificateId) ? [] : [
     {
       name: 'api.ai7uae.com'
@@ -153,7 +168,7 @@ resource documentOcrWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIdenti
   name: documentOcrWorkerIdentityName
 }
 
-resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = {
+resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = if (!parallelDeployment) {
   name: bankStatementWorkerName
   location: location
   identity: {
@@ -241,8 +256,8 @@ resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = {
   }
 }
 
-resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (enableDocumentOcr || enableDocumentOcrWorker) {
-  name: 'ca-ai7uae-document-ocr-worker'
+resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (!parallelDeployment && (enableDocumentOcr || enableDocumentOcrWorker)) {
+  name: documentOcrWorkerName
   location: location
   identity: {
     type: 'UserAssigned'
@@ -303,8 +318,8 @@ resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (enable
   }
 }
 
-resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableDocumentOcr || enableDocumentOcrWorker) {
-  name: 'caj-ai7uae-document-ocr-purge'
+resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && (enableDocumentOcr || enableDocumentOcrWorker)) {
+  name: documentOcrPurgeJobName
   location: location
   identity: {
     type: 'UserAssigned'
@@ -338,8 +353,8 @@ resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableDocumen
   }
 }
 
-resource caseManagerPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableCaseManager || maintainCaseManagerData) {
-  name: 'caj-ai7uae-case-manager-purge'
+resource caseManagerPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) {
+  name: caseManagerPurgeJobName
   location: location
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
   properties: {
@@ -370,8 +385,8 @@ resource caseManagerPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableCaseMan
   }
 }
 
-resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (enableCaseManager || maintainCaseManagerData) {
-  name: 'caj-ai7uae-case-manager-reconcile'
+resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) {
+  name: caseManagerReconcileJobName
   location: location
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
   properties: {
@@ -541,7 +556,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'case-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/case-manager-data-key-v1', identity: runtimeIdentityResourceId }
       ] : [])
       ingress: {
-        external: true
+        external: !parallelDeployment
         allowInsecure: false
         targetPort: 8080
         transport: 'Auto'
@@ -569,11 +584,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'API_HOSTS', value: 'api.ai7uae.com,app.kycprobe.com' }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
-            { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
-            { name: 'ADVERSE_MEDIA_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchDeadLetterQueueName}' }
-            { name: 'ADVERSE_MEDIA_WORKER_ENABLED', value: enableDeepResearchWorker ? 'true' : 'false' }
-            { name: 'FORMS_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsQueueName}' }
-            { name: 'FORMS_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsDeadLetterQueueName}' }
+            { name: 'ADVERSE_MEDIA_WORKER_ENABLED', value: !parallelDeployment && enableDeepResearchWorker ? 'true' : 'false' }
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
             { name: 'GDELT_INDEX_TABLE', value: 'GdeltEntityMentions' }
@@ -590,20 +601,25 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'PLATFORM_SMTP_USER', value: 'notify@kycprobe.com' }
             { name: 'PLATFORM_SMTP_PASSWORD', secretRef: 'platform-smtp-password' }
             { name: 'MERCHANT_SCREENSHOT_WORKER_URL', value: 'https://${merchantScreenshotWorker.properties.configuration.ingress.fqdn}' }
-            { name: 'BSA_PRODUCTION_ENABLED', value: '1' }
+            { name: 'BSA_PRODUCTION_ENABLED', value: parallelDeployment ? '0' : '1' }
             { name: 'BSA_DATA_KEY_HEX', secretRef: 'bsa-data-key' }
             { name: 'BSA_STORAGE_BLOB_URL', value: 'https://${bankStatementStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'BSA_STORAGE_CONTAINER', value: 'bank-statement-analysis' }
             { name: 'BSA_STORAGE_QUEUE', value: 'bank-statement-analysis' }
             { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
-            { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: enableDocumentOcr ? '1' : '0' }
-            { name: 'CASE_MANAGER_ENABLED', value: enableCaseManager ? 'true' : 'false' }
-          ], enableDocumentOcr ? [
+            { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: !parallelDeployment && enableDocumentOcr ? '1' : '0' }
+            { name: 'CASE_MANAGER_ENABLED', value: !parallelDeployment && enableCaseManager ? 'true' : 'false' }
+          ], parallelDeployment ? [] : [
+            { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
+            { name: 'ADVERSE_MEDIA_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchDeadLetterQueueName}' }
+            { name: 'FORMS_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsQueueName}' }
+            { name: 'FORMS_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsDeadLetterQueueName}' }
+          ], !parallelDeployment && enableDocumentOcr ? [
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
-          ] : [], enableCaseManager ? [
+          ] : [], !parallelDeployment && enableCaseManager ? [
             { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }
@@ -652,7 +668,7 @@ resource apiLogWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' e
   name: logAnalyticsWorkspaceName
 }
 
-resource apiAlerts 'Microsoft.Insights/actionGroups@2023-01-01' = {
+resource apiAlerts 'Microsoft.Insights/actionGroups@2023-01-01' = if (!parallelDeployment) {
   name: 'ag-ai7uae-api-uaen-001'
   location: 'global'
   properties: {
@@ -668,7 +684,7 @@ resource apiAlerts 'Microsoft.Insights/actionGroups@2023-01-01' = {
   }
 }
 
-resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = if (!parallelDeployment) {
   name: 'alert-ai7uae-api-sustained-5xx'
   location: 'global'
   properties: {
@@ -700,11 +716,11 @@ resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = {
         }
       ]
     }
-    actions: [ { actionGroupId: apiAlerts.id } ]
+    actions: [ { actionGroupId: apiAlerts!.id } ]
   }
 }
 
-resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = {
+resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = if (!parallelDeployment) {
   name: 'alert-ai7uae-adverse-source-failures'
   location: location
   kind: 'LogAlert'
@@ -729,7 +745,7 @@ resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-0
         }
       ]
     }
-    actions: { actionGroups: [ apiAlerts.id ] }
+    actions: { actionGroups: [ apiAlerts!.id ] }
   }
 }
 
@@ -742,12 +758,16 @@ var caseManagerAlertSignals = [
   { name: 'storage', signal: 'case_manager_storage_error' }
   { name: 'pending', signal: 'case_manager_aged_pending' }
   { name: 'expiry', signal: 'case_manager_expiry_backlog' }
+  { name: 'expiry-deadline', signal: 'case_manager_expiry_near_deadline' }
+  { name: 'expiry-breach', signal: 'case_manager_expiry_deadline_breached' }
+  { name: 'retirement-deadline', signal: 'case_manager_retirement_near_deadline' }
+  { name: 'retirement-breach', signal: 'case_manager_retirement_deadline_breached' }
   { name: 'deadletters', signal: 'case_manager_dead_letters' }
   { name: 'retirement', signal: 'case_manager_retirement_schedule_failed' }
   { name: 'retirement-task', signal: 'case_manager_retirement_task_failed' }
 ]
 
-resource caseManagerAlerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert in caseManagerAlertSignals: if (enableCaseManager || maintainCaseManagerData) {
+resource caseManagerAlerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert in caseManagerAlertSignals: if (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) {
   name: 'alert-ai7uae-case-manager-${alert.name}'
   location: location
   kind: 'LogAlert'
@@ -772,7 +792,7 @@ resource caseManagerAlerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' =
         }
       ]
     }
-    actions: { actionGroups: [ apiAlerts.id ] }
+    actions: { actionGroups: [ apiAlerts!.id ] }
   }
 }]
 
@@ -781,4 +801,4 @@ output customDomainVerificationId string = api.properties.customDomainVerificati
 output latestRevisionName string = api.properties.latestRevisionName
 output merchantScreenshotWorkerFqdn string = merchantScreenshotWorker.properties.configuration.ingress.fqdn
 output merchantScreenshotWorkerLatestRevisionName string = merchantScreenshotWorker.properties.latestRevisionName
-output bankStatementWorkerLatestRevisionName string = bankStatementWorker.properties.latestRevisionName
+output bankStatementWorkerLatestRevisionName string = parallelDeployment ? '' : bankStatementWorker!.properties.latestRevisionName

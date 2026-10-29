@@ -67,8 +67,10 @@ test('portal cases and PDFs require the signed workspace; expired and retired ca
   await store.setPortalSessionKey(signingKey);
   const a = createPortalAccount('a@example.test', 'StrongPass!234', { id: 'workspace-a', name: 'A' });
   const b = createPortalAccount('b@example.test', 'StrongPass!234', { id: 'workspace-b', name: 'B' });
+  const colleague = createPortalAccount('colleague@example.test', 'StrongPass!234', { id: 'workspace-a', name: 'A' });
   await store.setPortalUser(a);
   await store.setPortalUser(b);
+  await store.setPortalUser(colleague);
   await usageStore.updateCasePolicy('workspace-a', validateCasePolicy({ version: 0, enabled: true, ttl_days: 1 }));
   await usageStore.updateCasePolicy('workspace-b', validateCasePolicy({ version: 0, enabled: true, ttl_days: 1 }));
   const transactionId = '33333333-3333-4333-8333-333333333333';
@@ -89,7 +91,9 @@ test('portal cases and PDFs require the signed workspace; expired and retired ca
   const cookie = (account) => `${PORTAL_COOKIE}=${encodeURIComponent(createPortalSession(account, signingKey).token)}`;
   const path = `${base}/${intent.id}`;
   assert.equal((await fetch(path)).status, 401);
+  assert.equal((await fetch(path, { headers: { authorization: 'Bearer synthetic-api-key' } })).status, 401);
   assert.equal((await fetch(path, { headers: { cookie: cookie(b) } })).status, 404);
+  assert.equal((await fetch(path, { headers: { cookie: cookie(colleague) } })).status, 200);
   const detail = await fetch(path, { headers: { cookie: cookie(a) } });
   assert.equal(detail.status, 200);
   assert.equal(detail.headers.get('cache-control'), 'private, no-store');
@@ -113,4 +117,7 @@ test('portal cases and PDFs require the signed workspace; expired and retired ca
   assert.equal((await fetch(path, { headers: { cookie: cookie(a) } })).status, 404);
   const expiredLookup = await fetch(`${base}?transaction_id=${transactionId}`, { headers: { cookie: cookie(a) } });
   assert.deepEqual((await expiredLookup.json()).cases, []);
+  caseStore.rows.get(intent.id).expiresAt = new Date(Date.now() + 86_400_000).toISOString();
+  await usageStore.updateCasePolicy('workspace-a', validateCasePolicy({ version: 1, enabled: false, ttl_days: 1 }));
+  assert.equal((await fetch(path, { headers: { cookie: cookie(a) } })).status, 404);
 });

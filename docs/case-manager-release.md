@@ -12,12 +12,16 @@ Case Manager is an optional copy of verification results. Keep the global captur
 - Reads stop immediately at expiry or opt-out; physically delete Case Manager copies within 24 hours. This target was approved on 2026-10-30 and must be demonstrated in Azure-backed QA.
 - Peak traffic and added-latency objective remain provisional. The code and synthetic results alone do not settle these items.
 
+The proposed comparison objective for Azure-backed QA is no more than **+100 ms p95** and **+250 ms p99** versus the same private runtime with capture off. This is a test objective, not an achieved result. The provisional peak is 90 QPM; run the planned mixed load at 180 QPM and record failures and lag even if latency misses the objective.
+
 ## Packaging and Azure preview
 
 1. Confirm the reviewed PR head, clean worktree, passing exact-head CI, and immutable API image digest. Do not substitute a mutable image tag.
 2. First design and verify VNet-integrated API runtime connectivity, private endpoints for Blob, Table and Queue, private DNS resolution, ingress and rollback. The present workflow intentionally rejects Case Manager provisioning. After a reviewed network implementation, run the dedicated Case Manager platform Bicep what-if in the intended UAE North resource group. Verify that only isolated Case Manager resources and scoped role assignments are created. Provisioning is a separate reviewed action while capture remains off.
 3. Create the dedicated Case Manager encryption key in Key Vault through the approved secret process. Verify managed-identity access, disabled shared-key authorization, disabled public Blob access, disabled public storage network access, and runtime data-plane access over the private endpoints. Do not print the key.
 4. Run the API infrastructure what-if with the exact release digest and the intended values of `CASE_MANAGER_DESIRED_ENABLED`, `CASE_MANAGER_EMERGENCY_OFF`, and `CASE_MANAGER_MAINTENANCE_ENABLED`. Review every proposed change to the existing API and jobs before promotion.
+
+The [private-network inventory and cutover runbook](case-manager-private-network.md) records the 2026-10-30 live readback, the separate network, storage, probe and parallel-API what-if results, worker handoffs, certificate/DNS sequence and rollback boundaries. Those previews used the then-live API digest to test infrastructure shape; **they do not satisfy** this exact-release-digest step. The new network and storage need an approved CIDR, quota/cost review, explicit provisioning authority and a successful running-container probe before QA.
 
 ## Disposable workspace QA
 

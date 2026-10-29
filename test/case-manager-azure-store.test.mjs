@@ -146,3 +146,20 @@ test('Azure pagination advances past more than 1,000 hidden index rows', async (
   assert.equal(second.cases[0].id, '1001');
   assert.equal(second.next_cursor, null);
 });
+
+test('Azure age gauges query only the first expiry and pending index keys', async () => {
+  const filters = [];
+  const table = { listEntities({ queryOptions }) {
+    const filter = String(queryOptions.filter);
+    filters.push(filter);
+    const rowKey = filter.includes("'expiry'") ? '2026-10-29T11:00:00.000Z-expired'
+      : '2026-10-30T11:30:00.000Z-pending';
+    return (async function* () { yield { rowKey }; })();
+  } };
+  const store = new AzureCaseManagerStore({ table, container: {} });
+  const at = new Date('2026-10-30T12:00:00.000Z');
+  assert.equal(await store.oldestExpiredAgeSeconds(at), 25 * 3600);
+  assert.equal(await store.oldestPendingAgeSeconds(at), 30 * 60);
+  assert.match(filters[0], /PartitionKey eq 'expiry'/);
+  assert.match(filters[1], /PartitionKey eq 'pending'/);
+});

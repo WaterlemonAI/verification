@@ -17,3 +17,15 @@ test('purge deletes only expired Case Manager copies in bounded batches', async 
   assert.deepEqual(second, { removed: 1, limit_reached: false });
   assert.equal(store.rows.size, 2);
 });
+
+test('sanitized age gauges track pending cases and the oldest undeleted expired copy', async () => {
+  const store = new MemoryCaseManagerStore();
+  const at = new Date('2026-10-30T12:00:00.000Z');
+  await store.createIntent({ workspaceId: 'workspace-a', serviceId: 'synthetic', transactionId: 'expired',
+    acceptedAt: '2026-10-29T08:00:00.000Z', expiresAt: '2026-10-29T12:00:00.000Z', policyVersion: 1 });
+  assert.equal(await store.oldestPendingAgeSeconds(at), 28 * 3600);
+  assert.equal(await store.oldestExpiredAgeSeconds(at), 24 * 3600);
+  await purgeCases({ store, now: at });
+  assert.equal(await store.oldestExpiredAgeSeconds(at), 0);
+  assert.equal(await store.oldestPendingAgeSeconds(at), 0);
+});

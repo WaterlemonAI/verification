@@ -11,7 +11,8 @@ export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStor
   documentOcrStore, getBsaResultImpl = getBsaResult, reconcileMessageImpl = reconcileCaseMessage,
   maxMessages = 512, maxBatches = 16, maxRunMs = 10 * 60_000 } = {}) {
   const counts = { captured: 0, pending: 0, retired: 0, dead_lettered: 0, errors: 0,
-    retirement_recovered: 0, retirement_continuing: 0, messages_processed: 0,
+    retirement_recovered: 0, retirement_continuing: 0, retirement_oldest_age_seconds: 0,
+    messages_processed: 0,
     batches_received: 0, queue_age_seconds_p95: 0, queue_age_seconds_p99: 0,
     queue_age_seconds_max: 0, run_ms: 0 };
   const startedAt = Date.now();
@@ -98,6 +99,7 @@ export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStor
     const recovery = await recoverCaseRetirements({ usageStore, caseStore });
     counts.retirement_recovered = recovery.completed;
     counts.retirement_continuing = recovery.continuing;
+    counts.retirement_oldest_age_seconds = recovery.oldest_age_seconds;
     counts.errors += recovery.errors;
   } catch { counts.errors++; }
   if (queueAges.length) {
@@ -123,4 +125,8 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   console.info('case_manager_reconcile_counts', JSON.stringify(counts));
   if (counts.errors) console.warn('case_manager_storage_error', JSON.stringify({ count: counts.errors }));
   if (counts.dead_lettered) console.warn('case_manager_dead_letters', JSON.stringify({ count: counts.dead_lettered }));
+  if (counts.retirement_oldest_age_seconds >= 20 * 60 * 60) console.warn('case_manager_retirement_near_deadline',
+    JSON.stringify({ oldest_age_seconds: counts.retirement_oldest_age_seconds }));
+  if (counts.retirement_oldest_age_seconds >= 24 * 60 * 60) console.warn('case_manager_retirement_deadline_breached',
+    JSON.stringify({ oldest_age_seconds: counts.retirement_oldest_age_seconds }));
 }
