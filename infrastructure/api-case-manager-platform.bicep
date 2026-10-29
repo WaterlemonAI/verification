@@ -128,6 +128,10 @@ resource qaDeadLetters 'Microsoft.Storage/storageAccounts/queueServices/queues@2
   parent: queueService
   name: 'case-manager-qa-dead-letter'
 }
+resource qaLoadQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: queueService
+  name: 'case-manager-qa-load'
+}
 
 resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2023-05-01' = {
   parent: storage

@@ -14,6 +14,13 @@ Case Manager is an optional copy of verification results. Keep the global captur
 
 The proposed comparison objective for Azure-backed QA is no more than **+100 ms p95** and **+250 ms p99** versus the same private runtime with capture off. This is a test objective, not an achieved result. The provisional peak is 90 QPM; run the planned mixed load at 180 QPM and record failures and lag even if latency misses the objective.
 
+## Azure evidence on 2026-10-30
+
+- The running-container private-path probe `caj-ai7uae-cm-private-probe-uom8ham` succeeded with private DNS and managed-identity Blob, Table and Queue CRUD.
+- The manual synthetic smoke job `caj-ai7uae-cm-azure-qa-i68t90w` succeeded: exact 230,597-byte response, signed-in portal retrieval, workspace isolation, API-key-only denial and physical Blob/Table/index purge. The isolated QA table/container smoke `caj-ai7uae-cm-azure-qa-dwas9zn` also succeeded after the separate QA resources were provisioned. Both used disposable synthetic workspaces and cleaned their cases.
+- The first Azure-backed 180 QPM run `caj-ai7uae-cm-azure-qa-7f2h7c0` succeeded with 360 capture-off and 360 capture-on calls over two minutes per phase. There were zero HTTP failures and all 360 capture-on cases were recorded. With 230,597-byte synthetic responses, capture-off p95/p99 were 7/9 ms and capture-on p95/p99 were 169/190 ms, or **+162/+181 ms**. The +100 ms p95 objective was **missed**. This was a synchronous dynamic integration using fake supplier data; it did not measure mixed OCR/BSA/Form queue age, cost or a 24-hour deletion observation. The run used the private account's original metadata names before the QA-specific names were provisioned, and cleaned its cases on success.
+- The internal API `ca-ai7uae-api-private-qa` has internal ingress, the corrected `id-ai7uae-api-runtime` identity, and the separate `CaseManagerQaMetadata` table, `case-manager-qa-private` Blob container and `case-manager-qa-reconcile` queue. Its BSA, OCR, Forms and adverse-media production queue consumers remain off. The production API, DNS and customer capture were unchanged.
+
 ## Packaging and Azure preview
 
 1. Confirm the reviewed PR head, clean worktree, passing exact-head CI, and immutable API image digest. Do not substitute a mutable image tag.

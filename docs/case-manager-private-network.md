@@ -6,6 +6,8 @@ The dedicated VNet `vnet-ai7uae-cases-uaen-001` (`10.244.0.0/20`), delegated Con
 
 The manual probe execution `caj-ai7uae-cm-private-probe-uom8ham` succeeded on 2026-10-29 at 23:13:02 UTC using the API identity. Its sanitized result was `case_manager_private_path_verified {"private_dns":true,"blob":true,"table":true,"queue":true}`. It tested all three private DNS answers and managed-identity Blob/Table/Queue CRUD from a running container. The dedicated encryption key `case-manager-data-key-v1` was created in the existing KYCProbe Key Vault without printing its value.
 
+The isolated QA resources `CaseManagerQaMetadata`, `case-manager-qa-private`, `case-manager-qa-reconcile` and `case-manager-qa-dead-letter` were added inside the same private account. Internal QA API and its separately named purge/reconciliation jobs use these names; the future customer case table/container/queues are separate. A manual `case-manager-qa-load` queue is reserved for synthetic reconciliation capacity checks and has no scheduled consumer. The authenticated smoke execution `caj-ai7uae-cm-azure-qa-dwas9zn` succeeded against the isolated QA names with exact response retrieval, workspace denial, API-key-only denial and physical purge.
+
 ## Current KYCProbe resources
 
 | Resource group | Current readback | Cutover treatment |
@@ -47,4 +49,4 @@ Before real cases exist, routing back to the old environment is possible after d
 
 ## Open release gates
 
-Production exact-digest API what-if, new environment certificates and DNS validation, isolated OCR/BSA/Forms async QA, sustained mixed load and queue-age measurement, 24-hour deletion observation, a routine deployment after enablement, rollback, traffic and network posture approval, and a customer canary remain open. The GitHub deployer needs narrowly scoped read access to the new environment, Case Manager storage, private endpoints and probe executions before its release guard can operate; no deployer role was broadened here. Keep PR #108 draft and customer capture off.
+Production exact-digest API what-if, new environment certificates and DNS validation, real isolated OCR/BSA/Forms async QA, mixed load and queue-age measurement, 24-hour deletion observation, a routine deployment after enablement, rollback, traffic and network posture approval, and a customer canary remain open. The 180 QPM synchronous Azure run had zero failures but missed the proposed +100 ms p95 added-latency objective by 62 ms; see [release evidence](case-manager-release.md). The GitHub deployer needs narrowly scoped read access to the new environment, Case Manager storage, private endpoints and probe executions before its release guard can operate; no deployer role was broadened here. Keep PR #108 draft and customer capture off.

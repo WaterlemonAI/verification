@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
+import { QueueClient } from '@azure/storage-queue';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { MemoryCustomerUsageStore, validateCasePolicy } from '../lib/customer-usage.mjs';
 import { AzureCaseManagerStore } from '../lib/case-manager-store.mjs';
+import { ContainerAppsManagedIdentityCredential } from '../lib/azure-managed-identity.mjs';
 import { createPortalAccount, createPortalSession, PORTAL_COOKIE } from '../lib/portal-auth.mjs';
+import { drainCaseReconciliation } from './reconcile-cases.mjs';
 import { createAppServer } from '../server.mjs';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -60,13 +63,89 @@ async function runPhase(url, apiKey, { seconds, qpm, label }) {
     p99_ms: quantile(results.map((result) => result.ms), 0.99) };
 }
 
-export async function runQa({ load = false, seconds = 120, qpm = 180 } = {}) {
+async function runAsyncPhase({ usageStore, workspaceId, seconds, qpm }) {
+  const credential = new ContainerAppsManagedIdentityCredential();
+  const base = process.env.CASE_MANAGER_QUEUE_URL.replace(/\/$/, '');
+  const client = new QueueClient(`${base}/case-manager-qa-load`, credential);
+  const deadLetters = new QueueClient(`${base}/case-manager-qa-dead-letter`, credential);
+  if ((await client.getProperties()).approximateMessagesCount) throw new Error('qa_load_queue_not_empty');
+  const deadLettersBefore = (await deadLetters.getProperties()).approximateMessagesCount || 0;
+  const ages = [];
+  const queue = {
+    sendMessage: (...args) => client.sendMessage(...args),
+    deleteMessage: (...args) => client.deleteMessage(...args),
+    receiveMessages: async (...args) => {
+      const batch = await client.receiveMessages(...args);
+      for (const item of batch.receivedMessageItems || []) {
+        const inserted = new Date(item.insertedOn).getTime();
+        if (Number.isFinite(inserted)) ages.push(Math.max(0, Date.now() - inserted));
+      }
+      return batch;
+    }
+  };
+  const caseStore = new AzureCaseManagerStore({ queue });
+  const total = Math.ceil(seconds * qpm / 60);
+  const interval = 60_000 / qpm;
+  const started = performance.now();
+  let produced = 0;
+  let producerDone = false;
+  let captured = 0;
+  let errors = 0;
+  let batches = 0;
+  let producerElapsed = 0;
+  const producer = Promise.all(Array.from({ length: total }, async (_, index) => {
+    const wait = started + index * interval - performance.now();
+    if (wait > 0) await sleep(wait);
+    const serviceId = index % 2 ? 'bank-statement-analysis' : 'passport-icao-ocr';
+    const intent = await caseStore.createIntent({ workspaceId, serviceId, transactionId: randomUUID(),
+      acceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+    await caseStore.linkAsync(workspaceId, intent.id, { sourceId: `${index % 2 ? 'bsa' : 'ocr'}_${randomUUID()}`,
+      originalOwner: workspaceId });
+    produced++;
+  })).finally(() => { producerDone = true; producerElapsed = performance.now() - started; });
+  const consumer = (async () => {
+    const deadline = Date.now() + 12 * 60_000;
+    while ((!producerDone || captured < produced) && Date.now() < deadline) {
+      const counts = await drainCaseReconciliation({ queue, deadLetterQueue: deadLetters, caseStore,
+        usageStore, documentOcrStore: { getResult: async () => ({ job: { status: 'completed' },
+          result: { status: 'completed', data: { marker: 'synthetic' }, artifacts: [] } }) },
+        getBsaResultImpl: async () => ({ job: { status: 'completed' },
+          result: { status: 'partial', decisionEligible: false, artifacts: [] } }),
+        maxMessages: 512, maxBatches: 16, maxRunMs: 60_000 });
+      captured += counts.captured;
+      errors += counts.errors;
+      batches += counts.batches_received;
+      if (!counts.messages_processed) await sleep(500);
+    }
+  })();
+  await Promise.all([producer, consumer]);
+  let queueRemaining = 0;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    queueRemaining = (await client.getProperties()).approximateMessagesCount || 0;
+    if (!queueRemaining) break;
+    await sleep(1000);
+  }
+  const deadLettersAfter = (await deadLetters.getProperties()).approximateMessagesCount || 0;
+  assert.equal(produced, total);
+  assert.equal(captured, total);
+  assert.equal(errors, 0);
+  assert.equal(queueRemaining, 0);
+  assert.equal(deadLettersAfter, deadLettersBefore);
+  return { requests: total, offered_qpm: Math.round(total * 60_000 / producerElapsed),
+    completed_qpm: Math.round(total * 60_000 / (performance.now() - started)),
+    captured, errors, batches, queue_remaining: queueRemaining,
+    dead_letters_added: deadLettersAfter - deadLettersBefore,
+    queue_age_p95_ms: quantile(ages, 0.95), queue_age_p99_ms: quantile(ages, 0.99),
+    queue_age_max_ms: Math.round(Math.max(0, ...ages)) };
+}
+
+export async function runQa({ load = false, asyncQueue = false, seconds = 120, qpm = 180 } = {}) {
   if (process.env.CASE_MANAGER_QA_MODE !== 'true' ||
       ![process.env.CASE_MANAGER_BLOB_URL, process.env.CASE_MANAGER_TABLE_URL, process.env.CASE_MANAGER_QUEUE_URL]
         .every((url) => url?.startsWith(`https://${ownAccount}.`))) {
     throw new Error('case_manager_qa_isolation_required');
   }
-  if (load && (!(Number.isInteger(seconds) && seconds >= 30 && seconds <= 300) ||
+  if ((load || asyncQueue) && (!(Number.isInteger(seconds) && seconds >= 30 && seconds <= 300) ||
       !(Number.isInteger(qpm) && qpm >= 1 && qpm <= 180))) throw new Error('case_manager_qa_load_bounds');
 
   const store = new EnvironmentStore();
@@ -131,6 +210,8 @@ export async function runQa({ load = false, seconds = 120, qpm = 180 } = {}) {
     const captured = load ? await runPhase(url, client.apiKey, { seconds, qpm, label: 'capture_on' }) : null;
     const afterCount = load ? await countCases(caseStore, client.client.workspaceId) : 1;
     if (load) assert.equal(afterCount - beforeCount, captured.requests - captured.failures);
+    const asyncResult = asyncQueue ? await runAsyncPhase({ usageStore, workspaceId: client.client.workspaceId,
+      seconds, qpm }) : null;
 
     const futureExpiry = new Date(Date.now() + 60_000).toISOString();
     const expiring = await caseStore.createIntent({ workspaceId, serviceId: 'qa-synthetic-check',
@@ -148,6 +229,7 @@ export async function runQa({ load = false, seconds = 120, qpm = 180 } = {}) {
       api_key_history_denied: true, exact_response: true, physical_purge: true,
       supplier_calls: supplierCalls, response_bytes: Buffer.byteLength(JSON.stringify(payload)),
       baseline, captured, captured_cases: afterCount - beforeCount,
+      async_queue: asyncResult,
       p95_added_ms: load ? captured.p95_ms - baseline.p95_ms : null,
       p99_added_ms: load ? captured.p99_ms - baseline.p99_ms : null };
     console.info('case_manager_azure_qa_verified', JSON.stringify(result));
@@ -163,10 +245,12 @@ export async function runQa({ load = false, seconds = 120, qpm = 180 } = {}) {
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
   try {
     await runQa({ load: process.env.CASE_MANAGER_QA_LOAD === 'true',
+      asyncQueue: process.env.CASE_MANAGER_QA_ASYNC === 'true',
       seconds: Number(process.env.CASE_MANAGER_QA_SECONDS || 120),
       qpm: Number(process.env.CASE_MANAGER_QA_QPM || 180) });
   } catch (error) {
-    console.warn('case_manager_azure_qa_failed', error?.message || 'unknown');
+    const code = String(error?.code || error?.message || 'unknown');
+    console.warn('case_manager_azure_qa_failed', /^[A-Za-z0-9_]{1,64}$/.test(code) ? code : 'unknown');
     process.exitCode = 1;
   }
 }

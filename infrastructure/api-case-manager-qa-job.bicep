@@ -27,6 +27,9 @@ param caseManagerStorageName string = 'stai7uaecasesuaen001'
 @description('Run the bounded 180 QPM synthetic load comparison after smoke passes.')
 param runLoad bool = false
 
+@description('Run bounded synthetic OCR/BSA reconciliation on an isolated QA load queue.')
+param runAsync bool = false
+
 @description('Seconds per capture-off and capture-on phase (30-300).')
 @minValue(30)
 @maxValue(300)
@@ -66,6 +69,7 @@ resource qaJob 'Microsoft.App/jobs@2024-03-01' = {
             { name: 'NODE_ENV', value: 'test' }
             { name: 'CASE_MANAGER_QA_MODE', value: 'true' }
             { name: 'CASE_MANAGER_QA_LOAD', value: runLoad ? 'true' : 'false' }
+            { name: 'CASE_MANAGER_QA_ASYNC', value: runAsync ? 'true' : 'false' }
             { name: 'CASE_MANAGER_QA_SECONDS', value: string(phaseSeconds) }
             { name: 'CASE_MANAGER_QA_QPM', value: string(requestsPerMinute) }
             { name: 'CASE_MANAGER_ENABLED', value: 'true' }
