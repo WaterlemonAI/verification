@@ -11,6 +11,11 @@ on:
       - test/**
       - scripts/**
       - Dockerfile.document-ocr
+      - Dockerfile.api
+      - .dockerignore
+      - docs/case-manager.md
+      - docs/case-manager-release.md
+      - docs/case-manager-private-network.md
       - package.json
       - package-lock.json
       - infrastructure/api.bicep
