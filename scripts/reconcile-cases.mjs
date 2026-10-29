@@ -5,18 +5,26 @@ import { createCustomerUsageStore } from '../lib/customer-usage.mjs';
 import { createDocumentOcrStore } from '../lib/document-ocr-store.mjs';
 import { getBsaResult } from '../lib/bsa-store.mjs';
 import { reconcileCaseMessage } from '../lib/case-manager-reconcile.mjs';
+import { recoverCaseRetirements } from '../lib/case-manager-retirement.mjs';
 
 export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStore, usageStore,
   documentOcrStore, getBsaResultImpl = getBsaResult, maxMessages = 32 } = {}) {
-  const batch = await queue.receiveMessages({ numberOfMessages: Math.min(Math.max(maxMessages, 1), 32), visibilityTimeout: 120 });
-  const counts = { captured: 0, pending: 0, retired: 0, dead_lettered: 0, errors: 0 };
+  const counts = { captured: 0, pending: 0, retired: 0, dead_lettered: 0, errors: 0,
+    retirement_recovered: 0, retirement_continuing: 0 };
+  let batch;
+  try { batch = await queue.receiveMessages({ numberOfMessages: Math.min(Math.max(maxMessages, 1), 32), visibilityTimeout: 120 }); }
+  catch { counts.errors++; batch = { receivedMessageItems: [] }; }
   for (const item of batch.receivedMessageItems || []) {
     let message;
     try { message = JSON.parse(Buffer.from(item.messageText, 'base64').toString('utf8')); }
     catch { message = null; }
     if (message?.kind === 'retire' && message.version === 1 && message.workspaceId) {
       try {
-        const result = await caseStore.retireWorkspaceCases(message.workspaceId, Number(message.beforeVersion),
+        const beforeVersion = Number(message.beforeVersion);
+        const policy = await usageStore.casePolicy(message.workspaceId);
+        if (!Number.isSafeInteger(beforeVersion) || beforeVersion < 1
+          || policy.visible_from_version < beforeVersion) throw new Error('case_manager_retirement_policy_mismatch');
+        const result = await caseStore.retireWorkspaceCases(message.workspaceId, beforeVersion,
           { cursor: message.cursor || '', limit: 10_000 });
         if (!result.done) {
           await queue.sendMessage(Buffer.from(JSON.stringify({ ...message, cursor: result.cursor })).toString('base64'),
@@ -31,7 +39,9 @@ export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStor
               messageTimeToLive: 7 * 24 * 60 * 60 });
           counts.pending++;
         } else {
-          await deadLetterQueue.sendMessage(Buffer.from(JSON.stringify({ version: 1, reason: 'retirement_exhausted' })).toString('base64'));
+          await deadLetterQueue.sendMessage(Buffer.from(JSON.stringify({ version: 1, kind: 'retire',
+            workspaceId: message.workspaceId, beforeVersion: message.beforeVersion, cursor: message.cursor || '',
+            attempt, reason: 'retirement_exhausted' })).toString('base64'));
           counts.dead_lettered++;
         }
       }
@@ -56,13 +66,22 @@ export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStor
       if (message?.workspaceId && message?.caseId) {
         await caseStore.markIncomplete(message.workspaceId, message.caseId, 'RECONCILIATION_EXHAUSTED').catch(() => {});
       }
-      await deadLetterQueue.sendMessage(Buffer.from(JSON.stringify({ version: 1, caseId: message?.caseId || null,
+      await deadLetterQueue.sendMessage(Buffer.from(JSON.stringify({ version: 1, kind: 'reconcile',
+        workspaceId: message?.workspaceId || null, caseId: message?.caseId || null,
+        serviceId: message?.serviceId || null, sourceId: message?.sourceId || null,
+        originalOwner: message?.originalOwner || null, attempt: message?.attempt || 0,
         reason: outcome })).toString('base64'));
       counts.dead_lettered++;
     } else if (outcome === 'captured') counts.captured++;
     else if (outcome === 'retired' || outcome === 'incomplete') counts.retired++;
     await queue.deleteMessage(item.messageId, item.popReceipt);
   }
+  try {
+    const recovery = await recoverCaseRetirements({ usageStore, caseStore });
+    counts.retirement_recovered = recovery.completed;
+    counts.retirement_continuing = recovery.continuing;
+    counts.errors += recovery.errors;
+  } catch { counts.errors++; }
   return counts;
 }
 

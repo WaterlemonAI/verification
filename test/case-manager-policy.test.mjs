@@ -28,6 +28,13 @@ test('Azure policy update uses the account ETag and rejects stale versions', asy
       return structuredClone(item);
     },
     async createEntity(item) { entities.set(`${item.partitionKey}/${item.rowKey}`, { ...structuredClone(item), etag: '1' }); },
+    listEntities() { return (async function* () { for (const item of entities.values()) yield structuredClone(item); })(); },
+    async updateEntity(item, _mode, options) {
+      const key = `${item.partitionKey}/${item.rowKey}`;
+      const current = entities.get(key);
+      if (options.etag !== current.etag) throw Object.assign(new Error('stale'), { statusCode: 412 });
+      entities.set(key, { ...current, ...structuredClone(item), etag: String(Number(current.etag) + 1) });
+    },
     async submitTransaction(actions) {
       const [verb, item, , options] = actions[0];
       assert.equal(verb, 'update');
@@ -42,4 +49,18 @@ test('Azure policy update uses the account ETag and rejects stale versions', asy
     { version: 1, visible_from_version: 1, enabled: true, ttl_days: 1 });
   await assert.rejects(usage.updateCasePolicy('workspace-a', validateCasePolicy({ version: 0, enabled: false })), /changed/);
   assert.equal((await usage.casePolicy('workspace-a')).ttl_days, 1);
+  assert.deepEqual(await usage.pendingCaseRetirements(), [{ workspaceId: 'workspace-a', beforeVersion: 1, cursor: '' }]);
+  assert.equal(await usage.recordCaseRetirementProgress('workspace-a', 1, { done: true }), true);
+  assert.deepEqual(await usage.pendingCaseRetirements(), []);
+  await usage.updateCasePolicy('workspace-a', validateCasePolicy({ version: 1, enabled: false }));
+  assert.deepEqual(await usage.pendingCaseRetirements(), [{ workspaceId: 'workspace-a', beforeVersion: 2, cursor: '' }]);
+});
+
+test('a newer visibility floor resets retirement progress and rejects stale completion', async () => {
+  const usage = new MemoryCustomerUsageStore();
+  await usage.updateCasePolicy('workspace-a', validateCasePolicy({ version: 0, enabled: true, ttl_days: 45 }));
+  assert.equal(await usage.recordCaseRetirementProgress('workspace-a', 1, { done: false, cursor: 'case-900' }), true);
+  await usage.updateCasePolicy('workspace-a', validateCasePolicy({ version: 1, enabled: true, ttl_days: 30 }));
+  assert.equal(await usage.recordCaseRetirementProgress('workspace-a', 1, { done: true }), false);
+  assert.deepEqual(await usage.pendingCaseRetirements(), [{ workspaceId: 'workspace-a', beforeVersion: 2, cursor: '' }]);
 });

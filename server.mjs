@@ -1534,7 +1534,8 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
         try { await caseStore?.scheduleRetirement(account.client_id, saved.visible_from_version); }
         catch { retirementScheduled = false; console.warn('case_manager_retirement_schedule_failed'); }
       }
-      return json(res, 200, { available: true, policy: saved, retirement_scheduled: retirementScheduled }, { 'cache-control': 'no-store' });
+      return json(res, 200, { available: true, policy: saved, retirement_scheduled: retirementScheduled,
+        retirement_recovery_pending: !retirementScheduled }, { 'cache-control': 'no-store' });
     } catch (error) {
       const stale = /policy changed/.test(error.message);
       return json(res, stale ? 409 : 400, { status: 'Error', error: stale ? 'Settings changed. Reload and try again.' : error.message });

@@ -22,6 +22,10 @@ await caseStore.captureFinal(workspaceId, intent.id, { response: {
   status: 'partial', subject: '<img src=x onerror=window.__caseXss=1>',
   nested: { rows: Array.from({ length: 30 }, (_, index) => ({ index, note: 'Synthetic evidence '.repeat(10) })) }
 }, contentType: 'application/json', httpStatus: 200, outcome: 'review_required', reasonCodes: ['PARTIAL'] });
+const ocr = await caseStore.createIntent({ workspaceId, serviceId: 'passport-icao-ocr', transactionId: 'synthetic-ocr-tx',
+  acceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+await caseStore.captureFinal(workspaceId, ocr.id, { response: { status: 'completed', data: { document_number: 'SYNTHETIC' } },
+  contentType: 'application/json', httpStatus: 200, outcome: 'extracted' });
 const server = createAppServer({ store, usageStore, caseStore, startWorker: false, deepResearchQueue: null, formsQueue: null });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -36,8 +40,9 @@ try {
     const page = await context.newPage();
     await page.goto(`${base}/cases`);
     await page.locator('.case-list-item').first().waitFor();
-    await page.locator('.case-list-item').first().click();
+    await page.locator('.case-list-item', { hasText: 'synthetic-service' }).click();
     await page.locator('.case-result').getByText('<img src=x onerror=window.__caseXss=1>').waitFor();
+    await page.locator('.case-summary').getByText('Review required').waitFor();
     await page.getByRole('button', { name: 'Final response JSON' }).click();
     await page.locator('.case-json').waitFor();
     const result = await page.evaluate(() => ({ viewport: innerWidth,
@@ -47,6 +52,9 @@ try {
     if (result.scroll_width > result.viewport + 1 || result.xss_executed || result.injected_image || !result.raw_json_visible) {
       throw new Error(`Case Manager UI smoke failed: ${JSON.stringify(result)}`);
     }
+    await page.locator('.case-list-item', { hasText: 'passport-icao-ocr' }).click();
+    await page.locator('.case-summary').getByText('Extraction status').waitFor();
+    await page.locator('.case-summary').getByText('1', { exact: true }).waitFor();
     results.push(result);
     await context.close();
   }

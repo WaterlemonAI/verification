@@ -106,3 +106,24 @@ test('Azure purge retains the expiry marker until a failed row deletion can be r
   assert.equal(table.entities.has(table.key('expiry', `${row.expiresAt}-${row.caseId}`)), false);
   assert.equal(table.entities.has(table.key(row.partitionKey, row.rowKey)), false);
 });
+
+test('Azure pagination advances past more than 1,000 hidden index rows', async () => {
+  const indexes = Array.from({ length: 1002 }, (_, index) => ({
+    rowKey: `idx-all-all-${String(index).padStart(4, '0')}`, caseId: String(index)
+  }));
+  let query = 0;
+  const table = { listEntities: () => (async function* () {
+    for (const index of query++ === 0 ? indexes : indexes.slice(1000)) yield index;
+  })() };
+  const store = new AzureCaseManagerStore({ table, container: { getBlockBlobClient: () => ({}) }, queue: {} });
+  store.row = async (_workspaceId, caseId) => ({ caseId, serviceId: 'synthetic', acceptedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: Number(caseId) === 1001 ? 2 : 1,
+    state: 'complete', outcome: 'unclassified', reasonCodesJson: '[]', attemptIdsJson: '[]' });
+  const first = await store.listCases('synthetic-workspace', { activePolicyVersion: 2 });
+  assert.deepEqual(first.cases, []);
+  assert.equal(first.next_cursor, indexes[999].rowKey);
+  const second = await store.listCases('synthetic-workspace', { activePolicyVersion: 2, cursor: first.next_cursor });
+  assert.equal(second.cases.length, 1);
+  assert.equal(second.cases[0].id, '1001');
+  assert.equal(second.next_cursor, null);
+});

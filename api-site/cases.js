@@ -47,6 +47,47 @@
     return details;
   }
 
+  function renderSummary(item, response) {
+    const section = document.createElement('section');
+    section.className = 'case-summary';
+    section.append(text('h3', 'At a glance'));
+    const cards = document.createElement('div'); cards.className = 'case-summary-grid';
+    const add = (label, value) => {
+      if (value == null || value === '') return;
+      const card = document.createElement('div'); card.className = 'case-summary-card';
+      card.append(text('small', label), text('strong', value)); cards.append(card);
+    };
+    const yesNo = (value) => typeof value === 'boolean' ? value ? 'Yes' : 'No' : null;
+    add('Business outcome', labels[item.outcome] || 'Unclassified');
+    add('Service', item.service_id);
+    if (response && typeof response === 'object' && !Array.isArray(response)) {
+      if (item.service_id === 'adverse-media') {
+        add('Coverage complete', yesNo(response.coverage?.complete));
+        add('Decision eligible', yesNo(response.summary?.decision_eligible));
+        add('Human review required', yesNo(response.summary?.human_review_required));
+      } else if (item.service_id === 'merchant-screening') {
+        add('Risk level', typeof response.summary?.risk_level === 'string' ? response.summary.risk_level : null);
+        add('Decision eligible', yesNo(response.summary?.decision_eligible));
+      } else if (item.service_id === 'bank-statement-analysis') {
+        add('Analysis status', typeof response.status === 'string' ? response.status : null);
+        add('Decision eligible', yesNo(response.decisionEligible));
+        add('Artifacts', Array.isArray(response.artifacts) ? response.artifacts.length : null);
+      } else if (item.service_id === 'forms') {
+        add('Form status', typeof response.status === 'string' ? response.status : null);
+        add('Selected checks', Array.isArray(response.services) ? response.services.length : null);
+        add('Decision eligible', yesNo(response.summary?.decision_eligible));
+      } else if (item.service_id.endsWith('-ocr') || item.service_id === 'moa-analysis') {
+        add('Extraction status', typeof response.status === 'string' ? response.status : response.job?.status);
+        add('Extracted fields', response.data && typeof response.data === 'object' ? Object.keys(response.data).length : null);
+        add('Artifacts', Array.isArray(response.artifacts) ? response.artifacts.length : null);
+      } else {
+        add('Supplier status', typeof response.status === 'string' ? response.status : null);
+      }
+    }
+    section.append(cards);
+    return section;
+  }
+
   function filterQuery() {
     const query = new URLSearchParams();
     const from = $('case-from').value;
@@ -95,7 +136,7 @@
         ['Reason codes', item.outcome_reason_codes.join(', ') || 'None']]) {
         meta.append(text('dt', name), text('dd', value));
       }
-      panel.append(meta);
+      panel.append(meta, renderSummary(item, result.response));
       if (result.artifacts.length) {
         const artifacts = document.createElement('div'); artifacts.className = 'case-artifacts';
         artifacts.append(text('h3', 'Artifacts'));

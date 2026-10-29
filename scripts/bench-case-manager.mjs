@@ -8,8 +8,10 @@ process.env.NODE_ENV = 'test';
 const { createAppServer } = await import('../server.mjs');
 const peakQpm = Number(process.argv[2] || 100);
 const seconds = Number(process.argv[3] || 10);
-if (!Number.isFinite(peakQpm) || peakQpm < 1 || !Number.isFinite(seconds) || seconds < 1) {
-  throw new Error('Usage: node scripts/bench-case-manager.mjs [peak-qpm] [seconds]');
+const responseKb = Number(process.argv[4] || 0);
+if (!Number.isFinite(peakQpm) || peakQpm < 1 || !Number.isFinite(seconds) || seconds < 1
+  || !Number.isInteger(responseKb) || responseKb < 0 || responseKb > 2048) {
+  throw new Error('Usage: node scripts/bench-case-manager.mjs [peak-qpm] [seconds] [extra-response-kb]');
 }
 const targetQpm = peakQpm * 2;
 const intervalMs = 60_000 / targetQpm;
@@ -24,7 +26,7 @@ const usageStore = new MemoryCustomerUsageStore();
 const caseStore = new MemoryCaseManagerStore();
 const response = { status: 'partial', result: { name: 'Synthetic subject', evidence: Array.from({ length: 20 }, (_, i) => ({
   code: `SYNTHETIC_${i}`, notes: 'Synthetic data only. '.repeat(8)
-})) } };
+})) }, synthetic_padding: 'S'.repeat(responseKb * 1024) };
 const server = createAppServer({ store, usageStore, caseStore, startWorker: false,
   deepResearchQueue: null, formsQueue: null,
   fetchImpl: async () => { await delay(30); return new Response(JSON.stringify(response), {
@@ -57,8 +59,10 @@ async function run(enabled) {
   const bytes = [...caseStore.payloads.values()].reduce((sum, payload) => sum + payload.length, 0);
   return { requests: count, target_qpm: targetQpm, observed_qpm: Math.round(count * 60 / elapsedSeconds),
     latency_ms: { p50: Math.round(percentile(latencies, 0.5)), p95: Math.round(percentile(latencies, 0.95)),
+      p99: Math.round(percentile(latencies, 0.99)),
       max: Math.round(latencies.at(-1)) }, heap_delta_bytes: process.memoryUsage().heapUsed - startMemory,
-    cases: caseStore.rows.size, encrypted_blob_bytes: bytes, encrypted_bytes_per_case: caseStore.rows.size ? Math.round(bytes / caseStore.rows.size) : 0 };
+    cases: caseStore.rows.size, capture_failures: enabled ? count - caseStore.rows.size : 0,
+    encrypted_blob_bytes: bytes, encrypted_bytes_per_case: caseStore.rows.size ? Math.round(bytes / caseStore.rows.size) : 0 };
 }
 
 try {
@@ -76,6 +80,7 @@ try {
   const page = await caseStore.listCases(workspaceId, { serviceId: 'synthetic-benchmark', outcome: 'unclassified', limit: 10 });
   if (page.cases.length !== 10 || !page.next_cursor) throw new Error('benchmark_pagination_failed');
   console.log(JSON.stringify({ synthetic: true, provisional_peak_qpm: peakQpm, duration_per_mode_seconds: seconds,
+    extra_response_kb: responseKb,
     feature_off: off, feature_on: on, concurrent_write_burst: { requests: burst.length,
       elapsed_ms: Math.round(performance.now() - burstStart) }, filtered_page_size: page.cases.length }, null, 2));
 } finally {

@@ -38,10 +38,6 @@ on:
         description: Provision the isolated Case Manager storage only; API capture stays off
         type: boolean
         default: false
-      enableCaseManager:
-        description: Enable Case Manager only after reviewed storage, key, privacy, and QA gates
-        type: boolean
-        default: false
 
 # DOCUMENT_OCR_ENABLED is an environment variable set only after all eight
 # sample-based accuracy gates and the dedicated Gemini credential are ready.
@@ -68,6 +64,14 @@ jobs:
       - name: Test API contract and isolation
         run: npm test
 
+      - name: Resolve persistent Case Manager deployment state
+        id: case_manager_state
+        env:
+          CASE_MANAGER_DESIRED_ENABLED: ${{ vars.CASE_MANAGER_DESIRED_ENABLED }}
+          CASE_MANAGER_EMERGENCY_OFF: ${{ vars.CASE_MANAGER_EMERGENCY_OFF }}
+          CASE_MANAGER_MAINTENANCE_ENABLED: ${{ vars.CASE_MANAGER_MAINTENANCE_ENABLED }}
+        run: node scripts/resolve-case-manager-deployment.mjs >> "$GITHUB_OUTPUT"
+
       - name: Sign in to Azure with workload identity
         uses: azure/login@v2
         with:
@@ -90,8 +94,9 @@ jobs:
           test -n "${digest}"
           image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
           echo "image=${image}" >> "${GITHUB_OUTPUT}"
-          printf '{"repository":"%s","source_sha":"%s","run_id":"%s","run_attempt":"%s","digest":"%s","image":"%s"}\n' \
+          printf '{"repository":"%s","source_sha":"%s","run_id":"%s","run_attempt":"%s","digest":"%s","image":"%s","case_manager_enabled":%s,"case_manager_maintenance":%s}\n' \
             "${repository}" "${GITHUB_SHA}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" "${digest}" "${image}" \
+            "${{ steps.case_manager_state.outputs.enabled }}" "${{ steps.case_manager_state.outputs.maintenance }}" \
             > api-deployment-evidence.json
 
       - name: Build and publish immutable merchant screenshot worker image
@@ -158,7 +163,7 @@ jobs:
           az bicep build --file infrastructure/api-case-manager-platform.bicep
 
       - name: Provision isolated Case Manager storage
-        if: github.event_name == 'workflow_dispatch' && inputs.provisionCaseManagerPlatform && !inputs.enableCaseManager
+        if: github.event_name == 'workflow_dispatch' && inputs.provisionCaseManagerPlatform && steps.case_manager_state.outputs.enabled != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -208,11 +213,11 @@ jobs:
           jq -e '.location == "uaenorth" and (.principalId | type == "string" and length > 0)' <<< "${identity}" > /dev/null
 
       - name: Verify Case Manager release prerequisites
-        if: github.event_name == 'workflow_dispatch' && inputs.enableCaseManager
+        if: steps.case_manager_state.outputs.enabled == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          test "${{ vars.CASE_MANAGER_MAINTENANCE_ENABLED }}" = 'true'
+          test "${{ steps.case_manager_state.outputs.maintenance }}" = 'true'
           storage="$(az storage account show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name stai7uaecasesuaen001 \
             --query '{location:location,sharedKeyAllowed:allowSharedKeyAccess,publicBlobAllowed:allowBlobPublicAccess}' --output json)"
           jq -e '.location == "uaenorth" and .sharedKeyAllowed == false and .publicBlobAllowed == false' <<< "${storage}" > /dev/null
@@ -230,8 +235,8 @@ jobs:
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
-              enableCaseManager="${{ github.event_name == 'workflow_dispatch' && inputs.enableCaseManager && 'true' || 'false' }}" \
-              maintainCaseManagerData="${{ vars.CASE_MANAGER_MAINTENANCE_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
+              maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
@@ -254,8 +259,8 @@ jobs:
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
-              enableCaseManager="${{ github.event_name == 'workflow_dispatch' && inputs.enableCaseManager && 'true' || 'false' }}" \
-              maintainCaseManagerData="${{ vars.CASE_MANAGER_MAINTENANCE_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
+              maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \

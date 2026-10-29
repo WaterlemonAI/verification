@@ -105,9 +105,11 @@
       const result = await request('/portal/api/case-manager/settings', { method: 'PUT',
         body: JSON.stringify({ version: casePolicyVersion, enabled, ttl_days: ttlDays }) });
       casePolicyVersion = result.policy.version;
-      byId('case-settings-message').textContent = enabled
-        ? `Case Manager is enabled for new checks. Copies expire after ${ttlDays} days (30 days at most for OCR).`
-        : 'Case Manager is disabled. Earlier copies are retired and will be purged.';
+      byId('case-settings-message').textContent = result.retirement_recovery_pending
+        ? 'Earlier case copies are hidden. Deletion recovery is pending and operations has been alerted.'
+        : enabled
+          ? `Case Manager is enabled for new checks. Copies expire after ${ttlDays} days (30 days at most for OCR).`
+          : 'Case Manager is disabled. Earlier copies are retired and will be purged.';
     } catch (error) { byId('case-settings-message').textContent = error.message; }
     finally { button.disabled = false; }
   });
