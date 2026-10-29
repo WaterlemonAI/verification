@@ -103,6 +103,12 @@ resource qaContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@
   properties: { publicAccess: 'None' }
 }
 
+resource qaArtifactContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'case-manager-qa-artifacts'
+  properties: { publicAccess: 'None' }
+}
+
 resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
   parent: storage
   name: 'default'
@@ -149,6 +155,11 @@ resource probeTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023
 resource qaMetadata 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
   parent: tableService
   name: 'CaseManagerQaMetadata'
+}
+
+resource qaArtifacts 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  parent: tableService
+  name: 'CaseManagerQaArtifacts'
 }
 
 resource apiBlobAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
