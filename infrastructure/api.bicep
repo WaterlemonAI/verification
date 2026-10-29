@@ -386,6 +386,7 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (enableCas
         { name: 'bsa-data-key', keyVaultUrl: '${keyVaultUri}secrets/bsa-data-key', identity: runtimeIdentityResourceId }
       ], enableDocumentOcr ? [
         { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: runtimeIdentityResourceId }
+        { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
       ] : [])
       registries: [ { server: acrLoginServer, identity: runtimeIdentityResourceId } ]
     }
@@ -413,6 +414,8 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (enableCas
           ], enableDocumentOcr ? [
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
+            { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
+            { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
           ] : [])
           resources: { cpu: json('0.5'), memory: '1Gi' }
         }
