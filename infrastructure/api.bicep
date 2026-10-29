@@ -406,8 +406,9 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManag
       scheduleTriggerConfig: { cronExpression: '*/2 * * * *', parallelism: 1, replicaCompletionCount: 1 }
       secrets: concat([
         { name: 'case-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/case-manager-data-key-v1', identity: runtimeIdentityResourceId }
+      ], !parallelDeployment ? [
         { name: 'bsa-data-key', keyVaultUrl: '${keyVaultUri}secrets/bsa-data-key', identity: runtimeIdentityResourceId }
-      ], enableDocumentOcr ? [
+      ] : [], !parallelDeployment && enableDocumentOcr ? [
         { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: runtimeIdentityResourceId }
         { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
       ] : [])
@@ -427,6 +428,7 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManag
             { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_DATA_KEY_V1_HEX', secretRef: 'case-data-key-v1' }
             { name: 'CASE_MANAGER_ACTIVE_KEY_VERSION', value: '1' }
+          ], !parallelDeployment ? [
             { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
             { name: 'BSA_PRODUCTION_ENABLED', value: '1' }
             { name: 'BSA_DATA_KEY_HEX', secretRef: 'bsa-data-key' }
@@ -434,7 +436,7 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManag
             { name: 'BSA_STORAGE_CONTAINER', value: 'bank-statement-analysis' }
             { name: 'BSA_STORAGE_QUEUE', value: 'bank-statement-analysis' }
             { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
-          ], enableDocumentOcr ? [
+          ] : [], !parallelDeployment && enableDocumentOcr ? [
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
