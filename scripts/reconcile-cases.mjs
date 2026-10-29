@@ -17,7 +17,7 @@ export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStor
     if (message?.kind === 'retire' && message.version === 1 && message.workspaceId) {
       try {
         const result = await caseStore.retireWorkspaceCases(message.workspaceId, Number(message.beforeVersion),
-          { cursor: message.cursor || '', limit: 100 });
+          { cursor: message.cursor || '', limit: 10_000 });
         if (!result.done) {
           await queue.sendMessage(Buffer.from(JSON.stringify({ ...message, cursor: result.cursor })).toString('base64'),
             { messageTimeToLive: 7 * 24 * 60 * 60 });

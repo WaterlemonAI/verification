@@ -65,3 +65,20 @@ test('an interrupted Azure finalization keeps the first encrypted response on re
     else process.env.CASE_MANAGER_DATA_KEY_V1_HEX = previousKey;
   }
 });
+
+test('workspace retirement advances a bounded cursor after parallel deletion', async () => {
+  const rows = ['case-a', 'case-b', 'case-c'].map((rowKey) => ({ rowKey, policyVersion: 1 }));
+  let query = 0;
+  const table = { listEntities: () => (async function* () {
+    for (const row of query++ === 0 ? rows : rows.slice(2)) yield row;
+  })() };
+  const store = new AzureCaseManagerStore({ table, container: { getBlockBlobClient: () => ({}) }, queue: {} });
+  const deleted = [];
+  store.deleteCaseRow = async (row) => { deleted.push(row.rowKey); };
+  const first = await store.retireWorkspaceCases('synthetic-workspace', 2, { limit: 2 });
+  assert.deepEqual(first, { done: false, cursor: 'case-b' });
+  assert.deepEqual(deleted.sort(), ['case-a', 'case-b']);
+  const last = await store.retireWorkspaceCases('synthetic-workspace', 2, { cursor: first.cursor, limit: 2 });
+  assert.deepEqual(last, { done: true, cursor: '' });
+  assert.deepEqual(deleted.sort(), ['case-a', 'case-b', 'case-c']);
+});
