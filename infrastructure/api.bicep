@@ -736,6 +736,9 @@ resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-0
 var caseManagerAlertSignals = [
   { name: 'capture', signal: 'case_manager_capture_failed' }
   { name: 'intent', signal: 'case_manager_intent_failed' }
+  { name: 'link', signal: 'case_manager_reconcile_link_failed' }
+  { name: 'incomplete', signal: 'case_manager_incomplete_mark_failed' }
+  { name: 'rejected-attempt', signal: 'case_manager_rejected_attempt_capture_failed' }
   { name: 'storage', signal: 'case_manager_storage_error' }
   { name: 'pending', signal: 'case_manager_aged_pending' }
   { name: 'expiry', signal: 'case_manager_expiry_backlog' }
