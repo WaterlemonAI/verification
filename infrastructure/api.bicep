@@ -63,6 +63,9 @@ param parallelDeployment bool = false
 @description('Enable synthetic-only Case Manager capture and its dedicated maintenance jobs on the internal parallel API after private-path proof. Shared source queue consumers stay off.')
 param parallelCaseManagerQa bool = false
 
+@description('Move existing API and adverse-source alerts to the new app only after customer traffic moves.')
+param apiTrafficCutover bool = false
+
 @description('Dedicated S0 Document Intelligence account for the eight extraction APIs.')
 param documentOcrEndpoint string = 'https://doc-ai7uae-ocr-uaen-001.cognitiveservices.azure.com/'
 
@@ -144,6 +147,8 @@ resource formsDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/q
 var bankStatementClamavImage = '${acrLoginServer}/ai7uae-clamav@sha256:6ba4e78b29853b2fc7e3c111389596e2cad5ec4ed5f0fd2cb663d29ab6b0e6a3'
 var caseManagerRuntimeEnabled = (!parallelDeployment && enableCaseManager) || (parallelDeployment && parallelCaseManagerQa)
 var caseManagerMaintenanceEnabled = (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) || (parallelDeployment && parallelCaseManagerQa)
+var monitoredApiId = apiTrafficCutover ? api.id : resourceId('Microsoft.App/containerApps', 'ca-ai7uae-api')
+var monitoredApiName = apiTrafficCutover ? containerAppName : 'ca-ai7uae-api'
 var customDomains = parallelDeployment ? [] : concat(
   empty(apiCertificateId) ? [] : [
     {
@@ -710,7 +715,7 @@ resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = if (!par
     description: 'Five or more API HTTP 5xx responses in five minutes.'
     severity: 2
     enabled: true
-    scopes: [ api.id ]
+    scopes: [ monitoredApiId ]
     evaluationFrequency: 'PT1M'
     windowSize: 'PT5M'
     autoMitigate: true
@@ -755,7 +760,7 @@ resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-0
     criteria: {
       allOf: [
         {
-          query: 'ContainerAppConsoleLogs_CL | where ContainerAppName_s == "${containerAppName}" and Log_s has "adverse_media_search_unavailable" | summarize failed = count()'
+          query: 'ContainerAppConsoleLogs_CL | where ContainerAppName_s == "${monitoredApiName}" and Log_s has "adverse_media_search_unavailable" | summarize failed = count()'
           metricMeasureColumn: 'failed'
           timeAggregation: 'Total'
           operator: 'GreaterThanOrEqual'

@@ -274,6 +274,7 @@ jobs:
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
               parallelDeployment="${{ vars.CASE_MANAGER_PARALLEL_QA == 'true' && 'true' || 'false' }}" \
+              apiTrafficCutover="${{ vars.CASE_MANAGER_TRAFFIC_CUTOVER == 'true' && 'true' || 'false' }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               containerAppName="${{ vars.API_CONTAINER_APP_NAME || 'ca-ai7uae-api' }}" \
               merchantScreenshotWorkerName="${{ vars.MERCHANT_SCREENSHOT_WORKER_NAME || 'ca-ai7uae-merchant-screenshot' }}" \
@@ -306,6 +307,7 @@ jobs:
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
               parallelDeployment="${{ vars.CASE_MANAGER_PARALLEL_QA == 'true' && 'true' || 'false' }}" \
+              apiTrafficCutover="${{ vars.CASE_MANAGER_TRAFFIC_CUTOVER == 'true' && 'true' || 'false' }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
               containerAppName="${{ vars.API_CONTAINER_APP_NAME || 'ca-ai7uae-api' }}" \
               merchantScreenshotWorkerName="${{ vars.MERCHANT_SCREENSHOT_WORKER_NAME || 'ca-ai7uae-merchant-screenshot' }}" \

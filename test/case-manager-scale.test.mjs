@@ -86,3 +86,38 @@ test('one scheduled run drains two minutes of synthetic 200 QPM arrivals and obs
   assert.equal(deleted, 400);
   assert.equal(arrivals.length, 0);
 });
+
+test('retirement cursor processes 50,000 cases in bounded pages without a tenant cap', async () => {
+  const rows = Array.from({ length: 50_000 }, (_, index) => ({
+    rowKey: `case-${String(index).padStart(5, '0')}`, caseId: String(index), policyVersion: 1
+  }));
+  const table = { listEntities({ queryOptions }) {
+    const filter = String(queryOptions.filter);
+    assert.match(filter, /PartitionKey eq 'w-/);
+    const after = /RowKey gt '([^']*)'/.exec(filter)?.[1] || 'case-';
+    let low = 0;
+    let high = rows.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (rows[middle].rowKey <= after) low = middle + 1;
+      else high = middle;
+    }
+    return (async function* () {
+      for (let index = low; index < Math.min(low + 10_001, rows.length); index++) yield rows[index];
+    })();
+  } };
+  const store = new AzureCaseManagerStore({ table, container: {} });
+  const deleted = new Set();
+  store.deleteCaseRow = async (row) => { deleted.add(row.caseId); };
+  let cursor = '';
+  let pages = 0;
+  let done = false;
+  while (!done) {
+    const page = await store.retireWorkspaceCases('large-synthetic-workspace', 2, { cursor, limit: 10_000 });
+    cursor = page.cursor;
+    done = page.done;
+    pages++;
+  }
+  assert.equal(pages, 5);
+  assert.equal(deleted.size, 50_000);
+});
