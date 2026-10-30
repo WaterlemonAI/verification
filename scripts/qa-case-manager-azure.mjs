@@ -6,6 +6,7 @@ import { odata } from '@azure/data-tables';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { MemoryCustomerUsageStore, validateCasePolicy } from '../lib/customer-usage.mjs';
 import { AzureCaseManagerStore } from '../lib/case-manager-store.mjs';
+import { caseOutcome } from '../lib/case-manager-outcomes.mjs';
 import { AzureLoginOtpStore } from '../lib/login-otp.mjs';
 import { AzureAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { ContainerAppsManagedIdentityCredential } from '../lib/azure-managed-identity.mjs';
@@ -189,13 +190,75 @@ async function runAsyncPhase({ usageStore, workspaceId, seconds, qpm }) {
     queue_age_max_ms: Math.round(Math.max(0, ...ages)) };
 }
 
-export async function runQa({ load = false, asyncQueue = false, seconds = 120, qpm = 200 } = {}) {
+const mixedLicence = { status: 'Success', uae_tl_verification: {
+  uae_licence_number: 'SYN-123', licence_registration_name: 'Synthetic Trading LLC',
+  license_status: 'Active', moec_status: 'Active', expiration_date: '2099-01-01' } };
+const mixedIban = { status: 1, data: { results: {
+  result: 'Full Bank and Account Owner Match', bank: 'MATCH', bankCode: 'MATCH',
+  completeName: 'MATCH', bankAccountNumber: 'MATCH' } } };
+const mixedFixtures = [
+  ['uae-tlv', mixedLicence, 8_000],
+  ['iban-verification', mixedIban, 4_000],
+  ['entity-search', { message: 'Search Successful', profiles_success: true,
+    data: { profiles: [] } }, 40_000],
+  ['adverse-media', { status: 'completed', coverage: { complete: true },
+    summary: { outcome: 'safe', decision_eligible: true, human_review_required: false } }, 80_000],
+  ['merchant-screening', { status: 'completed',
+    summary: { risk_level: 'safe', decision_eligible: true, human_review_required: false } }, 100_000],
+  ['forms', { status: 'completed', summary: { decision_eligible: true, total: 2 },
+    services: [
+      { service_id: 'uae-tlv', response: mixedLicence, http_status: 200,
+        transport: { completed: true }, coverage: { complete: true }, eligibility: { decision_eligible: true } },
+      { service_id: 'iban-verification', response: mixedIban, http_status: 200,
+        transport: { completed: true }, coverage: { complete: true }, eligibility: { decision_eligible: true } }
+    ] }, 180_000],
+  ['passport-icao-ocr', { status: 'completed', data: { document_number: 'SYNTHETIC' } }, 230_000],
+  ['bank-statement-analysis', { status: 'completed', decisionEligible: false }, 230_000]
+];
+
+async function runMixedPhase({ caseStore, workspaceId, otherWorkspaceId, seconds, qpm }) {
+  const total = Math.ceil(seconds * qpm / 60);
+  const interval = 60_000 / qpm;
+  const started = performance.now();
+  const results = await Promise.all(Array.from({ length: total }, async (_, index) => {
+    const wait = started + index * interval - performance.now();
+    if (wait > 0) await sleep(wait);
+    const [serviceId, fixture, paddingBytes] = mixedFixtures[index % mixedFixtures.length];
+    const response = { ...fixture, synthetic_padding: 'x'.repeat(paddingBytes) };
+    const acceptedAt = new Date().toISOString();
+    const began = performance.now();
+    const intent = await caseStore.createIntent({ workspaceId, serviceId, transactionId: randomUUID(),
+      acceptedAt, expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+    const mapping = caseOutcome(serviceId, response, { httpStatus: 200 });
+    await caseStore.captureFinal(workspaceId, intent.id, { response, contentType: 'application/json',
+      httpStatus: 200, outcome: mapping.outcome, reasonCodes: mapping.reasonCodes });
+    return { serviceId, id: intent.id, outcome: mapping.outcome, ms: performance.now() - began,
+      bytes: Buffer.byteLength(JSON.stringify(response)) };
+  }));
+  const byService = Object.fromEntries(mixedFixtures.map(([serviceId]) => [serviceId,
+    results.filter((entry) => entry.serviceId === serviceId).length]));
+  for (const serviceId of Object.keys(byService)) {
+    const first = results.find((entry) => entry.serviceId === serviceId);
+    const saved = await caseStore.getCase(workspaceId, first.id);
+    assert.equal(saved.outcome, first.outcome);
+    assert.equal((await caseStore.getCase(otherWorkspaceId, first.id)), null);
+    const filtered = await caseStore.listCases(workspaceId, { serviceId, outcome: first.outcome, limit: 1 });
+    assert.equal(filtered.cases[0]?.service_id, serviceId);
+  }
+  return { requests: total, captured: results.length, offered_qpm: qpm,
+    completed_qpm: Math.round(total * 60_000 / (performance.now() - started)),
+    response_bytes_total: results.reduce((sum, entry) => sum + entry.bytes, 0),
+    capture_p95_ms: quantile(results.map((entry) => entry.ms), 0.95),
+    capture_p99_ms: quantile(results.map((entry) => entry.ms), 0.99), by_service: byService };
+}
+
+export async function runQa({ load = false, asyncQueue = false, mixed = false, seconds = 120, qpm = 200 } = {}) {
   if (process.env.CASE_MANAGER_QA_MODE !== 'true' ||
       ![process.env.CASE_MANAGER_BLOB_URL, process.env.CASE_MANAGER_TABLE_URL, process.env.CASE_MANAGER_QUEUE_URL]
         .every((url) => url?.startsWith(`https://${ownAccount}.`))) {
     throw new Error('case_manager_qa_isolation_required');
   }
-  if ((load || asyncQueue) && (!(Number.isInteger(seconds) && seconds >= 30 && seconds <= 300) ||
+  if ((load || asyncQueue || mixed) && (!(Number.isInteger(seconds) && seconds >= 30 && seconds <= 300) ||
       !(Number.isInteger(qpm) && qpm >= 1 && qpm <= 200))) throw new Error('case_manager_qa_load_bounds');
 
   const store = new EnvironmentStore();
@@ -331,6 +394,10 @@ export async function runQa({ load = false, asyncQueue = false, seconds = 120, q
     if (load) assert.equal(afterCount - beforeCount, captured.requests - captured.failures);
     const asyncResult = asyncQueue ? await runAsyncPhase({ usageStore, workspaceId: client.client.workspaceId,
       seconds, qpm }) : null;
+    const mixedBefore = mixed ? await countCases(caseStore, client.client.workspaceId) : 0;
+    const mixedResult = mixed ? await runMixedPhase({ caseStore, workspaceId: client.client.workspaceId,
+      otherWorkspaceId, seconds, qpm }) : null;
+    if (mixed) assert.equal(await countCases(caseStore, client.client.workspaceId) - mixedBefore, mixedResult.requests);
 
     const futureExpiry = new Date(Date.now() + 60_000).toISOString();
     const expiring = await caseStore.createIntent({ workspaceId: purgeFixtureWorkspaceId, serviceId: 'qa-synthetic-check',
@@ -351,7 +418,7 @@ export async function runQa({ load = false, asyncQueue = false, seconds = 120, q
       queue_failure_retirement: true,
       supplier_calls: supplierCalls, response_bytes: Buffer.byteLength(JSON.stringify(payload)),
       baseline, captured, captured_cases: afterCount - beforeCount,
-      async_queue: asyncResult,
+      async_queue: asyncResult, mixed_capture: mixedResult,
       p95_added_ms: load ? captured.p95_ms - baseline.p95_ms : null,
       p99_added_ms: load ? captured.p99_ms - baseline.p99_ms : null };
     console.info('case_manager_azure_qa_verified', JSON.stringify(result));
@@ -366,7 +433,11 @@ export async function runQa({ load = false, asyncQueue = false, seconds = 120, q
       });
     }
     try {
+      const cleanupStarted = performance.now();
+      const cleanupCount = (load || mixed || asyncQueue) ? await countCases(caseStore, client.client.workspaceId) : 0;
       await retireAll(caseStore, client.client.workspaceId);
+      if (cleanupCount) console.info('case_manager_qa_retirement_throughput', JSON.stringify({
+        cases: cleanupCount, elapsed_ms: Math.round(performance.now() - cleanupStarted) }));
       await retireAll(caseStore, purgeFixtureWorkspaceId);
       await retireAll(caseStore, retirementWorkspaceId);
       assert.equal(await countCases(caseStore, client.client.workspaceId), 0);
@@ -385,7 +456,7 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   try {
     if (process.env.CASE_MANAGER_QA_CLEANUP === 'true') await cleanupLegacySyntheticCases();
     else await runQa({ load: process.env.CASE_MANAGER_QA_LOAD === 'true',
-      asyncQueue: process.env.CASE_MANAGER_QA_ASYNC === 'true',
+      asyncQueue: process.env.CASE_MANAGER_QA_ASYNC === 'true', mixed: process.env.CASE_MANAGER_QA_MIXED === 'true',
       seconds: Number(process.env.CASE_MANAGER_QA_SECONDS || 120),
       qpm: Number(process.env.CASE_MANAGER_QA_QPM || 200) });
   } catch (error) {
