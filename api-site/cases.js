@@ -1,3 +1,5 @@
+import { buildCasePresentation, serviceName } from './case-result-model.mjs';
+
 (() => {
   const $ = (id) => document.getElementById(id);
   const labels = { passed: 'Passed', failed: 'Failed', review_required: 'Review required',
@@ -23,101 +25,62 @@
     return element;
   }
 
-  function displayKey(key) {
-    const words = String(key).replace(/([a-z\d])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').trim();
-    return words.replace(/\b(id|iban|mrz|pdf|url|api|ocr|aml|kyc|bsa)\b/gi, (word) => word.toUpperCase())
-      .replace(/^./, (letter) => letter.toUpperCase());
+  function safeEvidenceUrl(value) {
+    if (typeof value !== 'string') return null;
+    try {
+      const url = new URL(value);
+      return ['https:', 'http:'].includes(url.protocol) ? url.href : null;
+    } catch { return null; }
   }
 
-  function renderValue(value, depth = 0) {
-    if (value == null || typeof value !== 'object') return text('span', value == null ? 'null' : value, 'case-value');
-    const entries = Array.isArray(value) ? value.map((item, index) => [String(index + 1), item]) : Object.entries(value);
-    const details = document.createElement('details');
-    details.className = 'case-nested';
-    if (depth === 0) details.open = true;
-    const summary = text('summary', Array.isArray(value) ? `${entries.length} items` : `${entries.length} fields`);
-    const content = document.createElement('div');
-    content.className = 'case-nested-content';
-    let rendered = false;
-    const fill = () => {
-      if (rendered) return;
-      rendered = true;
-      for (const [key, item] of entries) {
-        const row = document.createElement('div');
-        row.className = 'case-field';
-        row.append(text('strong', Array.isArray(value) ? `Item ${key}` : displayKey(key)), renderValue(item, depth + 1));
-        content.append(row);
+  function renderPresentation(item, response) {
+    const model = buildCasePresentation(item, response);
+    const root = document.createElement('div'); root.className = 'case-presentation';
+    if (model.metrics.length) {
+      const metrics = document.createElement('div'); metrics.className = 'case-summary-grid';
+      for (const metric of model.metrics) {
+        const card = document.createElement('div'); card.className = 'case-summary-card';
+        card.append(text('small', metric.label), text('strong', metric.value)); metrics.append(card);
       }
-      if (!entries.length) content.append(text('span', 'No fields'));
-    };
-    details.addEventListener('toggle', () => { if (details.open) fill(); });
-    details.append(summary, content);
-    if (details.open) fill();
-    return details;
-  }
-
-  function renderSummary(item, response) {
-    const section = document.createElement('section');
-    section.className = 'case-summary';
-    section.append(text('h3', 'At a glance'));
-    const cards = document.createElement('div'); cards.className = 'case-summary-grid';
-    const add = (label, value) => {
-      if (value == null || value === '') return;
-      const card = document.createElement('div'); card.className = 'case-summary-card';
-      card.append(text('small', label), text('strong', value)); cards.append(card);
-    };
-    const yesNo = (value) => typeof value === 'boolean' ? value ? 'Yes' : 'No' : null;
-    add('Business outcome', outcomeLabel(item));
-    add('Service', item.service_id);
-    if (response && typeof response === 'object' && !Array.isArray(response)) {
-      if (item.service_id === 'adverse-media') {
-        add('Subject', response.entity?.name);
-        add('Risk level', response.summary?.risk_level);
-        add('Results', Array.isArray(response.results) ? response.results.length : null);
-        add('Coverage complete', yesNo(response.coverage?.complete));
-        add('Decision eligible', yesNo(response.summary?.decision_eligible));
-        add('Human review required', yesNo(response.summary?.human_review_required));
-      } else if (item.service_id === 'merchant-screening') {
-        add('Merchant', response.merchant_identity?.names?.[0]);
-        add('Domain', response.domain?.domain);
-        add('Risk level', typeof response.summary?.risk_level === 'string' ? response.summary.risk_level : null);
-        add('Findings', Array.isArray(response.findings) ? response.findings.length : null);
-        add('Decision eligible', yesNo(response.summary?.decision_eligible));
-      } else if (item.service_id === 'uae-tlv') {
-        const licence = response.uae_tl_verification || response.trade_licence_verification_api || {};
-        add('Company', licence.licence_registration_name || licence.company_name);
-        add('Licence number', licence.uae_licence_number || licence.license_number);
-        add('Emirate', licence.emirate_name);
-        add('Licence status', licence.license_status);
-      } else if (item.service_id === 'iban-verification') {
-        const match = response.data?.results || {};
-        add('Verification result', match.result || response.msg);
-        add('Country', match.country);
-        add('Bank match', match.bank);
-        add('Account number match', match.bankAccountNumber);
-      } else if (item.service_id === 'entity-search') {
-        add('Search result', response.message);
-        add('Profiles found', Array.isArray(response.data?.profiles) ? response.data.profiles.length : null);
-        add('Profiles search complete', yesNo(response.profiles_success));
-        add('Adverse public content complete', yesNo(response.apc_success));
-      } else if (item.service_id === 'bank-statement-analysis') {
-        add('Analysis status', typeof response.status === 'string' ? response.status : null);
-        add('Decision eligible', yesNo(response.decisionEligible));
-        add('Artifacts', Array.isArray(response.artifacts) ? response.artifacts.length : null);
-      } else if (item.service_id === 'forms') {
-        add('Form status', typeof response.status === 'string' ? response.status : null);
-        add('Selected checks', Array.isArray(response.services) ? response.services.length : null);
-        add('Decision eligible', yesNo(response.summary?.decision_eligible));
-      } else if (item.service_id.endsWith('-ocr') || item.service_id === 'moa-analysis') {
-        add('Extraction status', typeof response.status === 'string' ? response.status : response.job?.status);
-        add('Extracted fields', response.data && typeof response.data === 'object' ? Object.keys(response.data).length : null);
-        add('Artifacts', Array.isArray(response.artifacts) ? response.artifacts.length : null);
-      } else {
-        add('Response status', typeof response.status === 'string' ? response.status : null);
-      }
+      root.append(metrics);
     }
-    section.append(cards);
-    return section;
+    if (model.note) root.append(text('p', model.note, 'case-guidance'));
+    for (const section of model.sections) {
+      const block = document.createElement('section'); block.className = 'case-section';
+      block.append(text('h3', section.title));
+      if (section.fields?.length) {
+        const grid = document.createElement('dl'); grid.className = 'case-facts';
+        for (const field of section.fields) grid.append(text('dt', field.label), text('dd', field.value));
+        block.append(grid);
+      }
+      if (section.items?.length) {
+        const list = document.createElement('div'); list.className = 'case-evidence-list';
+        for (const entry of section.items) {
+          const card = document.createElement('article'); card.className = 'case-evidence';
+          const title = text('h4', entry.title);
+          const href = safeEvidenceUrl(entry.url);
+          if (href) {
+            const link = document.createElement('a'); link.href = href;
+            link.target = '_blank'; link.rel = 'noopener noreferrer';
+            link.textContent = entry.title || 'Open source';
+            title.replaceChildren(link);
+          }
+          card.append(title);
+          if (entry.meta) card.append(text('p', entry.meta, 'case-evidence-meta'));
+          if (entry.description) card.append(text('p', entry.description, 'case-evidence-description'));
+          if (entry.fields?.length) {
+            const facts = document.createElement('dl'); facts.className = 'case-facts';
+            for (const field of entry.fields) facts.append(text('dt', field.label), text('dd', field.value));
+            card.append(facts);
+          }
+          list.append(card);
+        }
+        block.append(list);
+      }
+      if (section.note) block.append(text('p', section.note, 'case-section-note'));
+      root.append(block);
+    }
+    return root;
   }
 
   function filterQuery() {
@@ -136,14 +99,18 @@
   }
 
   async function loadCases(append = false) {
-    if (!append) { cursor = null; $('case-list').replaceChildren(); }
+    if (!append) {
+      cursor = null; selected = null;
+      $('case-list').replaceChildren();
+      $('case-detail').replaceChildren(text('p', 'Select a case to review its result.'));
+    }
     $('cases-notice').textContent = 'Loading cases…';
     try {
       const result = await request(`/portal/api/cases?${filterQuery()}`);
       for (const item of result.cases) {
         const button = document.createElement('button');
-        button.type = 'button'; button.className = 'case-list-item';
-        button.append(text('strong', item.service_id), text('span', outcomeLabel(item), `case-badge case-${item.outcome}`),
+        button.type = 'button'; button.className = 'case-list-item'; button.dataset.caseId = item.id;
+        button.append(text('strong', serviceName(item.service_id)), text('span', outcomeLabel(item), `case-badge case-${item.outcome}`),
           text('small', `${new Date(item.accepted_at).toLocaleString()} · ${item.state}`));
         button.addEventListener('click', () => loadDetail(item.id));
         $('case-list').append(button);
@@ -156,6 +123,9 @@
 
   async function loadDetail(id) {
     selected = id;
+    document.querySelectorAll('.case-list-item').forEach((button) => {
+      button.setAttribute('aria-current', button.dataset.caseId === id ? 'true' : 'false');
+    });
     const panel = $('case-detail');
     panel.replaceChildren(text('p', 'Loading case…'));
     try {
@@ -163,42 +133,49 @@
       if (selected !== id) return;
       const item = result.case;
       panel.replaceChildren();
-      panel.append(text('p', item.service_id, 'label'), text('h2', outcomeLabel(item)));
+      panel.append(text('p', serviceName(item.service_id), 'label'), text('h2', outcomeLabel(item)));
       if (outcomeLabel(item) === 'No material findings') {
         panel.append(text('p', 'No material findings within completed screening coverage. This is not legal or credit clearance.'));
       }
-      const meta = document.createElement('dl'); meta.className = 'case-meta';
-      for (const [name, value] of [['Accepted', item.accepted_at], ['Expires', item.expires_at],
-        ['State', item.state], ['Transaction IDs', item.attempt_ids.join(', ') || 'None'],
-        ['HTTP status', item.final_http_status || 'Pending'],
-        ['Reason codes', item.outcome_reason_codes.join(', ') || 'None']]) {
-        meta.append(text('dt', name), text('dd', value));
-      }
-      panel.append(meta, renderSummary(item, result.response));
-      if (result.artifacts.length) {
-        const artifacts = document.createElement('div'); artifacts.className = 'case-artifacts';
-        artifacts.append(text('h3', 'Artifacts'));
-        for (const artifact of result.artifacts) {
-          const link = document.createElement('a');
-          link.href = `/portal/api/cases/${id}/artifacts/${artifact.index}`;
-          link.textContent = artifact.name || 'Download artifact';
-          artifacts.append(link);
-        }
-        panel.append(artifacts);
-      }
       const tabs = document.createElement('div'); tabs.className = 'case-tabs';
-      const readable = text('button', 'Readable result'); readable.type = 'button';
+      const readable = text('button', 'Overview'); readable.type = 'button';
       const plainText = typeof result.response === 'string';
       const raw = text('button', plainText ? 'Final response text' : 'Final response JSON'); raw.type = 'button';
       const copy = text('button', plainText ? 'Copy response' : 'Copy JSON'); copy.type = 'button';
       const view = document.createElement('div'); view.className = 'case-result';
-      const showReadable = () => { readable.setAttribute('aria-pressed', 'true'); raw.setAttribute('aria-pressed', 'false');
-        view.replaceChildren(result.response == null ? text('p', 'Final result is pending.') : renderValue(result.response)); };
+      const showReadable = () => {
+        readable.setAttribute('aria-pressed', 'true'); raw.setAttribute('aria-pressed', 'false');
+        const overview = renderPresentation(item, result.response);
+        if (result.artifacts.length) {
+          const artifacts = document.createElement('section'); artifacts.className = 'case-artifacts case-section';
+          artifacts.append(text('h3', 'Downloads'));
+          for (const artifact of result.artifacts) {
+            const link = document.createElement('a');
+            link.href = `/portal/api/cases/${id}/artifacts/${artifact.index}`;
+            link.textContent = artifact.name || 'Download artifact';
+            artifacts.append(link);
+          }
+          overview.append(artifacts);
+        }
+        const details = document.createElement('details'); details.className = 'case-technical';
+        details.append(text('summary', 'Case details'));
+        const meta = document.createElement('dl'); meta.className = 'case-meta';
+        for (const [name, value] of [['Accepted', item.accepted_at], ['Expires', item.expires_at],
+          ['State', item.state], ['Transaction IDs', item.attempt_ids.join(', ') || 'None'],
+          ['HTTP status', item.final_http_status || 'Pending'],
+          ['Reason codes', item.outcome_reason_codes.join(', ') || 'None']]) {
+          meta.append(text('dt', name), text('dd', value));
+        }
+        details.append(meta); overview.append(details);
+        view.replaceChildren(overview);
+      };
       const showRaw = async () => { readable.setAttribute('aria-pressed', 'false'); raw.setAttribute('aria-pressed', 'true');
         view.replaceChildren(text('p', 'Loading final response…'));
         const response = await fetch(`/portal/api/cases/${id}/json`, { credentials: 'same-origin' });
+        if (selected !== id || raw.getAttribute('aria-pressed') !== 'true') return;
         if (!response.ok) { view.replaceChildren(text('p', 'Final response is not yet available.')); return; }
         const body = await response.text();
+        if (selected !== id || raw.getAttribute('aria-pressed') !== 'true') return;
         let formatted = body;
         try { formatted = JSON.stringify(JSON.parse(body), null, 2); } catch { /* supplier text remains text */ }
         view.replaceChildren(text('pre', formatted, 'case-json')); };
