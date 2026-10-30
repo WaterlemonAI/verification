@@ -29,7 +29,7 @@ async function retireAll(store, workspaceId) {
   do {
     const result = await store.retireWorkspaceCases(workspaceId, 2, { cursor, limit: 100 });
     cursor = result.done ? '' : result.cursor;
-    if (++passes > 100) throw new Error('qa_cleanup_limit');
+    if (++passes > 1000) throw new Error('qa_cleanup_limit');
   } while (cursor);
 }
 
@@ -252,7 +252,61 @@ async function runMixedPhase({ caseStore, workspaceId, otherWorkspaceId, seconds
     capture_p99_ms: quantile(results.map((entry) => entry.ms), 0.99), by_service: byService };
 }
 
-export async function runQa({ load = false, asyncQueue = false, mixed = false, seconds = 120, qpm = 200 } = {}) {
+async function runScalePhase({ caseStore, workspaceId, otherWorkspaceId, total = 50_000 }) {
+  if (total !== 50_000) throw new Error('qa_scale_count_unreviewed');
+  const response = { status: 'completed', marker: 'synthetic-scale' };
+  let firstId = '';
+  let lastId = '';
+  const started = performance.now();
+  console.info('case_manager_qa_scale_workspace', JSON.stringify({ workspace_id: workspaceId, target: total }));
+  for (let offset = 0; offset < total; offset += 32) {
+    const batch = await Promise.all(Array.from({ length: Math.min(32, total - offset) }, async () => {
+      const acceptedAt = new Date().toISOString();
+      const intent = await caseStore.createIntent({ workspaceId, serviceId: 'qa-synthetic-check',
+        transactionId: randomUUID(), acceptedAt,
+        expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+      await caseStore.captureFinal(workspaceId, intent.id, { response,
+        contentType: 'application/json', httpStatus: 200, outcome: 'unclassified' });
+      return intent.id;
+    }));
+    firstId ||= batch[0];
+    lastId = batch.at(-1);
+    if ((offset + batch.length) % 5_000 === 0) console.info('case_manager_qa_scale_progress',
+      JSON.stringify({ created: offset + batch.length, target: total }));
+  }
+  const createMs = Math.round(performance.now() - started);
+  const firstRow = await caseStore.row(workspaceId, firstId);
+  assert.ok(firstRow);
+  const partition = firstRow.partitionKey;
+  const countRows = async () => {
+    let count = 0;
+    for await (const _row of caseStore.table.listEntities({ queryOptions: {
+      filter: odata`PartitionKey eq ${partition} and RowKey gt ${'case-'} and RowKey lt ${'casf-'}`
+    } })) count++;
+    return count;
+  };
+  assert.equal(await countRows(), total);
+  assert.equal((await caseStore.getCase(otherWorkspaceId, firstId)), null);
+  const retireStarted = performance.now();
+  let cursor = '';
+  let pages = 0;
+  let done = false;
+  while (!done && pages < 10) {
+    const page = await caseStore.retireWorkspaceCases(workspaceId, 2, { cursor, limit: 10_000 });
+    cursor = page.cursor;
+    done = page.done;
+    pages++;
+  }
+  assert.equal(done, true);
+  assert.equal(await countRows(), 0);
+  assert.equal((await caseStore.blob(partition, firstId).exists()), false);
+  assert.equal((await caseStore.blob(partition, lastId).exists()), false);
+  return { created: total, retired: total, retirement_pages: pages,
+    create_ms: createMs, retirement_ms: Math.round(performance.now() - retireStarted) };
+}
+
+export async function runQa({ load = false, asyncQueue = false, mixed = false, scale = false,
+  seconds = 120, qpm = 200 } = {}) {
   if (process.env.CASE_MANAGER_QA_MODE !== 'true' ||
       ![process.env.CASE_MANAGER_BLOB_URL, process.env.CASE_MANAGER_TABLE_URL, process.env.CASE_MANAGER_QUEUE_URL]
         .every((url) => url?.startsWith(`https://${ownAccount}.`))) {
@@ -272,6 +326,7 @@ export async function runQa({ load = false, asyncQueue = false, mixed = false, s
     containerName: 'case-manager-qa-artifacts', tableName: 'CaseManagerQaArtifacts' });
   const purgeFixtureWorkspaceId = `qa-${randomUUID()}`;
   const retirementWorkspaceId = `qa-${randomUUID()}`;
+  const scaleWorkspaceId = `qa-${randomUUID()}`;
   const otherWorkspaceId = `qa-${randomUUID()}`;
   const signingKey = randomUUID();
   const payload = { marker: 'synthetic', status: 'partial', items: Array.from({ length: 256 }, (_, i) =>
@@ -398,6 +453,8 @@ export async function runQa({ load = false, asyncQueue = false, mixed = false, s
     const mixedResult = mixed ? await runMixedPhase({ caseStore, workspaceId: client.client.workspaceId,
       otherWorkspaceId, seconds, qpm }) : null;
     if (mixed) assert.equal(await countCases(caseStore, client.client.workspaceId) - mixedBefore, mixedResult.requests);
+    const scaleResult = scale ? await runScalePhase({ caseStore, workspaceId: scaleWorkspaceId,
+      otherWorkspaceId }) : null;
 
     const futureExpiry = new Date(Date.now() + 60_000).toISOString();
     const expiring = await caseStore.createIntent({ workspaceId: purgeFixtureWorkspaceId, serviceId: 'qa-synthetic-check',
@@ -418,7 +475,7 @@ export async function runQa({ load = false, asyncQueue = false, mixed = false, s
       queue_failure_retirement: true,
       supplier_calls: supplierCalls, response_bytes: Buffer.byteLength(JSON.stringify(payload)),
       baseline, captured, captured_cases: afterCount - beforeCount,
-      async_queue: asyncResult, mixed_capture: mixedResult,
+      async_queue: asyncResult, mixed_capture: mixedResult, scale_retirement: scaleResult,
       p95_added_ms: load ? captured.p95_ms - baseline.p95_ms : null,
       p99_added_ms: load ? captured.p99_ms - baseline.p99_ms : null };
     console.info('case_manager_azure_qa_verified', JSON.stringify(result));
@@ -440,6 +497,7 @@ export async function runQa({ load = false, asyncQueue = false, mixed = false, s
         cases: cleanupCount, elapsed_ms: Math.round(performance.now() - cleanupStarted) }));
       await retireAll(caseStore, purgeFixtureWorkspaceId);
       await retireAll(caseStore, retirementWorkspaceId);
+      if (scale) await retireAll(caseStore, scaleWorkspaceId);
       assert.equal(await countCases(caseStore, client.client.workspaceId), 0);
       assert.equal(await countCases(caseStore, purgeFixtureWorkspaceId), 0);
       if (artifact) assert.ok(await reportStore.table.getEntity(artifact.ownerPartition, artifact.reportId));
@@ -457,6 +515,7 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
     if (process.env.CASE_MANAGER_QA_CLEANUP === 'true') await cleanupLegacySyntheticCases();
     else await runQa({ load: process.env.CASE_MANAGER_QA_LOAD === 'true',
       asyncQueue: process.env.CASE_MANAGER_QA_ASYNC === 'true', mixed: process.env.CASE_MANAGER_QA_MIXED === 'true',
+      scale: process.env.CASE_MANAGER_QA_SCALE === 'true',
       seconds: Number(process.env.CASE_MANAGER_QA_SECONDS || 120),
       qpm: Number(process.env.CASE_MANAGER_QA_QPM || 200) });
   } catch (error) {

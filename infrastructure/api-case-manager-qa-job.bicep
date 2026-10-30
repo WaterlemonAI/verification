@@ -33,6 +33,9 @@ param runAsync bool = false
 @description('Replay mixed synthetic final responses through private Azure case storage.')
 param runMixed bool = false
 
+@description('Run a guarded 50,000-case private Azure storage and retirement trial.')
+param runScale bool = false
+
 @description('One-time guarded deletion of synthetic QA case copies from the October 30 executions.')
 param cleanupOrphans bool = false
 
@@ -57,7 +60,7 @@ resource qaJob 'Microsoft.App/jobs@2024-03-01' = {
     environmentId: privateEnvironmentId
     configuration: {
       triggerType: 'Manual'
-      replicaTimeout: 1800
+      replicaTimeout: runScale ? 3600 : 1800
       replicaRetryLimit: 0
       manualTriggerConfig: { parallelism: 1, replicaCompletionCount: 1 }
       registries: [ { server: acrLoginServer, identity: runtimeIdentityResourceId } ]
@@ -77,6 +80,7 @@ resource qaJob 'Microsoft.App/jobs@2024-03-01' = {
             { name: 'CASE_MANAGER_QA_LOAD', value: runLoad ? 'true' : 'false' }
             { name: 'CASE_MANAGER_QA_ASYNC', value: runAsync ? 'true' : 'false' }
             { name: 'CASE_MANAGER_QA_MIXED', value: runMixed ? 'true' : 'false' }
+            { name: 'CASE_MANAGER_QA_SCALE', value: runScale ? 'true' : 'false' }
             { name: 'CASE_MANAGER_QA_CLEANUP', value: cleanupOrphans ? 'true' : 'false' }
             { name: 'CASE_MANAGER_QA_SECONDS', value: string(phaseSeconds) }
             { name: 'CASE_MANAGER_QA_QPM', value: string(requestsPerMinute) }
