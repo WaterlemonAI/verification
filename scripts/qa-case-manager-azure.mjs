@@ -257,20 +257,25 @@ async function runScalePhase({ caseStore, workspaceId, otherWorkspaceId, total =
   const response = { status: 'completed', marker: 'synthetic-scale' };
   let firstId = '';
   let lastId = '';
+  let firstTransactionId = '';
+  let lastTransactionId = '';
   const started = performance.now();
   console.info('case_manager_qa_scale_workspace', JSON.stringify({ workspace_id: workspaceId, target: total }));
   for (let offset = 0; offset < total; offset += 32) {
     const batch = await Promise.all(Array.from({ length: Math.min(32, total - offset) }, async () => {
       const acceptedAt = new Date().toISOString();
+      const transactionId = randomUUID();
       const intent = await caseStore.createIntent({ workspaceId, serviceId: 'qa-synthetic-check',
-        transactionId: randomUUID(), acceptedAt,
+        transactionId, acceptedAt,
         expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
       await caseStore.captureFinal(workspaceId, intent.id, { response,
         contentType: 'application/json', httpStatus: 200, outcome: 'unclassified' });
-      return intent.id;
+      return { id: intent.id, transactionId };
     }));
-    firstId ||= batch[0];
-    lastId = batch.at(-1);
+    firstId ||= batch[0].id;
+    firstTransactionId ||= batch[0].transactionId;
+    lastId = batch.at(-1).id;
+    lastTransactionId = batch.at(-1).transactionId;
     if ((offset + batch.length) % 5_000 === 0) console.info('case_manager_qa_scale_progress',
       JSON.stringify({ created: offset + batch.length, target: total }));
   }
@@ -287,6 +292,29 @@ async function runScalePhase({ caseStore, workspaceId, otherWorkspaceId, total =
   };
   assert.equal(await countRows(), total);
   assert.equal((await caseStore.getCase(otherWorkspaceId, firstId)), null);
+  assert.equal((await caseStore.listCases(otherWorkspaceId, { limit: 100 })).cases.length, 0);
+  assert.equal((await caseStore.findByTransaction(workspaceId, firstTransactionId))?.id, firstId);
+  assert.equal((await caseStore.findByTransaction(workspaceId, lastTransactionId))?.id, lastId);
+  assert.equal(await caseStore.findByTransaction(otherWorkspaceId, firstTransactionId), null);
+  const listStarted = performance.now();
+  const pageTimes = [];
+  const seen = new Set();
+  let listCursor = '';
+  for (let page = 0; page < 500; page++) {
+    const pageStarted = performance.now();
+    const listed = await caseStore.listCases(workspaceId, { cursor: listCursor, limit: 100 });
+    pageTimes.push(performance.now() - pageStarted);
+    assert.equal(listed.cases.length, 100);
+    for (const item of listed.cases) seen.add(item.id);
+    if (page < 499) assert.ok(listed.next_cursor);
+    else assert.equal(listed.next_cursor, null);
+    listCursor = listed.next_cursor || '';
+    if ((page + 1) % 100 === 0) console.info('case_manager_qa_scale_list_progress',
+      JSON.stringify({ pages: page + 1, cases: seen.size, target: total }));
+  }
+  assert.equal(seen.size, total);
+  assert.ok(seen.has(firstId) && seen.has(lastId));
+  const listMs = Math.round(performance.now() - listStarted);
   const retireStarted = performance.now();
   let cursor = '';
   let pages = 0;
@@ -302,7 +330,9 @@ async function runScalePhase({ caseStore, workspaceId, otherWorkspaceId, total =
   assert.equal((await caseStore.blob(partition, firstId).exists()), false);
   assert.equal((await caseStore.blob(partition, lastId).exists()), false);
   return { created: total, retired: total, retirement_pages: pages,
-    create_ms: createMs, retirement_ms: Math.round(performance.now() - retireStarted) };
+    create_ms: createMs, list_pages: pageTimes.length, list_ms: listMs,
+    list_page_p95_ms: quantile(pageTimes, 0.95), list_page_p99_ms: quantile(pageTimes, 0.99),
+    retirement_ms: Math.round(performance.now() - retireStarted) };
 }
 
 export async function runQa({ load = false, asyncQueue = false, mixed = false, scale = false,
