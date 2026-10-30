@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#071f43" /><title>KYCProbe — Case Manager</title>
   <link rel="stylesheet" href="/api.css?v=16" />
-  <script src="/portal-auth.js?v=5" defer></script><script src="/cases.js?v=6" type="module"></script>
+  <script src="/portal-auth.js?v=5" defer></script><script src="/cases.js?v=7" type="module"></script>
 </head>
 <body>
   <div class="utility-bar"><span>KYCProbe Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
@@ -18,7 +18,7 @@
         <label>Through <input id="case-to" type="date" required /></label>
         <label>Service ID <input id="case-service" type="text" maxlength="80" placeholder="All services" pattern="[a-z0-9-]*" /></label>
         <label>Transaction ID <input id="case-transaction" type="text" maxlength="36" placeholder="Optional exact ID" pattern="[0-9a-fA-F-]*" /></label>
-        <label>Business outcome <select id="case-outcome"><option value="">All outcomes</option><option value="passed">No material findings</option><option value="failed">Failed</option><option value="review_required">Review required</option><option value="extracted">Extracted</option><option value="pending">Pending</option><option value="not_run">Not run</option><option value="could_not_complete">Could not complete</option><option value="unclassified">Unclassified</option></select></label>
+        <label>Business outcome <select id="case-outcome"><option value="">All outcomes</option><option value="passed">Passed (service specific)</option><option value="failed">Failed</option><option value="review_required">Review required</option><option value="extracted">Extracted</option><option value="analyzed">Analyzed</option><option value="pending">Pending</option><option value="not_run">Not run</option><option value="could_not_complete">Could not complete</option><option value="unclassified">Unclassified</option></select></label>
         <label>API request <select id="case-request-status"><option value="">All requests</option><option value="succeeded">API succeeded (2xx)</option><option value="failed">API failed (4xx/5xx)</option><option value="pending">Awaiting final result</option><option value="other">Other HTTP status</option></select></label>
         <button type="submit">Apply filters</button>
       </form>

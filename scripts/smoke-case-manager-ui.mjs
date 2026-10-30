@@ -2,6 +2,7 @@ import { chromium } from 'playwright-core';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { MemoryCustomerUsageStore, validateCasePolicy } from '../lib/customer-usage.mjs';
 import { MemoryCaseManagerStore } from '../lib/case-manager-store.mjs';
+import { caseOutcome } from '../lib/case-manager-outcomes.mjs';
 import { createPortalAccount, createPortalSession, PORTAL_COOKIE } from '../lib/portal-auth.mjs';
 
 process.env.NODE_ENV = 'test';
@@ -37,16 +38,26 @@ for (const [serviceId, response] of [
   ['uae-tlv', { status: 'Success', uae_tl_verification: { licence_registration_name: 'Synthetic Trading LLC',
     uae_licence_number: 'SYN-123', emirate_name: 'Dubai', license_status: 'Active' } }],
   ['iban-verification', { msg: 'success', status: 1, data: { results: { result: 'Full match',
-    bank: 'MATCH', country: 'AE', bankAccountNumber: 'MATCH' } } }],
+    bank: 'MATCH', country: 'AE', completeName: 'MATCH', bankAccountNumber: 'MATCH' } } }],
   ['entity-search', { message: 'Search Successful', profiles_success: true, apc_success: true,
     data: { profiles: [{ uid: 'SYNTHETIC-PROFILE' }] } }]
 ]) {
   const sample = await caseStore.createIntent({ workspaceId, serviceId, transactionId: `synthetic-${serviceId}`,
     acceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
   caseIds.set(serviceId, sample.id);
+  const mapping = caseOutcome(serviceId, response, { httpStatus: 200 });
   await caseStore.captureFinal(workspaceId, sample.id, { response, contentType: 'application/json',
-    httpStatus: 200, outcome: 'unclassified' });
+    httpStatus: 200, outcome: mapping.outcome, reasonCodes: mapping.reasonCodes });
 }
+const analysis = await caseStore.createIntent({ workspaceId, serviceId: 'bank-statement-analysis',
+  transactionId: 'synthetic-bsa', acceptedAt: new Date().toISOString(),
+  expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+caseIds.set('bank-statement-analysis', analysis.id);
+const analysisResponse = { status: 'completed', decisionEligible: false, coverage: { transactionCount: 12 } };
+const analysisMapping = caseOutcome('bank-statement-analysis', analysisResponse, { httpStatus: 200 });
+await caseStore.captureFinal(workspaceId, analysis.id, { response: analysisResponse,
+  contentType: 'application/json', httpStatus: 200,
+  outcome: analysisMapping.outcome, reasonCodes: analysisMapping.reasonCodes });
 for (const [serviceId, response] of [
   ['adverse-media', { status: 'completed', entity: { name: 'Synthetic Individual' },
     summary: { risk_level: 'no_material_results', decision_eligible: true }, coverage: { complete: true }, results: [] }],
@@ -115,6 +126,11 @@ try {
       await page.locator(`.case-list-item[data-case-id="${caseIds.get(serviceId)}"]`).click();
       await page.locator('.case-presentation').getByText(expected).waitFor();
     }
+    for (const serviceId of ['uae-tlv', 'iban-verification']) {
+      await page.locator(`.case-list-item[data-case-id="${caseIds.get(serviceId)}"]`).getByText('Passed').waitFor();
+    }
+    await page.locator(`.case-list-item[data-case-id="${caseIds.get('entity-search')}"]`).getByText('Review required').waitFor();
+    await page.locator(`.case-list-item[data-case-id="${analysis.id}"]`).getByText('Analyzed').waitFor();
     for (const serviceId of ['adverse-media', 'merchant-screening']) {
       const caseButton = page.locator(`.case-list-item[data-case-id="${caseIds.get(serviceId)}"]`);
       await caseButton.getByText('No material findings').waitFor();

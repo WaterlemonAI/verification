@@ -151,13 +151,13 @@ export function buildCasePresentation(item, response) {
     addMetric('Emirate', licence.emirate_name);
     addFields('Licence details', licence, ['legal_type_from_entity', 'governing_body_name', 'registration_date',
       'expiration_date', 'licence_registration_address', 'moec_status']);
-    view.note = 'These are provider-returned licence details. The business outcome remains unclassified until its meaning is approved.';
+    view.note = 'An active licence result requires a provider status, registered name and licence number. Conflicting or unknown status needs review.';
   } else if (service === 'iban-verification') {
     const match = response.data?.results || {};
     addMetric('Provider result', match.result || response.msg);
     addMetric('Country', match.country);
     addFields('Match checks', match, ['bank', 'bankCode', 'completeName', 'bankAccountNumber']);
-    view.note = 'Match values are shown as returned by the provider; no overall approval is inferred.';
+    view.note = 'A pass requires the provider\'s explicit full bank and account-owner match with matching owner and account checks.';
   } else if (service === 'entity-search') {
     addMetric('Search status', response.message);
     addMetric('Profiles found', response.data?.profiles?.length);
@@ -169,7 +169,7 @@ export function buildCasePresentation(item, response) {
       description: profile.description || '', url: profile.url,
       fields: fields(profile, ['status', 'registration_number', 'jurisdiction'])
     }));
-    view.note = 'Search hits are candidates for review, not verified matches.';
+    view.note = 'Search hits are candidates for review, not verified matches. A no-candidate result applies only to completed checks in this response.';
   } else if (service === 'bank-statement-analysis') {
     addMetric('Analysis status', response.status || response.analysis?.status);
     addMetric('Decision eligible', response.decisionEligible);

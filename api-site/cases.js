@@ -1,13 +1,14 @@
-import { buildCasePresentation, serviceName } from './case-result-model.mjs';
+import { buildCasePresentation, serviceName } from './case-result-model.mjs?v=2';
 
 (() => {
   const $ = (id) => document.getElementById(id);
   const labels = { passed: 'Passed', failed: 'Failed', review_required: 'Review required',
-    extracted: 'Extracted', pending: 'Pending', not_run: 'Not run',
+    extracted: 'Extracted', analyzed: 'Analyzed', pending: 'Pending', not_run: 'Not run',
     could_not_complete: 'Could not complete', unclassified: 'Unclassified' };
   const outcomeLabel = (item) => item.outcome === 'passed'
     && ['adverse-media', 'merchant-screening'].includes(item.service_id)
-    ? 'No material findings' : labels[item.outcome] || 'Unclassified';
+    ? 'No material findings' : item.outcome === 'passed' && item.service_id === 'entity-search'
+      ? 'No candidates found' : labels[item.outcome] || 'Unclassified';
   const requestStatusLabel = (item) => {
     const labels = { succeeded: 'API succeeded', failed: 'API failed', pending: 'Awaiting final API result',
       other: 'Other HTTP status' };
@@ -145,6 +146,9 @@ import { buildCasePresentation, serviceName } from './case-result-model.mjs';
           'case-request-note'));
       if (outcomeLabel(item) === 'No material findings') {
         panel.append(text('p', 'No material findings within completed screening coverage. This is not legal or credit clearance.'));
+      }
+      if (item.outcome === 'passed' && item.service_id === 'entity-search') {
+        panel.append(text('p', 'No candidates were returned in the completed provider checks. This does not certify every underlying source as clear.'));
       }
       const tabs = document.createElement('div'); tabs.className = 'case-tabs';
       const readable = text('button', 'Overview'); readable.type = 'button';
