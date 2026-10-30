@@ -768,6 +768,40 @@ resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-0
   }
 }
 
+var loginCodeAlertSignals = [
+  { name: 'email', signal: 'platform_login_code_email_failed' }
+  { name: 'store', signal: 'platform_login_code_store_failed' }
+]
+
+resource loginCodeAlerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert in loginCodeAlertSignals: if (!parallelDeployment) {
+  name: 'alert-ai7uae-login-code-${alert.name}'
+  location: location
+  kind: 'LogAlert'
+  properties: {
+    description: 'Email sign-in code ${alert.name} failure requires operations review.'
+    displayName: 'KYCProbe login code ${alert.name} failure'
+    severity: 2
+    enabled: true
+    scopes: [ apiLogWorkspace.id ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: 'ContainerAppConsoleLogs_CL | where ContainerAppName_s == "${containerAppName}" and Log_s has "${alert.signal}" | summarize failures = count()'
+          metricMeasureColumn: 'failures'
+          timeAggregation: 'Total'
+          operator: 'GreaterThanOrEqual'
+          threshold: 1
+          failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
+        }
+      ]
+    }
+    actions: { actionGroups: [ apiAlerts!.id ] }
+  }
+}]
+
 var caseManagerAlertSignals = [
   { name: 'capture', signal: 'case_manager_capture_failed' }
   { name: 'intent', signal: 'case_manager_intent_failed' }

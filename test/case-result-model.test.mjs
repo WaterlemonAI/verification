@@ -48,3 +48,11 @@ test('unknown service retains a bounded overview and leaves the full response to
   assert.equal(view.sections[0].fields.length, 24);
   assert.match(view.note, /Final response JSON/);
 });
+
+test('overview keeps returned values verbatim, including underscores in identifiers and text', () => {
+  const value = '<img src=x onerror=window.__caseXss=1>';
+  const view = buildCasePresentation({ service_id: 'new-integration' }, { subject: value, account_id: 'ACCT_123_456' });
+  assert.deepEqual(view.sections[0].fields, [
+    { label: 'Subject', value }, { label: 'Account ID', value: 'ACCT_123_456' }
+  ]);
+});

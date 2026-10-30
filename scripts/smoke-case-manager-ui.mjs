@@ -27,6 +27,7 @@ const ocr = await caseStore.createIntent({ workspaceId, serviceId: 'passport-ica
   acceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
 await caseStore.captureFinal(workspaceId, ocr.id, { response: { status: 'completed', data: { document_number: 'SYNTHETIC' } },
   contentType: 'application/json', httpStatus: 200, outcome: 'extracted' });
+const caseIds = new Map([['synthetic-service', intent.id], ['passport-icao-ocr', ocr.id]]);
 for (const [serviceId, response] of [
   ['uae-tlv', { status: 'Success', uae_tl_verification: { licence_registration_name: 'Synthetic Trading LLC',
     uae_licence_number: 'SYN-123', emirate_name: 'Dubai', license_status: 'Active' } }],
@@ -37,6 +38,7 @@ for (const [serviceId, response] of [
 ]) {
   const sample = await caseStore.createIntent({ workspaceId, serviceId, transactionId: `synthetic-${serviceId}`,
     acceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+  caseIds.set(serviceId, sample.id);
   await caseStore.captureFinal(workspaceId, sample.id, { response, contentType: 'application/json',
     httpStatus: 200, outcome: 'unclassified' });
 }
@@ -48,6 +50,7 @@ for (const [serviceId, response] of [
 ]) {
   const sample = await caseStore.createIntent({ workspaceId, serviceId, transactionId: `synthetic-${serviceId}`,
     acceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+  caseIds.set(serviceId, sample.id);
   await caseStore.captureFinal(workspaceId, sample.id, { response, contentType: 'application/json',
     httpStatus: 200, outcome: 'passed' });
 }
@@ -55,7 +58,8 @@ const server = createAppServer({ store, usageStore, caseStore, startWorker: fals
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: true,
-  executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+  executablePath: process.env.CHROME_PATH || (process.platform === 'darwin'
+    ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : chromium.executablePath()) });
 try {
   const results = [];
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
@@ -69,13 +73,15 @@ try {
     await page.getByRole('button', { name: 'Apply filters' }).click();
     await page.locator('.case-list-item').first().waitFor();
     if (await page.locator('.case-list-item').count() !== 1) throw new Error('Transaction lookup did not isolate one case');
-    await page.locator('.case-list-item', { hasText: 'synthetic-service' }).click();
-    await page.locator('.case-meta').getByText(transactionId).waitFor();
-    await page.locator('.case-result').getByText('<img src=x onerror=window.__caseXss=1>').waitFor();
-    await page.locator('.case-summary').getByText('Review required').waitFor();
+    await page.locator(`.case-list-item[data-case-id="${intent.id}"]`).click();
+    await page.locator('#case-detail h2').getByText('Review required').waitFor();
     if (viewport.width < 761) {
       await page.waitForFunction(() => document.querySelector('#case-detail').getBoundingClientRect().top <= 80);
     }
+    await page.locator('.case-technical summary').click();
+    await page.locator('.case-meta').getByText(transactionId).waitFor();
+    await page.locator('.case-result').getByText('<img src=x onerror=window.__caseXss=1>').waitFor();
+    await page.locator('.case-summary-grid').getByText('Response status').waitFor();
     await page.getByRole('button', { name: 'Final response JSON' }).click();
     await page.locator('.case-json').waitFor();
     const result = await page.evaluate(() => ({ viewport: innerWidth,
@@ -87,22 +93,22 @@ try {
     }
     await page.locator('#case-transaction').fill('');
     await page.getByRole('button', { name: 'Apply filters' }).click();
-    await page.locator('.case-list-item', { hasText: 'passport-icao-ocr' }).click();
-    await page.locator('.case-summary').getByText('Extraction status').waitFor();
-    await page.locator('.case-summary').getByText('1', { exact: true }).waitFor();
+    await page.locator(`.case-list-item[data-case-id="${ocr.id}"]`).click();
+    await page.locator('.case-summary-grid').getByText('Extraction status').waitFor();
+    await page.locator('.case-summary-grid').getByText('1', { exact: true }).waitFor();
     for (const [serviceId, expected] of [
       ['uae-tlv', 'Synthetic Trading LLC'], ['iban-verification', 'Full match'], ['entity-search', 'Profiles found']
     ]) {
-      await page.locator('.case-list-item', { hasText: serviceId }).click();
-      await page.locator('.case-summary').getByText(expected).waitFor();
+      await page.locator(`.case-list-item[data-case-id="${caseIds.get(serviceId)}"]`).click();
+      await page.locator('.case-presentation').getByText(expected).waitFor();
     }
     for (const serviceId of ['adverse-media', 'merchant-screening']) {
-      const caseButton = page.locator('.case-list-item', { hasText: serviceId });
+      const caseButton = page.locator(`.case-list-item[data-case-id="${caseIds.get(serviceId)}"]`);
       await caseButton.getByText('No material findings').waitFor();
       await caseButton.click();
       await page.locator('#case-detail h2').getByText('No material findings').waitFor();
       await page.locator('#case-detail').getByText('No material findings within completed screening coverage. This is not legal or credit clearance.').waitFor();
-      await page.locator('.case-summary').getByText('No material findings').waitFor();
+      await page.locator('#case-detail h2').getByText('No material findings').waitFor();
     }
     results.push(result);
     await context.close();

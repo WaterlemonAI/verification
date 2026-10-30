@@ -23,7 +23,7 @@ export function fieldName(key) {
 function scalar(value) {
   if (value == null || value === '') return null;
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'string' || typeof value === 'number') return String(value).replace(/_/g, ' ');
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
   return null;
 }
 
