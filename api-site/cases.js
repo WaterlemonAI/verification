@@ -8,6 +8,12 @@ import { buildCasePresentation, serviceName } from './case-result-model.mjs';
   const outcomeLabel = (item) => item.outcome === 'passed'
     && ['adverse-media', 'merchant-screening'].includes(item.service_id)
     ? 'No material findings' : labels[item.outcome] || 'Unclassified';
+  const requestStatusLabel = (item) => {
+    const labels = { succeeded: 'API succeeded', failed: 'API failed', pending: 'Awaiting final API result',
+      other: 'Other HTTP status' };
+    const label = labels[item.request_status] || 'Awaiting final API result';
+    return item.final_http_status ? `${label} (HTTP ${item.final_http_status})` : label;
+  };
   let cursor = null;
   let selected = null;
 
@@ -93,6 +99,7 @@ import { buildCasePresentation, serviceName } from './case-result-model.mjs';
     if ($('case-service').value.trim()) query.set('service', $('case-service').value.trim());
     if (transactionId) query.set('transaction_id', transactionId);
     if ($('case-outcome').value) query.set('outcome', $('case-outcome').value);
+    if ($('case-request-status').value) query.set('request_status', $('case-request-status').value);
     query.set('limit', '25');
     if (cursor) query.set('cursor', cursor);
     return query;
@@ -111,7 +118,7 @@ import { buildCasePresentation, serviceName } from './case-result-model.mjs';
         const button = document.createElement('button');
         button.type = 'button'; button.className = 'case-list-item'; button.dataset.caseId = item.id;
         button.append(text('strong', serviceName(item.service_id)), text('span', outcomeLabel(item), `case-badge case-${item.outcome}`),
-          text('small', `${new Date(item.accepted_at).toLocaleString()} · ${item.state}`));
+          text('small', `${new Date(item.accepted_at).toLocaleString()} · ${requestStatusLabel(item)}`));
         button.addEventListener('click', () => loadDetail(item.id));
         $('case-list').append(button);
       }
@@ -133,7 +140,9 @@ import { buildCasePresentation, serviceName } from './case-result-model.mjs';
       if (selected !== id) return;
       const item = result.case;
       panel.replaceChildren();
-      panel.append(text('p', serviceName(item.service_id), 'label'), text('h2', outcomeLabel(item)));
+      panel.append(text('p', serviceName(item.service_id), 'label'), text('h2', outcomeLabel(item)),
+        text('p', `${requestStatusLabel(item)} · HTTP status describes the API request, not the verification result.`,
+          'case-request-note'));
       if (outcomeLabel(item) === 'No material findings') {
         panel.append(text('p', 'No material findings within completed screening coverage. This is not legal or credit clearance.'));
       }

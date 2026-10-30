@@ -47,6 +47,7 @@ test('feature off touches no case store; feature on captures exact dynamic respo
   assert.equal(found.outcome, 'unclassified');
   assert.deepEqual(found.payload.final_response, finalBody);
   assert.equal(found.final_http_status, 200);
+  assert.equal(found.request_status, 'succeeded');
   assert.equal((await caseStore.getCase('other-workspace', row.caseId)), null);
   const wrongMethod = await fetch(url, { method: 'GET', headers: { authorization: `Bearer ${issued.apiKey}` } });
   assert.equal(wrongMethod.status, 405);
@@ -54,6 +55,8 @@ test('feature off touches no case store; feature on captures exact dynamic respo
   assert.equal(caseStore.rows.size, 2);
   const rejected = [...caseStore.rows.values()].find((item) => item.finalHttpStatus === 405);
   assert.equal(rejected.outcome, 'not_run');
+  assert.equal((await caseStore.listCases(workspaceId, { requestStatus: 'succeeded' })).cases.length, 1);
+  assert.equal((await caseStore.listCases(workspaceId, { requestStatus: 'failed' })).cases.length, 1);
 });
 
 test('portal cases and PDFs require the signed workspace; expired and retired cases return 404', async (t) => {
@@ -103,6 +106,15 @@ test('portal cases and PDFs require the signed workspace; expired and retired ca
   const lookup = await fetch(`${base}?transaction_id=${transactionId}`, { headers: { cookie: cookie(a) } });
   assert.equal(lookup.status, 200);
   assert.deepEqual((await lookup.json()).cases.map((item) => item.id), [intent.id]);
+  const statusLookup = await fetch(`${base}?transaction_id=${transactionId}&request_status=succeeded`,
+    { headers: { cookie: cookie(a) } });
+  assert.deepEqual((await statusLookup.json()).cases.map((item) => item.id), [intent.id]);
+  const wrongStatusLookup = await fetch(`${base}?transaction_id=${transactionId}&request_status=failed`,
+    { headers: { cookie: cookie(a) } });
+  assert.deepEqual((await wrongStatusLookup.json()).cases, []);
+  const statusList = await fetch(`${base}?request_status=succeeded`, { headers: { cookie: cookie(a) } });
+  assert.deepEqual((await statusList.json()).cases.map((item) => item.id), [intent.id]);
+  assert.equal((await fetch(`${base}?request_status=unknown`, { headers: { cookie: cookie(a) } })).status, 400);
   const unfiltered = await fetch(base, { headers: { cookie: cookie(a) } });
   assert.equal(unfiltered.status, 200);
   assert.deepEqual((await unfiltered.json()).cases.map((item) => item.id), [intent.id]);

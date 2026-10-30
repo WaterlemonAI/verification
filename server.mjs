@@ -37,7 +37,8 @@ import {
 import { bsaEnabled, bsaMode, bsaCapabilities, createBsaJob, getBsaJob, getBsaResult, getBsaArtifact, presentBsaResult } from './lib/bsa-store.mjs';
 import { DOCUMENT_OCR_BY_PATH } from './lib/document-ocr-contracts.mjs';
 import { createDocumentOcrStore } from './lib/document-ocr-store.mjs';
-import { CASE_OUTCOMES, caseExpiresAt, classifyCaseSubmission } from './lib/case-manager-contract.mjs';
+import { CASE_OUTCOMES, CASE_REQUEST_STATUSES, caseExpiresAt, caseRequestStatus,
+  classifyCaseSubmission } from './lib/case-manager-contract.mjs';
 import { caseOutcome } from './lib/case-manager-outcomes.mjs';
 import { createLoginOtpStore, LOGIN_OTP_SECONDS, loginOtpHash, newLoginOtp } from './lib/login-otp.mjs';
 import { createCaseManagerStore } from './lib/case-manager-store.mjs';
@@ -1624,6 +1625,7 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
       const to = url.searchParams.get('to') || new Date(currentTime).toISOString();
       const serviceId = url.searchParams.get('service') || '';
       const outcome = url.searchParams.get('outcome') || '';
+      const requestStatus = url.searchParams.get('request_status') || '';
       const transactionIdFilter = url.searchParams.get('transaction_id') || '';
       const limit = Number(url.searchParams.get('limit') || 25);
       const rawCursor = url.searchParams.get('cursor') || '';
@@ -1636,6 +1638,7 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
         || Date.parse(to) - Date.parse(from) > 45 * 86_400_000 || !Number.isInteger(limit) || limit < 1 || limit > 100
         || (serviceId && !/^[a-z0-9-]{1,80}$/.test(serviceId))
         || (outcome && !CASE_OUTCOMES.includes(outcome))
+        || (requestStatus && !CASE_REQUEST_STATUSES.includes(requestStatus))
         || (transactionIdFilter && !/^[0-9a-f-]{36}$/i.test(transactionIdFilter))
         || (transactionIdFilter && cursor) || cursor.length > 256) {
         return json(res, 400, { status: 'Error', error: 'Invalid case filters.' });
@@ -1645,11 +1648,12 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
           { activePolicyVersion: policy.visible_from_version });
         const matches = found && (!serviceId || found.service_id === serviceId)
           && (!outcome || found.outcome === outcome)
+          && (!requestStatus || caseRequestStatus(found.final_http_status) === requestStatus)
           && found.accepted_at >= from && found.accepted_at <= to;
         return json(res, 200, { cases: matches ? [found] : [], next_cursor: null },
           { 'cache-control': 'no-store' });
       }
-      const page = await caseStore.listCases(workspaceId, { from, to, serviceId, outcome, limit, cursor,
+      const page = await caseStore.listCases(workspaceId, { from, to, serviceId, outcome, requestStatus, limit, cursor,
         activePolicyVersion: policy.visible_from_version });
       return json(res, 200, { cases: page.cases,
         next_cursor: page.next_cursor ? Buffer.from(page.next_cursor).toString('base64url') : null }, { 'cache-control': 'no-store' });

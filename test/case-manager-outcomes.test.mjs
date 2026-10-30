@@ -2,6 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { caseOutcome } from '../lib/case-manager-outcomes.mjs';
 import { CASE_DIRECT_SERVICES } from '../lib/case-manager-contract.mjs';
+import { caseRequestStatus } from '../lib/case-manager-contract.mjs';
+
+test('HTTP request status is separate from the service outcome', () => {
+  assert.equal(caseRequestStatus(200), 'succeeded');
+  assert.equal(caseRequestStatus(202), 'succeeded');
+  assert.equal(caseRequestStatus(422), 'failed');
+  assert.equal(caseRequestStatus(503), 'failed');
+  assert.equal(caseRequestStatus(0), 'pending');
+  assert.equal(caseRequestStatus(302), 'other');
+  assert.equal(caseOutcome('future-integration', { verified: false }, { httpStatus: 200 }).outcome, 'unclassified');
+});
 
 test('HTTP success is not business success, partial results require review', () => {
   assert.equal(caseOutcome('future-integration', { status: 'ok' }, { httpStatus: 200 }).outcome, 'unclassified');

@@ -23,6 +23,11 @@ await caseStore.captureFinal(workspaceId, intent.id, { response: {
   status: 'partial', subject: '<img src=x onerror=window.__caseXss=1>',
   nested: { rows: Array.from({ length: 30 }, (_, index) => ({ index, note: 'Synthetic evidence '.repeat(10) })) }
 }, contentType: 'application/json', httpStatus: 200, outcome: 'review_required', reasonCodes: ['PARTIAL'] });
+const failedRequest = await caseStore.createIntent({ workspaceId, serviceId: 'synthetic-service',
+  transactionId: 'synthetic-failed-request', acceptedAt: new Date().toISOString(),
+  expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+await caseStore.captureFinal(workspaceId, failedRequest.id, { response: { error: 'Synthetic invalid input' },
+  contentType: 'application/json', httpStatus: 422, outcome: 'not_run' });
 const ocr = await caseStore.createIntent({ workspaceId, serviceId: 'passport-icao-ocr', transactionId: 'synthetic-ocr-tx',
   acceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
 await caseStore.captureFinal(workspaceId, ocr.id, { response: { status: 'completed', data: { document_number: 'SYNTHETIC' } },
@@ -69,6 +74,14 @@ try {
     const page = await context.newPage();
     await page.goto(`${base}/cases`);
     await page.locator('.case-list-item').first().waitFor();
+    await page.locator('#case-request-status').selectOption('failed');
+    await page.getByRole('button', { name: 'Apply filters' }).click();
+    await page.locator(`.case-list-item[data-case-id="${failedRequest.id}"]`).waitFor();
+    if (await page.locator('.case-list-item').count() !== 1) throw new Error('API failure filter included successful requests');
+    await page.locator(`.case-list-item[data-case-id="${failedRequest.id}"]`).click();
+    await page.locator('#case-detail .case-request-note').getByText('API failed (HTTP 422)', { exact: false }).waitFor();
+    await page.locator('#case-request-status').selectOption('');
+    await page.getByRole('button', { name: 'Apply filters' }).click();
     await page.locator('#case-transaction').fill(transactionId);
     await page.getByRole('button', { name: 'Apply filters' }).click();
     await page.locator('.case-list-item').first().waitFor();

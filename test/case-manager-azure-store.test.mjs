@@ -249,12 +249,14 @@ test('Azure pagination advances past more than 1,000 hidden index rows', async (
   })() };
   const store = new AzureCaseManagerStore({ table, container: { getBlockBlobClient: () => ({}) }, queue: {} });
   store.row = async (_workspaceId, caseId) => ({ caseId, serviceId: 'synthetic', acceptedAt: new Date().toISOString(),
-    expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: Number(caseId) === 1001 ? 2 : 1,
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 2,
+    finalHttpStatus: Number(caseId) === 1001 ? 200 : 422,
     state: 'complete', outcome: 'unclassified', reasonCodesJson: '[]', attemptIdsJson: '[]' });
-  const first = await store.listCases('synthetic-workspace', { activePolicyVersion: 2 });
+  const first = await store.listCases('synthetic-workspace', { activePolicyVersion: 2, requestStatus: 'succeeded' });
   assert.deepEqual(first.cases, []);
   assert.equal(first.next_cursor, indexes[999].rowKey);
-  const second = await store.listCases('synthetic-workspace', { activePolicyVersion: 2, cursor: first.next_cursor });
+  const second = await store.listCases('synthetic-workspace', { activePolicyVersion: 2,
+    requestStatus: 'succeeded', cursor: first.next_cursor });
   assert.equal(second.cases.length, 1);
   assert.equal(second.cases[0].id, '1001');
   assert.equal(second.next_cursor, null);
