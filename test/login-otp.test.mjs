@@ -51,9 +51,11 @@ class FakeTable {
 }
 
 test('Azure challenge consumption uses an ETag so concurrent verification issues one session', async () => {
-  const store = new AzureLoginOtpStore({ table: new FakeTable() });
+  const table = new FakeTable();
+  const store = new AzureLoginOtpStore({ table });
   const challenge = make();
   assert.deepEqual(await store.issue({ ...challenge, now: 1000 }), { issued: true });
+  assert.equal(typeof [...table.rows.values()][0].expiresAt, 'string');
   const results = await Promise.all(Array.from({ length: 8 }, () => store.consume({ ...challenge, now: 2000 })));
   assert.equal(results.filter(Boolean).length, 1);
   assert.equal(await store.consume({ ...challenge, now: 3000 }), false);
