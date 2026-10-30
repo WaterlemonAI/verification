@@ -17,6 +17,14 @@ class FakeTable {
     this.entities.set(key, { ...row, etag: '1' });
   }
   async deleteEntity(partitionKey, rowKey) { this.entities.delete(this.key(partitionKey, rowKey)); }
+  async upsertEntity(row) { this.entities.set(this.key(row.partitionKey, row.rowKey), { ...row, etag: '1' }); }
+  listEntities({ queryOptions }) {
+    const filter = String(queryOptions.filter);
+    const after = /RowKey gt '([^']*)'/.exec(filter)?.[1] || '';
+    const rows = [...this.entities.values()].filter((row) => row.partitionKey === 'pending' && row.rowKey > after)
+      .sort((a, b) => a.rowKey.localeCompare(b.rowKey));
+    return (async function* () { for (const row of rows) yield { ...row }; })();
+  }
   async submitTransaction(actions) {
     if (this.failFinalUpdate && actions[0][0] === 'update') {
       this.failFinalUpdate = false;
@@ -64,6 +72,66 @@ test('an interrupted Azure finalization keeps the first encrypted response on re
     if (previousKey === undefined) delete process.env.CASE_MANAGER_DATA_KEY_V1_HEX;
     else process.env.CASE_MANAGER_DATA_KEY_V1_HEX = previousKey;
   }
+});
+
+test('deferred final capture acknowledges a durable Blob and recovers its index after background failure', async () => {
+  const previousKey = process.env.CASE_MANAGER_DATA_KEY_V1_HEX;
+  process.env.CASE_MANAGER_DATA_KEY_V1_HEX = 'a'.repeat(64);
+  try {
+    const table = new FakeTable();
+    let encrypted;
+    const blob = {
+      async uploadData(bytes, options) {
+        assert.equal(options.conditions.ifNoneMatch, '*');
+        encrypted = Buffer.from(bytes);
+      },
+      async download() { return { readableStreamBody: Readable.from([encrypted]) }; }
+    };
+    const store = new AzureCaseManagerStore({ table, container: { getBlockBlobClient: () => blob }, queue: {} });
+    const intent = await store.createIntent({ workspaceId: 'synthetic-workspace', serviceId: 'synthetic-service',
+      transactionId: 'tx-deferred', acceptedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+    const original = store.finalizeStoredBlob.bind(store);
+    store.finalizeStoredBlob = async () => { throw new Error('simulated process loss'); };
+    const warning = console.warn;
+    console.warn = () => {};
+    try {
+      await store.captureFinalDeferred('synthetic-workspace', intent.id, { response: { result: 'synthetic' },
+        contentType: 'application/json', httpStatus: 200, outcome: 'unclassified' }, intent);
+      await new Promise((resolve) => setImmediate(resolve));
+    } finally { console.warn = warning; }
+    assert.equal((await store.row('synthetic-workspace', intent.id)).state, 'pending');
+    assert.equal((await store.getCase('synthetic-workspace', intent.id)).payload.final_response.result, 'synthetic');
+    store.finalizeStoredBlob = original;
+    const recovered = await store.recoverStoredFinals();
+    assert.equal(recovered.recovered, 1);
+    assert.equal((await store.getCase('synthetic-workspace', intent.id)).state, 'complete');
+    assert.equal((await store.agedPending(new Date(Date.now() + 1), 10)), 0);
+  } finally {
+    if (previousKey === undefined) delete process.env.CASE_MANAGER_DATA_KEY_V1_HEX;
+    else process.env.CASE_MANAGER_DATA_KEY_V1_HEX = previousKey;
+  }
+});
+
+test('stored-final recovery rotates its bounded cursor past more than 512 pending jobs', async () => {
+  const table = new FakeTable();
+  for (let index = 0; index < 513; index++) {
+    const caseId = `00000000-0000-0000-0000-${String(index).padStart(12, '0')}`;
+    await table.createEntity({ partitionKey: 'pending', rowKey: `${String(index).padStart(4, '0')}-${caseId}`,
+      workspaceId: 'synthetic-workspace', caseId });
+  }
+  const store = new AzureCaseManagerStore({ table, container: {}, queue: {} });
+  store.row = async (_workspaceId, caseId) => ({ caseId, state: 'pending' });
+  store.finalizeStoredBlob = async () => { throw Object.assign(new Error('Blob not yet written'), { statusCode: 404 }); };
+  const first = await store.recoverStoredFinals();
+  assert.equal(first.scanned, 512);
+  assert.equal(first.errors, 0);
+  const second = await store.recoverStoredFinals();
+  assert.equal(second.scanned, 1);
+  assert.equal(second.errors, 0);
+  assert.match((await table.getEntity('maintenance', 'stored-final-cursor')).cursor, /^0512-/);
+  const third = await store.recoverStoredFinals();
+  assert.equal(third.scanned, 512);
 });
 
 test('Azure transaction index resolves original and replay attempts only inside their workspace', async () => {

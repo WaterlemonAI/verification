@@ -302,9 +302,10 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
       const originalArtifactOwner = req.ai7Case.service_id === 'entity-search'
         ? `workspace-${workspaceId}` : req.ai7OriginalArtifactOwner;
       try {
-        await caseStore.captureFinal(workspaceId, req.ai7Case.id, { response: finalResponse, contentType,
+        await (caseStore.captureFinalDeferred || caseStore.captureFinal).call(caseStore, workspaceId, req.ai7Case.id,
+          { response: finalResponse, contentType,
           httpStatus: status, outcome: mapping.outcome, reasonCodes: mapping.reasonCodes,
-          originalArtifactOwner, artifactRefs });
+          originalArtifactOwner, artifactRefs }, req.ai7Case);
       } catch {
         console.warn('case_manager_capture_failed', JSON.stringify({ transaction_id: transactionId }));
         await caseStore.markIncomplete(workspaceId, req.ai7Case.id).catch(() =>
