@@ -41,7 +41,7 @@ The outcome vocabulary is `pending`, `passed`, `failed`, `review_required`, `ext
 | Document OCR and MOA | `extracted` on completed extraction, `review_required` on OCR review status | Confirm that extraction is never shown as verification. |
 | Bank statement analysis | A terminal failed job is `could_not_complete`; partial or ineligible result is `review_required`; otherwise `unclassified` | Define analysis outcome separately from credit approval. |
 | Forms | Partial/ineligible result is `review_required`; otherwise `unclassified` | Define how child outcomes combine. |
-| UAE TLV, IBAN, entity search and dynamic integrations | `unclassified` on successful transport | Product owner approved retaining `unclassified` pending response-contract review on 2026-10-30. |
+| UAE TLV, IBAN, entity search and dynamic integrations | `unclassified` on successful transport | The product owner now requires reviewed service-specific outcome meanings before customer launch. No generic transport-success pass is allowed. |
 
 The remaining outcome rows are review candidates, not authorization to enable customer workspaces. The dashboard shows service-specific summary cards and a bounded generic fallback for future integrations. The separate raw-response view retains every response field.
 

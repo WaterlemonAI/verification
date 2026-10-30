@@ -807,6 +807,7 @@ var caseManagerAlertSignals = [
   { name: 'intent', signal: 'case_manager_intent_failed' }
   { name: 'link', signal: 'case_manager_reconcile_link_failed' }
   { name: 'incomplete', signal: 'case_manager_incomplete_mark_failed' }
+  { name: 'pending-cleanup', signal: 'case_manager_pending_index_cleanup_failed' }
   { name: 'rejected-attempt', signal: 'case_manager_rejected_attempt_capture_failed' }
   { name: 'storage', signal: 'case_manager_storage_error' }
   { name: 'pending', signal: 'case_manager_aged_pending' }

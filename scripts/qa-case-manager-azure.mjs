@@ -6,9 +6,11 @@ import { odata } from '@azure/data-tables';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { MemoryCustomerUsageStore, validateCasePolicy } from '../lib/customer-usage.mjs';
 import { AzureCaseManagerStore } from '../lib/case-manager-store.mjs';
+import { AzureLoginOtpStore } from '../lib/login-otp.mjs';
 import { AzureAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { ContainerAppsManagedIdentityCredential } from '../lib/azure-managed-identity.mjs';
 import { createPortalAccount, createPortalSession, PORTAL_COOKIE } from '../lib/portal-auth.mjs';
+import { createAdminAccount } from '../lib/admin-auth.mjs';
 import { drainCaseReconciliation } from './reconcile-cases.mjs';
 import { recoverCaseRetirements } from '../lib/case-manager-retirement.mjs';
 import { createAppServer } from '../server.mjs';
@@ -199,6 +201,9 @@ export async function runQa({ load = false, asyncQueue = false, seconds = 120, q
   const store = new EnvironmentStore();
   const usageStore = new MemoryCustomerUsageStore();
   const caseStore = new AzureCaseManagerStore();
+  const otpStore = new AzureLoginOtpStore({ table: caseStore.table });
+  const sentCodes = [];
+  const mailer = { configured: true, sendLoginCode: async (message) => { sentCodes.push(message); } };
   const reportStore = new AzureAdverseMediaReportStore({ blobServiceUrl: process.env.CASE_MANAGER_BLOB_URL,
     tableServiceUrl: process.env.CASE_MANAGER_TABLE_URL,
     containerName: 'case-manager-qa-artifacts', tableName: 'CaseManagerQaArtifacts' });
@@ -219,6 +224,8 @@ export async function runQa({ load = false, asyncQueue = false, seconds = 120, q
   await usageStore.updateCasePolicy(client.client.workspaceId,
     validateCasePolicy({ version: 0, enabled: true, ttl_days: 1 }));
   await store.setPortalSessionKey(signingKey);
+  await store.setAdminSessionKey(signingKey);
+  await store.setAdminAccount(createAdminAccount('qa-admin@example.invalid', 'SyntheticOnly!234'));
   const account = createPortalAccount('qa@example.invalid', 'SyntheticOnly!234',
     { id: client.client.workspaceId, name: 'Disposable QA Workspace' });
   const other = createPortalAccount('other@example.invalid', 'SyntheticOnly!234',
@@ -228,7 +235,7 @@ export async function runQa({ load = false, asyncQueue = false, seconds = 120, q
   const cookie = (user) => `${PORTAL_COOKIE}=${encodeURIComponent(createPortalSession(user, signingKey).token)}`;
 
   try {
-    server = createAppServer({ store, usageStore, caseStore, reportStore, startWorker: false,
+    server = createAppServer({ store, usageStore, caseStore, reportStore, otpStore, mailer, startWorker: false,
       deepResearchQueue: null, formsQueue: null,
       fetchImpl: async () => { supplierCalls++; return new Response(JSON.stringify(payload), {
         status: 200, headers: { 'content-type': 'application/json' }
@@ -237,6 +244,23 @@ export async function runQa({ load = false, asyncQueue = false, seconds = 120, q
     const base = `http://127.0.0.1:${server.address().port}`;
     const url = `${base}/service/qa_synthetic_check`;
     process.env.CASE_MANAGER_ENABLED = 'true';
+    for (const [kind, email] of [['portal', 'qa@example.invalid'], ['admin', 'qa-admin@example.invalid']]) {
+      const path = kind === 'portal' ? '/portal/api/auth' : '/admin/api/auth';
+      const login = await fetch(`${base}${path}/login`, { method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password: 'SyntheticOnly!234' }) });
+      assert.equal(login.status, 202);
+      assert.equal(login.headers.get('set-cookie'), null);
+      const challengeId = (await login.json()).challenge_id;
+      assert.equal(sentCodes.at(-1)?.to, email);
+      const verification = { email, challenge_id: challengeId, code: sentCodes.at(-1).code };
+      const verified = await fetch(`${base}${path}/verify-code`, { method: 'POST',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify(verification) });
+      assert.equal(verified.status, 200);
+      assert.ok(verified.headers.get('set-cookie'));
+      assert.equal((await fetch(`${base}${path}/verify-code`, { method: 'POST',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify(verification) })).status, 401);
+    }
     const response = await fetch(url, { method: 'POST', headers: {
       authorization: `Bearer ${client.apiKey}`, 'content-type': 'application/json'
     }, body: '{}' });
@@ -321,6 +345,7 @@ export async function runQa({ load = false, asyncQueue = false, seconds = 120, q
     assert.equal((await caseStore.listCases(purgeFixtureWorkspaceId)).cases.some((item) => item.id === expiring.id), false);
 
     const result = { private_azure_store: true, authenticated_portal: true, workspace_isolation: true,
+      azure_otp_challenges: true, portal_email_code: true, admin_email_code: true,
       api_key_history_denied: true, exact_response: true, physical_purge: true,
       azure_artifact_download: true,
       queue_failure_retirement: true,
@@ -334,6 +359,12 @@ export async function runQa({ load = false, asyncQueue = false, seconds = 120, q
   } finally {
     process.env.CASE_MANAGER_ENABLED = 'false';
     if (server) await new Promise((resolve) => server.close(resolve));
+    for (const [kind, email] of [['portal', 'qa@example.invalid'], ['admin', 'qa-admin@example.invalid']]) {
+      const key = createHash('sha256').update(`${kind}:${email}`).digest('hex');
+      await caseStore.table.deleteEntity('login-otp-v1', key).catch((error) => {
+        if (error.statusCode !== 404) throw error;
+      });
+    }
     try {
       await retireAll(caseStore, client.client.workspaceId);
       await retireAll(caseStore, purgeFixtureWorkspaceId);

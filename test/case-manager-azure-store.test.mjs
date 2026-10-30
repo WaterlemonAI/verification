@@ -85,6 +85,51 @@ test('Azure transaction index resolves original and replay attempts only inside 
   assert.equal(await store.findByTransaction('workspace-a', 'tx-replay'), null);
 });
 
+test('intent marker creation waits for both writes before cleaning up a failed admission', async () => {
+  const table = new FakeTable();
+  const create = table.createEntity.bind(table);
+  table.createEntity = async (row) => {
+    if (row.partitionKey === 'pending') throw Object.assign(new Error('pending unavailable'), { statusCode: 503 });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return create(row);
+  };
+  const store = new AzureCaseManagerStore({ table,
+    container: { getBlockBlobClient: () => ({}) }, queue: {} });
+  await assert.rejects(store.createIntent({ workspaceId: 'synthetic-workspace', serviceId: 'synthetic-service',
+    transactionId: 'tx-failed', acceptedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 }), /pending unavailable/);
+  assert.equal([...table.entities.keys()].some((key) => key.startsWith('expiry/') || key.startsWith('pending/')), false);
+});
+
+test('a failed pending-marker cleanup does not turn a committed final response into a capture failure', async () => {
+  const previousKey = process.env.CASE_MANAGER_DATA_KEY_V1_HEX;
+  process.env.CASE_MANAGER_DATA_KEY_V1_HEX = 'a'.repeat(64);
+  try {
+    const table = new FakeTable();
+    let encrypted;
+    const blob = {
+      async uploadData(bytes) { encrypted = Buffer.from(bytes); },
+      async download() { return { readableStreamBody: Readable.from([encrypted]) }; }
+    };
+    const store = new AzureCaseManagerStore({ table, container: { getBlockBlobClient: () => blob }, queue: {} });
+    const workspaceId = 'synthetic-workspace';
+    const intent = await store.createIntent({ workspaceId, serviceId: 'synthetic-service', transactionId: 'tx-cleanup',
+      acceptedAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+    const remove = table.deleteEntity.bind(table);
+    table.deleteEntity = async (partitionKey, rowKey) => {
+      if (partitionKey === 'pending') throw Object.assign(new Error('pending cleanup unavailable'), { statusCode: 503 });
+      return remove(partitionKey, rowKey);
+    };
+    const captured = await store.captureFinal(workspaceId, intent.id, { response: { marker: 'synthetic' },
+      contentType: 'application/json', httpStatus: 200, outcome: 'unclassified' });
+    assert.equal(captured.state, 'complete');
+    assert.deepEqual((await store.getCase(workspaceId, intent.id)).payload.final_response, { marker: 'synthetic' });
+  } finally {
+    if (previousKey === undefined) delete process.env.CASE_MANAGER_DATA_KEY_V1_HEX;
+    else process.env.CASE_MANAGER_DATA_KEY_V1_HEX = previousKey;
+  }
+});
+
 test('workspace retirement advances a bounded cursor after parallel deletion', async () => {
   const rows = ['case-a', 'case-b', 'case-c'].map((rowKey) => ({ rowKey, policyVersion: 1 }));
   let query = 0;
