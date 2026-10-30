@@ -189,14 +189,14 @@ async function runAsyncPhase({ usageStore, workspaceId, seconds, qpm }) {
     queue_age_max_ms: Math.round(Math.max(0, ...ages)) };
 }
 
-export async function runQa({ load = false, asyncQueue = false, seconds = 120, qpm = 180 } = {}) {
+export async function runQa({ load = false, asyncQueue = false, seconds = 120, qpm = 200 } = {}) {
   if (process.env.CASE_MANAGER_QA_MODE !== 'true' ||
       ![process.env.CASE_MANAGER_BLOB_URL, process.env.CASE_MANAGER_TABLE_URL, process.env.CASE_MANAGER_QUEUE_URL]
         .every((url) => url?.startsWith(`https://${ownAccount}.`))) {
     throw new Error('case_manager_qa_isolation_required');
   }
   if ((load || asyncQueue) && (!(Number.isInteger(seconds) && seconds >= 30 && seconds <= 300) ||
-      !(Number.isInteger(qpm) && qpm >= 1 && qpm <= 180))) throw new Error('case_manager_qa_load_bounds');
+      !(Number.isInteger(qpm) && qpm >= 1 && qpm <= 200))) throw new Error('case_manager_qa_load_bounds');
 
   const store = new EnvironmentStore();
   const usageStore = new MemoryCustomerUsageStore();
@@ -387,7 +387,7 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
     else await runQa({ load: process.env.CASE_MANAGER_QA_LOAD === 'true',
       asyncQueue: process.env.CASE_MANAGER_QA_ASYNC === 'true',
       seconds: Number(process.env.CASE_MANAGER_QA_SECONDS || 120),
-      qpm: Number(process.env.CASE_MANAGER_QA_QPM || 180) });
+      qpm: Number(process.env.CASE_MANAGER_QA_QPM || 200) });
   } catch (error) {
     const code = String(error?.code || error?.message || 'unknown');
     console.warn('case_manager_azure_qa_failed', /^[A-Za-z0-9_]{1,64}$/.test(code) ? code : 'unknown');

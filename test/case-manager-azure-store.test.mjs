@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { AzureCaseManagerStore } from '../lib/case-manager-store.mjs';
 
@@ -260,6 +261,50 @@ test('Azure pagination advances past more than 1,000 hidden index rows', async (
   assert.equal(second.cases.length, 1);
   assert.equal(second.cases[0].id, '1001');
   assert.equal(second.next_cursor, null);
+});
+
+test('Azure pagination traverses 50,000 cases in one workspace without exposing another', async () => {
+  const workspaceId = 'large-synthetic-workspace';
+  const partition = `w-${createHash('sha256').update(`case-manager:${workspaceId}`).digest('hex')}`;
+  const keys = Array.from({ length: 50_000 }, (_, index) => `idx-all-all-${String(index).padStart(5, '0')}`);
+  const table = { listEntities({ queryOptions }) {
+    const filter = String(queryOptions.filter);
+    if (!filter.includes(`PartitionKey eq '${partition}'`)) return (async function* () {})();
+    const after = /RowKey gt '([^']*)'/.exec(filter)?.[1] || '';
+    let low = 0;
+    let high = keys.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (keys[middle] <= after) low = middle + 1;
+      else high = middle;
+    }
+    return (async function* () {
+      for (let index = low; index < Math.min(low + 101, keys.length); index++) {
+        yield { rowKey: keys[index], caseId: String(index) };
+      }
+    })();
+  } };
+  const store = new AzureCaseManagerStore({ table, container: {} });
+  store.row = async (owner, caseId) => {
+    assert.equal(owner, workspaceId);
+    return { caseId, serviceId: 'synthetic', acceptedAt: '2026-10-31T00:00:00.000Z',
+      expiresAt: '2099-01-01T00:00:00.000Z', policyVersion: 1,
+      finalHttpStatus: 200, state: 'complete', outcome: 'passed',
+      reasonCodesJson: '[]', attemptIdsJson: '[]' };
+  };
+  const seen = new Set();
+  let cursor = '';
+  let pages = 0;
+  do {
+    const page = await store.listCases(workspaceId, { limit: 100, cursor, activePolicyVersion: 1 });
+    for (const item of page.cases) seen.add(item.id);
+    cursor = page.next_cursor || '';
+    pages++;
+  } while (cursor);
+  assert.equal(seen.size, 50_000);
+  assert.equal(pages, 500);
+  assert.deepEqual(await store.listCases('another-workspace', { limit: 100 }),
+    { cases: [], next_cursor: null });
 });
 
 test('Azure age gauges query only the first expiry and pending index keys', async () => {

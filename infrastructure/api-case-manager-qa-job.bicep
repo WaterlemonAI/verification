@@ -24,7 +24,7 @@ param keyVaultUri string
 @description('Dedicated private Case Manager storage account.')
 param caseManagerStorageName string = 'stai7uaecasesuaen001'
 
-@description('Run the bounded 180 QPM synthetic load comparison after smoke passes.')
+@description('Run the bounded 200 QPM synthetic load comparison after smoke passes.')
 param runLoad bool = false
 
 @description('Run bounded synthetic OCR/BSA reconciliation on an isolated QA load queue.')
@@ -38,10 +38,10 @@ param cleanupOrphans bool = false
 @maxValue(300)
 param phaseSeconds int = 120
 
-@description('Synthetic request rate per minute (1-180).')
+@description('Synthetic request rate per minute (1-200).')
 @minValue(1)
-@maxValue(180)
-param requestsPerMinute int = 180
+@maxValue(200)
+param requestsPerMinute int = 200
 
 resource qaJob 'Microsoft.App/jobs@2024-03-01' = {
   name: 'caj-ai7uae-cm-azure-qa'

@@ -11,9 +11,9 @@ Case Manager is an optional copy of verification results. Keep production captur
 - Completed eligible adverse-media and merchant screenings display **No material findings**; partial coverage remains **Review required**. This wording was approved on 2026-10-30 and does not assert legal or credit clearance.
 - Storage must be accessible only through private endpoints before any Case Manager QA. The new VNet-integrated private runtime and Blob/Table/Queue endpoints are provisioned, and a managed-identity running-container probe has verified all three private paths. No public-network exception is approved.
 - Reads stop immediately at expiry or opt-out; physically delete Case Manager copies within 24 hours. This target was approved on 2026-10-30 and must be demonstrated in Azure-backed QA.
-- Peak traffic remains provisional at 90 QPM. The product owner kept the +100 ms p95 / +250 ms p99 added-latency target; the exact-digest 180 QPM synthetic run below met it. Mixed real-provider traffic and sustained cost/retention remain open.
+- The product owner set launch peak at **100 QPM**, so the release load gate is **200 QPM**. The +100 ms p95 / +250 ms p99 added-latency target remains. No fixed tenant case count or spend ceiling is approved; 50,000 cases in one workspace must remain listable, and QA must measure storage growth and cost without blocking a customer at that count. The earlier 180 QPM run below passed its synthetic latency objective; the new 200 QPM and sustained cost/retention checks remain open.
 
-The comparison objective for Azure-backed QA is no more than **+100 ms p95** and **+250 ms p99** versus the same private runtime with capture off. The provisional peak is 90 QPM. The synthetic 180 QPM comparison passed this latency objective; a representative mixed service run at that rate is still required.
+The comparison objective for Azure-backed QA is no more than **+100 ms p95** and **+250 ms p99** versus the same private runtime with capture off. The launch peak is 100 QPM; test at 200 QPM. A representative mixed service run at that rate is required.
 
 ## Azure evidence on 2026-10-30
 
@@ -61,6 +61,7 @@ Use synthetic subjects and documents. Enable one disposable workspace with a one
 ## Load, retention and rollback gates
 
 - Run Azure-backed sustained traffic at twice the approved peak with representative response sizes and a mix of synchronous, OCR, BSA and Form jobs. Record API p95/p99 added latency, capture failures, queue age p95/p99/max, dead letters, cost and storage growth. The memory-store benchmark is not this gate.
+- Exercise pagination, exact transaction lookup, workspace isolation, opt-out retirement and expiry against a 50,000-case single-tenant scenario. Do not impose a case-count cap; record actual Azure latency and deletion throughput. A local Azure-store simulation has already traversed 50,000 indexed cases in 500 pages without crossing workspace partitions.
 - Prove the expiry purge keeps up with the approved arrival rate and physically deletes Case Manager copies within 24 hours of expiry or opt-out. Check encrypted Blob, case metadata, transaction indexes and due tasks after deletion; source stores remain untouched.
 - Test a routine deployment after capture has been enabled. It must preserve the approved desired state. Test `CASE_MANAGER_EMERGENCY_OFF=true` as rollback while `CASE_MANAGER_MAINTENANCE_ENABLED=true` keeps deletion and reconciliation running. Confirm the prior immutable digest can be restored and no case storage is deleted during rollback.
 

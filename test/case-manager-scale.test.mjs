@@ -58,10 +58,10 @@ test('Azure retirement cursor advances with an atomic due-task replacement', asy
   assert.equal(entities.size, 0);
 });
 
-test('one scheduled run drains two minutes of synthetic 180 QPM arrivals and observes queue age', async () => {
-  const arrivals = Array.from({ length: 360 }, (_, i) => ({
+test('one scheduled run drains two minutes of synthetic 200 QPM arrivals and observes queue age', async () => {
+  const arrivals = Array.from({ length: 400 }, (_, i) => ({
     messageId: `message-${i}`, popReceipt: 'receipt',
-    insertedOn: new Date(Date.now() - 120_000 + i * (120_000 / 360)).toISOString(),
+    insertedOn: new Date(Date.now() - 120_000 + i * (120_000 / 400)).toISOString(),
     messageText: Buffer.from(JSON.stringify({ version: 1, kind: 'reconcile',
       workspaceId: 'synthetic-workspace', caseId: `case-${i}` })).toString('base64')
   }));
@@ -76,13 +76,13 @@ test('one scheduled run drains two minutes of synthetic 180 QPM arrivals and obs
     deadLetterQueue: { async sendMessage() { throw new Error('unexpected dead letter'); } },
     caseStore: { async pendingRetirements() { return []; } }, usageStore: {}, documentOcrStore: null,
     reconcileMessageImpl: async () => 'captured' });
-  assert.equal(counts.messages_processed, 360);
-  assert.equal(counts.batches_received, 12);
-  assert.equal(counts.captured, 360);
+  assert.equal(counts.messages_processed, 400);
+  assert.equal(counts.batches_received, 13);
+  assert.equal(counts.captured, 400);
   assert.equal(counts.queue_age_seconds_p95, 114);
   assert.equal(counts.queue_age_seconds_p99, 119);
   assert.equal(counts.queue_age_seconds_max, 120);
   assert.ok(counts.run_ms >= 0);
-  assert.equal(deleted, 360);
+  assert.equal(deleted, 400);
   assert.equal(arrivals.length, 0);
 });
