@@ -49,6 +49,15 @@ for (const [serviceId, response] of [
   await caseStore.captureFinal(workspaceId, sample.id, { response, contentType: 'application/json',
     httpStatus: 200, outcome: mapping.outcome, reasonCodes: mapping.reasonCodes });
 }
+const clearSearch = await caseStore.createIntent({ workspaceId, serviceId: 'entity-search',
+  transactionId: 'synthetic-entity-search-clear', acceptedAt: new Date().toISOString(),
+  expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+caseIds.set('entity-search-clear', clearSearch.id);
+const clearResponse = { message: 'Search Successful', profiles_success: true, data: { profiles: [] } };
+const clearMapping = caseOutcome('entity-search', clearResponse, { httpStatus: 200 });
+await caseStore.captureFinal(workspaceId, clearSearch.id, { response: clearResponse,
+  contentType: 'application/json', httpStatus: 200,
+  outcome: clearMapping.outcome, reasonCodes: clearMapping.reasonCodes });
 const analysis = await caseStore.createIntent({ workspaceId, serviceId: 'bank-statement-analysis',
   transactionId: 'synthetic-bsa', acceptedAt: new Date().toISOString(),
   expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
@@ -130,6 +139,9 @@ try {
       await page.locator(`.case-list-item[data-case-id="${caseIds.get(serviceId)}"]`).getByText('Passed').waitFor();
     }
     await page.locator(`.case-list-item[data-case-id="${caseIds.get('entity-search')}"]`).getByText('Review required').waitFor();
+    await page.locator(`.case-list-item[data-case-id="${clearSearch.id}"]`).getByText('No candidates found').waitFor();
+    await page.locator(`.case-list-item[data-case-id="${clearSearch.id}"]`).click();
+    await page.locator('#case-detail').getByText('No candidates were returned in the completed provider checks. This does not certify every underlying source as clear.').waitFor();
     await page.locator(`.case-list-item[data-case-id="${analysis.id}"]`).getByText('Analyzed').waitFor();
     for (const serviceId of ['adverse-media', 'merchant-screening']) {
       const caseButton = page.locator(`.case-list-item[data-case-id="${caseIds.get(serviceId)}"]`);

@@ -83,6 +83,18 @@ test('entity search passes only completed no-candidate checks; hits and incomple
     { httpStatus: 200 }).outcome, 'review_required');
   assert.equal(caseOutcome('entity-search', { ...clear, data: { profiles: [], unknown_dataset: [] } },
     { httpStatus: 200 }).outcome, 'review_required');
+  assert.equal(caseOutcome('entity-search', { message: 'Search Successful', profiles_success: true,
+    data: { profiles: [] } }, { httpStatus: 200 }).outcome, 'passed');
+  assert.equal(caseOutcome('entity-search', { message: 'Search Successful', profiles_success: true,
+    data: { profiles: [], aml: [{ uid: 'candidate' }] } }, { httpStatus: 200 }).outcome, 'review_required');
+  assert.equal(caseOutcome('entity-search', { message: 'Search Successful', profiles_success: false,
+    data: { profiles: [] } }, { httpStatus: 200 }).outcome, 'review_required');
+  assert.equal(caseOutcome('entity-search', { message: 'Search Successful', apc_success: true,
+    data: { apc: [] } }, { httpStatus: 200 }).outcome, 'passed');
+  assert.equal(caseOutcome('entity-search', { message: 'Search Successful', apc_success: false,
+    data: { apc: [] } }, { httpStatus: 200 }).outcome, 'review_required');
+  assert.equal(caseOutcome('entity-search', { message: 'Provider unavailable', profiles_success: true,
+    data: { profiles: [] } }, { httpStatus: 200 }).outcome, 'review_required');
 });
 
 test('Form result rolls up only explicit child decisions, not transport success alone', () => {
