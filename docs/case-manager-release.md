@@ -41,9 +41,10 @@ Use synthetic subjects and documents. Enable one disposable workspace with a one
 2. Submit one direct check from each current service, one administrator-configured integration, and one Form with multiple children. Verify the case count, final body, status badge, attempt IDs, and original API response remain correct. A Form child must not create a separate case.
 3. Exercise OCR and bank-statement `202` receipts through completed and failed terminal states. Check the saved final response, source-independent case artifact link, and no extra supplier, OCR, Brave or Gemini calls. A failed BSA job should finish as `Could not complete` with its public 422 response.
 4. Force a callback failure after a saved adverse-media or Form result. Retry delivery, then verify there is one logical case, one provider run, and one final result. Retry an idempotent submission and find the same case by both transaction IDs.
-5. Verify the case list filters by time, service, outcome and exact transaction ID. Open the readable view, raw JSON, copy action and PDF or other artifact on desktop and mobile. Render hostile strings as text.
-6. Sign in to a second workspace. Its session must get 404 or an empty list for the first workspace's case, transaction ID and artifact. A Bearer API key alone must not access case-history routes.
-7. Shorten the TTL and opt out. Reads must stop immediately; the due retirement task must delete only the Case Manager copies. Re-enable later and confirm old cases do not reappear. Inject a queue failure and verify the durable due task still completes physical deletion.
+5. Verify the case list filters by time, service, outcome and exact transaction ID. Open the service-specific overview, raw JSON, copy action and PDF or other artifact on desktop and mobile. Render hostile strings as text.
+6. Complete the new portal and admin email-code sign-in journeys with controlled mailboxes before using a real workspace. Check that first-time setup creates no session, the initial API key appears only after code verification, and SMTP or challenge-store failures issue no session.
+7. Sign in to a second workspace. Its session must get 404 or an empty list for the first workspace's case, transaction ID and artifact. A Bearer API key alone must not access case-history routes.
+8. Shorten the TTL and opt out. Reads must stop immediately; the due retirement task must delete only the Case Manager copies. Re-enable later and confirm old cases do not reappear. Inject a queue failure and verify the durable due task still completes physical deletion.
 
 ## Load, retention and rollback gates
 

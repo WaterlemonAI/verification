@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=10" />
-    <script src="/portal-login.js?v=3" defer></script>
+    <script src="/portal-login.js?v=4" defer></script>
   </head>
   <body class="login-page">
     <main class="login-shell">
@@ -36,6 +36,12 @@
             <label>Password<input id="login-password" type="password" autocomplete="current-password" required /></label>
             <p class="auth-error" id="login-error" role="alert"></p>
             <button type="submit">Sign in to workspace →</button>
+          </form>
+          <form class="auth-form" id="code-form" novalidate hidden>
+            <label>Email sign-in code<input id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" maxlength="8" required /></label>
+            <p class="auth-error" id="code-error" role="alert"></p>
+            <button type="submit">Verify code →</button>
+            <small>Codes expire after 10 minutes and can be used once. To request another, return to sign in after one minute.</small>
           </form>
           <button class="auth-link" type="button" id="show-forgot">Forgot password?</button>
 

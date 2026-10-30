@@ -16,15 +16,22 @@ test('invited customer manages multiple workspace keys, rotation and service hea
   await store.setAdminAccount(createAdminAccount('operator@example.com', 'AdminPassword!123'));
   await store.setAdminSessionKey('test-admin-session-key');
   const sent = [];
-  const mailer = { configured: true, sendInvitation: async (message) => sent.push(message) };
+  const codes = [];
+  const mailer = { configured: true, sendInvitation: async (message) => sent.push(message),
+    sendLoginCode: async (message) => codes.push(message) };
   const server = createAppServer({ store, mailer, startWorker: false, deepResearchQueue: null, formsQueue: null });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
 
   const adminLogin = await post(base, '/admin/api/auth/login', { email: 'operator@example.com', password: 'AdminPassword!123' });
-  const adminCookie = adminLogin.headers.get('set-cookie').split(';')[0];
-  const adminCsrf = (await adminLogin.json()).csrf_token;
+  assert.equal(adminLogin.status, 202);
+  const adminChallenge = (await adminLogin.json()).challenge_id;
+  const adminVerify = await post(base, '/admin/api/auth/verify-code', { email: 'operator@example.com',
+    challenge_id: adminChallenge, code: codes.at(-1).code });
+  assert.equal(adminVerify.status, 200);
+  const adminCookie = adminVerify.headers.get('set-cookie').split(';')[0];
+  const adminCsrf = (await adminVerify.json()).csrf_token;
   const adminHeaders = { cookie: adminCookie, 'x-ai7-csrf': adminCsrf };
   const invite = await post(base, '/admin/api/customers', { name: 'Bank A', admin_email: 'owner@banka.example' }, adminHeaders);
   assert.equal(invite.status, 201);
@@ -42,10 +49,18 @@ test('invited customer manages multiple workspace keys, rotation and service hea
   assert.equal(accepted.status, 201);
   const setup = await accepted.json();
   assert.equal(setup.account.client_id, invited.customer.id);
-  assert.equal(await store.isClientKey(setup.api_key), true);
+  assert.equal(accepted.headers.get('set-cookie'), null);
+  const portalLogin = await post(base, '/portal/api/auth/login', { email: 'owner@banka.example', password: 'CustomerPass!123' });
+  assert.equal(portalLogin.status, 202);
+  const portalChallenge = (await portalLogin.json()).challenge_id;
+  const portalVerify = await post(base, '/portal/api/auth/verify-code', { email: 'owner@banka.example',
+    challenge_id: portalChallenge, code: codes.at(-1).code });
+  assert.equal(portalVerify.status, 200);
+  const verified = await portalVerify.json();
+  assert.equal(await store.isClientKey(verified.api_key), true);
   assert.equal((await post(base, '/portal/api/invitations/accept', { token, password: 'CustomerPass!123' })).status, 400);
-  const portalCookie = accepted.headers.get('set-cookie').split(';')[0];
-  const portalHeaders = { cookie: portalCookie, 'x-ai7-csrf': setup.csrf_token };
+  const portalCookie = portalVerify.headers.get('set-cookie').split(';')[0];
+  const portalHeaders = { cookie: portalCookie, 'x-ai7-csrf': verified.csrf_token };
   const initialList = await fetch(`${base}/portal/api/keys`, { headers: { cookie: portalCookie } });
   assert.equal((await initialList.json()).keys.length, 1);
   assert.equal((await post(base, '/portal/api/keys', { label: 'Production' }, { cookie: portalCookie })).status, 403);

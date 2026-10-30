@@ -39,6 +39,7 @@ import { DOCUMENT_OCR_BY_PATH } from './lib/document-ocr-contracts.mjs';
 import { createDocumentOcrStore } from './lib/document-ocr-store.mjs';
 import { CASE_OUTCOMES, caseExpiresAt, classifyCaseSubmission } from './lib/case-manager-contract.mjs';
 import { caseOutcome } from './lib/case-manager-outcomes.mjs';
+import { createLoginOtpStore, LOGIN_OTP_SECONDS, loginOtpHash, newLoginOtp } from './lib/login-otp.mjs';
 import { createCaseManagerStore } from './lib/case-manager-store.mjs';
 import { documentOcrArtifactUrl, documentOcrSignedAccess } from './lib/document-ocr-artifact-url.mjs';
 
@@ -1410,6 +1411,40 @@ async function completePasswordReset(req, res, { kind, store, mailer }) {
   }
 }
 
+async function beginEmailLogin(res, { kind, account, signingKey, mailer, otpStore }) {
+  if (!mailer.configured || !mailer.sendLoginCode || !otpStore || !signingKey) {
+    return json(res, 503, { status: 'Error', error: 'Email sign-in is temporarily unavailable.' });
+  }
+  const { challengeId, code } = newLoginOtp();
+  const codeHash = loginOtpHash({ kind, email: account.email, challengeId, code, signingKey });
+  try {
+    const issued = await otpStore.issue({ kind, email: account.email, challengeId, codeHash, version: account.version });
+    if (!issued.issued) return json(res, 429, { status: 'Error', error: 'A code was recently sent. Try again shortly.' },
+      { 'retry-after': String(issued.retryAfter) });
+    try { await mailer.sendLoginCode({ to: account.email, code, minutes: LOGIN_OTP_SECONDS / 60, kind }); }
+    catch {
+      await otpStore.cancel({ kind, email: account.email, challengeId }).catch(() => {});
+      console.warn('platform_login_code_email_failed');
+      return json(res, 503, { status: 'Error', error: 'Email sign-in is temporarily unavailable.' });
+    }
+    return json(res, 202, { challenge_id: challengeId, expires_in: LOGIN_OTP_SECONDS,
+      message: 'A sign-in code was sent to your account email.' });
+  } catch {
+    console.warn('platform_login_code_store_failed');
+    return json(res, 503, { status: 'Error', error: 'Email sign-in is temporarily unavailable.' });
+  }
+}
+
+async function consumeEmailLogin(req, { kind, body, account, signingKey, otpStore }) {
+  if (!sameOrigin(req)) return false;
+  if (!account || !signingKey || !otpStore || !/^[A-Za-z0-9_-]{32}$/.test(String(body.challenge_id || ''))
+    || !/^\d{8}$/.test(String(body.code || ''))) return false;
+  const codeHash = loginOtpHash({ kind, email: account.email, challengeId: body.challenge_id,
+    code: body.code, signingKey });
+  return otpStore.consume({ kind, email: account.email, challengeId: body.challenge_id,
+    codeHash, version: account.version });
+}
+
 async function currentPortalSession(req, store) {
   const token = parseCookies(req.headers.cookie)[PORTAL_COOKIE];
   if (!token) return { account: null, session: null };
@@ -1424,7 +1459,7 @@ async function currentPortalSession(req, store) {
   }
 }
 
-async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore,
+async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore,
   caseStore = null, reportStore = null, documentOcrStore = null) {
   if (req.method === 'GET' && url.pathname === '/portal/api/auth/status') {
     const { account, session } = await currentPortalSession(req, store);
@@ -1452,18 +1487,16 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
       }
       if (await store.getPortalUser(customer.adminEmail)) return json(res, 409, { status: 'Error', error: 'An account already exists for this email.' });
       if (url.pathname.endsWith('/preview')) return json(res, 200, { customer: { name: customer.name, admin_email: customer.adminEmail, expires_at: customer.invitationExpiresAt } });
+      if (!mailer.configured || !mailer.sendLoginCode || !otpStore) return json(res, 503,
+        { status: 'Error', error: 'Account setup is temporarily unavailable.' });
       const account = createPortalAccount(customer.adminEmail, body.password, { id: customer.id, name: customer.name });
       if (!(await store.claimInvitation(customer.invitationHash))) return json(res, 409, { status: 'Error', error: 'This setup link has already been used.' });
       let signingKey = await store.getPortalSessionKey();
       if (!signingKey) { signingKey = newSigningKey(); await store.setPortalSessionKey(signingKey); }
-      await store.setPortalUser(account);
+      await store.setPortalUser({ ...account, initial_key_pending: true });
       await store.setCustomer({ ...customer, status: 'active', invitationHash: '', invitationExpiresAt: '', updatedAt: new Date().toISOString() });
-      const issued = await store.createClient(customer.name, { workspaceId: customer.id, label: 'Initial key', ownerEmail: account.email });
       loginThrottle.clear(throttleKey);
-      const session = createPortalSession(account, signingKey);
-      return json(res, 201, { account: safePortalAccount(account), api_key: issued.apiKey, key: issued.client, csrf_token: session.csrfToken }, {
-        'set-cookie': portalCookie(session.token, { secure: secureRequest(req) })
-      });
+      return json(res, 201, { account: safePortalAccount(account), message: 'Account created. Sign in to receive an email code.' });
     } catch (error) {
       if (error.message === 'invitation_claim_store_unavailable') return json(res, 503, { status: 'Error', error: 'Account setup is temporarily unavailable. Try again later.' });
       return json(res, error.statusCode || 400, { status: 'Error', error: error.statusCode ? 'The setup request is invalid.' : error.message });
@@ -1487,12 +1520,34 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
       }
       loginThrottle.clear(throttleKey);
       const signingKey = await store.getPortalSessionKey();
-      const created = createPortalSession(account, signingKey);
-      return json(res, 200, { account: safePortalAccount(account), csrf_token: created.csrfToken, expires_in: created.expiresIn }, {
-        'set-cookie': portalCookie(created.token, { secure: secureRequest(req) })
-      });
+      return beginEmailLogin(res, { kind: 'portal', account, signingKey, mailer, otpStore });
     } catch (error) {
       return json(res, error.statusCode || 400, { status: 'Error', error: 'The sign-in request is invalid.' });
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/portal/api/auth/verify-code') {
+    try {
+      const body = await readJson(req);
+      const email = normalizeAdminEmail(body.email);
+      const account = await store.getPortalUser(email, { fresh: true });
+      const signingKey = await store.getPortalSessionKey();
+      if (!(await consumeEmailLogin(req, { kind: 'portal', body, account, signingKey, otpStore }))) {
+        return json(res, 401, { status: 'Error', error: 'The code is invalid or expired.' });
+      }
+      let issued = null;
+      if (account.initial_key_pending) {
+        issued = await store.createClientIdempotent(account.client_name, { workspaceId: account.client_id,
+          label: 'Initial key', ownerEmail: account.email }, `initial-key:${account.email}`);
+        await store.setPortalUser({ ...account, initial_key_pending: false });
+      }
+      const created = createPortalSession(account, signingKey);
+      return json(res, 200, { account: safePortalAccount(account), csrf_token: created.csrfToken,
+        expires_in: created.expiresIn, ...(issued ? { api_key: issued.apiKey, key: issued.client } : {}) }, {
+        'set-cookie': portalCookie(created.token, { secure: secureRequest(req) })
+      });
+    } catch {
+      return json(res, 503, { status: 'Error', error: 'Email sign-in is temporarily unavailable.' });
     }
   }
 
@@ -1772,7 +1827,7 @@ async function requireAdmin(req, res, store, { csrf = false } = {}) {
   return { account, session };
 }
 
-async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore) {
+async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore) {
   if (req.method === 'GET' && url.pathname === '/admin/api/auth/status') {
     const account = await store.getAdminAccount();
     return json(res, 200, { configured: Boolean(account) });
@@ -1788,14 +1843,15 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
   if (req.method === 'POST' && url.pathname === '/admin/api/auth/setup') {
     if (await store.getAdminAccount()) return json(res, 409, { status: 'Error', error: 'The administrator account is already configured.' });
     if (!(await store.isAdminKey(bearerToken(req)))) return json(res, 401, { status: 'Error', error: 'The one-time setup key is missing or incorrect.' });
+    if (!mailer.configured || !mailer.sendLoginCode || !otpStore) return json(res, 503,
+      { status: 'Error', error: 'Account setup is temporarily unavailable.' });
     try {
       const body = await readJson(req);
       const account = createAdminAccount(body.email, body.password);
       const signingKey = newSigningKey();
       await store.setAdminSessionKey(signingKey);
       await store.setAdminAccount(account);
-      const created = createAdminSession(account, signingKey);
-      return json(res, 201, { account: safeAdminAccount(account), csrf_token: created.csrfToken, expires_in: created.expiresIn }, { 'set-cookie': adminCookie(created.token, { secure: secureRequest(req) }) });
+      return json(res, 201, { account: safeAdminAccount(account), message: 'Administrator account created. Sign in to receive an email code.' });
     } catch (error) {
       return json(res, error.statusCode || 400, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : error.message });
     }
@@ -1813,10 +1869,26 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
       }
       loginThrottle.clear(key);
       const signingKey = await store.getAdminSessionKey();
-      const created = createAdminSession(account, signingKey);
-      return json(res, 200, { account: safeAdminAccount(account), csrf_token: created.csrfToken, expires_in: created.expiresIn }, { 'set-cookie': adminCookie(created.token, { secure: secureRequest(req) }) });
+      return beginEmailLogin(res, { kind: 'admin', account, signingKey, mailer, otpStore });
     } catch (error) {
       return json(res, error.statusCode || 400, { status: 'Error', error: 'The sign-in request is invalid.' });
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/admin/api/auth/verify-code') {
+    try {
+      const body = await readJson(req);
+      const account = await store.getAdminAccount({ fresh: true });
+      const signingKey = await store.getAdminSessionKey();
+      if (normalizeAdminEmail(body.email) !== account?.email
+        || !(await consumeEmailLogin(req, { kind: 'admin', body, account, signingKey, otpStore }))) {
+        return json(res, 401, { status: 'Error', error: 'The code is invalid or expired.' });
+      }
+      const created = createAdminSession(account, signingKey);
+      return json(res, 200, { account: safeAdminAccount(account), csrf_token: created.csrfToken,
+        expires_in: created.expiresIn }, { 'set-cookie': adminCookie(created.token, { secure: secureRequest(req) }) });
+    } catch {
+      return json(res, 503, { status: 'Error', error: 'Email sign-in is temporarily unavailable.' });
     }
   }
 
@@ -2320,6 +2392,7 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
 }
 
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
+  otpStore = createLoginOtpStore(),
   deepResearchQueue = process.env.ADVERSE_MEDIA_WORKER_ENABLED === 'false' ? null : createDeepResearchQueue(),
   formsQueue = createFormsQueue(), formSubmissionStore = createFormsSubmissionStore(),
   reportStore = createAdverseMediaReportStore(), jsonStore = createAdverseMediaJsonStore(),
@@ -2480,8 +2553,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         }, { 'cache-control': 'public, max-age=3600' });
       }
       if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle,
-        mailer, usageStore, caseStore, reportStore, documentOcrStore);
-      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, usageStore);
+        mailer, otpStore, usageStore, caseStore, reportStore, documentOcrStore);
+      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore);
       if (url.pathname === '/admin/bsa-synthetic-combined.pdf') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }

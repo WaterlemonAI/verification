@@ -17,11 +17,13 @@ test('one-time customer invitation creates a portal account and initial workspac
   const store = new EnvironmentStore();
   const usageStore = new MemoryCustomerUsageStore();
   const caseStore = new MemoryCaseManagerStore();
+  const codes = [];
+  const mailer = { configured: true, sendLoginCode: async (value) => { codes.push(value); } };
   const customerId = 'abcdef0123456789';
   const invitation = createInvitation(customerId);
   await store.setCustomer({ id: customerId, name: 'Regulated Institution', adminEmail: 'user@example.com', status: 'pending', usagePolicyVersion: 1,
     invitationHash: invitation.tokenHash, invitationExpiresAt: invitation.expiresAt });
-  const server = createAppServer({ store, usageStore, caseStore,
+  const server = createAppServer({ store, usageStore, caseStore, mailer,
     startWorker: false, deepResearchQueue: null, formsQueue: null });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
@@ -52,10 +54,24 @@ test('one-time customer invitation creates a portal account and initial workspac
   assert.equal(signupBody.account.email, 'user@example.com');
   assert.equal(signupBody.account.client_id, customerId);
   assert.equal(signupBody.account.client_name, 'Regulated Institution');
+  assert.equal(signup.headers.get('set-cookie'), null);
+  assert.equal(signupBody.api_key, undefined);
+
+  const firstLogin = await fetch(`${baseUrl}/portal/api/auth/login`, { method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'user@example.com', password: 'PortalPass!234' }) });
+  assert.equal(firstLogin.status, 202);
+  const firstChallenge = (await firstLogin.json()).challenge_id;
+  assert.equal((await fetch(`${baseUrl}/portal/api/auth/session`)).status, 401);
+  const firstVerify = await fetch(`${baseUrl}/portal/api/auth/verify-code`, { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'user@example.com',
+      challenge_id: firstChallenge, code: codes.at(-1).code }) });
+  assert.equal(firstVerify.status, 200);
+  Object.assign(signupBody, await firstVerify.json());
   assert.ok(signupBody.csrf_token);
-  const cookie = sessionCookie(signup);
+  const cookie = sessionCookie(firstVerify);
   assert.match(cookie, /^ai7_portal_session=/);
-  assert.equal(signup.headers.get('set-cookie').toLowerCase().includes('domain='), false);
+  assert.equal(firstVerify.headers.get('set-cookie').toLowerCase().includes('domain='), false);
 
   const stored = await store.getPortalUser('user@example.com');
   assert.equal(stored.client_id, customerId);
@@ -118,9 +134,16 @@ test('one-time customer invitation creates a portal account and initial workspac
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ email: 'user@example.com', password: 'PortalPass!234' })
   });
-  assert.equal(login.status, 200);
-  const loginBody = await login.json();
-  const loginCookie = sessionCookie(login);
+  assert.equal(login.status, 202);
+  const challenge = (await login.json()).challenge_id;
+  assert.equal(login.headers.get('set-cookie'), null);
+  const verified = await fetch(`${baseUrl}/portal/api/auth/verify-code`, { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'user@example.com',
+      challenge_id: challenge, code: codes.at(-1).code }) });
+  assert.equal(verified.status, 200);
+  const loginBody = await verified.json();
+  assert.equal(loginBody.api_key, undefined);
+  const loginCookie = sessionCookie(verified);
 
   const caseSettingsUrl = `${baseUrl}/portal/api/case-manager/settings`;
   const defaultCaseSettings = await (await fetch(caseSettingsUrl, { headers: { cookie: loginCookie } })).json();
