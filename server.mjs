@@ -1499,6 +1499,19 @@ async function currentPortalSession(req, store) {
 
 async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore,
   caseStore = null, reportStore = null, documentOcrStore = null, ejariStore = null) {
+  const ejariCertificate = /^\/portal\/api\/ejari\/jobs\/(ejari_[0-9a-f-]{36})\/certificate\.pdf$/.exec(url.pathname);
+  if (req.method === 'GET' && ejariCertificate) {
+    if (process.env.EJARI_PLATFORM_ENABLED !== '1' || !ejariStore) return json(res, 503, {
+      status: 'Error', reasonCode: 'EJARI_PLATFORM_UNAVAILABLE' });
+    let workspaceId;
+    if (req.headers.authorization) workspaceId = (await store.getClientForKey(bearerToken(req)))?.id;
+    else {
+      const { account, session } = await currentPortalSession(req, store);
+      if (session) workspaceId = account.client_id;
+    }
+    if (!workspaceId) return json(res, 401, { status: 'Error', error: 'Sign in or provide an active API key.' });
+    return sendEjariCertificate(res, ejariStore, ejariCertificate[1], workspaceId);
+  }
   if (req.method === 'GET' && url.pathname === '/portal/api/auth/status') {
     const { account, session } = await currentPortalSession(req, store);
     return json(res, 200, { authenticated: Boolean(session), account: session ? safePortalAccount(account) : null });
@@ -2209,6 +2222,14 @@ function serveStatic(res, directory, requestPath) {
   createReadStream(filePath).pipe(res);
 }
 
+async function sendEjariCertificate(res, ejariStore, jobId, workspaceId) {
+  const bytes = await ejariStore.getCertificate(jobId, workspaceId);
+  if (!bytes) return json(res, 404, { status: 'Error', error: 'Certificate was not found.' });
+  res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': bytes.length,
+    'content-disposition': `attachment; filename="${jobId}.pdf"`, 'cache-control': 'private, no-store' });
+  return res.end(bytes);
+}
+
 async function handleEjari(req, res, url, store, ejariStore, usageStore) {
   const rootPath = '/service/dubai_ejari_verification';
   const token = bearerToken(req);
@@ -2218,11 +2239,7 @@ async function handleEjari(req, res, url, store, ejariStore, usageStore) {
   const workspaceId = req.ai7Client?.id || reportOwnerId(token);
   const artifact = /^\/service\/dubai_ejari_verification\/jobs\/(ejari_[0-9a-f-]{36})\/certificate\.pdf$/.exec(url.pathname);
   if (req.method === 'GET' && artifact) {
-    const bytes = await ejariStore.getCertificate(artifact[1], workspaceId);
-    if (!bytes) return json(res, 404, { status: 'Error', error: 'Certificate was not found.' });
-    res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': bytes.length,
-      'content-disposition': `attachment; filename="${artifact[1]}.pdf"`, 'cache-control': 'private, no-store' });
-    return res.end(bytes);
+    return sendEjariCertificate(res, ejariStore, artifact[1], workspaceId);
   }
   const match = /^\/service\/dubai_ejari_verification\/jobs\/(ejari_[0-9a-f-]{36})(\/result)?$/.exec(url.pathname);
   if (req.method === 'GET' && match) {
@@ -2231,7 +2248,8 @@ async function handleEjari(req, res, url, store, ejariStore, usageStore) {
       if (!record) return json(res, 404, { status: 'Error', error: 'Job was not found.' });
       if (!record.result) return json(res, 202, { jobId: match[1], status: record.job.status });
       return json(res, 200, { ...record.result,
-        certificateUrl: record.result.certificateAvailable ? `${rootPath}/jobs/${match[1]}/certificate.pdf` : null });
+        certificateUrl: record.result.certificateAvailable
+          ? `https://app.kycprobe.com/portal/api/ejari/jobs/${match[1]}/certificate.pdf` : null });
     }
     const job = await ejariStore.getJob(match[1], workspaceId);
     return job ? json(res, 200, { jobId: job.id, status: job.status, receivedAt: job.receivedAt,

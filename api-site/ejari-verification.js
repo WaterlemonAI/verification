@@ -69,6 +69,13 @@
       byId('ejari-json').textContent = JSON.stringify(result, null, 2);
       certificateUrl = result.certificateUrl || '';
       byId('ejari-download').hidden = !certificateUrl;
+      if (certificateUrl) {
+        const item = document.createElement('div');
+        const heading = document.createElement('strong'); heading.textContent = 'DLD certificate';
+        const link = document.createElement('a'); link.href = certificateUrl;
+        link.textContent = 'Download PDF (available for 30 days)';
+        item.append(heading, link); summary.append(item);
+      }
     } catch (problem) { error.textContent = problem.message || 'Verification failed.'; status.textContent = 'Could not complete'; }
     finally { button.disabled = false; }
   });
