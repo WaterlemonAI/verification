@@ -16,11 +16,13 @@ on:
       - Dockerfile.api
       - Dockerfile.merchant-screenshot
       - bank-statement-analysis/**
+      - ejari-verifier/**
       - merchant-screenshot-worker.mjs
       - infrastructure/api.bicep
       - infrastructure/merchant-screenshot-platform.bicep
       - infrastructure/api-bank-statement-platform.bicep
       - infrastructure/api-document-ocr-platform.bicep
+      - infrastructure/api-ejari-platform.bicep
       - Dockerfile.document-ocr
       - .github/workflows/deploy-api.yml
   workflow_dispatch:
@@ -35,6 +37,10 @@ on:
         default: false
       provisionCaseManagerPlatform:
         description: BLOCKED pending reviewed private-network path; selecting this fails closed
+        type: boolean
+        default: false
+      provisionEjariPlatform:
+        description: Provision the private Ejari storage, worker identity and access roles; API stays off until EJARI_PLATFORM_ENABLED is true
         type: boolean
         default: false
 
@@ -62,6 +68,13 @@ jobs:
 
       - name: Test API contract and isolation
         run: npm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test Ejari worker and encryption compatibility
+        run: |
+          python -m pip install -r ejari-verifier/requirements.txt
+          PYTHONPATH=ejari-verifier/src python -m unittest discover -s ejari-verifier/tests -v
 
       - name: Sign in to Azure with workload identity
         uses: azure/login@v2
@@ -210,6 +223,25 @@ jobs:
             api-deployment-evidence.json > api-deployment-evidence.next.json
           mv api-deployment-evidence.next.json api-deployment-evidence.json
 
+      - name: Build and publish immutable Ejari worker image
+        id: ejari_image
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="ai7uae-ejari-worker"
+          tag="${GITHUB_SHA}"
+          tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
+          docker build --pull --file ejari-verifier/Dockerfile --tag "${tagged_image}" ejari-verifier
+          docker push "${tagged_image}"
+          digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}:${tag}" --query digest --output tsv)"
+          test -n "${digest}"
+          image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          jq --arg repository "${repository}" --arg digest "${digest}" --arg image "${image}" \
+            '.ejari_worker = {repository: $repository, digest: $digest, image: $image}' \
+            api-deployment-evidence.json > api-deployment-evidence.next.json
+          mv api-deployment-evidence.next.json api-deployment-evidence.json
+
       - name: Validate API Bicep
         run: |
           az bicep build --file infrastructure/api.bicep
@@ -219,6 +251,48 @@ jobs:
           az bicep build --file infrastructure/api-case-manager-private-probe.bicep
           az bicep build --file infrastructure/api-case-manager-cutover-certificates.bicep
           az bicep build --file infrastructure/api-case-manager-release-reader.bicep
+          az bicep build --file infrastructure/api-ejari-platform.bicep
+
+      - name: Provision private Ejari platform
+        if: github.event_name == 'workflow_dispatch' && inputs.provisionEjariPlatform
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${{ vars.CASE_MANAGER_PRIVATE_ENDPOINT_SUBNET_ID }}"
+          vault_uri="${{ vars.KEY_VAULT_URI }}"
+          vault_name="${vault_uri#https://}"
+          vault_name="${vault_name%%.*}"
+          registry_id="/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.AZURE_RESOURCE_GROUP }}/providers/Microsoft.ContainerRegistry/registries/${{ vars.ACR_NAME }}"
+          vault_id="/subscriptions/${{ vars.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${{ vars.AZURE_RESOURCE_GROUP }}/providers/Microsoft.KeyVault/vaults/${vault_name}"
+          az deployment group what-if \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "ai7uae-ejari-platform-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/api-ejari-platform.bicep \
+            --parameters apiRuntimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" registryId="${registry_id}" keyVaultId="${vault_id}" privateEndpointSubnetId="${{ vars.CASE_MANAGER_PRIVATE_ENDPOINT_SUBNET_ID }}"
+          az deployment group create \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "ai7uae-ejari-platform-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/api-ejari-platform.bicep \
+            --parameters apiRuntimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" registryId="${registry_id}" keyVaultId="${vault_id}" privateEndpointSubnetId="${{ vars.CASE_MANAGER_PRIVATE_ENDPOINT_SUBNET_ID }}"
+
+      - name: Verify private Ejari platform before enabling
+        if: vars.EJARI_PLATFORM_ENABLED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" = "${{ vars.CASE_MANAGER_PRIVATE_ENVIRONMENT_ID }}"
+          az storage account show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name stai7uaeejariuaen001 \
+            --query '{publicNetworkAccess:publicNetworkAccess,allowSharedKeyAccess:allowSharedKeyAccess}' --output json \
+            | jq -e '.publicNetworkAccess == "Disabled" and .allowSharedKeyAccess == false' > /dev/null
+          az identity show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name id-ai7uae-ejari-worker-uaen-001 \
+            --query principalId --output tsv | grep -E '^[a-zA-Z0-9-]+$'
+          az keyvault secret show --vault-name kv-ai7uae-api-uaen-001 --name ejari-data-key-v1 --query id --output tsv > /dev/null
+          for group in blob table queue; do
+            state="$(az network private-endpoint show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "pe-ai7uae-ejari-${group}-uaen-001" \
+              --query 'privateLinkServiceConnections[0].privateLinkServiceConnectionState.status' --output tsv)"
+            test "${state}" = 'Approved'
+          done
 
       - name: Block Case Manager provisioning until private connectivity is reviewed
         if: github.event_name == 'workflow_dispatch' && inputs.provisionCaseManagerPlatform
@@ -271,6 +345,8 @@ jobs:
               merchantScreenshotWorkerImage="${{ steps.merchant_screenshot_image.outputs.image }}" \
               bankStatementWorkerImage="${{ steps.bank_statement_image.outputs.image }}" \
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
+              ejariWorkerImage="${{ steps.ejari_image.outputs.image }}" \
+              enableEjari="${{ vars.EJARI_PLATFORM_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
@@ -304,6 +380,8 @@ jobs:
               merchantScreenshotWorkerImage="${{ steps.merchant_screenshot_image.outputs.image }}" \
               bankStatementWorkerImage="${{ steps.bank_statement_image.outputs.image }}" \
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
+              ejariWorkerImage="${{ steps.ejari_image.outputs.image }}" \
+              enableEjari="${{ vars.EJARI_PLATFORM_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \

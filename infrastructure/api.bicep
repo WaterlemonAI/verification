@@ -15,6 +15,17 @@ param bankStatementWorkerImage string
 @description('Digest-pinned document OCR worker image. Required only when document OCR is enabled.')
 param documentOcrWorkerImage string = ''
 
+@description('Digest-pinned Ejari verification worker image.')
+param ejariWorkerImage string = ''
+
+@description('Enable the private Ejari worker and API after its data plane is provisioned.')
+param enableEjari bool = false
+
+param ejariStorageName string = 'stai7uaeejariuaen001'
+param ejariWorkerIdentityName string = 'id-ai7uae-ejari-worker-uaen-001'
+param ejariWorkerName string = 'ca-ai7uae-ejari-worker'
+param ejariPurgeJobName string = 'caj-ai7uae-ejari-purge'
+
 @description('Enable the eight document OCR APIs only after all sample and credential validation gates pass.')
 param enableDocumentOcr bool = false
 
@@ -176,6 +187,79 @@ resource bankStatementWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIden
 
 resource documentOcrWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: documentOcrWorkerIdentityName
+}
+
+resource ejariWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = if (enableEjari) {
+  name: ejariWorkerIdentityName
+}
+
+resource ejariWorker 'Microsoft.App/containerApps@2025-07-01' = if (!parallelDeployment && enableEjari) {
+  name: ejariWorkerName
+  location: location
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${ejariWorkerIdentity.id}': {} } }
+  properties: {
+    managedEnvironmentId: environmentId
+    configuration: {
+      activeRevisionsMode: 'Single'
+      registries: [{ server: acrLoginServer, identity: ejariWorkerIdentity.id }]
+      secrets: [{ name: 'ejari-root-key', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: ejariWorkerIdentity.id }]
+    }
+    template: {
+      containers: [
+        {
+          name: 'ejari-worker'
+          image: ejariWorkerImage
+          env: [
+            { name: 'EJARI_AZURE_WORKER', value: '1' }
+            { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-root-key' }
+            { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'EJARI_WORKER_IDENTITY_CLIENT_ID', value: ejariWorkerIdentity!.properties.clientId }
+            { name: 'KEY_VAULT_URI', value: keyVaultUri }
+            { name: 'EJARI_CLAMD_HOST', value: '127.0.0.1' }
+            { name: 'EJARI_CLAMD_PORT', value: '3310' }
+          ]
+          resources: { cpu: json('2.0'), memory: '4Gi' }
+        }
+        { name: 'clamav', image: bankStatementClamavImage, resources: { cpu: json('2.0'), memory: '4Gi' } }
+      ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 3
+        rules: [{ name: 'ejari-queue', azureQueue: {
+          accountName: ejariStorageName
+          queueName: 'ejari-jobs'
+          queueLength: 1
+          identity: ejariWorkerIdentity.id
+        } }]
+      }
+    }
+  }
+}
+
+resource ejariPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && enableEjari) {
+  name: ejariPurgeJobName
+  location: location
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${ejariWorkerIdentity.id}': {} } }
+  properties: {
+    environmentId: environmentId
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 900
+      replicaRetryLimit: 1
+      scheduleTriggerConfig: { cronExpression: '*/15 * * * *', parallelism: 1, replicaCompletionCount: 1 }
+      registries: [{ server: acrLoginServer, identity: ejariWorkerIdentity.id }]
+    }
+    template: { containers: [{
+      name: 'ejari-purge'
+      image: ejariWorkerImage
+      command: ['python', '-m', 'ejari_verifier.purge']
+      env: [
+        { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
+        { name: 'EJARI_WORKER_IDENTITY_CLIENT_ID', value: ejariWorkerIdentity!.properties.clientId }
+      ]
+      resources: { cpu: json('0.5'), memory: '1Gi' }
+    }] }
+  }
 }
 
 resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = if (!parallelDeployment) {
@@ -416,6 +500,8 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManag
       ] : [], !parallelDeployment && enableDocumentOcr ? [
         { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: runtimeIdentityResourceId }
         { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
+      ] : [], !parallelDeployment && enableEjari ? [
+        { name: 'ejari-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: runtimeIdentityResourceId }
       ] : [])
       registries: [ { server: acrLoginServer, identity: runtimeIdentityResourceId } ]
     }
@@ -446,6 +532,9 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManag
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
             { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
+          ] : [], !parallelDeployment && enableEjari ? [
+            { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-data-key-v1' }
           ] : [], parallelDeployment && parallelCaseManagerQa ? [
             { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
             { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }
@@ -574,6 +663,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
       ] : [], caseManagerRuntimeEnabled ? [
         { name: 'case-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/case-manager-data-key-v1', identity: runtimeIdentityResourceId }
+      ] : [], !parallelDeployment && enableEjari ? [
+        { name: 'ejari-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: runtimeIdentityResourceId }
       ] : [])
       ingress: {
         external: !parallelDeployment
@@ -630,6 +721,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
             { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: !parallelDeployment && enableDocumentOcr ? '1' : '0' }
             { name: 'CASE_MANAGER_ENABLED', value: caseManagerRuntimeEnabled ? 'true' : 'false' }
+            { name: 'EJARI_PLATFORM_ENABLED', value: !parallelDeployment && enableEjari ? '1' : '0' }
           ], parallelDeployment ? [] : [
             { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
             { name: 'ADVERSE_MEDIA_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchDeadLetterQueueName}' }
@@ -645,6 +737,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_DATA_KEY_V1_HEX', secretRef: 'case-data-key-v1' }
             { name: 'CASE_MANAGER_ACTIVE_KEY_VERSION', value: '1' }
+          ] : [], !parallelDeployment && enableEjari ? [
+            { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-data-key-v1' }
           ] : [], parallelDeployment && parallelCaseManagerQa ? [
             { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
             { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }

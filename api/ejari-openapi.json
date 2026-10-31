@@ -1,0 +1,31 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "KYCProbe Dubai Ejari Verification", "version": "1.0.0", "description": "Asynchronous Dubai Land Department certificate lookup and field comparison. A retrieved certificate with sufficient matching fields is Verified; transport or OCR errors never imply No Record." },
+  "servers": [{ "url": "https://api.ai7uae.com" }],
+  "security": [{ "BearerAuth": [] }],
+  "paths": {
+    "/service/dubai_ejari_verification": {
+      "post": {
+        "summary": "Submit an Ejari check",
+        "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]+$" } }],
+        "requestBody": { "required": true, "content": {
+          "application/json": { "schema": { "$ref": "#/components/schemas/NumberInput" } },
+          "multipart/form-data": { "schema": { "type": "object", "properties": { "ejari_file": { "type": "string", "format": "binary" }, "contract_number": { "type": "string" }, "dewa_number": { "type": "string" } }, "required": ["ejari_file"] } }
+        } },
+        "responses": { "202": { "description": "Accepted or idempotently replayed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Receipt" } } } }, "400": { "description": "Invalid input" }, "401": { "description": "Invalid API key" }, "403": { "description": "Workspace lacks access" }, "409": { "description": "Idempotency key reused for a different input" }, "413": { "description": "PDF too large" }, "503": { "description": "Ejari service unavailable" } }
+      }
+    },
+    "/service/dubai_ejari_verification/jobs/{jobId}": { "get": { "summary": "Get job status", "parameters": [{ "$ref": "#/components/parameters/JobId" }], "responses": { "200": { "description": "Current status" }, "404": { "description": "Unknown or expired job" } } } },
+    "/service/dubai_ejari_verification/jobs/{jobId}/result": { "get": { "summary": "Get final result", "parameters": [{ "$ref": "#/components/parameters/JobId" }], "responses": { "202": { "description": "Still processing" }, "200": { "description": "Final verification result", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Result" } } } }, "404": { "description": "Unknown or expired job" } } } },
+    "/service/dubai_ejari_verification/jobs/{jobId}/certificate.pdf": { "get": { "summary": "Download retrieved DLD certificate", "parameters": [{ "$ref": "#/components/parameters/JobId" }], "responses": { "200": { "description": "Private PDF", "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } } } }, "404": { "description": "No certificate available" } } } }
+  },
+  "components": {
+    "securitySchemes": { "BearerAuth": { "type": "http", "scheme": "bearer" } },
+    "parameters": { "JobId": { "name": "jobId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^ejari_[0-9a-f-]{36}$" } } },
+    "schemas": {
+      "NumberInput": { "type": "object", "additionalProperties": false, "required": ["contract_number", "dewa_number"], "properties": { "contract_number": { "type": "string", "pattern": "^0[0-9]{13,16}$" }, "dewa_number": { "type": "string", "pattern": "^[0-9]{8,11}$" } } },
+      "Receipt": { "type": "object", "required": ["jobId", "status", "statusUrl", "resultUrl", "reused"], "properties": { "jobId": { "type": "string" }, "status": { "type": "string" }, "statusUrl": { "type": "string" }, "resultUrl": { "type": "string" }, "reused": { "type": "boolean" } } },
+      "Result": { "type": "object", "required": ["schemaVersion", "status", "decisionEligible", "reasonCodes", "certificateAvailable"], "properties": { "schemaVersion": { "const": "ejari-v1" }, "status": { "enum": ["verified", "review_required", "not_found", "could_not_complete"] }, "decisionEligible": { "type": "boolean" }, "reasonCodes": { "type": "array", "items": { "type": "string" } }, "source": { "type": "object" }, "fields": { "type": "object" }, "comparison": { "type": ["object", "null"] }, "certificateAvailable": { "type": "boolean" }, "certificateUrl": { "type": ["string", "null"] } } }
+    }
+  }
+}

@@ -284,7 +284,7 @@ async function loadIntegrations() {
     pill.textContent = item.enabled ? 'Active' : 'Disabled';
     pill.classList.toggle('off', !item.enabled);
     const credentialButton = row.querySelector('.set-credential');
-    credentialButton.hidden = item.id === 'merchant-screening' || (item.id !== 'document-ocr-ai' && item.id.endsWith('-ocr')) || item.id === 'moa-analysis';
+    credentialButton.hidden = item.id === 'merchant-screening' || item.id === 'ejari-verification' || (item.id !== 'document-ocr-ai' && item.id.endsWith('-ocr')) || item.id === 'moa-analysis';
     credentialButton.textContent = item.masterAuthKeyConfigured ? 'Replace credential' : 'Set credential';
     credentialButton.addEventListener('click', () => {
       const form = byId('supplier-credential-form');
@@ -314,6 +314,20 @@ async function loadIntegrations() {
     });
     list.append(row);
   });
+  await loadEjariConfig();
+}
+
+async function loadEjariConfig() {
+  const form = byId('ejari-config-form');
+  const status = byId('ejari-config-status');
+  try {
+    const data = await request('/admin/api/ejari/config');
+    form.elements.ocr_model.value = data.config.ocr_model || 'gpt-6-luna';
+    form.elements.ocr_detail.value = data.config.ocr_detail || 'high';
+    form.elements.enabled.checked = data.config.enabled === true;
+    form.elements.enabled.disabled = !data.platformAvailable;
+    status.textContent = `Azure worker: ${data.platformAvailable ? 'ready' : 'not deployed'} · OpenAI key: ${data.config.openaiKeyConfigured ? 'saved' : 'needed'} · CapSolver key: ${data.config.capsolverKeyConfigured ? 'saved' : 'needed'}`;
+  } catch (error) { status.textContent = error.message || 'Ejari setup could not be loaded.'; }
 }
 
 function formExamples() {
@@ -746,6 +760,26 @@ byId('integration-form').addEventListener('submit', async (event) => {
     byId('integration-dialog').close();
     await loadIntegrations();
   } catch (error) { byId('integration-error').textContent = error.message; }
+});
+
+byId('ejari-config-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const error = byId('ejari-config-error');
+  error.textContent = '';
+  try {
+    const values = {
+      enabled: form.elements.enabled.checked,
+      ocr_model: form.elements.ocr_model.value.trim(),
+      ocr_detail: form.elements.ocr_detail.value,
+      openai_key: form.elements.openai_key.value,
+      capsolver_key: form.elements.capsolver_key.value
+    };
+    await request('/admin/api/ejari/config', { method: 'PUT', body: JSON.stringify(values) });
+    form.elements.openai_key.value = '';
+    form.elements.capsolver_key.value = '';
+    await loadEjariConfig();
+  } catch (problem) { error.textContent = problem.message || 'Ejari setup could not be saved.'; }
 });
 
 byId('supplier-credential-form').addEventListener('submit', async (event) => {

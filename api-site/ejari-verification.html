@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#071412" />
+  <meta name="description" content="Dubai Ejari verification API documentation and workspace tester." />
+  <title>KYCProbe API — Dubai Ejari Verification</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/api.css?v=9" />
+  <script src="/portal-auth.js?v=6" defer></script>
+  <script src="/ejari-verification.js?v=1" defer></script>
+</head>
+<body>
+  <div class="utility-bar"><span>KYCProbe Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · Dubai, UAE ↗</a></div>
+  <a class="skip-link" href="#docs">Skip to documentation</a>
+  <header><a class="brand" href="https://kycprobe.com" aria-label="KYCProbe home"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a><span class="status"><i></i> API available</span></header>
+  <main id="docs">
+    <section class="hero">
+      <p class="eyebrow">DUBAI LAND DEPARTMENT / RENTAL CERTIFICATE</p>
+      <h1>Dubai Ejari<br /><em>verification.</em></h1>
+      <p>Retrieve the DLD rental certificate using its contract and DEWA numbers, or upload an Ejari PDF to compare its fields against a newly downloaded certificate.</p>
+      <div class="meta"><span>POST</span><code>/service/dubai_ejari_verification</code><button class="copy" id="copy-endpoint">Copy endpoint</button></div>
+      <figure class="hero-infographic" role="img" aria-label="Ejari numbers or PDF to DLD certificate retrieval to field comparison">
+        <figcaption>HOW THIS API HELPS</figcaption>
+        <div class="flow-steps">
+          <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>INPUT</small><strong>Numbers or Ejari PDF</strong></div></div>
+          <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><div><small>PROCESS</small><strong>DLD certificate lookup</strong></div></div>
+          <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 12 5 5L20 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>OUTPUT</small><strong>Fields and comparison</strong></div></div>
+        </div>
+      </figure>
+    </section>
+    <section class="layout">
+      <aside aria-label="On this page"><p>ON THIS PAGE</p><a href="#quick-start">How to use</a><a href="#authentication">Authentication</a><a href="#request">Request</a><a href="#responses">Responses</a><a href="#tester">Live tester</a></aside>
+      <div class="content">
+        <article id="quick-start" class="quick-start">
+          <p class="label">INSTRUCTIONS TO USE</p><h2>How to use this API</h2>
+          <p>Submit once, then follow the returned job URLs until the result is ready.</p>
+          <ol class="quick-steps">
+            <li><span>01</span><strong>Get your API key</strong><p>Use a workspace API key in the Bearer header.</p></li>
+            <li><span>02</span><strong>Provide Ejari input</strong><p>Send the contract and DEWA numbers as JSON, or upload one PDF with a unique Idempotency-Key.</p></li>
+            <li><span>03</span><strong>Review the result</strong><p>Poll the result URL, compare extracted fields, and download the private DLD certificate if available.</p></li>
+          </ol>
+        </article>
+        <article id="authentication"><p class="label">AUTHENTICATION</p><h2>Use your KYCProbe API key</h2><p>Send your workspace API key as a Bearer token. Keep it on your server. Your workspace must be enabled for Dubai Ejari Verification.</p><div class="code-block"><code>Authorization: Bearer YOUR_AI7_API_KEY</code></div></article>
+        <article id="request"><p class="label">REQUEST</p><h2>Submit numbers or one PDF</h2><p>For numbers, send JSON with <code>contract_number</code> (14–17 digits, starting with 0) and <code>dewa_number</code> (8–11 digits). For a PDF, send <code>multipart/form-data</code> with one <code>ejari_file</code>; you may also provide the two numbers as overrides. PDFs must be at most 10 MiB and 10 pages. Every submission needs a unique <code>Idempotency-Key</code> header (16–128 allowed characters).</p><div class="field-grid"><div><strong>contract_number</strong><span>string · required without PDF</span><p>Ejari contract number, preserving leading zeros.</p></div><div><strong>dewa_number</strong><span>string · required without PDF</span><p>DEWA premise number.</p></div><div><strong>ejari_file</strong><span>PDF · alternative input</span><p>The certificate or contract to compare with a fresh DLD download.</p></div></div><div class="code-block sample ejari-code"><pre>curl -X POST 'https://api.ai7uae.com/service/dubai_ejari_verification' \
+  -H 'Authorization: Bearer YOUR_AI7_API_KEY' \
+  -H 'Idempotency-Key: YOUR_UNIQUE_REQUEST_ID' \
+  -H 'Content-Type: application/json' \
+  -d '{"contract_number":"0120221004004205","dewa_number":"128053950"}'</pre></div><p>Requests are asynchronous. The initial HTTP 202 response includes <code>jobId</code>, <code>statusUrl</code>, and <code>resultUrl</code>.</p></article>
+        <article id="responses"><p class="label">RESPONSES</p><h2>Evidence with clear outcomes</h2><div class="responses ejari-outcomes"><div><b class="ok">verified</b><span>DLD returned a certificate and the key OCR fields match the submitted or uploaded values.</span></div><div><b>review_required</b><span>A certificate was retrieved, but fields differ or OCR could not establish a reliable match.</span></div><div><b>not_found</b><span>DLD explicitly returned no record for the supplied lookup details.</span></div><div><b>could_not_complete</b><span>CAPTCHA, DLD, OCR, or infrastructure prevented a dependable result. This does not mean no record exists.</span></div></div><p>The result includes source, checked time, extracted fields, comparison, and <code>certificateUrl</code> when DLD returned a PDF. The PDF download requires the same workspace API key. Uploaded PDFs and returned certificates are encrypted in private Azure storage and expire after 30 days. The workflow sends certificate images to OpenAI for OCR and uses CapSolver for DLD’s CAPTCHA. OCR is a transcription aid; review the DLD PDF for material decisions.</p><p><a href="/ejari-verification/openapi.json" target="_blank" rel="noopener">Open the complete OpenAPI 3.1 contract ↗</a></p></article>
+        <article id="tester" class="tester"><p class="label">LIVE TESTER</p><h2>Run an Ejari check</h2><p>Your API key stays in this page's memory. The tester polls the job and shows a readable summary.</p><form id="ejari-form"><label>API key<input id="ejari-api-key" type="password" autocomplete="off" required placeholder="Paste your workspace API key" /></label><div class="input-grid"><label>Ejari contract number<input id="ejari-contract" inputmode="numeric" pattern="[0-9]{14,17}" placeholder="0120221004004205" /></label><label>DEWA premise number<input id="ejari-dewa" inputmode="numeric" pattern="[0-9]{8,11}" placeholder="128053950" /></label></div><label>Or upload an Ejari PDF<input id="ejari-file" type="file" accept="application/pdf,.pdf" /></label><p class="form-error" id="ejari-error" role="alert"></p><button type="submit" id="ejari-submit">Start verification <span>→</span></button></form><div class="response-head"><span>RESULT</span><span id="ejari-status">Ready</span></div><div id="ejari-summary" class="field-grid" hidden></div><button class="copy" id="ejari-download" type="button" hidden>Download DLD certificate</button><details><summary>Raw JSON</summary><pre id="ejari-json">{ "message": "Your result will appear here." }</pre></details></article>
+      </div>
+    </section>
+  </main>
+  <footer><div><strong>KYCProbe Verification API</strong><span>ai7lab IP solutions FZ LLC · Dubai, UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">AI7lab</a><a href="mailto:contact@ai7lab.net">Contact</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
+</body>
+</html>
