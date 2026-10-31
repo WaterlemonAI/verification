@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/admin/admin.css?v=11" />
-    <script src="/admin/admin.js?v=16" defer></script>
+    <script src="/admin/admin.js?v=17" defer></script>
 
   </head>
   <body>
@@ -120,12 +120,7 @@
             <div><span>Active routes</span><strong id="active-count">0</strong></div>
             <button id="new-integration">＋ Add API</button>
           </div>
-          <div class="panel">
-            <div class="panel-head"><div><p class="eyebrow">ROUTE REGISTRY</p><h2>Configured APIs</h2></div><button class="refresh" data-refresh="integrations">Refresh</button></div>
-            <div class="empty" id="integration-empty">No APIs are configured yet.</div>
-            <div class="route-list" id="integration-list"></div>
-          </div>
-          <div class="panel">
+          <div class="panel" id="ejari-setup-panel">
             <div class="panel-head"><div><p class="eyebrow">DUBAI EJARI VERIFICATION</p><h2>Set up the Ejari API</h2></div></div>
             <p class="notice">The supplied DLD certificate flow uses CapSolver for the website CAPTCHA and OpenAI to read certificate fields. Keys are write-only in Key Vault. Certificates and results stay private to each workspace for 30 days.</p>
             <form id="ejari-config-form">
@@ -142,6 +137,11 @@
               <p id="ejari-config-error" class="error" role="alert"></p>
               <button type="submit">Save Ejari setup securely</button>
             </form>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><p class="eyebrow">ROUTE REGISTRY</p><h2>Configured APIs</h2></div><button class="refresh" data-refresh="integrations">Refresh</button></div>
+            <div class="empty" id="integration-empty">No APIs are configured yet.</div>
+            <div class="route-list" id="integration-list"></div>
           </div>
         </section>
 

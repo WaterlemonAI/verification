@@ -6,6 +6,7 @@ process.env.EJARI_PLATFORM_ENABLED = '1';
 const { EnvironmentStore } = await import('../lib/api-store.mjs');
 const { MemoryCustomerUsageStore, validateUsagePolicy, moneyMicros } = await import('../lib/customer-usage.mjs');
 const { createPortalAccount, createPortalSession, PORTAL_COOKIE } = await import('../lib/portal-auth.mjs');
+const { createAdminAccount, createAdminSession, ADMIN_COOKIE } = await import('../lib/admin-auth.mjs');
 const { createAppServer } = await import('../server.mjs');
 
 const store = new EnvironmentStore();
@@ -24,6 +25,10 @@ await store.setPortalSessionKey(signingKey);
 const account = createPortalAccount('ejari-ui@example.test', 'SyntheticPassword!234',
   { id: workspaceId, name: 'Synthetic Ejari UI' });
 await store.setPortalUser(account);
+const adminSigningKey = 'synthetic-ejari-admin-session';
+const adminAccount = createAdminAccount('ejari-admin@example.test', 'SyntheticPassword!234');
+await store.setAdminSessionKey(adminSigningKey);
+await store.setAdminAccount(adminAccount);
 const id = 'ejari_11111111-1111-4111-8111-111111111111';
 const ejariStore = {
   async createJob() { return { job: { id, status: 'queued' }, reused: false }; },
@@ -62,7 +67,19 @@ try {
     assert.deepEqual(errors, []);
     await page.close();
   }
-  console.log('Ejari desktop and mobile tester smoke passed');
+  const admin = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await admin.context().addCookies([{ name: ADMIN_COOKIE,
+    value: createAdminSession(adminAccount, adminSigningKey).token, url: base }]);
+  await admin.goto(`${base}/admin`, { waitUntil: 'networkidle' });
+  assert.equal(await admin.locator('#integrations-view > .panel').first().getAttribute('id'), 'ejari-setup-panel');
+  assert.equal(await admin.locator('#ejari-config-form input[name="openai_key"]').isVisible(), true);
+  assert.equal(await admin.locator('#ejari-config-form input[name="capsolver_key"]').isVisible(), true);
+  const row = admin.locator('#integration-list .route').filter({ hasText: 'Dubai Ejari Verification' });
+  assert.equal(await row.locator('button').textContent(), 'Configure Ejari');
+  await row.locator('button').click();
+  assert.equal(await admin.evaluate(() => document.activeElement?.name), 'openai_key');
+  await admin.close();
+  console.log('Ejari desktop and mobile tester and admin setup smoke passed');
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
