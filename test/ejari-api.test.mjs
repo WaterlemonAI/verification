@@ -10,6 +10,7 @@ const { createAppServer } = await import('../server.mjs');
 const { caseOutcome } = await import('../lib/case-manager-outcomes.mjs');
 const { reconcileCaseMessage } = await import('../lib/case-manager-reconcile.mjs');
 const { MemoryCaseManagerStore } = await import('../lib/case-manager-store.mjs');
+const { createPortalAccount, createPortalSession, PORTAL_COOKIE } = await import('../lib/portal-auth.mjs');
 
 const jobId = 'ejari_11111111-1111-4111-8111-111111111111';
 const endpoint = '/service/dubai_ejari_verification';
@@ -33,6 +34,13 @@ test('Ejari API validates input, keeps workspace boundaries, and returns only pr
   const usage = new MemoryCustomerUsageStore();
   const first = await entitlement(store, usage, 'ejari-first');
   const second = await entitlement(store, usage, 'ejari-second');
+  const signingKey = 'synthetic-ejari-download-session';
+  await store.setPortalSessionKey(signingKey);
+  const firstPortal = createPortalAccount('first@example.test', 'StrongPass!234', { id: first.id, name: 'First' });
+  const secondPortal = createPortalAccount('second@example.test', 'StrongPass!234', { id: second.id, name: 'Second' });
+  await store.setPortalUser(firstPortal);
+  await store.setPortalUser(secondPortal);
+  const portalCookie = (account) => `${PORTAL_COOKIE}=${encodeURIComponent(createPortalSession(account, signingKey).token)}`;
   let submitted = 0;
   const ejariStore = {
     async createJob(input) {
@@ -69,7 +77,19 @@ test('Ejari API validates input, keeps workspace boundaries, and returns only pr
   assert.equal((await fetch(`${base}${endpoint}/jobs/${jobId}/certificate.pdf`, { headers: other })).status, 404);
   const result = await fetch(`${base}${receipt.resultUrl}`, { headers });
   assert.equal(result.status, 200);
-  assert.equal((await result.json()).certificateUrl, `${endpoint}/jobs/${jobId}/certificate.pdf`);
+  const certificateUrl = (await result.json()).certificateUrl;
+  assert.equal(certificateUrl, `https://app.kycprobe.com/portal/api/ejari/jobs/${jobId}/certificate.pdf`);
+  const download = `${base}${new URL(certificateUrl).pathname}`;
+  assert.equal((await fetch(download)).status, 401);
+  assert.equal((await fetch(download, { headers: { authorization: 'Bearer invalid' } })).status, 401);
+  assert.equal((await fetch(download, { headers: other })).status, 404);
+  assert.equal((await fetch(download, { headers: { cookie: portalCookie(secondPortal) } })).status, 404);
+  const browserDownload = await fetch(download, { headers: { cookie: portalCookie(firstPortal) } });
+  assert.equal(browserDownload.status, 200);
+  assert.equal(browserDownload.headers.get('content-disposition'), `attachment; filename="${jobId}.pdf"`);
+  assert.equal(browserDownload.headers.get('cache-control'), 'private, no-store');
+  assert.equal(await browserDownload.text(), '%PDF-synthetic');
+  assert.equal((await fetch(download, { headers })).status, 200);
   const certificate = await fetch(`${base}${endpoint}/jobs/${jobId}/certificate.pdf`, { headers });
   assert.equal(certificate.status, 200);
   assert.equal(await certificate.text(), '%PDF-synthetic');
@@ -101,6 +121,8 @@ test('Ejari outcomes use DLD evidence and completed case reconciliation', async 
   assert.equal(status, 'captured');
   const saved = await caseStore.getCase('workspace-ejari', intent.id);
   assert.equal(saved.outcome, 'passed');
+  assert.equal(saved.payload.final_response.certificateUrl,
+    `https://app.kycprobe.com/portal/api/ejari/jobs/${jobId}/certificate.pdf`);
   assert.deepEqual(saved.payload.artifact_refs.map((item) => item.name), ['certificate.pdf']);
 });
 
