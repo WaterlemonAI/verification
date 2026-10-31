@@ -99,6 +99,19 @@ test('all eight document schemas remain available through local Ollama structuri
   }
 });
 
+test('an explicitly labelled Arabic trade name is source-backed when the model omits it', async () => {
+  const definition = DOCUMENT_OCR_APIS.find((item) => item.id === 'uae-trade-license-ocr');
+  const result = await structureDocumentWithOllama({ definition,
+    pages: [{ page: 1, text: 'TRADE LICENSE\nCompany Name Arabic: شركة المثال الصحراوية' }],
+    generate: async () => ({ response: JSON.stringify({
+      document_classification: definition.documentKind,
+      data: { company_name_arabic: 'Not Readable' }, evidence: [],
+      figure_roles: [], image_regions: [], unreadable_list_fields: [] }) }) });
+  assert.equal(result.data.company_name_arabic, 'شركة المثال الصحراوية');
+  assert.ok(result.evidence.some((item) => item.field === 'company_name_arabic'
+    && item.quote === 'Company Name Arabic: شركة المثال الصحراوية'));
+});
+
 test('injected OCR lines and invented values cannot enter a validated Ollama response', async () => {
   const definition = DOCUMENT_OCR_APIS.find((item) => item.id === 'cheque-ocr');
   const result = await structureDocumentWithOllama({ definition,
