@@ -1,6 +1,6 @@
 # Case Manager release and support checklist
 
-Case Manager is an optional copy of verification results. Keep production capture and every customer workspace policy off until the checks below pass. The separate internal QA app is enabled only for disposable synthetic testing. This checklist does not authorize customer traffic or change retention in the original service stores.
+Case Manager is an optional copy of verification results. The global runtime was enabled on the VNet production app on 2026-10-31; workspace capture remains opt-in. See [the live cutover log](case-manager-live-cutover-20261031.md) for current deployment evidence and remaining live QA. The checklist below records the release gates and earlier private QA evidence. Case Manager does not change retention in the original service stores.
 
 ## Decisions to record before enabling customer workspaces
 

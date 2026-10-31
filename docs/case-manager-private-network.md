@@ -1,5 +1,7 @@
 # Case Manager private-network inventory and cutover
 
+> **2026-10-31 update:** The production DNS cutover and global Case Manager runtime enablement are recorded in [the live cutover log](case-manager-live-cutover-20261031.md). The inventory and previews below describe the earlier private QA state and are retained as historical evidence.
+
 This records the **2026-10-30** private Case Manager QA provisioning authorized in the current task. Subscription **Azure subscription 1**, resource group `rg-ai7uae-web-uaen-001`, region **UAE North**. Production API, workers, DNS and customer capture were not changed. Draft PR #108 remains the only source branch.
 
 The dedicated VNet `vnet-ai7uae-cases-uaen-001` (`10.244.0.0/20`), delegated Container Apps subnet (`/23`), private endpoint subnet (`10.244.2.0/27`), private environment `cae-ai7uae-private-uaen-001`, private Blob/Table/Queue DNS zones and links, and Case Manager account `stai7uaecasesuaen001` are now provisioned. Storage readback confirms public network access disabled, shared keys disabled and public Blob access disabled. The Blob/Table/Queue private endpoints are approved in the dedicated subnet. The real API identity is `id-ai7uae-api-runtime` (client ID `90e732e9-624e-496d-b56a-f55ca222312d`); it has the three account-scoped data roles. An initial assignment to the similarly named `id-ai7uae-runtime` was corrected and all three incorrect assignments were removed before QA data existed.
