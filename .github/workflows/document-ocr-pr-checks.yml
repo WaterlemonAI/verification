@@ -7,6 +7,7 @@ on:
       - lib/document-ocr-*.mjs
       - scripts/document-ocr-paddle.py
       - scripts/run-document-ocr-worker.mjs
+      - scripts/document-ocr-ollama-smoke.mjs
       - bank-statement-analysis/src/bsa/paddle_ocr.py
       - bank-statement-analysis/scripts/install_paddle_models.py
       - .github/workflows/document-ocr-pr-checks.yml
@@ -21,7 +22,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build private document OCR worker image
         run: docker build --pull --file Dockerfile.document-ocr --tag document-ocr-pr-check .
-      - name: Verify bundled Paddle inference capability
+      - name: Verify bundled Ollama models
         run: |
-          result="$(docker run --rm --entrypoint /opt/document-ocr-python/bin/python document-ocr-pr-check scripts/document-ocr-paddle.py --check)"
-          test "${result}" = '{"ready": true}'
+          docker run --rm --entrypoint sh document-ocr-pr-check -c 'test -f /opt/ollama-models/manifests/registry.ollama.ai/library/qwen3-vl/4b-instruct'
+      - name: Run CPU-only Ollama OCR and eight-schema smoke
+        run: |
+          docker run --rm --memory=6g --cpus=2 --entrypoint sh document-ocr-pr-check -ec '
+            ollama serve >/tmp/ollama-smoke.log 2>&1 &
+            pid=$!
+            trap "kill $pid 2>/dev/null || true" EXIT
+            for i in $(seq 1 60); do ollama list >/dev/null 2>&1 && break; sleep 2; done
+            node scripts/document-ocr-ollama-smoke.mjs
+          '

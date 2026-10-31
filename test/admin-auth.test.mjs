@@ -103,7 +103,7 @@ test('only a signed-in administrator can select a verified OCR engine', async ()
   assert.equal((await put({}, 'paddle')).status, 401);
   assert.equal((await put({ cookie }, 'paddle')).status, 403);
   assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'paddle')).status, 409);
-  assert.equal(await store.getDocumentOcrEngine('cheque-ocr'), 'azure');
+  assert.equal(await store.getDocumentOcrEngine('cheque-ocr'), 'ollama');
   paddleReady = true;
   capabilityRecent = false;
   assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'paddle')).status, 409);

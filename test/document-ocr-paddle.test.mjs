@@ -5,7 +5,7 @@ import { DOCUMENT_OCR_APIS } from '../lib/document-ocr-contracts.mjs';
 import { normalizePaddleResult } from '../lib/document-ocr-paddle.mjs';
 import { processDocumentOcrJob } from '../lib/document-ocr-worker.mjs';
 
-test('all eight settings default to Azure, persist independently, and stay out of the public catalog', async () => {
+test('all eight stored settings retain Azure until the Ollama cutover, and stay out of the public catalog', async () => {
   const records = new Map();
   const store = Object.create(KeyVaultStore.prototype);
   store.getJson = async (name, fallback) => records.get(name)?.value || fallback;
@@ -16,6 +16,14 @@ test('all eight settings default to Azure, persist independently, and stay out o
   assert.equal(await store.getDocumentOcrEngine('emirates-id-ocr'), 'azure');
   assert.equal(records.get('document-ocr-engine-cheque-ocr').tags.previous, 'azure');
   assert.equal(records.get('document-ocr-engine-cheque-ocr').tags.actor, 'admin@example.test');
+  const previousOverride = process.env.DOCUMENT_OCR_FORCE_OLLAMA;
+  try {
+    process.env.DOCUMENT_OCR_FORCE_OLLAMA = '1';
+    for (const api of DOCUMENT_OCR_APIS) assert.equal(await store.getDocumentOcrEngine(api.id), 'ollama');
+  } finally {
+    if (previousOverride === undefined) delete process.env.DOCUMENT_OCR_FORCE_OLLAMA;
+    else process.env.DOCUMENT_OCR_FORCE_OLLAMA = previousOverride;
+  }
   await assert.rejects(store.setDocumentOcrEngine('unknown', 'paddle', 'admin@example.test'), /engine_invalid/);
   const local = new EnvironmentStore();
   await local.setDocumentOcrEngine('cheque-ocr', 'paddle', 'admin@example.test');

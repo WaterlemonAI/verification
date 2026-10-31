@@ -2,7 +2,13 @@
 
 This release replaces the earlier four-provider OCR plan. The eight native KYCProbe modules are UAE trade licence, passport/TD3 MRZ, UAE power of attorney, UAE utility bill, cheque, memorandum of association, articles of association, and Emirates ID/TD1 MRZ. The customer API routes were enabled on 27 October 2026 after the isolated worker and sample checks. Each module has its own customer entitlement and tiered price; they are excluded from Forms until a document-input mapping is designed and tested.
 
-## Processing contract
+## Ollama migration gate — 1 November 2026
+
+The proposed worker image bundles the Apache 2.0 licensed `qwen3-vl:4b-instruct` vision model for page transcription and local JSON structuring, including Arabic text. It runs on CPU through Ollama bound to loopback, with one request at a time per replica. The existing private queue, encrypted 30-day store, malware gate, field schemas, evidence checks, MRZ checks, billing, and private Emirates ID crop links remain. New local installations default to Ollama. Production keeps its Azure/Gemini selection until the reviewed rollout sets the GitHub environment variable `DOCUMENT_OCR_FORCE_OLLAMA=true`; that override routes all eight APIs to Ollama, while already queued Azure jobs retain their recorded engine. Drain any pre-existing Paddle jobs before replacing the worker image. The API rejects new Ollama admissions until the bundled worker records the deployed image digest and model as available. The OCR worker scales from zero to ten replicas on queue length. Queue visibility renews while CPU processing runs, and queued-job reconciliation allows a seven-day backlog window.
+
+Before enabling the production override, the focused pull request must pass the bundled-image build and CPU-constrained smoke that exercises vision OCR, all eight structured schemas, and an injected-document example. Run representative, redacted samples for every document type, including a real utility bill, valid and invalid passport/Emirates ID MRZ, Emirates ID front/back crops, Arabic text, poor scans, and wrong-document controls. Check every populated field against its source and review flags. Then use the reviewed main-branch deployment workflow, wake the new worker with a harmless queue message, verify its capability record and image digest, and submit authenticated disposable-key jobs for all eight routes. Keep the old pipeline running until those checks pass. No accuracy claim follows from synthetic unit or smoke tests alone.
+
+## Historical Azure/Gemini processing contract
 
 - `POST /service/{module}` accepts one `file` and an `Idempotency-Key` (16–128 allowed characters). Emirates ID alone accepts one `additional_file` for the other side. PDF, PNG and JPEG are accepted, up to 25 MiB combined and the service page limit. Invalid content is rejected before queueing.
 - The API reserves credit only after authentication and entitlement checks. HTTP 202 returns the job, status and result URLs. Repeated requests with the same key and files reuse the job and refund the duplicate admission. A terminal extraction failure refunds the reservation; successful and review-required extraction results settle it once. The hourly reconciler repairs a worker crash between result storage and settlement.
@@ -12,7 +18,7 @@ This release replaces the earlier four-provider OCR plan. The eight native KYCPr
 - Inputs, OCR text, results and crops use dedicated encrypted private Blob storage. The API stops serving them after 30 days; an hourly purge removes expired jobs and data. Blob lifecycle deletion is a backup. The Document Intelligence analyze result is explicitly deleted after retrieval.
 - Pending and expiry rows are indexed by due time, so settlement and deletion jobs read only due work as volume grows. A job that remains unfinished for two hours is failed and refunded rather than leaving credit reserved indefinitely.
 
-## Before enabling production
+## Historical 27 October production enablement
 
 1. Obtain a **separate Gemini project and API key** for document extraction. Place it through Admin → API engine → Document OCR AI Structuring; confirm the write-only credential is present. The adverse-media Gemini key must remain separate.
 2. Obtain **redacted but representative samples** for every document type. Include English/Arabic trade licences, a valid and invalid TD3 passport MRZ, both Emirates ID sides as a single PDF and as two files, and a valid and invalid TD1 MRZ where available. Include scans of varied quality and a non-matching document for each service. Do not use real customer identity data in test fixtures.

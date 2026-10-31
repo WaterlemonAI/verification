@@ -149,5 +149,5 @@ test('customer admission snapshots the current engine and exposes no engine cont
   assert.equal((await submit('snapshot-engine-00001')).status, 202);
   await store.setDocumentOcrEngine('cheque-ocr', 'paddle', 'admin@example.test');
   assert.equal((await submit('snapshot-engine-00002')).status, 202);
-  assert.deepEqual(accepted, ['azure', 'paddle']);
+  assert.deepEqual(accepted, ['ollama', 'paddle']);
 });
