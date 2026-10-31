@@ -2016,6 +2016,7 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
   }
 
   if (url.pathname === '/admin/api/ejari/config') {
+    if (access.legacy) return json(res, 409, { status: 'Error', error: 'Complete account setup first.' });
     if (req.method === 'GET') return json(res, 200, { platformAvailable: process.env.EJARI_PLATFORM_ENABLED === '1',
       config: await store.getEjariConfig() });
     if (req.method === 'PUT') {

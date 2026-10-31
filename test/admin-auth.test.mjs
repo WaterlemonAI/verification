@@ -104,6 +104,27 @@ test('state-changing admin operations require the session CSRF token', async () 
   assert.equal(created.status, 201);
 });
 
+test('Ejari admin setup requires the signed session and never returns provider keys', async (t) => {
+  const previous = process.env.EJARI_PLATFORM_ENABLED;
+  process.env.EJARI_PLATFORM_ENABLED = '1';
+  t.after(() => { if (previous === undefined) delete process.env.EJARI_PLATFORM_ENABLED;
+    else process.env.EJARI_PLATFORM_ENABLED = previous; });
+  const input = { enabled: true, ocr_model: 'gpt-6-luna', ocr_detail: 'high',
+    openai_key: 'synthetic-ocr-secret', capsolver_key: 'synthetic-captcha-secret' };
+  const url = `${appUrl}/admin/api/ejari/config`;
+  assert.equal((await fetch(url, { method: 'PUT', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify(input) })).status, 403);
+  const saved = await fetch(url, { method: 'PUT', headers: { cookie, 'x-ai7-csrf': csrf, 'content-type': 'application/json' },
+    body: JSON.stringify(input) });
+  assert.equal(saved.status, 200);
+  const response = await saved.json();
+  assert.equal(response.config.enabled, true);
+  assert.equal(response.config.openaiKeyConfigured, true);
+  assert.equal(response.config.capsolverKeyConfigured, true);
+  assert.equal(JSON.stringify(response).includes('synthetic-ocr-secret'), false);
+  assert.equal(JSON.stringify(await (await fetch(url, { headers: { cookie } })).json()).includes('synthetic-captcha-secret'), false);
+});
+
 test('logout clears the browser session cookie', async () => {
   const response = await fetch(`${appUrl}/admin/api/auth/logout`, { method: 'POST', headers: { cookie, 'x-ai7-csrf': csrf } });
   assert.equal(response.status, 200);
