@@ -218,7 +218,7 @@ test('serves the public KYCProbe marketplace homepage and terms on the new apex 
 test('routes app.kycprobe.com to the portal and admin while preserving the API host', async () => {
   const portal = await getWithHost('/login', 'app.kycprobe.com');
   assert.equal(portal.status, 200);
-  assert.match(portal.body.toString('utf8'), /KYCProbe — Developer Portal/);
+  assert.match(portal.body.toString('utf8'), /KYCProbe — API Platform/);
 
   const admin = await getWithHost('/admin', 'app.kycprobe.com');
   assert.equal(admin.status, 200);

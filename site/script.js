@@ -34,6 +34,7 @@ function confirmExternalLink(event) {
   if (!link || event.defaultPrevented) return;
   const destination = new URL(link.href);
   if (!['http:', 'https:'].includes(destination.protocol) || destination.origin === location.origin) return;
+  if ((location.pathname === '/' || location.pathname === '/index.html') && destination.origin === 'https://app.kycprobe.com') return;
   if (!window.confirm(`You will be redirected to ${destination.hostname} website. Continue?`)) {
     event.preventDefault();
     event.stopImmediatePropagation();
