@@ -42,13 +42,14 @@ import { CASE_OUTCOMES, CASE_REQUEST_STATUSES, caseExpiresAt, caseRequestStatus,
 import { caseOutcome } from './lib/case-manager-outcomes.mjs';
 import { createLoginOtpStore, LOGIN_OTP_SECONDS, loginOtpHash, newLoginOtp } from './lib/login-otp.mjs';
 import { createCaseManagerStore } from './lib/case-manager-store.mjs';
+import { createEjariStore } from './lib/ejari-store.mjs';
 import { documentOcrArtifactUrl, documentOcrSignedAccess } from './lib/document-ocr-artifact-url.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
 const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 15 * 1024 * 1024);
 const apiHosts = new Set((process.env.API_HOSTS || 'api.ai7uae.com,app.kycprobe.com,localhost,127.0.0.1').split(',').map((v) => v.trim().toLowerCase()));
-const reconciledCaseServices = new Set(['bank-statement-analysis', ...[...DOCUMENT_OCR_BY_PATH.values()].map((item) => item.id)]);
+const reconciledCaseServices = new Set(['bank-statement-analysis', 'ejari-verification', ...[...DOCUMENT_OCR_BY_PATH.values()].map((item) => item.id)]);
 const caseRouteIsReconciled = (serviceId) => reconciledCaseServices.has(serviceId);
 
 const mimeTypes = {
@@ -113,6 +114,7 @@ async function classifyCustomerApi(req, url, store) {
     '/service/adverse_media': 'adverse-media',
     '/service/merchant_screening': 'merchant-screening',
     '/service/bank_statement_analysis': 'bank-statement-analysis',
+    '/service/dubai_ejari_verification': 'ejari-verification',
     '/reports/entity-search.pdf': 'entity-search-report'
   };
   if (path === '/service/health') return { moduleIds: [], method: 'GET', billable: false };
@@ -128,6 +130,7 @@ async function classifyCustomerApi(req, url, store) {
   if (path === '/service/adverse_media/config' || /\/service\/(?:adverse_media|merchant_screening|forms)\/reports\//.test(path)
     || /\/service\/merchant_screening\/screenshots\//.test(path)) return null;
   if (path.startsWith('/service/bank_statement_analysis/')) return { moduleIds: ['bank-statement-analysis'], method: 'GET', billable: false };
+  if (path.startsWith('/service/dubai_ejari_verification/jobs/')) return { moduleIds: ['ejari-verification'], method: 'GET', billable: false };
   const formMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(path);
   if (formMatch) {
     const form = await store.getForm(formMatch[1]);
@@ -307,7 +310,7 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
       if (status === 202) {
         if (caseRouteIsReconciled(req.ai7Case.service_id)) {
           const sourceId = req.ai7Case.service_id === 'bank-statement-analysis'
-            ? finalResponse?.analysisId : finalResponse?.id;
+            ? finalResponse?.analysisId : req.ai7Case.service_id === 'ejari-verification' ? finalResponse?.jobId : finalResponse?.id;
           try {
             await caseStore.linkAsync(workspaceId, req.ai7Case.id, { sourceId,
               originalOwner: req.ai7Case.service_id === 'bank-statement-analysis'
@@ -1495,7 +1498,7 @@ async function currentPortalSession(req, store) {
 }
 
 async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore,
-  caseStore = null, reportStore = null, documentOcrStore = null) {
+  caseStore = null, reportStore = null, documentOcrStore = null, ejariStore = null) {
   if (req.method === 'GET' && url.pathname === '/portal/api/auth/status') {
     const { account, session } = await currentPortalSession(req, store);
     return json(res, 200, { authenticated: Boolean(session), account: session ? safePortalAccount(account) : null });
@@ -1721,6 +1724,10 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
         && ['audit.pdf', 'analysis.xlsx'].includes(item.name)) {
         bytes = await getBsaArtifact(record.payload.source_id, record.payload.original_artifact_owner, item.name);
         mime = item.name.endsWith('.pdf') ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      } else if (record.service_id === 'ejari-verification' && item.name === 'certificate.pdf'
+        && record.payload.source_id) {
+        bytes = await ejariStore?.getCertificate(record.payload.source_id, workspaceId);
+        mime = 'application/pdf';
       } else if (reconciledCaseServices.has(record.service_id) && record.payload.source_id
         && ['photo', 'signature'].includes(item.name)) {
         bytes = await documentOcrStore.getArtifact(workspaceId, record.payload.source_id, item.name);
@@ -1812,7 +1819,7 @@ function portalPagePath(pathname) {
 
 function protectedPortalPath(pathname) {
   const page = portalPagePath(pathname);
-  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account', '/cases'].includes(page)
+  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/cases'].includes(page)
     || /^\/forms\/[a-z0-9-]+$/.test(page)
     || /^\/document-extraction\/[a-z0-9-]+$/.test(page);
 }
@@ -2008,6 +2015,33 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
     return json(res, 200, { integrations: await store.listIntegrations() });
   }
 
+  if (url.pathname === '/admin/api/ejari/config') {
+    if (req.method === 'GET') return json(res, 200, { platformAvailable: process.env.EJARI_PLATFORM_ENABLED === '1',
+      config: await store.getEjariConfig() });
+    if (req.method === 'PUT') {
+      try {
+        const input = await readJson(req, 4096);
+        const current = await store.getEjariConfig();
+        const ocr_model = String(input.ocr_model || 'gpt-6-luna').trim();
+        const ocr_detail = String(input.ocr_detail || 'high').trim();
+        const openai_key = String(input.openai_key || '');
+        const capsolver_key = String(input.capsolver_key || '');
+        const enabled = input.enabled === true;
+        if (!/^[a-z0-9][a-z0-9.-]{2,79}$/.test(ocr_model) || !['low', 'high', 'auto', 'original'].includes(ocr_detail)
+          || [openai_key, capsolver_key].some((key) => key && (key.length > 512 || /[\r\n\0]/.test(key)))) {
+          return json(res, 400, { status: 'Error', error: 'Invalid Ejari model, detail, or credential value.' });
+        }
+        if (enabled && (!((current.openaiKeyConfigured || openai_key) && (current.capsolverKeyConfigured || capsolver_key)))) {
+          return json(res, 400, { status: 'Error', error: 'Set both the OpenAI and CapSolver keys before enabling Ejari.' });
+        }
+        if (enabled && process.env.EJARI_PLATFORM_ENABLED !== '1') return json(res, 409, { status: 'Error',
+          error: 'Deploy the private Ejari worker and storage before enabling this API.' });
+        return json(res, 200, { config: await store.saveEjariConfig({ enabled, ocr_model, ocr_detail, openai_key, capsolver_key }) });
+      } catch { return json(res, 503, { status: 'Error', error: 'Ejari configuration could not be saved.' }); }
+    }
+    return json(res, 405, { status: 'Error', error: 'Method not allowed.' });
+  }
+
   if (req.method === 'GET' && url.pathname === '/admin/api/forms') {
     return json(res, 200, { forms: await store.listForms() });
   }
@@ -2172,6 +2206,89 @@ function serveStatic(res, directory, requestPath) {
   const stat = statSync(filePath);
   res.writeHead(200, { 'content-type': mimeTypes[extname(filePath)] || 'application/octet-stream', 'content-length': stat.size, 'cache-control': 'no-cache' });
   createReadStream(filePath).pipe(res);
+}
+
+async function handleEjari(req, res, url, store, ejariStore, usageStore) {
+  const rootPath = '/service/dubai_ejari_verification';
+  const token = bearerToken(req);
+  if (!req.ai7Client && !(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  if (process.env.EJARI_PLATFORM_ENABLED !== '1' || !ejariStore) return json(res, 503, {
+    status: 'Error', reasonCode: 'EJARI_PLATFORM_UNAVAILABLE' });
+  const workspaceId = req.ai7Client?.id || reportOwnerId(token);
+  const artifact = /^\/service\/dubai_ejari_verification\/jobs\/(ejari_[0-9a-f-]{36})\/certificate\.pdf$/.exec(url.pathname);
+  if (req.method === 'GET' && artifact) {
+    const bytes = await ejariStore.getCertificate(artifact[1], workspaceId);
+    if (!bytes) return json(res, 404, { status: 'Error', error: 'Certificate was not found.' });
+    res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': bytes.length,
+      'content-disposition': `attachment; filename="${artifact[1]}.pdf"`, 'cache-control': 'private, no-store' });
+    return res.end(bytes);
+  }
+  const match = /^\/service\/dubai_ejari_verification\/jobs\/(ejari_[0-9a-f-]{36})(\/result)?$/.exec(url.pathname);
+  if (req.method === 'GET' && match) {
+    if (match[2]) {
+      const record = await ejariStore.getResult(match[1], workspaceId);
+      if (!record) return json(res, 404, { status: 'Error', error: 'Job was not found.' });
+      if (!record.result) return json(res, 202, { jobId: match[1], status: record.job.status });
+      return json(res, 200, { ...record.result,
+        certificateUrl: record.result.certificateAvailable ? `${rootPath}/jobs/${match[1]}/certificate.pdf` : null });
+    }
+    const job = await ejariStore.getJob(match[1], workspaceId);
+    return job ? json(res, 200, { jobId: job.id, status: job.status, receivedAt: job.receivedAt,
+      completedAt: job.completedAt, expiresAt: job.expiresAt, reasonCode: job.reasonCode })
+      : json(res, 404, { status: 'Error', error: 'Job was not found.' });
+  }
+  if (req.method !== 'POST' || url.pathname !== rootPath) return json(res, 404, { status: 'Error', error: 'Service was not found.' });
+  const config = await store.getEjariConfig();
+  if (!config.enabled || !config.openaiKeyConfigured || !config.capsolverKeyConfigured) return json(res, 503, {
+    status: 'Error', reasonCode: 'EJARI_NOT_CONFIGURED' });
+  const idempotencyKey = String(req.headers['idempotency-key'] || '');
+  if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) return json(res, 400, {
+    status: 'Error', reasonCode: 'INVALID_IDEMPOTENCY_KEY' });
+  try {
+    let fields;
+    let pdfBytes = null;
+    const contentType = String(req.headers['content-type'] || '');
+    if (contentType.startsWith('application/json')) {
+      fields = await readJson(req, 4096);
+    } else if (contentType.startsWith('multipart/form-data;')) {
+      const raw = await readBody(req, 10 * 1024 * 1024 + 262144);
+      const form = await new Request('http://localhost/', { method: 'POST', headers: { 'content-type': contentType }, body: raw }).formData();
+      const file = form.get('ejari_file');
+      if (!(file instanceof File) || form.getAll('ejari_file').length !== 1) return json(res, 400, {
+        status: 'Error', reasonCode: 'EJARI_PDF_REQUIRED' });
+      if ([...form.keys()].some((key) => !['ejari_file', 'contract_number', 'dewa_number'].includes(key))
+        || form.getAll('contract_number').length > 1 || form.getAll('dewa_number').length > 1) {
+        return json(res, 400, { status: 'Error', reasonCode: 'INVALID_REQUEST_FIELDS' });
+      }
+      pdfBytes = Buffer.from(await file.arrayBuffer());
+      if (!pdfBytes.subarray(0, 5).equals(Buffer.from('%PDF-'))) return json(res, 415, {
+        status: 'Error', reasonCode: 'PDF_REQUIRED' });
+      if (pdfBytes.length > 10 * 1024 * 1024) return json(res, 413, {
+        status: 'Error', reasonCode: 'PDF_TOO_LARGE' });
+      fields = { contract_number: form.get('contract_number'), dewa_number: form.get('dewa_number') };
+    } else return json(res, 415, { status: 'Error', reasonCode: 'UNSUPPORTED_CONTENT_TYPE' });
+    if (!fields || typeof fields !== 'object' || Array.isArray(fields)) throw new Error('invalid_request');
+    const contract = fields.contract_number == null ? '' : String(fields.contract_number).trim();
+    const dewa = fields.dewa_number == null ? '' : String(fields.dewa_number).trim();
+    if ((contract && !/^0\d{13,16}$/.test(contract)) || (dewa && !/^\d{8,11}$/.test(dewa))
+      || (!pdfBytes && (!contract || !dewa)) || Object.keys(fields).some((key) => !['contract_number', 'dewa_number'].includes(key))) {
+      throw new Error('invalid_request');
+    }
+    const created = await ejariStore.createJob({ workspaceId, idempotencyKey,
+      fields: { contract_number: contract || null, dewa_number: dewa || null, input_pdf: Boolean(pdfBytes) }, pdfBytes });
+    if (created.reused && req.ai7Usage) await usageStore.settleAsyncResult(req.ai7Usage.workspaceId,
+      req.ai7Usage.logKey, { successful: false, reason: 'idempotency_replay' });
+    const path = `${rootPath}/jobs/${created.job.id}`;
+    return json(res, 202, { jobId: created.job.id, status: created.job.status,
+      statusUrl: path, resultUrl: `${path}/result`, reused: created.reused });
+  } catch (error) {
+    if (error.message === 'idempotency_conflict') return json(res, 409, { status: 'Error', reasonCode: 'IDEMPOTENCY_CONFLICT' });
+    if (error.message === 'idempotency_expired') return json(res, 409, { status: 'Error', reasonCode: 'IDEMPOTENCY_KEY_EXPIRED' });
+    if (error.message === 'invalid_request' || error instanceof TypeError || error instanceof SyntaxError) return json(res, 400, {
+      status: 'Error', reasonCode: 'INVALID_REQUEST_FIELDS' });
+    if (error.message === 'request_too_large') return json(res, 413, { status: 'Error', reasonCode: 'PDF_TOO_LARGE' });
+    return json(res, 503, { status: 'Error', reasonCode: 'EJARI_UNAVAILABLE' });
+  }
 }
 
 async function handleBsa(req, res, url, store, adminAccount = null) {
@@ -2445,6 +2562,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   formsQueue = createFormsQueue(), formSubmissionStore = createFormsSubmissionStore(),
   reportStore = createAdverseMediaReportStore(), jsonStore = createAdverseMediaJsonStore(),
   documentOcrStore = createDocumentOcrStore(),
+  ejariStore = createEjariStore(),
   usageStore = createCustomerUsageStore(),
   caseStore = createCaseManagerStore(),
   merchantScreener = configuredMerchantScreener, requestCapacity = createRequestCapacity(),
@@ -2567,6 +2685,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'POST' && url.pathname === '/service/adverse_media')
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
+      if (url.pathname === '/service/dubai_ejari_verification' || url.pathname.startsWith('/service/dubai_ejari_verification/'))
+        return await handleEjari(req, res, url, store, ejariStore, usageStore);
       if (url.pathname === '/service/bank_statement_analysis' || url.pathname.startsWith('/service/bank_statement_analysis/')) return await handleBsa(req, res, url, store);
       if (await handleDocumentOcr(req, res, url, documentOcrStore, usageStore)) return;
       const formSubmissionMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
@@ -2601,7 +2721,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         }, { 'cache-control': 'public, max-age=3600' });
       }
       if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle,
-        mailer, otpStore, usageStore, caseStore, reportStore, documentOcrStore);
+        mailer, otpStore, usageStore, caseStore, reportStore, documentOcrStore, ejariStore);
       if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore);
       if (url.pathname === '/admin/bsa-synthetic-combined.pdf') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
@@ -2642,6 +2762,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'no-store' });
         return res.end(spec);
       }
+      if (url.pathname === '/ejari-verification/openapi.json') {
+        const spec = readFileSync(join(root, 'api', 'ejari-openapi.json'));
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
+        return res.end(spec);
+      }
 
       const integration = await store.getIntegration(url.pathname, req.method || 'GET');
       if (integration) return await proxyIntegration(req, res, url, integration, store, fetchImpl, reportStore);
@@ -2653,7 +2778,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         const { account, session } = await currentPortalSession(req, store);
         if (!session) return portalLoginRedirect(res, url.pathname, url.search);
         const page = portalPagePath(url.pathname);
-        const pageModule = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/forms': 'forms' }[page]
+        const pageModule = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/ejari-verification': 'ejari-verification', '/forms': 'forms' }[page]
           || (/^\/forms\/[a-z0-9-]+$/.test(page) ? 'forms' : '')
           || (/^\/document-extraction\/[a-z0-9-]+$/.test(page) ? page.split('/').at(-1) : '');
         if (pageModule) {
@@ -2682,6 +2807,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
       if (directory.endsWith('api-site') && (url.pathname === '/merchant-screening' || url.pathname === '/merchant-screening/')) return serveStatic(res, directory, '/merchant-screening.html');
       if (directory.endsWith('api-site') && (url.pathname === '/bank-statement-analysis' || url.pathname === '/bank-statement-analysis/')) return serveStatic(res, directory, '/bank-statement-analysis.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/ejari-verification' || url.pathname === '/ejari-verification/')) return serveStatic(res, directory, '/ejari-verification.html');
       if (directory.endsWith('api-site') && (url.pathname === '/forms' || url.pathname === '/forms/' || /^\/forms\/[a-z0-9-]+\/?$/.test(url.pathname))) return serveStatic(res, directory, '/forms.html');
       if (directory.endsWith('api-site') && /^\/document-extraction\/[a-z0-9-]+\/?$/.test(url.pathname)) {
         const id = portalPagePath(url.pathname).split('/').at(-1);

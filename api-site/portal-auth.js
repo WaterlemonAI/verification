@@ -12,7 +12,7 @@
   document.addEventListener('click', confirmExternalLink, true);
   document.addEventListener('auxclick', confirmExternalLink, true);
 
-  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account', '/cases']);
+  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/cases']);
   const normalizedPath = location.pathname.length > 1 ? location.pathname.replace(/\/$/, '') : '/';
   const documentApis = [
     ['uae-trade-license-ocr', 'UAE Trade License OCR'],
@@ -31,6 +31,7 @@
     '/adverse-media': ['Verification API', 'Adverse Media'],
     '/merchant-screening': ['Verification API', 'Merchant Screening'],
     '/bank-statement-analysis': ['Verification API', 'Bank Statement Analysis'],
+    '/ejari-verification': ['Verification API', 'Dubai Ejari Verification'],
     '/forms': ['Forms', 'Forms Module'],
     '/account': ['Workspace', 'Account settings'],
     '/cases': ['Workspace', 'Case Manager'],
@@ -71,19 +72,20 @@
         <a href="/adverse-media" data-path="/adverse-media"><span>04</span> Adverse Media</a>
         <a href="/merchant-screening" data-path="/merchant-screening"><span>05</span> Merchant Screening</a>
         <a href="/bank-statement-analysis" data-path="/bank-statement-analysis"><span>06</span> Bank Statement Analysis</a>
+        <a href="/ejari-verification" data-path="/ejari-verification"><span>07</span> Dubai Ejari Verification</a>
       </div>
       <div class="portal-nav-group">
         <p>DOCUMENT EXTRACTION</p>
-        ${documentApis.map(([id, name], index) => `<a href="/document-extraction/${id}" data-path="/document-extraction/${id}"><span>${String(index + 9).padStart(2, '0')}</span> ${escapeHtml(name)}</a>`).join('')}
+        ${documentApis.map(([id, name], index) => `<a href="/document-extraction/${id}" data-path="/document-extraction/${id}"><span>${String(index + 10).padStart(2, '0')}</span> ${escapeHtml(name)}</a>`).join('')}
       </div>
       <div class="portal-nav-group">
         <p>FORMS</p>
-        <a href="/forms" data-path="/forms"><span>07</span> Forms Module</a>
+        <a href="/forms" data-path="/forms"><span>08</span> Forms Module</a>
       </div>
       <div class="portal-nav-group">
         <p>WORKSPACE</p>
-        <a href="/account" data-path="/account"><span>08</span> Account settings</a>
-        <a href="/cases" data-path="/cases" id="portal-case-link" hidden><span>09</span> Case Manager</a>
+        <a href="/account" data-path="/account"><span>09</span> Account settings</a>
+        <a href="/cases" data-path="/cases" id="portal-case-link" hidden><span>10</span> Case Manager</a>
       </div>
       <div class="portal-account">
         <span>WORKSPACE</span>
@@ -92,7 +94,7 @@
         <button type="button" id="portal-sign-out">Sign out</button>
       </div>`;
     sidebar.querySelector(`[data-path="${normalizedPath}"]`)?.classList.add('active');
-    const modules = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/forms': 'forms',
+    const modules = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/ejari-verification': 'ejari-verification', '/forms': 'forms',
       ...Object.fromEntries(documentApis.map(([id]) => [`/document-extraction/${id}`, id])) };
     sidebar.querySelectorAll('a[data-path]').forEach((link) => {
       const module = modules[link.dataset.path];

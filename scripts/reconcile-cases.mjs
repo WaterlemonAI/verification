@@ -3,12 +3,13 @@ import { ContainerAppsManagedIdentityCredential } from '../lib/azure-managed-ide
 import { createCaseManagerStore } from '../lib/case-manager-store.mjs';
 import { createCustomerUsageStore } from '../lib/customer-usage.mjs';
 import { createDocumentOcrStore } from '../lib/document-ocr-store.mjs';
+import { createEjariStore } from '../lib/ejari-store.mjs';
 import { getBsaResult } from '../lib/bsa-store.mjs';
 import { reconcileCaseMessage } from '../lib/case-manager-reconcile.mjs';
 import { recoverCaseRetirements } from '../lib/case-manager-retirement.mjs';
 
 export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStore, usageStore,
-  documentOcrStore, getBsaResultImpl = getBsaResult, reconcileMessageImpl = reconcileCaseMessage,
+  documentOcrStore, ejariStore, getBsaResultImpl = getBsaResult, reconcileMessageImpl = reconcileCaseMessage,
   maxMessages = 512, maxBatches = 16, maxRunMs = 10 * 60_000 } = {}) {
   const counts = { captured: 0, pending: 0, retired: 0, dead_lettered: 0, errors: 0,
     retirement_recovered: 0, retirement_continuing: 0, retirement_oldest_age_seconds: 0,
@@ -69,7 +70,7 @@ export async function drainCaseReconciliation({ queue, deadLetterQueue, caseStor
       let outcome = 'invalid';
       try {
         if (message) outcome = await reconcileMessageImpl(message, { caseStore, usageStore, documentOcrStore,
-          getBsaResult: getBsaResultImpl });
+          ejariStore, getBsaResult: getBsaResultImpl });
       } catch { counts.errors++; outcome = 'pending'; }
       if (outcome === 'pending') {
         const attempt = Number(message?.attempt || 0) + 1;
@@ -127,7 +128,7 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   const deadLetterQueue = new QueueClient(`${queueUrl.replace(/\/$/, '')}/${process.env.CASE_MANAGER_DEAD_LETTER_QUEUE_NAME || 'case-manager-dead-letter'}`, credential);
   const counts = await drainCaseReconciliation({ queue, deadLetterQueue,
     caseStore: createCaseManagerStore(), usageStore: createCustomerUsageStore(),
-    documentOcrStore: createDocumentOcrStore() });
+    documentOcrStore: createDocumentOcrStore(), ejariStore: createEjariStore() });
   console.info('case_manager_reconcile_counts', JSON.stringify(counts));
   if (counts.errors) console.warn('case_manager_storage_error', JSON.stringify({ count: counts.errors }));
   if (counts.dead_lettered) console.warn('case_manager_dead_letters', JSON.stringify({ count: counts.dead_lettered }));

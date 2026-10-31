@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/admin/admin.css?v=11" />
-    <script src="/admin/admin.js?v=15" defer></script>
+    <script src="/admin/admin.js?v=16" defer></script>
 
   </head>
   <body>
@@ -124,6 +124,24 @@
             <div class="panel-head"><div><p class="eyebrow">ROUTE REGISTRY</p><h2>Configured APIs</h2></div><button class="refresh" data-refresh="integrations">Refresh</button></div>
             <div class="empty" id="integration-empty">No APIs are configured yet.</div>
             <div class="route-list" id="integration-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div><p class="eyebrow">DUBAI EJARI VERIFICATION</p><h2>Set up the Ejari API</h2></div></div>
+            <p class="notice">The supplied DLD certificate flow uses CapSolver for the website CAPTCHA and OpenAI to read certificate fields. Keys are write-only in Key Vault. Certificates and results stay private to each workspace for 30 days.</p>
+            <form id="ejari-config-form">
+              <div class="grid two">
+                <label>OpenAI API key<input name="openai_key" type="password" autocomplete="off" placeholder="Leave blank to keep the saved key" /></label>
+                <label>CapSolver API key<input name="capsolver_key" type="password" autocomplete="off" placeholder="Leave blank to keep the saved key" /></label>
+              </div>
+              <div class="grid two">
+                <label>Image-capable OCR model<input name="ocr_model" value="gpt-6-luna" required /></label>
+                <label>Image detail<select name="ocr_detail"><option value="high">High</option><option value="auto">Auto</option><option value="low">Low</option><option value="original">Original</option></select></label>
+              </div>
+              <label class="check"><input name="enabled" type="checkbox" /> Enable customer Ejari requests after both keys and the Azure worker are ready</label>
+              <p id="ejari-config-status" class="field-help" role="status"></p>
+              <p id="ejari-config-error" class="error" role="alert"></p>
+              <button type="submit">Save Ejari setup securely</button>
+            </form>
           </div>
         </section>
 
