@@ -202,7 +202,7 @@ resource ejariWorker 'Microsoft.App/containerApps@2025-07-01' = if (!parallelDep
     configuration: {
       activeRevisionsMode: 'Single'
       registries: [{ server: acrLoginServer, identity: ejariWorkerIdentity.id }]
-      secrets: [{ name: 'ejari-root-key', keyVaultUrl: '${keyVaultUri}secrets/bsa-data-key', identity: ejariWorkerIdentity.id }]
+      secrets: [{ name: 'ejari-root-key', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: ejariWorkerIdentity.id }]
     }
     template: {
       containers: [
@@ -500,6 +500,8 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManag
       ] : [], !parallelDeployment && enableDocumentOcr ? [
         { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: runtimeIdentityResourceId }
         { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
+      ] : [], !parallelDeployment && enableEjari ? [
+        { name: 'ejari-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: runtimeIdentityResourceId }
       ] : [])
       registries: [ { server: acrLoginServer, identity: runtimeIdentityResourceId } ]
     }
@@ -532,7 +534,7 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManag
             { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
           ] : [], !parallelDeployment && enableEjari ? [
             { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
-            { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'bsa-data-key' }
+            { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-data-key-v1' }
           ] : [], parallelDeployment && parallelCaseManagerQa ? [
             { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
             { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }
@@ -661,6 +663,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
       ] : [], caseManagerRuntimeEnabled ? [
         { name: 'case-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/case-manager-data-key-v1', identity: runtimeIdentityResourceId }
+      ] : [], !parallelDeployment && enableEjari ? [
+        { name: 'ejari-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: runtimeIdentityResourceId }
       ] : [])
       ingress: {
         external: !parallelDeployment
@@ -735,7 +739,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'CASE_MANAGER_ACTIVE_KEY_VERSION', value: '1' }
           ] : [], !parallelDeployment && enableEjari ? [
             { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
-            { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'bsa-data-key' }
+            { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-data-key-v1' }
           ] : [], parallelDeployment && parallelCaseManagerQa ? [
             { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
             { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }

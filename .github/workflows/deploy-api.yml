@@ -286,6 +286,13 @@ jobs:
             | jq -e '.publicNetworkAccess == "Disabled" and .allowSharedKeyAccess == false' > /dev/null
           az identity show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name id-ai7uae-ejari-worker-uaen-001 \
             --query principalId --output tsv | grep -E '^[a-zA-Z0-9-]+$'
+          az keyvault secret show --vault-name kv-ai7uae-api-uaen-001 --name ejari-data-key-v1 --query id --output tsv > /dev/null
+          for group in blob table queue; do
+            state="$(az network private-endpoint show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "pe-ai7uae-ejari-${group}-uaen-001" \
+              --query 'privateLinkServiceConnections[0].privateLinkServiceConnectionState.status' --output tsv)"
+            test "${state}" = 'Approved'
+          done
 
       - name: Block Case Manager provisioning until private connectivity is reviewed
         if: github.event_name == 'workflow_dispatch' && inputs.provisionCaseManagerPlatform
