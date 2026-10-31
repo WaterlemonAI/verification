@@ -284,9 +284,15 @@ async function loadIntegrations() {
     pill.textContent = item.enabled ? 'Active' : 'Disabled';
     pill.classList.toggle('off', !item.enabled);
     const credentialButton = row.querySelector('.set-credential');
-    credentialButton.hidden = item.id === 'merchant-screening' || item.id === 'ejari-verification' || (item.id !== 'document-ocr-ai' && item.id.endsWith('-ocr')) || item.id === 'moa-analysis';
-    credentialButton.textContent = item.masterAuthKeyConfigured ? 'Replace credential' : 'Set credential';
+    credentialButton.hidden = item.id === 'merchant-screening' || (item.id !== 'document-ocr-ai' && item.id.endsWith('-ocr')) || item.id === 'moa-analysis';
+    credentialButton.textContent = item.id === 'ejari-verification' ? 'Configure Ejari'
+      : item.masterAuthKeyConfigured ? 'Replace credential' : 'Set credential';
     credentialButton.addEventListener('click', () => {
+      if (item.id === 'ejari-verification') {
+        byId('ejari-setup-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        byId('ejari-config-form').elements.openai_key.focus({ preventScroll: true });
+        return;
+      }
       const form = byId('supplier-credential-form');
       form.reset();
       form.elements.id.value = item.id;
