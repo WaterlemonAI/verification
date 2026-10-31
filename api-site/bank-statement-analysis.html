@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/api.css?v=7" />
+    <link rel="stylesheet" href="/api.css?v=9" />
     <script src="/portal-auth.js?v=4" defer></script>
     <script src="/bank-statement-analysis.js?v=3" defer></script>
   </head>
@@ -27,11 +27,20 @@
         <h1>Bank statement<br /><em>analysis.</em></h1>
         <p>Extract, reconcile, and analyse bank-statement transactions with private asynchronous processing in Microsoft Azure UAE North.</p>
         <div class="meta"><span>POST</span><code>/service/bank_statement_analysis</code><button class="copy" data-copy="https://api.ai7uae.com/service/bank_statement_analysis">Copy endpoint</button></div>
+        <figure class="hero-infographic" role="img" aria-label="Statement upload to Transaction analysis to Reconciled signals">
+          <figcaption>HOW THIS API HELPS</figcaption>
+          <div class="flow-steps">
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>INPUT</small><strong>Statement upload</strong></div></div>
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><div><small>PROCESS</small><strong>Transaction analysis</strong></div></div>
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 12 5 5L20 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>OUTPUT</small><strong>Reconciled signals</strong></div></div>
+          </div>
+        </figure>
       </section>
 
       <section class="layout">
         <aside aria-label="On this page">
           <p>ON THIS PAGE</p>
+          <a href="#quick-start">How to use</a>
           <a href="#authentication">Authentication</a>
           <a href="#request">Request</a>
           <a href="#workflow">Workflow</a>
@@ -40,6 +49,17 @@
         </aside>
 
         <div class="content">
+          <article id="quick-start" class="quick-start">
+            <p class="label">INSTRUCTIONS TO USE</p>
+            <h2>How to use this API</h2>
+            <p>Start here, then use the detailed request and response reference below.</p>
+            <ol class="quick-steps">
+              <li><span>01</span><strong>Get your API key</strong><p>Use a workspace API key in the Bearer header.</p></li>
+              <li><span>02</span><strong>Upload a statement</strong><p>Send a PDF or ordered images with a unique Idempotency-Key.</p></li>
+              <li><span>03</span><strong>Get the final result</strong><p>Poll the status and result URLs or receive a signed callback; inspect review signals.</p></li>
+            </ol>
+          </article>
+
           <article id="authentication">
             <p class="label">AUTHENTICATION</p>
             <h2>Use your AI7 credential</h2>
