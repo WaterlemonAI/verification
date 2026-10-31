@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from ejari_verifier.azure_worker import process, result_from_lookup
+from ejari_verifier.azure_worker import process, result_from_lookup, terminal_attempt_reason
 from ejari_verifier.crypto import decrypt, encrypt
 from ejari_verifier.lookup import EjariError, parse_dld_response
 from ejari_verifier.purge import purge_records
@@ -47,6 +47,14 @@ class EjariWorkerTests(unittest.TestCase):
                         (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat()}
         payload = {'partitionKey': 'tenant-hash', 'jobId': 'ejari_11111111-1111-4111-8111-111111111111'}
         self.assertEqual(process(payload, None, Table(), None, None), 'busy')
+
+    def test_unavailable_malware_scanner_retries_but_detected_malware_stops(self):
+        unavailable = ValueError('MALWARE_CHECK_FAILED')
+        self.assertIsNone(terminal_attempt_reason(unavailable, 1))
+        self.assertIsNone(terminal_attempt_reason(unavailable, 2))
+        self.assertEqual(terminal_attempt_reason(unavailable, 3), 'MALWARE_CHECK_FAILED')
+        self.assertEqual(terminal_attempt_reason(ValueError('MALWARE_DETECTED'), 1), 'MALWARE_DETECTED')
+        self.assertEqual(terminal_attempt_reason(ValueError('INVALID_PDF'), 1), 'INVALID_PDF')
 
     def test_encryption_is_compatible_with_node(self):
         original = b'{"contract_number":"0120221004004205"}'
