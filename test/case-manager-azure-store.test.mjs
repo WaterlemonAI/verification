@@ -40,6 +40,22 @@ class FakeTable {
   }
 }
 
+test('Azure Case Manager links an Ejari job for asynchronous capture', async () => {
+  const messages = [];
+  const store = new AzureCaseManagerStore({ table: new FakeTable(), container: {},
+    queue: { async sendMessage(body) { messages.push(JSON.parse(Buffer.from(body, 'base64').toString())); } } });
+  const intent = await store.createIntent({ workspaceId: 'ejari-synthetic-workspace', serviceId: 'ejari-verification',
+    transactionId: 'ejari-synthetic-tx', acceptedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+  const sourceId = 'ejari_11111111-1111-4111-8111-111111111111';
+  await store.linkAsync('ejari-synthetic-workspace', intent.id,
+    { sourceId, originalOwner: 'ejari-synthetic-workspace' });
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].serviceId, 'ejari-verification');
+  assert.equal(messages[0].sourceId, sourceId);
+  assert.equal((await store.row('ejari-synthetic-workspace', intent.id)).state, 'pending');
+});
+
 test('an interrupted Azure finalization keeps the first encrypted response on retry', async () => {
   const previousKey = process.env.CASE_MANAGER_DATA_KEY_V1_HEX;
   process.env.CASE_MANAGER_DATA_KEY_V1_HEX = 'a'.repeat(64);

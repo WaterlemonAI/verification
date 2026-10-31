@@ -180,6 +180,15 @@ def mark_failed(payload, container, table, reason):
                         mode=UpdateMode.MERGE)
 
 
+def terminal_attempt_reason(error, attempt):
+    code = str(error) if isinstance(error, ValueError) else ''
+    if code in {'INVALID_PDF', 'PDF_PAGE_LIMIT', 'MALWARE_DETECTED'}:
+        return code
+    if attempt >= 3:
+        return 'MALWARE_CHECK_FAILED' if code == 'MALWARE_CHECK_FAILED' else 'DLD_OR_OCR_UNAVAILABLE'
+    return None
+
+
 def run():
     container, queue, table, vault = clients()
     config = {'enabled': False}
@@ -216,11 +225,8 @@ def run():
             except Exception as error:
                 print(json.dumps({'kind': 'ejari_job_attempt_failed', 'reason': type(error).__name__,
                                   'attempt': message.dequeue_count}), flush=True)
-                invalid_input = isinstance(error, ValueError) and str(error) in {
-                    'INVALID_PDF', 'PDF_PAGE_LIMIT', 'MALWARE_DETECTED', 'MALWARE_CHECK_FAILED'
-                }
-                if invalid_input or message.dequeue_count >= 3:
-                    reason = str(error) if invalid_input else 'DLD_OR_OCR_UNAVAILABLE'
+                reason = terminal_attempt_reason(error, message.dequeue_count)
+                if reason:
                     mark_failed(payload, container, table, reason)
                     queue.delete_message(message)
                 else:
