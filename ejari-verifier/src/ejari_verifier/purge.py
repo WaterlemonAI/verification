@@ -26,7 +26,10 @@ def purge(limit=5000):
     expiry = TableClient(table_url, 'EjariExpiry', credential=identity)
     jobs = TableClient(table_url, 'EjariJobs', credential=identity)
     container = BlobServiceClient(url, credential=identity).get_container_client('ejari-private')
-    now = datetime.now(timezone.utc)
+    return purge_records(expiry, jobs, container, datetime.now(timezone.utc), limit)
+
+
+def purge_records(expiry, jobs, container, now, limit=5000):
     cutoff = now.strftime('%Y%m%d%H%M%S%f')[:17] + '~'
     deleted = 0
     for month in months((2026, 10), (now.year, now.month)):

@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from ejari_verifier.azure_worker import process, result_from_lookup
 from ejari_verifier.crypto import decrypt, encrypt
 from ejari_verifier.lookup import EjariError, parse_dld_response
+from ejari_verifier.purge import purge_records
 
 
 class EjariWorkerTests(unittest.TestCase):
@@ -56,6 +57,34 @@ class EjariWorkerTests(unittest.TestCase):
         returned = subprocess.check_output(['node', '--input-type=module', '-e', node,
                                             base64.b64encode(encrypted).decode()], env=os.environ)
         self.assertEqual(decrypt(base64.b64decode(returned)), original)
+
+    def test_expiry_scan_deletes_blobs_and_metadata_then_index(self):
+        deleted = []
+        row = {'PartitionKey': '202610', 'RowKey': '20261030000000000_ejari_id',
+               'jobId': 'ejari_id', 'jobPartition': 'tenant-hash', 'idemKey': 'idem_hash',
+               'blobPrefix': 'tenant-hash/ejari_id'}
+        class Expiry:
+            def query_entities(self, query, parameters):
+                self.query = (query, parameters)
+                return [row]
+            def delete_entity(self, pk, rk):
+                deleted.append(('expiry', pk, rk))
+        class Jobs:
+            def delete_entity(self, pk, rk):
+                deleted.append(('job', pk, rk))
+        class Blob:
+            name = 'tenant-hash/ejari_id/result.bin'
+        class Container:
+            def list_blobs(self, name_starts_with):
+                self.prefix = name_starts_with
+                return [Blob()]
+            def delete_blob(self, name):
+                deleted.append(('blob', name))
+        expiry, container = Expiry(), Container()
+        count = purge_records(expiry, Jobs(), container, datetime(2026, 10, 31, tzinfo=timezone.utc), 1)
+        self.assertEqual(count, 1)
+        self.assertEqual(container.prefix, 'tenant-hash/ejari_id/')
+        self.assertEqual([item[0] for item in deleted], ['blob', 'job', 'job', 'expiry'])
 
 
 if __name__ == '__main__':
