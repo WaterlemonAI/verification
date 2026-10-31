@@ -63,7 +63,7 @@
     sidebar.id = 'portal-sidebar';
     sidebar.setAttribute('aria-label', 'Portal navigation');
     sidebar.innerHTML = `
-      <a class="portal-brand" href="/" aria-label="KYCProbe developer portal"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a>
+      <a class="portal-brand" href="/" aria-label="KYCProbe API Platform"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a>
       <div class="portal-nav-group">
         <p>VERIFICATION API</p>
         <a href="/" data-path="/"><span>01</span> UAE Trade Licence</a>
@@ -121,7 +121,7 @@
       header.prepend(menu);
       const context = document.createElement('div');
       context.className = 'portal-context';
-      const [section, page] = pageContext[normalizedPath] || ['Developer Portal', 'Workspace'];
+      const [section, page] = pageContext[normalizedPath] || ['API Platform', 'Workspace'];
       context.innerHTML = `<span>${section}</span><strong>${page}</strong>`;
       menu.after(context);
       menu.addEventListener('click', () => {
