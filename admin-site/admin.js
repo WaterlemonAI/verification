@@ -3,6 +3,38 @@ let pendingAdminLogin = null;
 let integrationCatalog = [];
 const byId = (id) => document.getElementById(id);
 
+function confirmExternalLink(event) {
+  const link = event.target.closest?.('a[href]');
+  if (!link || event.defaultPrevented) return;
+  const destination = new URL(link.href);
+  if (!['http:', 'https:'].includes(destination.protocol) || destination.origin === location.origin) return;
+  if (!window.confirm(`You will be redirected to ${destination.hostname} website. Continue?`)) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+}
+document.addEventListener('click', confirmExternalLink, true);
+document.addEventListener('auxclick', confirmExternalLink, true);
+
+for (const input of document.querySelectorAll('#login-view input[type="password"]')) {
+  const field = document.createElement('span');
+  field.className = 'password-field';
+  input.before(field);
+  field.append(input);
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'password-toggle';
+  toggle.textContent = 'Show';
+  toggle.setAttribute('aria-label', 'Show password');
+  toggle.addEventListener('click', () => {
+    const visible = input.type === 'password';
+    input.type = visible ? 'text' : 'password';
+    toggle.textContent = visible ? 'Hide' : 'Show';
+    toggle.setAttribute('aria-label', `${visible ? 'Hide' : 'Show'} password`);
+  });
+  field.append(toggle);
+}
+
 async function request(path, options = {}) {
   const response = await fetch(path, {
     ...options,
@@ -276,7 +308,7 @@ async function loadIntegrations() {
           : isAdverseMediaAi
             ? 'This write-only Google AI API key enables bounded AI classification for adverse-media results. The key is never returned or shown again.'
           : isDocumentOcrAi
-            ? 'Use the dedicated document OCR Gemini project key. It is applied only after malware scanning and Azure OCR complete, and is never shown again.'
+            ? 'Use the dedicated document OCR ai7edd model key. It is applied only after malware scanning and Azure OCR complete, and is never shown again.'
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });

@@ -618,7 +618,7 @@ test('deep research queues an optional signed HTTPS callback without exposing cr
       headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
         entity_type: 'business', name: 'Example LLC', languages: ['en', 'ar'], deep_research: true,
-        callback_url: 'https://example.com/ai7-webhook'
+        callback_url: 'https://example.com/ai7-webhook', callback_access_key: 'callback-token-123'
       })
     });
     const body = await response.json();
@@ -630,8 +630,25 @@ test('deep research queues an optional signed HTTPS callback without exposing cr
     assert.equal(jobs.length, 1);
     assert.equal(jobs[0].screening_id, body.screening_id);
     assert.equal(jobs[0].callback_secret, body.callback.signing_secret);
+    assert.equal(jobs[0].callback_access_key, 'callback-token-123');
     assert.equal(jobs[0].request.callback_url, '');
+    assert.equal(JSON.stringify(jobs[0].request).includes('callback-token-123'), false);
+    assert.equal(JSON.stringify(jobs[0].input_payload).includes('callback-token-123'), false);
+    assert.equal(JSON.stringify(body).includes('callback-token-123'), false);
     assert.equal(JSON.stringify(body).includes('private-search-key'), false);
+    for (const invalid of [
+      { callback_access_key: 'callback-token-123' },
+      { callback_url: 'https://example.com/ai7-webhook', callback_access_key: '' },
+      { callback_url: 'https://example.com/ai7-webhook', callback_access_key: null },
+      { callback_url: 'https://example.com/ai7-webhook', callback_access_key: 'bad\r\nheader' }
+    ]) {
+      const rejected = await fetch(`http://127.0.0.1:${queuedApp.address().port}/service/adverse_media`, {
+        method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ entity_type: 'business', name: 'Example LLC', deep_research: true, ...invalid })
+      });
+      assert.equal(rejected.status, 400);
+      assert.equal((await rejected.json()).reasonCode, 'INVALID_CALLBACK_ACCESS_KEY');
+    }
   } finally {
     await new Promise((resolve) => queuedApp.close(resolve));
   }

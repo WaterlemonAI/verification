@@ -136,7 +136,15 @@
     catch (error) { byId('account-message').textContent = error.message; }
     finally { button.disabled = false; }
   });
-  byId('copy-new-key').addEventListener('click', async () => { await navigator.clipboard.writeText(byId('new-key-value').textContent); byId('copy-new-key').textContent = 'Copied'; });
+  byId('copy-new-key').addEventListener('click', async () => {
+    const button = byId('copy-new-key');
+    await navigator.clipboard.writeText(byId('new-key-value').textContent);
+    const icon = button.innerHTML;
+    button.disabled = true;
+    button.textContent = '✓';
+    button.setAttribute('aria-label', 'Copied API key');
+    setTimeout(() => { button.innerHTML = icon; button.setAttribute('aria-label', 'Copy API key'); button.disabled = false; }, 1200);
+  });
   byId('refresh-health').addEventListener('click', loadHealth);
   byId('refresh-usage').addEventListener('click', loadUsage);
 

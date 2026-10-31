@@ -96,6 +96,13 @@
                     "maxLength": 2048,
                     "description": "Optional public HTTPS endpoint that receives the HMAC-SHA256 signed terminal result. The endpoint must not contain credentials or a fragment."
                   },
+                  "callback_access_key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512,
+                    "pattern": "^[A-Za-z0-9._~+/-]+=*$",
+                    "description": "Optional Bearer token sent only in the callback POST Authorization header. Requires callback_url and is not returned in responses."
+                  },
                   "get_pdf": {
                     "type": "boolean",
                     "default": false

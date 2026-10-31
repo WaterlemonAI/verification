@@ -9,9 +9,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/api.css?v=8" />
+    <link rel="stylesheet" href="/api.css?v=9" />
     <script src="/portal-auth.js?v=4" defer></script>
-    <script src="/forms.js?v=1" defer></script>
+    <script src="/forms.js?v=2" defer></script>
   </head>
   <body>
     <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
@@ -26,6 +26,14 @@
         <h1 id="form-title">One input.<br /><em>One verified result.</em></h1>
         <p id="form-description">Submit customer data once, run multiple AI7 verification APIs, receive one signed callback, and retain one consolidated audit PDF.</p>
         <div class="meta" id="endpoint-meta" hidden><span>POST</span><code id="endpoint"></code><button class="copy" id="copy-endpoint">Copy endpoint</button></div>
+        <figure class="hero-infographic" role="img" aria-label="Customer input to configured checks to signed result and audit PDF">
+          <figcaption>HOW THIS API HELPS</figcaption>
+          <div class="flow-steps">
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>INPUT</small><strong>Customer input</strong></div></div>
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><div><small>PROCESS</small><strong>Configured checks</strong></div></div>
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 12 5 5L20 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>OUTPUT</small><strong>Signed result and PDF</strong></div></div>
+          </div>
+        </figure>
       </section>
 
       <section class="forms-shell">
@@ -57,6 +65,7 @@
             <form id="submission-form" novalidate>
               <label>AI7 API key<input id="api-key" type="password" autocomplete="off" placeholder="Paste your API key" required /></label>
               <label>Public callback URL <code>callback_url</code><input id="callback-url" type="url" placeholder="https://your-system.example/webhooks/ai7" required /><small class="field-help">AI7 posts one signed JSON event here after all configured APIs and the PDF are complete.</small></label>
+              <label>Callback access key <code>callback_access_key</code><input id="callback-access-key" type="password" maxlength="512" autocomplete="off" placeholder="Bearer token required by your endpoint" /><small class="field-help">Optional. Sent only as Authorization: Bearer on callback delivery.</small></label>
               <label>Customer logo URL <code>customer_logo_url</code><input id="logo-url" type="url" placeholder="https://your-domain.example/logo.png" /><small class="field-help">Optional public HTTPS PNG or JPEG printed on the consolidated report.</small></label>
               <div class="input-grid" id="dynamic-fields"></div>
               <p class="form-error" id="form-error" role="alert"></p>
@@ -71,6 +80,6 @@
         </div>
       </section>
     </main>
-    <footer><div><strong>AI7 UAE Verification API</strong><span>AI7LAB Tech Innovation Limited · DIFC, Dubai, UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">Parent company</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
+    <footer><div><strong>AI7 UAE Verification API</strong><span>ai7lab IP solutions FZ LLC · Dubai, UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">AI7lab</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
   </body>
 </html>
