@@ -22,4 +22,7 @@ test('OpenAPI documents every OCR route and every structured output field', () =
   assert.ok(spec.paths['/service/{documentService}/jobs/{jobId}']?.get);
   assert.ok(spec.paths['/service/{documentService}/jobs/{jobId}/result']?.get);
   assert.ok(spec.paths['/service/emirates_id_ocr/jobs/{jobId}/artifacts/{artifactName}']?.get);
+  assert.equal(JSON.stringify(spec).toLowerCase().includes('gemini'), false);
+  assert.deepEqual(spec.components.schemas.DocumentOcrJob.properties.provider_calls.required,
+    ['azure', 'ai7edd_model']);
 });

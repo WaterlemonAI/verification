@@ -59,6 +59,23 @@ const mimeTypes = {
 
 const hopByHopHeaders = new Set(['authorization', 'connection', 'content-length', 'host', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']);
 
+function presentDocumentOcrResponse(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const presented = { ...value };
+  if (value.provider_calls && typeof value.provider_calls === 'object') {
+    const { gemini, ...otherCalls } = value.provider_calls;
+    if (gemini !== undefined) presented.provider_calls = { ...otherCalls, ai7edd_model: gemini };
+  }
+  if (value.processing && typeof value.processing === 'object') {
+    presented.processing = presentDocumentOcrResponse(value.processing);
+    if (typeof value.processing.ai_model === 'string' && /gemini/i.test(value.processing.ai_model)) {
+      presented.processing.ai_model = 'ai7edd model';
+    }
+  }
+  if (value.job && typeof value.job === 'object') presented.job = presentDocumentOcrResponse(value.job);
+  return presented;
+}
+
 function validateCallbackAccessKey(value, callbackUrl) {
   if (value === undefined) return '';
   if (typeof value !== 'string' || !callbackUrl || value.length < 1 || value.length > 512
@@ -1687,7 +1704,8 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
           'cache-control': 'private, no-store' });
         return res.end(bytes);
       }
-      return json(res, 200, body, { 'cache-control': 'private, no-store' });
+      return json(res, 200, record.service_id.endsWith('-ocr') || record.service_id === 'moa-analysis'
+        ? presentDocumentOcrResponse(body) : body, { 'cache-control': 'private, no-store' });
     }
     if (match[3] != null) {
       const item = record.payload?.artifact_refs?.[Number(match[3])];
@@ -1715,7 +1733,9 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
       return res.end(bytes);
     }
     const { payload, ...publicRecord } = record;
-    return json(res, 200, { case: publicRecord, response: payload?.final_response ?? null,
+    return json(res, 200, { case: publicRecord,
+      response: record.service_id.endsWith('-ocr') || record.service_id === 'moa-analysis'
+        ? presentDocumentOcrResponse(payload?.final_response ?? null) : payload?.final_response ?? null,
       artifacts: payload?.artifact_refs?.map((item, index) => ({ index, type: item.type,
         name: item.name || (item.report_id ? 'PDF report' : 'Artifact') })) || [] }, { 'cache-control': 'private, no-store' });
   }
@@ -2354,15 +2374,16 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
     }
     if (jobMatch[3] === 'result') {
       const record = await documentStore.getResult(workspaceId, jobMatch[2]);
-      if (!record.result) { json(res, record.job.status === 'failed' ? 422 : 202, { job: record.job }); return true; }
+      if (!record.result) { json(res, record.job.status === 'failed' ? 422 : 202,
+        { job: presentDocumentOcrResponse(record.job) }); return true; }
       const result = { ...record.result };
       if (Array.isArray(result.artifacts)) result.artifacts = result.artifacts.map((item) => ({
         ...item, download_url: documentOcrArtifactUrl(jobDefinition, workspaceId, jobMatch[2], item.name)
       }));
-      json(res, 200, result);
+      json(res, 200, presentDocumentOcrResponse(result));
       return true;
     }
-    json(res, 200, { job });
+    json(res, 200, { job: presentDocumentOcrResponse(job) });
     return true;
   }
   if (!req.ai7Client) { json(res, 401, { status: 'Error', error: 'An active customer API key is required.' }); return true; }
@@ -2407,7 +2428,8 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
       });
     }
     const path = `${definition.publicPath}/jobs/${created.job.id}`;
-    json(res, 202, { ...created.job, reused: created.reused, status_url: path, result_url: `${path}/result` });
+    json(res, 202, presentDocumentOcrResponse({ ...created.job, reused: created.reused,
+      status_url: path, result_url: `${path}/result` }));
     return true;
   } catch (error) {
     if (error.message === 'document_ocr_idempotency_conflict') json(res, 409, { status: 'Error', reasonCode: 'IDEMPOTENCY_CONFLICT' });

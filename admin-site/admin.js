@@ -276,7 +276,7 @@ async function loadIntegrations() {
           : isAdverseMediaAi
             ? 'This write-only Google AI API key enables bounded AI classification for adverse-media results. The key is never returned or shown again.'
           : isDocumentOcrAi
-            ? 'Use the dedicated document OCR Gemini project key. It is applied only after malware scanning and Azure OCR complete, and is never shown again.'
+            ? 'Use the dedicated document OCR ai7edd model key. It is applied only after malware scanning and Azure OCR complete, and is never shown again.'
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });
