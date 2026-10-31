@@ -1,4 +1,36 @@
 (() => {
+  function confirmExternalLink(event) {
+    const link = event.target.closest?.('a[href]');
+    if (!link || event.defaultPrevented) return;
+    const destination = new URL(link.href);
+    if (!['http:', 'https:'].includes(destination.protocol) || destination.origin === location.origin) return;
+    if (!window.confirm(`You will be redirected to ${destination.hostname} website. Continue?`)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }
+  document.addEventListener('click', confirmExternalLink, true);
+  document.addEventListener('auxclick', confirmExternalLink, true);
+
+  for (const input of document.querySelectorAll('.auth-form input[type="password"]')) {
+    const field = document.createElement('span');
+    field.className = 'password-field';
+    input.before(field);
+    field.append(input);
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'password-toggle';
+    toggle.textContent = 'Show';
+    toggle.setAttribute('aria-label', 'Show password');
+    toggle.addEventListener('click', () => {
+      const visible = input.type === 'password';
+      input.type = visible ? 'text' : 'password';
+      toggle.textContent = visible ? 'Hide' : 'Show';
+      toggle.setAttribute('aria-label', `${visible ? 'Hide' : 'Show'} password`);
+    });
+    field.append(toggle);
+  }
+
   const loginForm = document.getElementById('login-form');
   const codeForm = document.getElementById('code-form');
   let pendingLogin = null;

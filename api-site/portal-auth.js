@@ -1,4 +1,17 @@
 (() => {
+  function confirmExternalLink(event) {
+    const link = event.target.closest?.('a[href]');
+    if (!link || event.defaultPrevented) return;
+    const destination = new URL(link.href);
+    if (!['http:', 'https:'].includes(destination.protocol) || destination.origin === location.origin) return;
+    if (!window.confirm(`You will be redirected to ${destination.hostname} website. Continue?`)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }
+  document.addEventListener('click', confirmExternalLink, true);
+  document.addEventListener('auxclick', confirmExternalLink, true);
+
   const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account', '/cases']);
   const normalizedPath = location.pathname.length > 1 ? location.pathname.replace(/\/$/, '') : '/';
   const documentApis = [

@@ -183,6 +183,10 @@ body.portal-ready { padding-left: 276px; }
 .account-create-form input { width: 100%; padding: .9rem; border: 1px solid #cbd6df; background: white; }
 .account-key-reveal { padding: 1.2rem; margin-bottom: 1.2rem; background: #e3f7ef; border: 1px solid #8acdb4; }
 .account-key-reveal code { display: block; overflow-wrap: anywhere; padding: .8rem 0; }
+.account-key-value { display:flex; align-items:center; gap:.65rem; }
+.account-key-value code { flex:1; min-width:0; }
+.account-key-reveal .copy-key-icon { display:grid; place-items:center; width:2.5rem; height:2.5rem; padding:.4rem; border-radius:4px; }
+.copy-key-icon svg { width:1.15rem; height:1.15rem; fill:none; stroke:currentColor; stroke-width:1.8; }
 .account-key-reveal p { margin-bottom: 0; color: #315c4d; font-size: .78rem; }
 .account-key-list, .account-health-list { display: grid; gap: .6rem; }
 .account-key-row, .account-health-row { display: flex; align-items: center; gap: .7rem; padding: 1rem 1.2rem; background: white; border: 1px solid #dae3ea; }
@@ -221,6 +225,9 @@ body.portal-ready { padding-left: 276px; }
 .auth-form label { display:grid; gap:.45rem; font-size:.73rem; font-weight:700; }
 .auth-form input { width:100%; border:1px solid #cbd6df; padding:.85rem .95rem; outline:none; background:#fbfcfd; }
 .auth-form input:focus { border-color:var(--green); box-shadow:0 0 0 3px #0062ad12; }
+.password-field { position:relative; display:block; }
+.password-field input { padding-right:4.2rem; }
+.password-toggle { position:absolute; right:.55rem; top:50%; transform:translateY(-50%); border:0; padding:.35rem; color:var(--green); background:transparent; font-size:.7rem; font-weight:800; cursor:pointer; }
 .auth-form small { color:var(--muted); font-size:.67rem; line-height:1.5; font-weight:400; }
 .auth-form button[type="submit"] { min-height:47px; border:0; margin-top:.25rem; color:var(--dark); background:var(--mint); cursor:pointer; font-weight:800; }
 .auth-form button[type="submit"]:disabled { opacity:.55; cursor:wait; }
