@@ -22,13 +22,15 @@ let url;
 let pdf;
 let adminCookie;
 let adminCsrf;
+const codes = [];
 
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'ai7-bsa-'));
   process.env.BSA_DATA_DIR = directory;
   pdf = await readFile(new URL('./fixtures/bsa-synthetic-combined.pdf', import.meta.url));
   await writeFile(join(directory, 'worker-capabilities.json'), JSON.stringify({ native: 'ready', rapidocr: 'ready', paddleocr: 'ready', azureLayout: 'configured' }));
-  server = createAppServer({ startWorker: false });
+  server = createAppServer({ startWorker: false, mailer: { configured: true,
+    sendLoginCode: async (value) => { codes.push(value); } } });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   url = `http://127.0.0.1:${server.address().port}`;
   const setup = await fetch(`${url}/admin/api/auth/setup`, {
@@ -37,8 +39,16 @@ before(async () => {
     body: JSON.stringify({ email: 'analysis-admin@example.com', password: 'StrongAnalysis!123' })
   });
   assert.equal(setup.status, 201);
-  adminCookie = setup.headers.get('set-cookie').split(';')[0];
-  adminCsrf = (await setup.json()).csrf_token;
+  const login = await fetch(`${url}/admin/api/auth/login`, { method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'analysis-admin@example.com', password: 'StrongAnalysis!123' }) });
+  assert.equal(login.status, 202);
+  const verify = await fetch(`${url}/admin/api/auth/verify-code`, { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'analysis-admin@example.com',
+      challenge_id: (await login.json()).challenge_id, code: codes.at(-1).code }) });
+  assert.equal(verify.status, 200);
+  adminCookie = verify.headers.get('set-cookie').split(';')[0];
+  adminCsrf = (await verify.json()).csrf_token;
 });
 
 after(async () => {

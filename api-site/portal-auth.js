@@ -1,5 +1,5 @@
 (() => {
-  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account']);
+  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account', '/cases']);
   const normalizedPath = location.pathname.length > 1 ? location.pathname.replace(/\/$/, '') : '/';
   const documentApis = [
     ['uae-trade-license-ocr', 'UAE Trade License OCR'],
@@ -20,6 +20,7 @@
     '/bank-statement-analysis': ['Verification API', 'Bank Statement Analysis'],
     '/forms': ['Forms', 'Forms Module'],
     '/account': ['Workspace', 'Account settings'],
+    '/cases': ['Workspace', 'Case Manager'],
     ...Object.fromEntries(documentApis.map(([id, name]) => [`/document-extraction/${id}`, ['Document Extraction', name]]))
   };
 
@@ -69,6 +70,7 @@
       <div class="portal-nav-group">
         <p>WORKSPACE</p>
         <a href="/account" data-path="/account"><span>08</span> Account settings</a>
+        <a href="/cases" data-path="/cases" id="portal-case-link" hidden><span>09</span> Case Manager</a>
       </div>
       <div class="portal-account">
         <span>WORKSPACE</span>
@@ -85,6 +87,8 @@
         || (Array.isArray(entitlements.available_modules) && !entitlements.available_modules.includes(module)))) link.remove();
     });
     document.body.prepend(sidebar);
+    fetch('/portal/api/case-manager/settings', { credentials: 'same-origin' }).then((response) => response.ok ? response.json() : null)
+      .then((settings) => { if (settings?.available) sidebar.querySelector('#portal-case-link').hidden = false; }).catch(() => {});
 
     const header = document.querySelector('header');
     if (header) {

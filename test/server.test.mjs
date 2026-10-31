@@ -113,6 +113,13 @@ test('relays a successful response without changing its shape', async () => {
   });
 });
 
+test('serves the Case Manager display module with a JavaScript MIME type', async () => {
+  const response = await fetch(`${appUrl}/case-result-model.mjs`, { headers: { host: 'api.ai7uae.com' } });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /^text\/javascript/);
+  assert.match(await response.text(), /buildCasePresentation/);
+});
+
 test('relays every documented JSON input and complete output without changing names or values', async () => {
   const response = await fetch(`${appUrl}/service/uae_tlv`, {
     method: 'POST',

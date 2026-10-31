@@ -1,4 +1,5 @@
 let csrfToken = '';
+let pendingAdminLogin = null;
 let integrationCatalog = [];
 const byId = (id) => document.getElementById(id);
 
@@ -23,6 +24,7 @@ function showSignedOut() {
   byId('app-view').hidden = true;
   byId('login-view').hidden = false;
   byId('signin-card').hidden = false;
+  byId('code-card').hidden = true;
   byId('setup-card').hidden = true;
   byId('forgot-card').hidden = true;
   byId('reset-card').hidden = true;
@@ -512,10 +514,33 @@ byId('login-form').addEventListener('submit', async (event) => {
       body: JSON.stringify({ email: byId('admin-email').value, password: byId('admin-password').value })
     });
     byId('admin-password').value = '';
-    await showApp(auth);
+    pendingAdminLogin = { email: byId('admin-email').value.trim(), challengeId: auth.challenge_id };
+    byId('admin-code-intro').textContent = `Enter the eight digit code sent to ${pendingAdminLogin.email}.`;
+    byId('signin-card').hidden = true;
+    byId('code-card').hidden = false;
+    byId('admin-code').focus();
   } catch (error) {
     byId('login-error').textContent = error.message;
   }
+});
+byId('code-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  byId('admin-code-error').textContent = '';
+  const code = byId('admin-code').value.trim();
+  if (!pendingAdminLogin || !/^\d{8}$/.test(code)) {
+    byId('admin-code-error').textContent = 'Enter the eight digit code from your email.'; return;
+  }
+  const button = event.currentTarget.querySelector('button[type=submit]'); button.disabled = true;
+  try {
+    const auth = await request('/admin/api/auth/verify-code', { method: 'POST',
+      body: JSON.stringify({ email: pendingAdminLogin.email, challenge_id: pendingAdminLogin.challengeId, code }) });
+    pendingAdminLogin = null; byId('code-form').reset(); await showApp(auth);
+  } catch (error) { byId('admin-code-error').textContent = error.message; }
+  finally { button.disabled = false; }
+});
+byId('back-from-code').addEventListener('click', () => {
+  pendingAdminLogin = null; byId('code-form').reset();
+  byId('code-card').hidden = true; byId('signin-card').hidden = false;
 });
 
 byId('show-admin-forgot').addEventListener('click', () => {
@@ -567,13 +592,16 @@ byId('setup-form').addEventListener('submit', async (event) => {
     return;
   }
   try {
-    const auth = await request('/admin/api/auth/setup', {
+    const created = await request('/admin/api/auth/setup', {
       method: 'POST',
       headers: { Authorization: `Bearer ${byId('setup-key').value.trim()}` },
       body: JSON.stringify({ email: byId('setup-email').value, password })
     });
     form.reset();
-    await showApp(auth);
+    byId('setup-card').hidden = true;
+    byId('signin-card').hidden = false;
+    byId('admin-email').value = created.account.email;
+    byId('login-error').textContent = created.message;
   } catch (error) {
     byId('setup-error').textContent = error.message;
 

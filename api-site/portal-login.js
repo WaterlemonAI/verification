@@ -1,11 +1,13 @@
 (() => {
   const loginForm = document.getElementById('login-form');
+  const codeForm = document.getElementById('code-form');
+  let pendingLogin = null;
   const inviteForm = document.getElementById('invite-form');
   const forgotForm = document.getElementById('forgot-form');
   const resetForm = document.getElementById('reset-form');
   const title = document.getElementById('auth-title');
   const intro = document.getElementById('auth-intro');
-  const allowedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account']);
+  const allowedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account', '/cases']);
 
   function destination() {
     const value = new URLSearchParams(location.search).get('next') || '/';
@@ -18,36 +20,20 @@
 
   function setMode(mode) {
     loginForm.hidden = mode !== 'login';
+    codeForm.hidden = mode !== 'code';
     inviteForm.hidden = mode !== 'invite';
     forgotForm.hidden = mode !== 'forgot';
     resetForm.hidden = mode !== 'reset';
     document.getElementById('show-forgot').hidden = mode !== 'login';
     document.getElementById('back-to-login').hidden = mode === 'login';
-    title.textContent = mode === 'reset' ? 'Set a new password' : mode === 'forgot' ? 'Recover your account' : mode === 'invite' ? 'Set up your workspace' : 'Welcome back';
-    intro.textContent = mode === 'reset' ? 'Choose a new password for your workspace.' : mode === 'forgot' ? 'We will email a reset link if this account exists.' : mode === 'invite' ? 'Your invitation links this account to the correct customer workspace.' : 'Sign in with your workspace email and password.';
-  }
-
-  async function submit(form, endpoint, body, errorElement) {
-    const button = form.querySelector('button[type="submit"]');
-    errorElement.textContent = '';
-    button.disabled = true;
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify(body)
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || 'The request could not be completed.');
-      location.replace(destination());
-    } catch (error) {
-      errorElement.textContent = error.message;
-      button.disabled = false;
-    }
+    title.textContent = mode === 'code' ? 'Check your email' : mode === 'reset' ? 'Set a new password' : mode === 'forgot' ? 'Recover your account' : mode === 'invite' ? 'Set up your workspace' : 'Welcome back';
+    intro.textContent = mode === 'code' ? `Enter the eight digit code sent to ${pendingLogin?.email || 'your email'}.` : mode === 'reset' ? 'Choose a new password for your workspace.' : mode === 'forgot' ? 'We will email a reset link if this account exists.' : mode === 'invite' ? 'Your invitation links this account to the correct customer workspace.' : 'Sign in with your workspace email and password.';
   }
 
   document.getElementById('show-forgot').addEventListener('click', () => setMode('forgot'));
-  document.getElementById('back-to-login').addEventListener('click', () => { history.replaceState(null, '', '/login'); setMode('login'); });
+  document.getElementById('back-to-login').addEventListener('click', () => {
+    history.replaceState(null, '', '/login'); pendingLogin = null; codeForm.reset(); setMode('login');
+  });
   forgotForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const button = forgotForm.querySelector('button[type="submit"]');
@@ -79,7 +65,7 @@
     } catch (error) { message.textContent = error.message; }
     finally { button.disabled = false; }
   });
-  loginForm.addEventListener('submit', (event) => {
+  loginForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const email = document.getElementById('login-email');
     const password = document.getElementById('login-password');
@@ -87,10 +73,32 @@
     if (!email.value.trim()) { error.textContent = 'Enter your email address.'; email.focus(); return; }
     if (!email.validity.valid) { error.textContent = 'Enter a valid email address.'; email.focus(); return; }
     if (!password.value) { error.textContent = 'Enter your password.'; password.focus(); return; }
-    submit(loginForm, '/portal/api/auth/login', {
-      email: email.value.trim(),
-      password: password.value
-    }, error);
+    const button = loginForm.querySelector('button[type="submit"]'); button.disabled = true;
+    try {
+      const response = await fetch('/portal/api/auth/login', { method: 'POST', credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email.value.trim(), password: password.value }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Sign-in could not be completed.');
+      pendingLogin = { email: email.value.trim(), challengeId: result.challenge_id };
+      password.value = ''; setMode('code'); document.getElementById('login-code').focus();
+    } catch (failure) { error.textContent = failure.message; }
+    finally { button.disabled = false; }
+  });
+  codeForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const code = document.getElementById('login-code').value.trim();
+    const error = document.getElementById('code-error'); error.textContent = '';
+    if (!/^\d{8}$/.test(code) || !pendingLogin) { error.textContent = 'Enter the eight digit code from your email.'; return; }
+    const button = codeForm.querySelector('button[type="submit"]'); button.disabled = true;
+    try {
+      const response = await fetch('/portal/api/auth/verify-code', { method: 'POST', credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: pendingLogin.email,
+          challenge_id: pendingLogin.challengeId, code }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'The code could not be verified.');
+      if (result.api_key) sessionStorage.setItem('ai7_new_api_key', result.api_key);
+      location.replace(result.api_key ? '/account' : destination());
+    } catch (failure) { error.textContent = failure.message; button.disabled = false; }
   });
   inviteForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -107,9 +115,10 @@
       const response = await fetch('/portal/api/invitations/accept', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, password }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'The invitation could not be accepted.');
-      sessionStorage.setItem('ai7_new_api_key', result.api_key);
       history.replaceState(null, '', '/login');
-      location.replace('/account');
+      document.getElementById('login-email').value = result.account.email;
+      setMode('login');
+      document.getElementById('login-error').textContent = result.message;
     } catch (error) { errorElement.textContent = error.message; button.disabled = false; }
   });
 

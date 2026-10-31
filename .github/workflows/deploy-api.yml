@@ -33,6 +33,10 @@ on:
         description: Provision only the isolated document OCR Azure platform; customer OCR routes remain disabled until DOCUMENT_OCR_ENABLED is true
         type: boolean
         default: false
+      provisionCaseManagerPlatform:
+        description: BLOCKED pending reviewed private-network path; selecting this fails closed
+        type: boolean
+        default: false
 
 # DOCUMENT_OCR_ENABLED is an environment variable set only after all eight
 # sample-based accuracy gates and the dedicated Gemini credential are ready.
@@ -47,6 +51,9 @@ concurrency:
 
 jobs:
   test-build-deploy:
+    # Hold the merge-triggered run while the VNet cutover variables and certificates
+    # are staged. Clear the environment variable before the reviewed promotion run.
+    if: vars.CASE_MANAGER_RELEASE_HOLD != 'true'
     runs-on: ubuntu-latest
     environment: ai7uae-api
     steps:
@@ -66,6 +73,69 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Verify Case Manager private data-plane proof before capture
+        id: case_manager_private_path
+        if: vars.CASE_MANAGER_MAINTENANCE_ENABLED == 'true' || (vars.CASE_MANAGER_DESIRED_ENABLED == 'true' && vars.CASE_MANAGER_EMERGENCY_OFF != 'true')
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          CONTAINERAPPS_ENVIRONMENT_ID: ${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}
+          CASE_MANAGER_PRIVATE_ENVIRONMENT_ID: ${{ vars.CASE_MANAGER_PRIVATE_ENVIRONMENT_ID }}
+          CASE_MANAGER_PRIVATE_ENDPOINT_SUBNET_ID: ${{ vars.CASE_MANAGER_PRIVATE_ENDPOINT_SUBNET_ID }}
+          RUNTIME_IDENTITY_RESOURCE_ID: ${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${CASE_MANAGER_PRIVATE_ENVIRONMENT_ID}"
+          test "${CONTAINERAPPS_ENVIRONMENT_ID}" = "${CASE_MANAGER_PRIVATE_ENVIRONMENT_ID}"
+          node scripts/verify-case-manager-private-release.mjs >> "$GITHUB_OUTPUT"
+
+      - name: Resolve persistent Case Manager deployment state
+        id: case_manager_state
+        env:
+          CASE_MANAGER_DESIRED_ENABLED: ${{ vars.CASE_MANAGER_DESIRED_ENABLED }}
+          CASE_MANAGER_EMERGENCY_OFF: ${{ vars.CASE_MANAGER_EMERGENCY_OFF }}
+          CASE_MANAGER_MAINTENANCE_ENABLED: ${{ vars.CASE_MANAGER_MAINTENANCE_ENABLED }}
+          CASE_MANAGER_PRIVATE_PATH_VERIFIED: ${{ steps.case_manager_private_path.outputs.verified }}
+        run: node scripts/resolve-case-manager-deployment.mjs >> "$GITHUB_OUTPUT"
+
+      - name: Enforce distinct VNet cutover resources and certificates
+        if: vars.CASE_MANAGER_PRIVATE_ENVIRONMENT_ID != '' && vars.CONTAINERAPPS_ENVIRONMENT_ID == vars.CASE_MANAGER_PRIVATE_ENVIRONMENT_ID
+        env:
+          PRIVATE_ENVIRONMENT_ID: ${{ vars.CASE_MANAGER_PRIVATE_ENVIRONMENT_ID }}
+          API_CONTAINER_APP_NAME: ${{ vars.API_CONTAINER_APP_NAME }}
+          MERCHANT_SCREENSHOT_WORKER_NAME: ${{ vars.MERCHANT_SCREENSHOT_WORKER_NAME }}
+          BSA_WORKER_NAME: ${{ vars.BSA_WORKER_NAME }}
+          DOCUMENT_OCR_WORKER_NAME: ${{ vars.DOCUMENT_OCR_WORKER_NAME }}
+          DOCUMENT_OCR_PURGE_JOB_NAME: ${{ vars.DOCUMENT_OCR_PURGE_JOB_NAME }}
+          CASE_MANAGER_PURGE_JOB_NAME: ${{ vars.CASE_MANAGER_PURGE_JOB_NAME }}
+          CASE_MANAGER_RECONCILE_JOB_NAME: ${{ vars.CASE_MANAGER_RECONCILE_JOB_NAME }}
+          PARALLEL_DEPLOYMENT: ${{ vars.CASE_MANAGER_PARALLEL_QA }}
+          CASE_MANAGER_DESIRED_ENABLED: ${{ vars.CASE_MANAGER_DESIRED_ENABLED }}
+          CASE_MANAGER_MAINTENANCE_ENABLED: ${{ vars.CASE_MANAGER_MAINTENANCE_ENABLED }}
+          API_CERTIFICATE_RESOURCE_ID: ${{ vars.API_CERTIFICATE_RESOURCE_ID }}
+          APP_CERTIFICATE_RESOURCE_ID: ${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}
+        run: |
+          set -euo pipefail
+          test -n "${API_CONTAINER_APP_NAME}" && test "${API_CONTAINER_APP_NAME}" != 'ca-ai7uae-api'
+          test -n "${MERCHANT_SCREENSHOT_WORKER_NAME}" && test "${MERCHANT_SCREENSHOT_WORKER_NAME}" != 'ca-ai7uae-merchant-screenshot'
+          test -n "${BSA_WORKER_NAME}" && test "${BSA_WORKER_NAME}" != 'ca-ai7uae-bsa-worker'
+          test -n "${DOCUMENT_OCR_WORKER_NAME}" && test "${DOCUMENT_OCR_WORKER_NAME}" != 'ca-ai7uae-document-ocr-worker'
+          test -n "${DOCUMENT_OCR_PURGE_JOB_NAME}" && test "${DOCUMENT_OCR_PURGE_JOB_NAME}" != 'caj-ai7uae-document-ocr-purge'
+          test -n "${CASE_MANAGER_PURGE_JOB_NAME}" && test "${CASE_MANAGER_PURGE_JOB_NAME}" != 'caj-ai7uae-case-manager-purge'
+          test -n "${CASE_MANAGER_RECONCILE_JOB_NAME}" && test "${CASE_MANAGER_RECONCILE_JOB_NAME}" != 'caj-ai7uae-case-manager-reconcile'
+          if [[ "${PARALLEL_DEPLOYMENT}" == 'true' ]]; then
+            test "${CASE_MANAGER_DESIRED_ENABLED}" != 'true'
+            test "${CASE_MANAGER_MAINTENANCE_ENABLED}" != 'true'
+            test -z "${API_CERTIFICATE_RESOURCE_ID}"
+            test -z "${APP_CERTIFICATE_RESOURCE_ID}"
+          else
+            [[ "${API_CERTIFICATE_RESOURCE_ID}" == "${PRIVATE_ENVIRONMENT_ID}/managedCertificates/"* ]]
+            [[ "${APP_CERTIFICATE_RESOURCE_ID}" == "${PRIVATE_ENVIRONMENT_ID}/managedCertificates/"* ]]
+          fi
+
+      - name: Block parallel mode on the existing live environment
+        if: vars.CASE_MANAGER_PARALLEL_QA == 'true' && vars.CONTAINERAPPS_ENVIRONMENT_ID != vars.CASE_MANAGER_PRIVATE_ENVIRONMENT_ID
+        run: exit 1
+
       - name: Build and publish immutable API image
         id: image
         shell: bash
@@ -81,8 +151,9 @@ jobs:
           test -n "${digest}"
           image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
           echo "image=${image}" >> "${GITHUB_OUTPUT}"
-          printf '{"repository":"%s","source_sha":"%s","run_id":"%s","run_attempt":"%s","digest":"%s","image":"%s"}\n' \
+          printf '{"repository":"%s","source_sha":"%s","run_id":"%s","run_attempt":"%s","digest":"%s","image":"%s","case_manager_enabled":%s,"case_manager_maintenance":%s}\n' \
             "${repository}" "${GITHUB_SHA}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" "${digest}" "${image}" \
+            "${{ steps.case_manager_state.outputs.enabled }}" "${{ steps.case_manager_state.outputs.maintenance }}" \
             > api-deployment-evidence.json
 
       - name: Build and publish immutable merchant screenshot worker image
@@ -146,6 +217,17 @@ jobs:
         run: |
           az bicep build --file infrastructure/api.bicep
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
+          az bicep build --file infrastructure/api-case-manager-platform.bicep
+          az bicep build --file infrastructure/api-case-manager-network.bicep
+          az bicep build --file infrastructure/api-case-manager-private-probe.bicep
+          az bicep build --file infrastructure/api-case-manager-cutover-certificates.bicep
+          az bicep build --file infrastructure/api-case-manager-release-reader.bicep
+
+      - name: Block Case Manager provisioning until private connectivity is reviewed
+        if: github.event_name == 'workflow_dispatch' && inputs.provisionCaseManagerPlatform
+        run: |
+          echo 'Case Manager provisioning is blocked until the API runtime has a reviewed VNet and private Blob, Table and Queue endpoints.' >&2
+          exit 1
 
       - name: Deploy isolated document OCR resources
         if: github.event_name == 'workflow_dispatch' && inputs.provisionDocumentOcrPlatform
@@ -194,7 +276,18 @@ jobs:
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
+              maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
+              parallelDeployment="${{ vars.CASE_MANAGER_PARALLEL_QA == 'true' && 'true' || 'false' }}" \
+              apiTrafficCutover="${{ vars.CASE_MANAGER_TRAFFIC_CUTOVER == 'true' && 'true' || 'false' }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
+              containerAppName="${{ vars.API_CONTAINER_APP_NAME || 'ca-ai7uae-api' }}" \
+              merchantScreenshotWorkerName="${{ vars.MERCHANT_SCREENSHOT_WORKER_NAME || 'ca-ai7uae-merchant-screenshot' }}" \
+              bankStatementWorkerName="${{ vars.BSA_WORKER_NAME || 'ca-ai7uae-bsa-worker' }}" \
+              documentOcrWorkerName="${{ vars.DOCUMENT_OCR_WORKER_NAME || 'ca-ai7uae-document-ocr-worker' }}" \
+              documentOcrPurgeJobName="${{ vars.DOCUMENT_OCR_PURGE_JOB_NAME || 'caj-ai7uae-document-ocr-purge' }}" \
+              caseManagerPurgeJobName="${{ vars.CASE_MANAGER_PURGE_JOB_NAME || 'caj-ai7uae-case-manager-purge' }}" \
+              caseManagerReconcileJobName="${{ vars.CASE_MANAGER_RECONCILE_JOB_NAME || 'caj-ai7uae-case-manager-reconcile' }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
@@ -216,7 +309,18 @@ jobs:
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
+              maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
+              parallelDeployment="${{ vars.CASE_MANAGER_PARALLEL_QA == 'true' && 'true' || 'false' }}" \
+              apiTrafficCutover="${{ vars.CASE_MANAGER_TRAFFIC_CUTOVER == 'true' && 'true' || 'false' }}" \
               environmentId="${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}" \
+              containerAppName="${{ vars.API_CONTAINER_APP_NAME || 'ca-ai7uae-api' }}" \
+              merchantScreenshotWorkerName="${{ vars.MERCHANT_SCREENSHOT_WORKER_NAME || 'ca-ai7uae-merchant-screenshot' }}" \
+              bankStatementWorkerName="${{ vars.BSA_WORKER_NAME || 'ca-ai7uae-bsa-worker' }}" \
+              documentOcrWorkerName="${{ vars.DOCUMENT_OCR_WORKER_NAME || 'ca-ai7uae-document-ocr-worker' }}" \
+              documentOcrPurgeJobName="${{ vars.DOCUMENT_OCR_PURGE_JOB_NAME || 'caj-ai7uae-document-ocr-purge' }}" \
+              caseManagerPurgeJobName="${{ vars.CASE_MANAGER_PURGE_JOB_NAME || 'caj-ai7uae-case-manager-purge' }}" \
+              caseManagerReconcileJobName="${{ vars.CASE_MANAGER_RECONCILE_JOB_NAME || 'caj-ai7uae-case-manager-reconcile' }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
