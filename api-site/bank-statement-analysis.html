@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=7" />
     <script src="/portal-auth.js?v=4" defer></script>
-    <script src="/bank-statement-analysis.js?v=2" defer></script>
+    <script src="/bank-statement-analysis.js?v=3" defer></script>
   </head>
   <body>
     <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
@@ -61,6 +61,7 @@
               <div><strong>credit_models</strong><span>JSON array · optional</span><p>Selected transparent review models; no automatic credit decision is returned.</p></div>
               <div><strong>get_pdf / get_xlsx</strong><span>boolean · optional</span><p>Create authenticated audit-report and workbook artifacts.</p></div>
               <div><strong>callback_url</strong><span>HTTPS URI · optional</span><p>Receive the terminal completed, partial, or failed result as a signed JSON callback.</p></div>
+              <div><strong>callback_access_key</strong><span>Bearer token · optional</span><p>When set, the callback POST includes Authorization: Bearer with this key.</p></div>
             </div>
             <div class="tabs" role="tablist"><button class="active" data-sample="curl">cURL</button><button data-sample="javascript">JavaScript</button><button data-sample="python">Python</button></div>
             <div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div>
@@ -119,6 +120,7 @@
                 <label>Income currency <code>declared_income_currency</code><input id="income-currency" value="AED" maxlength="3" /></label>
                 <label>Customer reference <code>customer_reference</code><input id="customer-reference" maxlength="128" /></label>
                 <label>Callback URL <code>callback_url</code><input id="callback-url" type="url" maxlength="2048" placeholder="https://your-system.example/webhooks/ai7" /><small class="field-help">Optional public HTTPS endpoint. The terminal JSON result is signed and retried.</small></label>
+                <label>Callback access key <code>callback_access_key</code><input id="callback-access-key" type="password" maxlength="512" autocomplete="off" placeholder="Bearer token required by your endpoint" /><small class="field-help">Optional. Sent only as Authorization: Bearer on callback delivery.</small></label>
                 <label class="inline-toggle"><span>Audit PDF <code>get_pdf</code></span><span><input id="get-pdf" type="checkbox" checked /> Generate PDF</span></label>
                 <label class="inline-toggle"><span>Review workbook <code>get_xlsx</code></span><span><input id="get-xlsx" type="checkbox" /> Generate XLSX</span></label>
               </div>

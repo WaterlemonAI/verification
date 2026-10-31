@@ -536,6 +536,7 @@
         "properties": {
           "data": { "type": "object", "description": "Values defined by GET /forms/{formId}/schema. Unknown fields are rejected.", "additionalProperties": true },
           "callback_url": { "type": "string", "format": "uri", "pattern": "^https://", "description": "Public HTTPS endpoint that will receive the signed consolidated result." },
+          "callback_access_key": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z0-9._~+/-]+=*$", "description": "Optional Bearer token sent only in the callback POST Authorization header. Requires callback_url; it is not returned in responses or reports." },
           "customer_logo_url": { "type": "string", "format": "uri", "pattern": "^https://", "description": "Optional public PNG or JPEG printed on the consolidated PDF." }
         },
         "additionalProperties": false
@@ -2945,6 +2946,7 @@
           "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 },
           "deep_research": { "type": "boolean", "default": false, "description": "Enables asynchronous screening and optional signed callback delivery." },
           "callback_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS callback URL. Accepted only when deep_research is true. Receives the final completed or explicitly partial result." },
+          "callback_access_key": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z0-9._~+/-]+=*$", "description": "Optional Bearer token sent only in the callback POST Authorization header. Requires callback_url and deep_research=true; it is not returned in responses or reports." },
           "customer_logo_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS PNG or JPEG used on the automatically generated PDF report." }
         },
         "additionalProperties": false

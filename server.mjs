@@ -59,6 +59,13 @@ const mimeTypes = {
 
 const hopByHopHeaders = new Set(['authorization', 'connection', 'content-length', 'host', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade']);
 
+function validateCallbackAccessKey(value, callbackUrl) {
+  if (value === undefined) return '';
+  if (typeof value !== 'string' || !callbackUrl || value.length < 1 || value.length > 512
+    || !/^[A-Za-z0-9._~+/-]+=*$/.test(value)) throw new Error('invalid_callback_access_key');
+  return value;
+}
+
 function json(res, status, body, extraHeaders = {}) {
   const payload = Buffer.from(JSON.stringify(body));
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': payload.length, 'cache-control': 'no-store', ...extraHeaders });
@@ -585,11 +592,14 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       return json(res, 413, { status: 'Error', error: 'Adverse-media input must be 32 KiB or smaller.' });
     }
     const request = validateAdverseMediaRequest(input);
+    const callbackAccessKey = validateCallbackAccessKey(input.callback_access_key, request.callback_url);
     if (request.deep_research && request.callback_url) {
       if (!deepResearchQueue) return json(res, 503, { status: 'Error', error: 'Deep research callback processing is temporarily unavailable.' });
       await validatePublicCallbackUrl(request.callback_url);
+      const { callback_access_key: _callbackAccessKey, ...safeInput } = input;
       const job = makeDeepResearchJob(request, { owner_id: reportOwnerId(token), request_origin: requestOrigin(req),
-        input_payload: input, transaction_id: res.getHeader('x-ai7-transaction-id') });
+        callback_access_key: callbackAccessKey, input_payload: safeInput,
+        transaction_id: res.getHeader('x-ai7-transaction-id') });
       if (req.ai7Case) {
         job.case_id = req.ai7Case.id;
         job.case_workspace_id = req.ai7Client.id;
@@ -646,6 +656,9 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
         source_failures: error.sourceFailures || {}
       }));
     }
+    if (error.message === 'invalid_callback_access_key') return json(res, 400, { status: 'Error',
+      reasonCode: 'INVALID_CALLBACK_ACCESS_KEY',
+      error: 'callback_access_key requires callback_url and must be a 1–512 character Bearer token without whitespace.' });
     if (error.statusCode === 400 || (!error.statusCode && error.message !== 'search_provider_unavailable')) {
       return json(res, 400, { status: 'Error', error: error.message || 'The request is invalid.' });
     }
@@ -1292,7 +1305,9 @@ async function prepareFormSubmission(req, formId, store, formsQueue, transaction
   const form = await store.getForm(formId);
   if (!form || !form.enabled) return { status: 404, error: 'Form was not found.' };
   try {
-    const submission = validateFormSubmission(form, await readJson(req, 64 * 1024));
+    const input = await readJson(req, 64 * 1024);
+    const submission = validateFormSubmission(form, input);
+    submission.callback_access_key = validateCallbackAccessKey(input.callback_access_key, submission.callback_url);
     await validateFormsCallbackUrl(submission.callback_url);
     if (submission.customer_logo_url) await validateFormsCallbackUrl(submission.customer_logo_url);
     const job = makeFormsJob({ form, submission, ownerId: reportOwnerId(bearerToken(req)), origin: requestOrigin(req),
@@ -1302,6 +1317,7 @@ async function prepareFormSubmission(req, formId, store, formsQueue, transaction
   } catch (error) {
     const reason = String(error.message || '');
     if (reason === 'callback_url_required') return { status: 400, error: 'A public HTTPS callback_url is required.' };
+    if (reason === 'invalid_callback_access_key') return { status: 400, error: 'callback_access_key requires callback_url and must be a 1–512 character Bearer token without whitespace.' };
     if (reason.startsWith('callback_url_')) return { status: 400, error: 'callback_url and customer_logo_url must be public HTTPS URLs.' };
     if (reason === 'form_submission_too_large') return { status: 400, error: 'The mapped Form submission is too large for asynchronous processing.' };
     return { status: 400, error: reason || 'The Form submission is invalid.' };
@@ -2237,6 +2253,8 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
       fields.customerReference = customerReference;
     }
     const callbackUrl = form.get('callback_url');
+    const callbackAccessKey = validateCallbackAccessKey(
+      form.has('callback_access_key') ? form.get('callback_access_key') : undefined, callbackUrl);
     if (callbackUrl !== null) {
       if (typeof callbackUrl !== 'string' || !callbackUrl || callbackUrl.length > 2048) throw new Error('invalid_callback_url');
       let normalizedCallbackUrl;
@@ -2249,6 +2267,7 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
       catch { throw new Error('invalid_callback_url'); }
       fields.callback = {
         url: normalizedCallbackUrl,
+        ...(callbackAccessKey ? { accessKey: callbackAccessKey } : {}),
         signingSecret: randomBytes(32).toString('base64url'),
         deliveryId: randomUUID(),
         apiRoot: rootPath
@@ -2291,6 +2310,8 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
   } catch (error) {
     if (error.message === 'idempotency_conflict') return json(res, 409, { status: 'Error', reasonCode: 'IDEMPOTENCY_CONFLICT' });
     if (error.message === 'request_too_large') return json(res, 413, { status: 'Error', reasonCode: 'FILE_TOO_LARGE' });
+    if (error.message === 'invalid_callback_access_key') return json(res, 400, { status: 'Error', reasonCode: 'INVALID_CALLBACK_ACCESS_KEY',
+      error: 'callback_access_key requires callback_url and must be a 1–512 character Bearer token without whitespace.' });
     if (error.message === 'invalid_callback_url') return json(res, 400, { status: 'Error', reasonCode: 'INVALID_CALLBACK_URL',
       error: 'callback_url must be a public HTTPS URL without embedded credentials.' });
     if (error.message === 'invalid_fields' || error instanceof SyntaxError || error instanceof TypeError) return json(res, 400, { status: 'Error', reasonCode: 'INVALID_REQUEST_FIELDS' });

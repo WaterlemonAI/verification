@@ -10,7 +10,7 @@ const { EnvironmentStore } = await import('../lib/api-store.mjs');
 const { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } = await import('../lib/customer-usage.mjs');
 const { MemoryAdverseMediaReportStore } = await import('../lib/adverse-media-report-store.mjs');
 const { resolveFormServiceInput, validateFormDefinition } = await import('../lib/forms.mjs');
-const { startFormsWorker } = await import('../lib/forms-queue.mjs');
+const { formsCallbackHeaders, startFormsWorker } = await import('../lib/forms-queue.mjs');
 const { CapacityError } = await import('../lib/request-capacity.mjs');
 
 const adminKey = 'forms_admin_test_key';
@@ -128,6 +128,43 @@ test('one customer credential queues one signed multi-API submission', async () 
   assert.equal(queuedJob.form.id, 'vendor-onboarding');
   assert.equal(JSON.stringify(queuedJob).includes(issued.apiKey), false);
   primaryJob = queuedJob;
+});
+
+test('Form callback access key is sent as Bearer and changes conflict with idempotent replay', async () => {
+  const issued = await store.createClient('Bearer callback customer');
+  const headers = { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
+    'idempotency-key': 'forms-callback-access-key-0001' };
+  const payload = (key) => JSON.stringify({ callback_url: 'https://8.8.8.8/callback',
+    callback_access_key: key, data: { company_name: 'Bearer LLC', country: 'AE' } });
+  const first = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, { method: 'POST', headers,
+    body: payload('callback-token-123') });
+  assert.equal(first.status, 202);
+  assert.equal(JSON.stringify(await first.json()).includes('callback-token-123'), false);
+  assert.equal(queuedJob.callback_access_key, 'callback-token-123');
+  const callbackHeaders = formsCallbackHeaders(queuedJob, { event: 'forms.submission.completed' }, 'sha256=signed', 42);
+  assert.equal(callbackHeaders.authorization, 'Bearer callback-token-123');
+  assert.equal(callbackHeaders['x-ai7-signature'], 'sha256=signed');
+  const repeated = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, { method: 'POST', headers,
+    body: payload('callback-token-123') });
+  assert.equal(repeated.status, 202);
+  const changed = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, { method: 'POST', headers,
+    body: payload('different-token') });
+  assert.equal(changed.status, 409);
+  assert.equal((await changed.json()).reasonCode, 'IDEMPOTENCY_CONFLICT');
+  for (const [index, invalid] of [
+    { callback_access_key: 'callback-token-123' },
+    { callback_url: 'https://8.8.8.8/callback', callback_access_key: '' },
+    { callback_url: 'https://8.8.8.8/callback', callback_access_key: null },
+    { callback_url: 'https://8.8.8.8/callback', callback_access_key: 'bad\nheader' }
+  ].entries()) {
+    const rejected = await fetch(`${baseUrl}/forms/vendor-onboarding/submissions`, { method: 'POST',
+      headers: { ...headers, 'idempotency-key': `forms-invalid-callback-key-${index}` },
+      body: JSON.stringify({ data: { company_name: 'Bearer LLC', country: 'AE' }, ...invalid }) });
+    assert.equal(rejected.status, 400);
+    assert.match((await rejected.json()).error, /callback_access_key/);
+  }
+  assert.equal(formsCallbackHeaders({ delivery_id: 'x', submission_id: 'y' },
+    { event: 'forms.submission.completed' }, 'sha256=signed', 42).authorization, undefined);
 });
 
 test('same Form request ID replays accepted receipt without a second queue write or charge', async () => {

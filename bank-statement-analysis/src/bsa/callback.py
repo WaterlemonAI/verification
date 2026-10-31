@@ -101,6 +101,8 @@ def signed_callback(callback: dict, result: dict, completed_at: str) -> tuple[by
         "x-ai7-analysis-id": str(result["analysisId"]),
         SIGNATURE_HEADER: f"sha256={signature}",
     }
+    if callback.get("accessKey"):
+        headers["Authorization"] = f"Bearer {callback['accessKey']}"
     return body, headers
 
 

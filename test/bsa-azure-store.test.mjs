@@ -57,7 +57,7 @@ test('Azure BSA store encrypts tenant jobs, preserves idempotency and isolates r
   const request = { ownerId: 'tenant-one', idempotencyKey: 'unique-request-001',
     files: [{ bytes: Buffer.from('%PDF-private'), mediaType: 'application/pdf' }],
     fields: { countryCode: 'AE', entityType: 'company', getPdf: true,
-      callback: { url: 'https://hooks.example.test/ai7', signingSecret: 'first-private-secret',
+      callback: { url: 'https://hooks.example.test/ai7', signingSecret: 'first-private-secret', accessKey: 'callback-token-123',
         deliveryId: 'delivery-one', apiRoot: '/service/bank_statement_analysis' } } };
   const created = await store.createJob(request);
   assert.equal(created.reused, false);
@@ -74,6 +74,8 @@ test('Azure BSA store encrypts tenant jobs, preserves idempotency and isolates r
   assert.equal(repeated.job.id, created.job.id);
   assert.equal(repeated.job.callback.deliveryId, 'delivery-one');
   assert.equal(queue.messages.length, 1);
+  await assert.rejects(store.createJob({ ...request, fields: { ...request.fields,
+    callback: { ...request.fields.callback, accessKey: 'different-token' } } }), /idempotency_conflict/);
   assert.equal(await store.getJob(created.job.id, 'tenant-two'), null);
 
   const ownerPartition = [...table.entities.values()].find((entity) => entity.analysisId === created.job.id && entity.rowKey.startsWith('job_')).partitionKey;
@@ -81,6 +83,8 @@ test('Azure BSA store encrypts tenant jobs, preserves idempotency and isolates r
   const jobEntity = table.entities.get(jobKey);
   assert.equal(jobEntity.jobJson.includes('hooks.example.test'), false);
   assert.equal(jobEntity.jobJson.includes('first-private-secret'), false);
+  assert.equal(jobEntity.jobJson.includes('callback-token-123'), false);
+  assert.equal([...container.blobs.values()].some((blob) => blob.includes('callback-token-123')), false);
   table.entities.set(jobKey, { ...jobEntity, status: 'completed', completedAt: new Date().toISOString() });
   container.blobs.set(`${ownerPartition}/${created.job.id}/result.bin`, encryptBsa(Buffer.from(JSON.stringify({
     analysisId: created.job.id, status: 'completed', artifacts: [{ filename: 'ledger.json' }]

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { makeDeepResearchJob, startDeepResearchWorker } from '../lib/deep-research-queue.mjs';
+import { deepResearchCallbackHeaders, makeDeepResearchJob, startDeepResearchWorker } from '../lib/deep-research-queue.mjs';
 import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { MemoryCustomerUsageStore } from '../lib/customer-usage.mjs';
@@ -17,6 +17,16 @@ const request = {
 function messageFor(job) {
   return { messageId: 'message-1', popReceipt: 'receipt-1', messageText: JSON.stringify(job) };
 }
+
+test('deep-research callback sends optional Bearer key separately from its signature', () => {
+  const event = { event: 'adverse_media.deep_research.completed', event_id: 'screening-1' };
+  const job = makeDeepResearchJob(request, { callback_access_key: 'callback-token-123' });
+  const headers = deepResearchCallbackHeaders(job, event, 'sha256=signed', 123);
+  assert.equal(headers.authorization, 'Bearer callback-token-123');
+  assert.equal(headers['x-ai7-signature'], 'sha256=signed');
+  assert.equal(deepResearchCallbackHeaders(makeDeepResearchJob(request), event, 'sha256=signed', 123).authorization, undefined);
+  assert.equal(JSON.stringify(job.request).includes('callback-token-123'), false);
+});
 
 test('worker pause rejects new deep-research submissions while API health remains available', async (t) => {
   const previousFlag = process.env.ADVERSE_MEDIA_WORKER_ENABLED;

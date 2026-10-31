@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=6" />
     <script src="/portal-auth.js?v=4" defer></script>
-    <script src="/adverse-media.js?v=6" defer></script>
+    <script src="/adverse-media.js?v=7" defer></script>
   </head>
   <body>
     <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
@@ -164,6 +164,7 @@
                 <label><span>Search+ <code>search_plus</code></span><span><input id="search-plus" type="checkbox" /> Run publisher-targeted searches</span><small class="field-help">Prioritises requested countries and curated specialist sources, and records the exact publishers searched. Provider indexes can omit articles, so this is not a direct crawl of all 1,500 publishers.</small></label>
                 <label><span>Deep research <code>deep_research</code></span><span><input id="deep-research" type="checkbox" /> Queue an asynchronous signed callback</span></label>
                 <label id="callback-field" hidden>Callback URL <code>callback_url</code><input id="callback-url" type="url" inputmode="url" placeholder="https://your-domain.example/webhooks/ai7" disabled /><small class="field-help">Optional. The queued response returns a one-time signing secret for verifying callbacks.</small></label>
+                <label id="callback-access-key-field" hidden>Callback access key <code>callback_access_key</code><input id="callback-access-key" type="password" maxlength="512" autocomplete="off" placeholder="Bearer token required by your endpoint" disabled /><small class="field-help">Optional. Sent only as Authorization: Bearer on callback delivery.</small></label>
                 <label>Customer logo URL <code>customer_logo_url</code><input id="customer-logo-url" type="url" inputmode="url" placeholder="https://your-domain.example/logo.png" /><small class="field-help">Optional PNG/JPEG. Every completed check creates a permanently stored PDF with an unguessable public download link.</small></label>
               </div>
               <fieldset>
