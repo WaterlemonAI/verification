@@ -217,6 +217,8 @@ jobs:
           az bicep build --file infrastructure/api-case-manager-platform.bicep
           az bicep build --file infrastructure/api-case-manager-network.bicep
           az bicep build --file infrastructure/api-case-manager-private-probe.bicep
+          az bicep build --file infrastructure/api-case-manager-cutover-certificates.bicep
+          az bicep build --file infrastructure/api-case-manager-release-reader.bicep
 
       - name: Block Case Manager provisioning until private connectivity is reviewed
         if: github.event_name == 'workflow_dispatch' && inputs.provisionCaseManagerPlatform

@@ -25,6 +25,8 @@ on:
       - infrastructure/api-case-manager-network.bicep
       - infrastructure/api-case-manager-private-probe.bicep
       - infrastructure/api-case-manager-qa-job.bicep
+      - infrastructure/api-case-manager-cutover-certificates.bicep
+      - infrastructure/api-case-manager-release-reader.bicep
       - .github/workflows/deploy-api.yml
       - .github/workflows/api-pr-checks.yml
 
@@ -59,3 +61,5 @@ jobs:
           az bicep build --file infrastructure/api-case-manager-network.bicep
           az bicep build --file infrastructure/api-case-manager-private-probe.bicep
           az bicep build --file infrastructure/api-case-manager-qa-job.bicep
+          az bicep build --file infrastructure/api-case-manager-cutover-certificates.bicep
+          az bicep build --file infrastructure/api-case-manager-release-reader.bicep
