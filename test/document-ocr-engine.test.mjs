@@ -86,7 +86,7 @@ test('a source-backed utility bill date with a four-digit year uses the required
   assert.ok(unsupported.review_flags.includes('DATE_FORMAT_INVALID:bill_date'));
 });
 
-test('Paddle coordinates stay separate from contiguous text used for evidence', async () => {
+test('OCR line coordinates stay separate from contiguous text used for evidence', async () => {
   const utility = DOCUMENT_OCR_BY_ID.get('uae-utility-bill-ocr');
   const modelOutput = { document_classification: 'utility_bill', data: { address: 'Street One Dubai' },
     evidence: [{ field: 'address', page: 1, quote: 'Street One Dubai' }] };

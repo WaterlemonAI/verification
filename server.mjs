@@ -1989,7 +1989,7 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
   if (req.method === 'GET' && url.pathname === '/admin/api/document-ocr/capability') {
     if (access.legacy) return json(res, 409, { status: 'Error', error: 'Complete account setup first.' });
     const capability = documentOcrStore?.getWorkerCapability
-      ? await documentOcrStore.getWorkerCapability() : { azure: false, paddle: false, ollama: false,
+      ? await documentOcrStore.getWorkerCapability() : { azure: false, ollama: false,
         recent: false, checkedAt: null };
     capability.imageMatches = Boolean(process.env.DOCUMENT_OCR_WORKER_IMAGE
       && capability.imageDigest === process.env.DOCUMENT_OCR_WORKER_IMAGE);
@@ -2002,10 +2002,10 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
     if (!DOCUMENT_OCR_BY_ID.has(engineMatch[1])) return json(res, 404, { status: 'Error', error: 'OCR API not found.' });
     try {
       const body = await readJson(req);
-      if (!['azure', 'paddle', 'ollama'].includes(body.engine)) return json(res, 400, { status: 'Error', error: 'Invalid extraction engine.' });
+      if (!['azure', 'ollama'].includes(body.engine)) return json(res, 400, { status: 'Error', error: 'Invalid extraction engine.' });
       if (process.env.DOCUMENT_OCR_FORCE_OLLAMA === '1' && body.engine !== 'ollama')
         return json(res, 409, { status: 'Error', error: 'Ollama is required for document extraction.' });
-      if (body.engine === 'paddle' || body.engine === 'ollama') {
+      if (body.engine === 'ollama') {
         const capability = documentOcrStore?.getWorkerCapability ? await documentOcrStore.getWorkerCapability() : null;
         const imageMatches = Boolean(process.env.DOCUMENT_OCR_WORKER_IMAGE
           && capability?.imageDigest === process.env.DOCUMENT_OCR_WORKER_IMAGE);

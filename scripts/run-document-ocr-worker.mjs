@@ -45,7 +45,7 @@ if (!malwareReady) throw new Error('document_ocr_malware_scanner_unavailable');
 async function refreshCapability() {
   try {
     await documentStore.recordWorkerCapability({ azure: Boolean(process.env.DOCUMENT_OCR_AZURE_ENDPOINT),
-      paddle: false, ollama: await ollamaCapability(),
+      ollama: await ollamaCapability(),
       imageDigest: process.env.DOCUMENT_OCR_WORKER_IMAGE || '' });
   } catch { console.warn('document_ocr_capability_check_failed'); }
 }

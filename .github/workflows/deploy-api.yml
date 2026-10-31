@@ -83,7 +83,7 @@ jobs:
               focused=true
               while IFS= read -r path; do
                 case "${path}" in
-                  Dockerfile.document-ocr|admin-site/admin.js|admin-site/admin.css|admin-site/index.html|lib/api-store.mjs|lib/document-ocr-*.mjs|server.mjs|scripts/document-ocr-paddle.py|scripts/document-ocr-ollama-smoke.mjs|scripts/run-document-ocr-worker.mjs|scripts/guard-document-ocr-whatif.mjs|infrastructure/api.bicep|.github/workflows/deploy-api.yml|.github/workflows/document-ocr-pr-checks.yml|test/document-ocr-*.test.mjs|test/admin-auth.test.mjs|test/document-ocr-api.test.mjs) ;;
+                  Dockerfile.document-ocr|admin-site/admin.js|admin-site/admin.css|admin-site/index.html|lib/api-store.mjs|lib/document-ocr-*.mjs|server.mjs|scripts/document-ocr-ollama-smoke.mjs|scripts/run-document-ocr-worker.mjs|scripts/guard-document-ocr-whatif.mjs|infrastructure/api.bicep|.github/workflows/deploy-api.yml|.github/workflows/document-ocr-pr-checks.yml|test/document-ocr-*.test.mjs|test/admin-auth.test.mjs|test/document-ocr-api.test.mjs) ;;
                   *) focused=false ;;
                 esac
               done < <(git diff --name-only "${before}" "${GITHUB_SHA}")

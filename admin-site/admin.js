@@ -271,7 +271,7 @@ async function loadIntegrations() {
   ]);
   const capability = capabilityResult?.capability;
   byId('document-ocr-capability').textContent = capability?.recent
-    ? `Document OCR worker last checked ${new Date(capability.checkedAt).toLocaleString()}: Ollama ${capability.ollama ? 'models verified' : 'unverified'}, Azure ${capability.azure ? 'configured' : 'unconfigured'}, PaddleOCR ${capability.paddle ? 'inference verified' : 'unverified'}. Current image match: ${capability.imageMatches ? 'yes' : 'unconfirmed'}.`
+    ? `Document OCR worker last checked ${new Date(capability.checkedAt).toLocaleString()}: Ollama ${capability.ollama ? 'model verified' : 'unverified'}, Azure ${capability.azure ? 'configured' : 'unconfigured'}. Current image match: ${capability.imageMatches ? 'yes' : 'unconfirmed'}.`
     : 'Document OCR worker capability has not been verified recently. Ollama selection is unavailable.';
   integrationCatalog = data.integrations.filter((item) => item.enabled && item.formsCompatible !== false && item.id !== 'adverse-media-ai');
   const list = byId('integration-list');
@@ -322,7 +322,7 @@ async function loadIntegrations() {
           : isAdverseMediaAi
             ? 'This write-only Google AI API key enables bounded AI classification for adverse-media results. The key is never returned or shown again.'
           : isDocumentOcrAi
-            ? 'Legacy document OCR ai7edd model key for Azure or Paddle jobs. Ollama extraction does not use this key. The value is never shown again.'
+            ? 'Legacy document OCR ai7edd model key for Azure jobs. Ollama extraction does not use this key. The value is never shown again.'
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });
@@ -333,11 +333,11 @@ async function loadIntegrations() {
       for (const [value, label] of (capability?.forceOllama
         ? [['ollama', 'Ollama CPU (Qwen3 VL)']]
         : [['ollama', 'Ollama CPU (Qwen3 VL)'],
-          ['azure', 'Azure Document Intelligence'], ['paddle', 'PaddleOCR']])) {
+          ['azure', 'Azure Document Intelligence']])) {
         const option = document.createElement('option');
         option.value = value;
         option.textContent = label;
-        option.disabled = ['paddle', 'ollama'].includes(value) && (!capability?.recent || !capability[value]
+        option.disabled = value === 'ollama' && (!capability?.recent || !capability[value]
           || (capability.imageDigest && !capability.imageMatches));
         selector.append(option);
       }

@@ -1,10 +1,34 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import sharp from 'sharp';
+import { EnvironmentStore, KeyVaultStore } from '../lib/api-store.mjs';
 import { DOCUMENT_OCR_APIS } from '../lib/document-ocr-contracts.mjs';
 import { analyzeDocumentWithOllama, OLLAMA_OCR_MODEL, OLLAMA_STRUCTURE_MODEL,
   ollamaGenerate, structureDocumentWithOllama } from '../lib/document-ocr-ollama.mjs';
 import { processDocumentOcrJob } from '../lib/document-ocr-worker.mjs';
+
+test('production OCR selections stay Azure until all eight are switched to Ollama', async () => {
+  const records = new Map();
+  const store = Object.create(KeyVaultStore.prototype);
+  store.getJson = async (name, fallback) => records.get(name)?.value || fallback;
+  store.setSecret = async (name, value, tags) => { records.set(name, { value: JSON.parse(value), tags }); };
+  for (const api of DOCUMENT_OCR_APIS) assert.equal(await store.getDocumentOcrEngine(api.id), 'azure');
+  await store.setDocumentOcrEngine('cheque-ocr', 'ollama', 'admin@example.test');
+  assert.equal(await store.getDocumentOcrEngine('cheque-ocr'), 'ollama');
+  assert.equal(await store.getDocumentOcrEngine('emirates-id-ocr'), 'azure');
+  assert.equal(records.get('document-ocr-engine-cheque-ocr').tags.actor, 'admin@example.test');
+  const previous = process.env.DOCUMENT_OCR_FORCE_OLLAMA;
+  try {
+    process.env.DOCUMENT_OCR_FORCE_OLLAMA = '1';
+    for (const api of DOCUMENT_OCR_APIS) assert.equal(await store.getDocumentOcrEngine(api.id), 'ollama');
+  } finally {
+    if (previous === undefined) delete process.env.DOCUMENT_OCR_FORCE_OLLAMA;
+    else process.env.DOCUMENT_OCR_FORCE_OLLAMA = previous;
+  }
+  const local = new EnvironmentStore();
+  const customer = await local.listIntegrations({ publicOnly: true });
+  assert.equal(customer.find((item) => item.id === 'cheque-ocr').extractionEngine, undefined);
+});
 
 test('Ollama requests stay on loopback and reject truncated output', async () => {
   const result = await ollamaGenerate({ model: OLLAMA_STRUCTURE_MODEL, prompt: 'synthetic',

@@ -5,11 +5,8 @@ on:
     paths:
       - Dockerfile.document-ocr
       - lib/document-ocr-*.mjs
-      - scripts/document-ocr-paddle.py
       - scripts/run-document-ocr-worker.mjs
       - scripts/document-ocr-ollama-smoke.mjs
-      - bank-statement-analysis/src/bsa/paddle_ocr.py
-      - bank-statement-analysis/scripts/install_paddle_models.py
       - .github/workflows/document-ocr-pr-checks.yml
 
 permissions:
