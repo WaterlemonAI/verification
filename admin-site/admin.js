@@ -1,6 +1,39 @@
 let csrfToken = '';
+let pendingAdminLogin = null;
 let integrationCatalog = [];
 const byId = (id) => document.getElementById(id);
+
+function confirmExternalLink(event) {
+  const link = event.target.closest?.('a[href]');
+  if (!link || event.defaultPrevented) return;
+  const destination = new URL(link.href);
+  if (!['http:', 'https:'].includes(destination.protocol) || destination.origin === location.origin) return;
+  if (!window.confirm(`You will be redirected to ${destination.hostname} website. Continue?`)) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+}
+document.addEventListener('click', confirmExternalLink, true);
+document.addEventListener('auxclick', confirmExternalLink, true);
+
+for (const input of document.querySelectorAll('#login-view input[type="password"]')) {
+  const field = document.createElement('span');
+  field.className = 'password-field';
+  input.before(field);
+  field.append(input);
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'password-toggle';
+  toggle.textContent = 'Show';
+  toggle.setAttribute('aria-label', 'Show password');
+  toggle.addEventListener('click', () => {
+    const visible = input.type === 'password';
+    input.type = visible ? 'text' : 'password';
+    toggle.textContent = visible ? 'Hide' : 'Show';
+    toggle.setAttribute('aria-label', `${visible ? 'Hide' : 'Show'} password`);
+  });
+  field.append(toggle);
+}
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -23,6 +56,7 @@ function showSignedOut() {
   byId('app-view').hidden = true;
   byId('login-view').hidden = false;
   byId('signin-card').hidden = false;
+  byId('code-card').hidden = true;
   byId('setup-card').hidden = true;
   byId('forgot-card').hidden = true;
   byId('reset-card').hidden = true;
@@ -257,9 +291,16 @@ async function loadIntegrations() {
     pill.textContent = item.enabled ? 'Active' : 'Disabled';
     pill.classList.toggle('off', !item.enabled);
     const credentialButton = row.querySelector('.set-credential');
-    credentialButton.hidden = item.id === 'merchant-screening' || item.extractionEngine !== undefined;
-    credentialButton.textContent = item.masterAuthKeyConfigured ? 'Replace credential' : 'Set credential';
+    credentialButton.hidden = item.id === 'merchant-screening' || item.extractionEngine !== undefined
+      || (item.id !== 'document-ocr-ai' && item.id.endsWith('-ocr')) || item.id === 'moa-analysis';
+    credentialButton.textContent = item.id === 'ejari-verification' ? 'Configure Ejari'
+      : item.masterAuthKeyConfigured ? 'Replace credential' : 'Set credential';
     credentialButton.addEventListener('click', () => {
+      if (item.id === 'ejari-verification') {
+        byId('ejari-setup-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        byId('ejari-config-form').elements.openai_key.focus({ preventScroll: true });
+        return;
+      }
       const form = byId('supplier-credential-form');
       form.reset();
       form.elements.id.value = item.id;
@@ -281,7 +322,7 @@ async function loadIntegrations() {
           : isAdverseMediaAi
             ? 'This write-only Google AI API key enables bounded AI classification for adverse-media results. The key is never returned or shown again.'
           : isDocumentOcrAi
-            ? 'Legacy document OCR Gemini key for older Azure or Paddle jobs. Ollama extraction does not use this key. The value is never shown again.'
+            ? 'Legacy document OCR ai7edd model key for Azure or Paddle jobs. Ollama extraction does not use this key. The value is never shown again.'
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });
@@ -318,6 +359,20 @@ async function loadIntegrations() {
     }
     list.append(row);
   });
+  await loadEjariConfig();
+}
+
+async function loadEjariConfig() {
+  const form = byId('ejari-config-form');
+  const status = byId('ejari-config-status');
+  try {
+    const data = await request('/admin/api/ejari/config');
+    form.elements.ocr_model.value = data.config.ocr_model || 'gpt-6-luna';
+    form.elements.ocr_detail.value = data.config.ocr_detail || 'high';
+    form.elements.enabled.checked = data.config.enabled === true;
+    form.elements.enabled.disabled = !data.platformAvailable;
+    status.textContent = `Azure worker: ${data.platformAvailable ? 'ready' : 'not deployed'} · OpenAI key: ${data.config.openaiKeyConfigured ? 'saved' : 'needed'} · CapSolver key: ${data.config.capsolverKeyConfigured ? 'saved' : 'needed'}`;
+  } catch (error) { status.textContent = error.message || 'Ejari setup could not be loaded.'; }
 }
 
 function formExamples() {
@@ -550,10 +605,33 @@ byId('login-form').addEventListener('submit', async (event) => {
       body: JSON.stringify({ email: byId('admin-email').value, password: byId('admin-password').value })
     });
     byId('admin-password').value = '';
-    await showApp(auth);
+    pendingAdminLogin = { email: byId('admin-email').value.trim(), challengeId: auth.challenge_id };
+    byId('admin-code-intro').textContent = `Enter the eight digit code sent to ${pendingAdminLogin.email}.`;
+    byId('signin-card').hidden = true;
+    byId('code-card').hidden = false;
+    byId('admin-code').focus();
   } catch (error) {
     byId('login-error').textContent = error.message;
   }
+});
+byId('code-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  byId('admin-code-error').textContent = '';
+  const code = byId('admin-code').value.trim();
+  if (!pendingAdminLogin || !/^\d{8}$/.test(code)) {
+    byId('admin-code-error').textContent = 'Enter the eight digit code from your email.'; return;
+  }
+  const button = event.currentTarget.querySelector('button[type=submit]'); button.disabled = true;
+  try {
+    const auth = await request('/admin/api/auth/verify-code', { method: 'POST',
+      body: JSON.stringify({ email: pendingAdminLogin.email, challenge_id: pendingAdminLogin.challengeId, code }) });
+    pendingAdminLogin = null; byId('code-form').reset(); await showApp(auth);
+  } catch (error) { byId('admin-code-error').textContent = error.message; }
+  finally { button.disabled = false; }
+});
+byId('back-from-code').addEventListener('click', () => {
+  pendingAdminLogin = null; byId('code-form').reset();
+  byId('code-card').hidden = true; byId('signin-card').hidden = false;
 });
 
 byId('show-admin-forgot').addEventListener('click', () => {
@@ -605,13 +683,16 @@ byId('setup-form').addEventListener('submit', async (event) => {
     return;
   }
   try {
-    const auth = await request('/admin/api/auth/setup', {
+    const created = await request('/admin/api/auth/setup', {
       method: 'POST',
       headers: { Authorization: `Bearer ${byId('setup-key').value.trim()}` },
       body: JSON.stringify({ email: byId('setup-email').value, password })
     });
     form.reset();
-    await showApp(auth);
+    byId('setup-card').hidden = true;
+    byId('signin-card').hidden = false;
+    byId('admin-email').value = created.account.email;
+    byId('login-error').textContent = created.message;
   } catch (error) {
     byId('setup-error').textContent = error.message;
 
@@ -724,6 +805,26 @@ byId('integration-form').addEventListener('submit', async (event) => {
     byId('integration-dialog').close();
     await loadIntegrations();
   } catch (error) { byId('integration-error').textContent = error.message; }
+});
+
+byId('ejari-config-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const error = byId('ejari-config-error');
+  error.textContent = '';
+  try {
+    const values = {
+      enabled: form.elements.enabled.checked,
+      ocr_model: form.elements.ocr_model.value.trim(),
+      ocr_detail: form.elements.ocr_detail.value,
+      openai_key: form.elements.openai_key.value,
+      capsolver_key: form.elements.capsolver_key.value
+    };
+    await request('/admin/api/ejari/config', { method: 'PUT', body: JSON.stringify(values) });
+    form.elements.openai_key.value = '';
+    form.elements.capsolver_key.value = '';
+    await loadEjariConfig();
+  } catch (problem) { error.textContent = problem.message || 'Ejari setup could not be saved.'; }
 });
 
 byId('supplier-credential-form').addEventListener('submit', async (event) => {

@@ -17,6 +17,7 @@ def test_signed_callback_preserves_terminal_result_and_artifact_links(monkeypatc
         "signingSecret": "secret-value",
         "deliveryId": "delivery-1",
         "apiRoot": "/service/bank_statement_analysis",
+        "accessKey": "callback-token-123",
     }
     result = {
         "analysisId": "bsa_00000000-0000-0000-0000-000000000001",
@@ -33,7 +34,11 @@ def test_signed_callback_preserves_terminal_result_and_artifact_links(monkeypatc
     body, headers = signed_callback(callback, result, event["completed_at"])
     expected = hmac.new(b"secret-value", body, hashlib.sha256).hexdigest()
     assert headers["x-ai7-signature"] == f"sha256={expected}"
+    assert headers["Authorization"] == "Bearer callback-token-123"
+    assert b"callback-token-123" not in body
     assert json.loads(body)["delivery_id"] == "delivery-1"
+    del callback["accessKey"]
+    assert "Authorization" not in signed_callback(callback, result, event["completed_at"])[1]
 
 
 def test_callback_target_rejects_non_https_credentials_and_private_dns(monkeypatch):

@@ -113,6 +113,13 @@ test('relays a successful response without changing its shape', async () => {
   });
 });
 
+test('serves the Case Manager display module with a JavaScript MIME type', async () => {
+  const response = await fetch(`${appUrl}/case-result-model.mjs`, { headers: { host: 'api.ai7uae.com' } });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /^text\/javascript/);
+  assert.match(await response.text(), /buildCasePresentation/);
+});
+
 test('relays every documented JSON input and complete output without changing names or values', async () => {
   const response = await fetch(`${appUrl}/service/uae_tlv`, {
     method: 'POST',
@@ -199,7 +206,8 @@ test('serves the public KYCProbe marketplace homepage and terms on the new apex 
   const termsHtml = terms.body.toString('utf8');
   assert.equal(terms.status, 200);
   assert.match(termsHtml, /Terms of Use/);
-  assert.match(termsHtml, /AI7LAB Tech Innovation Limited/);
+  assert.match(termsHtml, /ai7lab IP solutions FZ LLC/);
+  assert.doesNotMatch(termsHtml, /AI7LAB Tech Innovation Limited|DIFC/);
 
   const vendoreyeLogo = await getWithHost('/assets/vendoreye-logo.png', 'kycprobe.com');
   assert.equal(vendoreyeLogo.status, 200);
@@ -210,7 +218,7 @@ test('serves the public KYCProbe marketplace homepage and terms on the new apex 
 test('routes app.kycprobe.com to the portal and admin while preserving the API host', async () => {
   const portal = await getWithHost('/login', 'app.kycprobe.com');
   assert.equal(portal.status, 200);
-  assert.match(portal.body.toString('utf8'), /KYCProbe — Developer Portal/);
+  assert.match(portal.body.toString('utf8'), /KYCProbe — API Platform/);
 
   const admin = await getWithHost('/admin', 'app.kycprobe.com');
   assert.equal(admin.status, 200);

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { EnvironmentStore } from '../lib/api-store.mjs';
-import { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } from '../lib/customer-usage.mjs';
+import { MemoryCustomerUsageStore, moneyMicros, validateCasePolicy, validateUsagePolicy } from '../lib/customer-usage.mjs';
+import { MemoryCaseManagerStore } from '../lib/case-manager-store.mjs';
+import { createPortalAccount, createPortalSession, PORTAL_COOKIE } from '../lib/portal-auth.mjs';
 
 process.env.NODE_ENV = 'test';
 process.env.DOCUMENT_OCR_DATA_KEY_HEX = 'a'.repeat(64);
@@ -24,15 +26,17 @@ test('OCR routes enforce entitlement, accept one file, and refund an idempotent 
       assert.equal(input.files.length, 1);
       assert.equal(input.files[0].mediaType, 'application/pdf');
       return { job: { id: jobId, service_id: input.serviceId, transaction_id: input.transactionId,
-        status: 'queued' }, reused: creates > 1 };
+        status: 'queued', provider_calls: { azure: 0, gemini: 0 } }, reused: creates > 1 };
     },
     async getJob(ownerId) {
-      return ownerId === workspaceId ? { id: jobId, service_id: 'passport-icao-ocr', status: 'completed' } : null;
+      return ownerId === workspaceId ? { id: jobId, service_id: 'passport-icao-ocr', status: 'completed',
+        provider_calls: { azure: 1, gemini: 1 } } : null;
     },
     async getResult(ownerId) {
       if (ownerId !== workspaceId) return null;
       return { job: { id: jobId, service_id: 'passport-icao-ocr', status: 'completed' },
-        result: { job_id: jobId, data: { document_type: 'Passport' }, artifacts: [] } };
+        result: { job_id: jobId, data: { document_type: 'Passport' }, artifacts: [],
+          processing: { ai_model: 'gemini-3.5-flash-lite', provider_calls: { azure: 1, gemini: 1 } } } };
     },
     async getArtifact() { return null; }
   };
@@ -53,15 +57,57 @@ test('OCR routes enforce entitlement, accept one file, and refund an idempotent 
   assert.equal(accepted.status, 202);
   const receipt = await accepted.json();
   assert.equal(receipt.result_url, `/service/passport_icao_ocr/jobs/${jobId}/result`);
+  assert.deepEqual(receipt.provider_calls, { azure: 0, ai7edd_model: 0 });
   const replay = await fetch(`${base}/service/passport_icao_ocr`, { method: 'POST', headers, body: form() });
   assert.equal(replay.status, 202);
   assert.equal((await replay.json()).reused, true);
   assert.equal((await usageStore.account(workspaceId, true)).spent, '0.100000');
   const result = await fetch(`${base}${receipt.result_url}`, { headers: { authorization: `Bearer ${issued.apiKey}` } });
   assert.equal(result.status, 200);
-  assert.equal((await result.json()).data.document_type, 'Passport');
+  const resultBody = await result.json();
+  assert.equal(resultBody.data.document_type, 'Passport');
+  assert.equal(resultBody.processing.ai_model, 'ai7edd model');
+  assert.deepEqual(resultBody.processing.provider_calls, { azure: 1, ai7edd_model: 1 });
+  assert.equal(JSON.stringify(resultBody).toLowerCase().includes('gemini'), false);
+  const status = await (await fetch(`${base}${receipt.status_url}`, { headers })).json();
+  assert.deepEqual(status.job.provider_calls, { azure: 1, ai7edd_model: 1 });
   const noAuth = await fetch(`${base}${receipt.result_url}`);
   assert.equal(noAuth.status, 401);
+});
+
+test('saved OCR cases present the ai7edd label without rewriting stored evidence', async (t) => {
+  process.env.CASE_MANAGER_ENABLED = 'true';
+  t.after(() => { delete process.env.CASE_MANAGER_ENABLED; });
+  const store = new EnvironmentStore();
+  const usageStore = new MemoryCustomerUsageStore();
+  const caseStore = new MemoryCaseManagerStore();
+  const signingKey = 'synthetic-ocr-case-signing-key';
+  const account = createPortalAccount('ocr-case@example.test', 'StrongPass!234',
+    { id: 'ocr-case-workspace', name: 'OCR Case' });
+  await store.setPortalSessionKey(signingKey);
+  await store.setPortalUser(account);
+  await usageStore.updateCasePolicy(account.client_id,
+    validateCasePolicy({ version: 0, enabled: true, ttl_days: 1 }));
+  const intent = await caseStore.createIntent({ workspaceId: account.client_id, serviceId: 'passport-icao-ocr',
+    transactionId: '33333333-3333-4333-8333-333333333333', acceptedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(), policyVersion: 1 });
+  await caseStore.captureFinal(account.client_id, intent.id, { response: { status: 'completed',
+    processing: { ai_model: 'gemini-3.5-flash-lite', provider_calls: { azure: 1, gemini: 1 } } },
+  contentType: 'application/json', httpStatus: 200, outcome: 'extracted' });
+  const server = createAppServer({ store, usageStore, caseStore, startWorker: false });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const path = `http://127.0.0.1:${server.address().port}/portal/api/cases/${intent.id}`;
+  const headers = { cookie: `${PORTAL_COOKIE}=${encodeURIComponent(createPortalSession(account, signingKey).token)}` };
+  for (const suffix of ['', '/json']) {
+    const response = await (await fetch(path + suffix, { headers })).json();
+    const result = suffix ? response : response.response;
+    assert.equal(result.processing.ai_model, 'ai7edd model');
+    assert.deepEqual(result.processing.provider_calls, { azure: 1, ai7edd_model: 1 });
+    assert.equal(JSON.stringify(response).toLowerCase().includes('gemini'), false);
+  }
+  const stored = await caseStore.getCase(account.client_id, intent.id);
+  assert.equal(stored.payload.final_response.processing.provider_calls.gemini, 1);
 });
 
 test('Emirates ID crop URL is private, expires, and works without exposing the API key', async (t) => {

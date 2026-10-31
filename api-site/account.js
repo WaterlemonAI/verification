@@ -1,6 +1,7 @@
 (() => {
   const byId = (id) => document.getElementById(id);
   let csrf = '';
+  let casePolicyVersion = 0;
 
   async function request(path, options = {}) {
     const response = await fetch(path, { ...options, credentials: 'same-origin', headers: {
@@ -84,6 +85,35 @@
     } catch (error) { byId('usage-status').textContent = error.message; }
   }
 
+  async function loadCaseSettings() {
+    const settings = await request('/portal/api/case-manager/settings');
+    if (!settings.available) return;
+    byId('case-settings-section').hidden = false;
+    casePolicyVersion = settings.policy.version;
+    byId('case-enabled').checked = settings.policy.enabled;
+    byId('case-ttl').value = settings.policy.ttl_days || 30;
+  }
+
+  byId('case-settings-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector('button');
+    button.disabled = true;
+    byId('case-settings-message').textContent = '';
+    try {
+      const enabled = byId('case-enabled').checked;
+      const ttlDays = Number(byId('case-ttl').value);
+      const result = await request('/portal/api/case-manager/settings', { method: 'PUT',
+        body: JSON.stringify({ version: casePolicyVersion, enabled, ttl_days: ttlDays }) });
+      casePolicyVersion = result.policy.version;
+      byId('case-settings-message').textContent = result.retirement_recovery_pending
+        ? 'Earlier case copies are hidden. Deletion recovery is pending and operations has been alerted.'
+        : enabled
+          ? `Case Manager is enabled for new checks. Copies expire after ${ttlDays} days (30 days at most for OCR).`
+          : 'Case Manager is disabled. Earlier copies are retired and will be purged.';
+    } catch (error) { byId('case-settings-message').textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+
   byId('create-key-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -106,7 +136,15 @@
     catch (error) { byId('account-message').textContent = error.message; }
     finally { button.disabled = false; }
   });
-  byId('copy-new-key').addEventListener('click', async () => { await navigator.clipboard.writeText(byId('new-key-value').textContent); byId('copy-new-key').textContent = 'Copied'; });
+  byId('copy-new-key').addEventListener('click', async () => {
+    const button = byId('copy-new-key');
+    await navigator.clipboard.writeText(byId('new-key-value').textContent);
+    const icon = button.innerHTML;
+    button.disabled = true;
+    button.textContent = '✓';
+    button.setAttribute('aria-label', 'Copied API key');
+    setTimeout(() => { button.innerHTML = icon; button.setAttribute('aria-label', 'Copy API key'); button.disabled = false; }, 1200);
+  });
   byId('refresh-health').addEventListener('click', loadHealth);
   byId('refresh-usage').addEventListener('click', loadUsage);
 
@@ -115,6 +153,6 @@
     byId('account-identity').textContent = `${session.account.client_name} · ${session.account.email}`;
     const initial = sessionStorage.getItem('ai7_new_api_key');
     if (initial) { sessionStorage.removeItem('ai7_new_api_key'); showNewKey(initial); }
-    await Promise.all([loadKeys(), loadHealth(), loadUsage()]);
+    await Promise.all([loadKeys(), loadHealth(), loadUsage(), loadCaseSettings()]);
   }).catch(() => location.replace('/login?next=%2Faccount'));
 })();

@@ -108,12 +108,13 @@ async function loadForm() {
   });
   const required = formDefinition.fields.filter((field) => field.required).map((field) => field.key);
   const optional = formDefinition.fields.filter((field) => !field.required).map((field) => field.key);
-  byId('form-schema-summary').textContent = `This Form runs ${formDefinition.services.map((service) => service.name).join(', ')}. Required data: ${required.join(', ') || 'none'}. Optional data: ${optional.join(', ') || 'none'}. A public HTTPS callback_url is required; customer_logo_url is optional. Use one Idempotency-Key per intended run and reuse it after a network error. Only the listed services run for this Form.`;
+  byId('form-schema-summary').textContent = `This Form runs ${formDefinition.services.map((service) => service.name).join(', ')}. Required data: ${required.join(', ') || 'none'}. Optional data: ${optional.join(', ') || 'none'}. A public HTTPS callback_url is required; callback_access_key and customer_logo_url are optional. Use one Idempotency-Key per intended run and reuse it after a network error. Only the listed services run for this Form.`;
   const sampleData = Object.fromEntries(formDefinition.fields.filter((field) => field.required).map((field) => {
     const example = field.placeholder || field.options?.[0] || (field.type === 'country' ? 'AE' : `YOUR_${field.key.toUpperCase()}`);
     return [field.key, field.type === 'number' ? Number(example) : field.type === 'boolean' ? true : example];
   }));
-  const sampleBody = JSON.stringify({ data: sampleData, callback_url: 'https://your-system.example/webhooks/ai7', customer_logo_url: 'https://your-domain.example/logo.png' }, null, 2);
+  const sampleBody = JSON.stringify({ data: sampleData, callback_url: 'https://your-system.example/webhooks/ai7',
+    callback_access_key: 'YOUR_CALLBACK_BEARER_KEY', customer_logo_url: 'https://your-domain.example/logo.png' }, null, 2);
   byId('form-curl').textContent = `curl -X POST '${endpoint}' \\\n  -H 'Authorization: Bearer YOUR_AI7_API_KEY' \\\n  -H 'Idempotency-Key: YOUR_UNIQUE_REQUEST_ID' \\\n  -H 'Content-Type: application/json' \\\n  --data '${sampleBody}'`;
   byId('copy-form-curl').addEventListener('click', async () => {
     await navigator.clipboard.writeText(byId('form-curl').textContent);
@@ -150,22 +151,27 @@ byId('submission-form').addEventListener('submit', async (event) => {
       return;
     }
   }
-  const button = byId('send-request');
-  button.disabled = true;
-  byId('response-status').className = '';
-  byId('response-status').textContent = 'Submitting';
   const data = {};
   for (const field of formDefinition.fields) {
     const input = byId(`field-${field.key}`);
     if (input.value === '') continue;
     data[field.key] = field.type === 'number' ? Number(input.value) : field.type === 'boolean' ? input.value === 'true' : input.value;
   }
-  const requestBody = JSON.stringify({ data, callback_url: byId('callback-url').value.trim(), customer_logo_url: byId('logo-url').value.trim() });
+  const callbackAccessKey = byId('callback-access-key').value;
+  const requestBody = JSON.stringify({ data, callback_url: byId('callback-url').value.trim(),
+    ...(callbackAccessKey ? { callback_access_key: callbackAccessKey } : {}),
+    customer_logo_url: byId('logo-url').value.trim() });
+  const requestHash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(requestBody))),
+    (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const button = byId('send-request');
+  button.disabled = true;
+  byId('response-status').className = '';
+  byId('response-status').textContent = 'Submitting';
   const pendingKey = `ai7-form-pending:${formDefinition.id}`;
   let pending;
   try { pending = JSON.parse(sessionStorage.getItem(pendingKey) || 'null'); } catch { /* stale browser storage */ }
-  const requestId = pending?.body === requestBody ? pending.id : crypto.randomUUID();
-  sessionStorage.setItem(pendingKey, JSON.stringify({ id: requestId, body: requestBody }));
+  const requestId = pending?.hash === requestHash ? pending.id : crypto.randomUUID();
+  sessionStorage.setItem(pendingKey, JSON.stringify({ id: requestId, hash: requestHash }));
   try {
     const response = await fetch(`/forms/${formDefinition.id}/submissions`, {
       method: 'POST',

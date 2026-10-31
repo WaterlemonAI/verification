@@ -15,6 +15,17 @@ param bankStatementWorkerImage string
 @description('Digest-pinned document OCR worker image. Required only when document OCR is enabled.')
 param documentOcrWorkerImage string = ''
 
+@description('Digest-pinned Ejari verification worker image.')
+param ejariWorkerImage string = ''
+
+@description('Enable the private Ejari worker and API after its data plane is provisioned.')
+param enableEjari bool = false
+
+param ejariStorageName string = 'stai7uaeejariuaen001'
+param ejariWorkerIdentityName string = 'id-ai7uae-ejari-worker-uaen-001'
+param ejariWorkerName string = 'ca-ai7uae-ejari-worker'
+param ejariPurgeJobName string = 'caj-ai7uae-ejari-purge'
+
 @description('Enable the eight document OCR APIs only after all sample and credential validation gates pass.')
 param enableDocumentOcr bool = false
 
@@ -51,11 +62,41 @@ param bankStatementDocumentEndpoint string = 'https://doc-ai7uae-bsa-uaen-001.co
 @description('Dedicated document OCR storage account; never reuse the bank statement store.')
 param documentOcrStorageName string = 'stai7uaeocruaen001'
 
+@description('Dedicated Case Manager storage account. Provision separately before enabling.')
+param caseManagerStorageName string = 'stai7uaecasesuaen001'
+
+@description('Enable Case Manager only after storage, key, policy, and QA gates are reviewed.')
+param enableCaseManager bool = false
+
+@description('Keep purge, reconciliation and alerts running for existing cases when API capture is disabled.')
+param maintainCaseManagerData bool = false
+
+@description('Parallel VNet preflight: new API and screenshot app only, internal ingress, all shared queue consumers and Case Manager capture off.')
+param parallelDeployment bool = false
+
+@description('Enable synthetic-only Case Manager capture and its dedicated maintenance jobs on the internal parallel API after private-path proof. Shared source queue consumers stay off.')
+param parallelCaseManagerQa bool = false
+
+@description('Move existing API and adverse-source alerts to the new app only after customer traffic moves.')
+param apiTrafficCutover bool = false
+
 @description('Dedicated S0 Document Intelligence account for the eight extraction APIs.')
 param documentOcrEndpoint string = 'https://doc-ai7uae-ocr-uaen-001.cognitiveservices.azure.com/'
 
 @description('Dedicated document OCR worker identity name.')
 param documentOcrWorkerIdentityName string = 'id-ai7uae-ocr-worker-uaen-001'
+
+@description('Document OCR worker name. Use a distinct name in the new VNet environment after the queue handoff.')
+param documentOcrWorkerName string = 'ca-ai7uae-document-ocr-worker'
+
+@description('Document OCR purge job name. Use a distinct name during the environment migration.')
+param documentOcrPurgeJobName string = 'caj-ai7uae-document-ocr-purge'
+
+@description('Case Manager purge job name. Never run two scheduled consumers against the same case store.')
+param caseManagerPurgeJobName string = 'caj-ai7uae-case-manager-purge'
+
+@description('Case Manager reconciliation job name. Never run two scheduled consumers against the same queue.')
+param caseManagerReconcileJobName string = 'caj-ai7uae-case-manager-reconcile'
 
 @description('Resource ID of the managed certificate for api.ai7uae.com. Leave blank until DNS validation is complete.')
 param apiCertificateId string = ''
@@ -107,18 +148,22 @@ resource deepResearchQueueService 'Microsoft.Storage/storageAccounts/queueServic
   name: 'default'
 }
 
-resource deepResearchDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+resource deepResearchDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = if (!parallelDeployment) {
   parent: deepResearchQueueService
   name: deepResearchDeadLetterQueueName
 }
 
-resource formsDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+resource formsDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = if (!parallelDeployment) {
   parent: deepResearchQueueService
   name: formsDeadLetterQueueName
 }
 // Cisco Talos ClamAV 1.4.6 LTS, mirrored into the private ACR and pinned to the amd64 manifest.
 var bankStatementClamavImage = '${acrLoginServer}/ai7uae-clamav@sha256:6ba4e78b29853b2fc7e3c111389596e2cad5ec4ed5f0fd2cb663d29ab6b0e6a3'
-var customDomains = concat(
+var caseManagerRuntimeEnabled = (!parallelDeployment && enableCaseManager) || (parallelDeployment && parallelCaseManagerQa)
+var caseManagerMaintenanceEnabled = (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) || (parallelDeployment && parallelCaseManagerQa)
+var monitoredApiId = apiTrafficCutover ? api.id : resourceId('Microsoft.App/containerApps', 'ca-ai7uae-api')
+var monitoredApiName = apiTrafficCutover ? containerAppName : 'ca-ai7uae-api'
+var customDomains = parallelDeployment ? [] : concat(
   empty(apiCertificateId) ? [] : [
     {
       name: 'api.ai7uae.com'
@@ -147,7 +192,80 @@ resource documentOcrWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIdenti
   name: documentOcrWorkerIdentityName
 }
 
-resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = {
+resource ejariWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = if (enableEjari) {
+  name: ejariWorkerIdentityName
+}
+
+resource ejariWorker 'Microsoft.App/containerApps@2025-07-01' = if (!parallelDeployment && enableEjari) {
+  name: ejariWorkerName
+  location: location
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${ejariWorkerIdentity.id}': {} } }
+  properties: {
+    managedEnvironmentId: environmentId
+    configuration: {
+      activeRevisionsMode: 'Single'
+      registries: [{ server: acrLoginServer, identity: ejariWorkerIdentity.id }]
+      secrets: [{ name: 'ejari-root-key', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: ejariWorkerIdentity.id }]
+    }
+    template: {
+      containers: [
+        {
+          name: 'ejari-worker'
+          image: ejariWorkerImage
+          env: [
+            { name: 'EJARI_AZURE_WORKER', value: '1' }
+            { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-root-key' }
+            { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'EJARI_WORKER_IDENTITY_CLIENT_ID', value: ejariWorkerIdentity!.properties.clientId }
+            { name: 'KEY_VAULT_URI', value: keyVaultUri }
+            { name: 'EJARI_CLAMD_HOST', value: '127.0.0.1' }
+            { name: 'EJARI_CLAMD_PORT', value: '3310' }
+          ]
+          resources: { cpu: json('2.0'), memory: '4Gi' }
+        }
+        { name: 'clamav', image: bankStatementClamavImage, resources: { cpu: json('2.0'), memory: '4Gi' } }
+      ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 3
+        rules: [{ name: 'ejari-queue', azureQueue: {
+          accountName: ejariStorageName
+          queueName: 'ejari-jobs'
+          queueLength: 1
+          identity: ejariWorkerIdentity.id
+        } }]
+      }
+    }
+  }
+}
+
+resource ejariPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && enableEjari) {
+  name: ejariPurgeJobName
+  location: location
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${ejariWorkerIdentity.id}': {} } }
+  properties: {
+    environmentId: environmentId
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 900
+      replicaRetryLimit: 1
+      scheduleTriggerConfig: { cronExpression: '*/15 * * * *', parallelism: 1, replicaCompletionCount: 1 }
+      registries: [{ server: acrLoginServer, identity: ejariWorkerIdentity.id }]
+    }
+    template: { containers: [{
+      name: 'ejari-purge'
+      image: ejariWorkerImage
+      command: ['python', '-m', 'ejari_verifier.purge']
+      env: [
+        { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
+        { name: 'EJARI_WORKER_IDENTITY_CLIENT_ID', value: ejariWorkerIdentity!.properties.clientId }
+      ]
+      resources: { cpu: json('0.5'), memory: '1Gi' }
+    }] }
+  }
+}
+
+resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = if (!parallelDeployment) {
   name: bankStatementWorkerName
   location: location
   identity: {
@@ -235,8 +353,8 @@ resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = {
   }
 }
 
-resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (enableDocumentOcr || enableDocumentOcrWorker) {
-  name: 'ca-ai7uae-document-ocr-worker'
+resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (!parallelDeployment && (enableDocumentOcr || enableDocumentOcrWorker)) {
+  name: documentOcrWorkerName
   location: location
   identity: {
     type: 'UserAssigned'
@@ -298,8 +416,8 @@ resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (enable
   }
 }
 
-resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableDocumentOcr || enableDocumentOcrWorker) {
-  name: 'caj-ai7uae-document-ocr-purge'
+resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && (enableDocumentOcr || enableDocumentOcrWorker)) {
+  name: documentOcrPurgeJobName
   location: location
   identity: {
     type: 'UserAssigned'
@@ -326,6 +444,107 @@ resource documentOcrPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (enableDocumen
             { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
           ]
+          resources: { cpu: json('0.5'), memory: '1Gi' }
+        }
+      ]
+    }
+  }
+}
+
+resource caseManagerPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (caseManagerMaintenanceEnabled) {
+  name: caseManagerPurgeJobName
+  location: location
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
+  properties: {
+    environmentId: environmentId
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 3600
+      replicaRetryLimit: 2
+      scheduleTriggerConfig: { cronExpression: '*/15 * * * *', parallelism: 1, replicaCompletionCount: 1 }
+      registries: [ { server: acrLoginServer, identity: runtimeIdentityResourceId } ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'case-manager-purge'
+          image: image
+          command: [ 'node', 'scripts/purge-cases.mjs' ]
+          env: concat([
+            { name: 'CASE_MANAGER_ENABLED', value: 'true' }
+            { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
+            { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
+          ], parallelDeployment && parallelCaseManagerQa ? [
+            { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
+            { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }
+          ] : [])
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+        }
+      ]
+    }
+  }
+}
+
+resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManagerMaintenanceEnabled) {
+  name: caseManagerReconcileJobName
+  location: location
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
+  properties: {
+    environmentId: environmentId
+    configuration: {
+      triggerType: 'Schedule'
+      replicaTimeout: 900
+      replicaRetryLimit: 2
+      scheduleTriggerConfig: { cronExpression: '*/2 * * * *', parallelism: 1, replicaCompletionCount: 1 }
+      secrets: concat([
+        { name: 'case-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/case-manager-data-key-v1', identity: runtimeIdentityResourceId }
+      ], !parallelDeployment ? [
+        { name: 'bsa-data-key', keyVaultUrl: '${keyVaultUri}secrets/bsa-data-key', identity: runtimeIdentityResourceId }
+      ] : [], !parallelDeployment && enableDocumentOcr ? [
+        { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: runtimeIdentityResourceId }
+        { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
+      ] : [], !parallelDeployment && enableEjari ? [
+        { name: 'ejari-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: runtimeIdentityResourceId }
+      ] : [])
+      registries: [ { server: acrLoginServer, identity: runtimeIdentityResourceId } ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'case-manager-reconcile'
+          image: image
+          command: [ 'node', 'scripts/reconcile-cases.mjs' ]
+          env: concat([
+            { name: 'CASE_MANAGER_ENABLED', value: 'true' }
+            { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
+            { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_DATA_KEY_V1_HEX', secretRef: 'case-data-key-v1' }
+            { name: 'CASE_MANAGER_ACTIVE_KEY_VERSION', value: '1' }
+          ], !parallelDeployment ? [
+            { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'BSA_PRODUCTION_ENABLED', value: '1' }
+            { name: 'BSA_DATA_KEY_HEX', secretRef: 'bsa-data-key' }
+            { name: 'BSA_STORAGE_BLOB_URL', value: 'https://${bankStatementStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'BSA_STORAGE_CONTAINER', value: 'bank-statement-analysis' }
+            { name: 'BSA_STORAGE_QUEUE', value: 'bank-statement-analysis' }
+            { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
+          ] : [], !parallelDeployment && enableDocumentOcr ? [
+            { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
+            { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
+            { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
+          ] : [], !parallelDeployment && enableEjari ? [
+            { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-data-key-v1' }
+          ] : [], parallelDeployment && parallelCaseManagerQa ? [
+            { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
+            { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }
+            { name: 'CASE_MANAGER_RECONCILE_QUEUE_NAME', value: 'case-manager-qa-reconcile' }
+            { name: 'CASE_MANAGER_DEAD_LETTER_QUEUE_NAME', value: 'case-manager-qa-dead-letter' }
+          ] : [])
           resources: { cpu: json('0.5'), memory: '1Gi' }
         }
       ]
@@ -446,9 +665,13 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       ], enableDocumentOcr ? [
         { name: 'ocr-data-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-data-key', identity: runtimeIdentityResourceId }
         { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
+      ] : [], caseManagerRuntimeEnabled ? [
+        { name: 'case-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/case-manager-data-key-v1', identity: runtimeIdentityResourceId }
+      ] : [], !parallelDeployment && enableEjari ? [
+        { name: 'ejari-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: runtimeIdentityResourceId }
       ] : [])
       ingress: {
-        external: true
+        external: !parallelDeployment
         allowInsecure: false
         targetPort: 8080
         transport: 'Auto'
@@ -476,11 +699,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'API_HOSTS', value: 'api.ai7uae.com,app.kycprobe.com' }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
-            { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
-            { name: 'ADVERSE_MEDIA_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchDeadLetterQueueName}' }
-            { name: 'ADVERSE_MEDIA_WORKER_ENABLED', value: enableDeepResearchWorker ? 'true' : 'false' }
-            { name: 'FORMS_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsQueueName}' }
-            { name: 'FORMS_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsDeadLetterQueueName}' }
+            { name: 'ADVERSE_MEDIA_WORKER_ENABLED', value: !parallelDeployment && enableDeepResearchWorker ? 'true' : 'false' }
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
             { name: 'GDELT_INDEX_TABLE', value: 'GdeltEntityMentions' }
@@ -497,20 +716,40 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'PLATFORM_SMTP_USER', value: 'notify@kycprobe.com' }
             { name: 'PLATFORM_SMTP_PASSWORD', secretRef: 'platform-smtp-password' }
             { name: 'MERCHANT_SCREENSHOT_WORKER_URL', value: 'https://${merchantScreenshotWorker.properties.configuration.ingress.fqdn}' }
-            { name: 'BSA_PRODUCTION_ENABLED', value: '1' }
+            { name: 'BSA_PRODUCTION_ENABLED', value: parallelDeployment ? '0' : '1' }
             { name: 'BSA_DATA_KEY_HEX', secretRef: 'bsa-data-key' }
             { name: 'BSA_STORAGE_BLOB_URL', value: 'https://${bankStatementStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'BSA_STORAGE_CONTAINER', value: 'bank-statement-analysis' }
             { name: 'BSA_STORAGE_QUEUE', value: 'bank-statement-analysis' }
             { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
-            { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: enableDocumentOcr ? '1' : '0' }
-            { name: 'DOCUMENT_OCR_FORCE_OLLAMA', value: enableDocumentOcr && forceDocumentOcrOllama ? '1' : '0' }
-          ], enableDocumentOcr ? [
+            { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: !parallelDeployment && enableDocumentOcr ? '1' : '0' }
+            { name: 'DOCUMENT_OCR_FORCE_OLLAMA', value: !parallelDeployment && enableDocumentOcr && forceDocumentOcrOllama ? '1' : '0' }
+            { name: 'CASE_MANAGER_ENABLED', value: caseManagerRuntimeEnabled ? 'true' : 'false' }
+            { name: 'EJARI_PLATFORM_ENABLED', value: !parallelDeployment && enableEjari ? '1' : '0' }
+          ], parallelDeployment ? [] : [
+            { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
+            { name: 'ADVERSE_MEDIA_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchDeadLetterQueueName}' }
+            { name: 'FORMS_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsQueueName}' }
+            { name: 'FORMS_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${formsDeadLetterQueueName}' }
+          ], !parallelDeployment && enableDocumentOcr ? [
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
             { name: 'DOCUMENT_OCR_WORKER_IMAGE', value: documentOcrWorkerImage }
+          ] : [], caseManagerRuntimeEnabled ? [
+            { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }
+            { name: 'CASE_MANAGER_DATA_KEY_V1_HEX', secretRef: 'case-data-key-v1' }
+            { name: 'CASE_MANAGER_ACTIVE_KEY_VERSION', value: '1' }
+          ] : [], !parallelDeployment && enableEjari ? [
+            { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-data-key-v1' }
+          ] : [], parallelDeployment && parallelCaseManagerQa ? [
+            { name: 'CASE_MANAGER_TABLE_NAME', value: 'CaseManagerQaMetadata' }
+            { name: 'CASE_MANAGER_CONTAINER_NAME', value: 'case-manager-qa-private' }
+            { name: 'CASE_MANAGER_RECONCILE_QUEUE_NAME', value: 'case-manager-qa-reconcile' }
           ] : [])
           resources: {
             cpu: json(enableDocumentOcr ? '0.5' : '0.25')
@@ -554,7 +793,7 @@ resource apiLogWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' e
   name: logAnalyticsWorkspaceName
 }
 
-resource apiAlerts 'Microsoft.Insights/actionGroups@2023-01-01' = {
+resource apiAlerts 'Microsoft.Insights/actionGroups@2023-01-01' = if (!parallelDeployment) {
   name: 'ag-ai7uae-api-uaen-001'
   location: 'global'
   properties: {
@@ -570,14 +809,14 @@ resource apiAlerts 'Microsoft.Insights/actionGroups@2023-01-01' = {
   }
 }
 
-resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = if (!parallelDeployment) {
   name: 'alert-ai7uae-api-sustained-5xx'
   location: 'global'
   properties: {
     description: 'Five or more API HTTP 5xx responses in five minutes.'
     severity: 2
     enabled: true
-    scopes: [ api.id ]
+    scopes: [ monitoredApiId ]
     evaluationFrequency: 'PT1M'
     windowSize: 'PT5M'
     autoMitigate: true
@@ -602,11 +841,11 @@ resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = {
         }
       ]
     }
-    actions: [ { actionGroupId: apiAlerts.id } ]
+    actions: [ { actionGroupId: apiAlerts!.id } ]
   }
 }
 
-resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = {
+resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = if (!parallelDeployment) {
   name: 'alert-ai7uae-adverse-source-failures'
   location: location
   kind: 'LogAlert'
@@ -622,7 +861,7 @@ resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-0
     criteria: {
       allOf: [
         {
-          query: 'ContainerAppConsoleLogs_CL | where ContainerAppName_s == "${containerAppName}" and Log_s has "adverse_media_search_unavailable" | summarize failed = count()'
+          query: 'ContainerAppConsoleLogs_CL | where ContainerAppName_s == "${monitoredApiName}" and Log_s has "adverse_media_search_unavailable" | summarize failed = count()'
           metricMeasureColumn: 'failed'
           timeAggregation: 'Total'
           operator: 'GreaterThanOrEqual'
@@ -631,13 +870,96 @@ resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-0
         }
       ]
     }
-    actions: { actionGroups: [ apiAlerts.id ] }
+    actions: { actionGroups: [ apiAlerts!.id ] }
   }
 }
+
+var loginCodeAlertSignals = [
+  { name: 'email', signal: 'platform_login_code_email_failed' }
+  { name: 'store', signal: 'platform_login_code_store_failed' }
+]
+
+resource loginCodeAlerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert in loginCodeAlertSignals: if (!parallelDeployment) {
+  name: 'alert-ai7uae-login-code-${alert.name}'
+  location: location
+  kind: 'LogAlert'
+  properties: {
+    description: 'Email sign-in code ${alert.name} failure requires operations review.'
+    displayName: 'KYCProbe login code ${alert.name} failure'
+    severity: 2
+    enabled: true
+    scopes: [ apiLogWorkspace.id ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: 'ContainerAppConsoleLogs_CL | where ContainerAppName_s == "${containerAppName}" and Log_s has "${alert.signal}" | summarize failures = count()'
+          metricMeasureColumn: 'failures'
+          timeAggregation: 'Total'
+          operator: 'GreaterThanOrEqual'
+          threshold: 1
+          failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
+        }
+      ]
+    }
+    actions: { actionGroups: [ apiAlerts!.id ] }
+  }
+}]
+
+var caseManagerAlertSignals = [
+  { name: 'capture', signal: 'case_manager_capture_failed' }
+  { name: 'intent', signal: 'case_manager_intent_failed' }
+  { name: 'link', signal: 'case_manager_reconcile_link_failed' }
+  { name: 'incomplete', signal: 'case_manager_incomplete_mark_failed' }
+  { name: 'pending-cleanup', signal: 'case_manager_pending_index_cleanup_failed' }
+  { name: 'deferred-finalization', signal: 'case_manager_deferred_finalization_failed' }
+  { name: 'rejected-attempt', signal: 'case_manager_rejected_attempt_capture_failed' }
+  { name: 'storage', signal: 'case_manager_storage_error' }
+  { name: 'pending', signal: 'case_manager_aged_pending' }
+  { name: 'expiry', signal: 'case_manager_expiry_backlog' }
+  { name: 'expiry-deadline', signal: 'case_manager_expiry_near_deadline' }
+  { name: 'expiry-breach', signal: 'case_manager_expiry_deadline_breached' }
+  { name: 'retirement-deadline', signal: 'case_manager_retirement_near_deadline' }
+  { name: 'retirement-breach', signal: 'case_manager_retirement_deadline_breached' }
+  { name: 'deadletters', signal: 'case_manager_dead_letters' }
+  { name: 'retirement', signal: 'case_manager_retirement_schedule_failed' }
+  { name: 'retirement-task', signal: 'case_manager_retirement_task_failed' }
+]
+
+resource caseManagerAlerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert in caseManagerAlertSignals: if (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) {
+  name: 'alert-ai7uae-case-manager-${alert.name}'
+  location: location
+  kind: 'LogAlert'
+  properties: {
+    description: 'Case Manager ${alert.name} requires operations review.'
+    displayName: 'KYCProbe Case Manager ${alert.name}'
+    severity: 2
+    enabled: true
+    scopes: [ apiLogWorkspace.id ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    autoMitigate: true
+    criteria: {
+      allOf: [
+        {
+          query: 'ContainerAppConsoleLogs_CL | where Log_s has "${alert.signal}" | summarize failures = count()'
+          metricMeasureColumn: 'failures'
+          timeAggregation: 'Total'
+          operator: 'GreaterThanOrEqual'
+          threshold: 1
+          failingPeriods: { numberOfEvaluationPeriods: 1, minFailingPeriodsToAlert: 1 }
+        }
+      ]
+    }
+    actions: { actionGroups: [ apiAlerts!.id ] }
+  }
+}]
 
 output fqdn string = api.properties.configuration.ingress.fqdn
 output customDomainVerificationId string = api.properties.customDomainVerificationId
 output latestRevisionName string = api.properties.latestRevisionName
 output merchantScreenshotWorkerFqdn string = merchantScreenshotWorker.properties.configuration.ingress.fqdn
 output merchantScreenshotWorkerLatestRevisionName string = merchantScreenshotWorker.properties.latestRevisionName
-output bankStatementWorkerLatestRevisionName string = bankStatementWorker.properties.latestRevisionName
+output bankStatementWorkerLatestRevisionName string = parallelDeployment ? '' : bankStatementWorker!.properties.latestRevisionName

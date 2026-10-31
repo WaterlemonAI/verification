@@ -22,13 +22,15 @@ let url;
 let pdf;
 let adminCookie;
 let adminCsrf;
+const codes = [];
 
 before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'ai7-bsa-'));
   process.env.BSA_DATA_DIR = directory;
   pdf = await readFile(new URL('./fixtures/bsa-synthetic-combined.pdf', import.meta.url));
   await writeFile(join(directory, 'worker-capabilities.json'), JSON.stringify({ native: 'ready', rapidocr: 'ready', paddleocr: 'ready', azureLayout: 'configured' }));
-  server = createAppServer({ startWorker: false });
+  server = createAppServer({ startWorker: false, mailer: { configured: true,
+    sendLoginCode: async (value) => { codes.push(value); } } });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   url = `http://127.0.0.1:${server.address().port}`;
   const setup = await fetch(`${url}/admin/api/auth/setup`, {
@@ -37,8 +39,16 @@ before(async () => {
     body: JSON.stringify({ email: 'analysis-admin@example.com', password: 'StrongAnalysis!123' })
   });
   assert.equal(setup.status, 201);
-  adminCookie = setup.headers.get('set-cookie').split(';')[0];
-  adminCsrf = (await setup.json()).csrf_token;
+  const login = await fetch(`${url}/admin/api/auth/login`, { method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'analysis-admin@example.com', password: 'StrongAnalysis!123' }) });
+  assert.equal(login.status, 202);
+  const verify = await fetch(`${url}/admin/api/auth/verify-code`, { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'analysis-admin@example.com',
+      challenge_id: (await login.json()).challenge_id, code: codes.at(-1).code }) });
+  assert.equal(verify.status, 200);
+  adminCookie = verify.headers.get('set-cookie').split(';')[0];
+  adminCsrf = (await verify.json()).csrf_token;
 });
 
 after(async () => {
@@ -82,9 +92,10 @@ test('authenticated upload, idempotency, tenant isolation and result retrieval',
 
 test('accepts an optional signed callback and never redisplays its signing secret', async () => {
   const headers = { authorization: `Bearer ${key}`, 'idempotency-key': 'bsa-callback-key-001' };
-  const callbackForm = () => {
+  const callbackForm = (accessKey = 'callback-token-123') => {
     const body = form();
     body.append('callback_url', 'https://8.8.8.8/ai7-callback');
+    if (accessKey !== null) body.append('callback_access_key', accessKey);
     return body;
   };
   const first = await fetch(`${url}/service/bank_statement_analysis`, { method: 'POST', headers, body: callbackForm() });
@@ -95,6 +106,7 @@ test('accepts an optional signed callback and never redisplays its signing secre
   assert.equal(accepted.callback.signature_header, 'x-ai7-signature');
   assert.match(accepted.callback.signing_secret, /^[A-Za-z0-9_-]{40,}$/);
   assert.equal(accepted.callback.signing_secret_returned, true);
+  assert.equal(JSON.stringify(accepted).includes('callback-token-123'), false);
 
   const repeated = await fetch(`${url}/service/bank_statement_analysis`, { method: 'POST', headers, body: callbackForm() });
   assert.equal(repeated.status, 202);
@@ -103,6 +115,10 @@ test('accepts an optional signed callback and never redisplays its signing secre
   assert.equal(reused.callback.delivery_id, accepted.callback.delivery_id);
   assert.equal(reused.callback.signing_secret, undefined);
   assert.equal(reused.callback.signing_secret_returned, false);
+  const changed = await fetch(`${url}/service/bank_statement_analysis`, { method: 'POST', headers,
+    body: callbackForm('different-token') });
+  assert.equal(changed.status, 409);
+  assert.equal((await changed.json()).reasonCode, 'IDEMPOTENCY_CONFLICT');
 
   const status = await (await fetch(`${url}${accepted.statusUrl}`, { headers })).json();
   assert.deepEqual(status.callback, {
@@ -115,6 +131,19 @@ test('accepts an optional signed callback and never redisplays its signing secre
     headers: { ...headers, 'idempotency-key': 'bsa-callback-key-002' }, body: invalid });
   assert.equal(rejected.status, 400);
   assert.equal((await rejected.json()).reasonCode, 'INVALID_CALLBACK_URL');
+  for (const [index, invalidKey] of ['', 'bad\r\nheader'].entries()) {
+    const invalidKeyForm = callbackForm(invalidKey);
+    const invalidKeyResponse = await fetch(`${url}/service/bank_statement_analysis`, { method: 'POST',
+      headers: { ...headers, 'idempotency-key': `bsa-invalid-key-00${index}` }, body: invalidKeyForm });
+    assert.equal(invalidKeyResponse.status, 400);
+    assert.equal((await invalidKeyResponse.json()).reasonCode, 'INVALID_CALLBACK_ACCESS_KEY');
+  }
+  const withoutUrl = form();
+  withoutUrl.append('callback_access_key', 'callback-token-123');
+  const withoutUrlResponse = await fetch(`${url}/service/bank_statement_analysis`, { method: 'POST',
+    headers: { ...headers, 'idempotency-key': 'bsa-invalid-key-no-url' }, body: withoutUrl });
+  assert.equal(withoutUrlResponse.status, 400);
+  assert.equal((await withoutUrlResponse.json()).reasonCode, 'INVALID_CALLBACK_ACCESS_KEY');
 });
 
 test('rejects unauthenticated, invalid, oversized and conflicting uploads', async () => {

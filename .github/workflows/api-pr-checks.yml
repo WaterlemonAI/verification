@@ -6,16 +6,30 @@ on:
       - api-site/**
       - admin-site/**
       - api/**
+      - ejari-verifier/**
       - lib/**
       - server.mjs
       - test/**
       - scripts/**
       - Dockerfile.document-ocr
+      - Dockerfile.api
+      - .dockerignore
+      - docs/case-manager.md
+      - docs/case-manager-release.md
+      - docs/case-manager-private-network.md
       - package.json
       - package-lock.json
       - infrastructure/api.bicep
       - infrastructure/api-document-ocr-platform.bicep
+      - infrastructure/api-ejari-platform.bicep
       - infrastructure/api-document-ocr-purge-bootstrap.bicep
+      - infrastructure/api-case-manager-platform.bicep
+      - infrastructure/api-case-manager-network.bicep
+      - infrastructure/api-case-manager-private-probe.bicep
+      - infrastructure/api-case-manager-qa-job.bicep
+      - infrastructure/api-case-manager-cutover-certificates.bicep
+      - infrastructure/api-case-manager-release-reader.bicep
+      - .github/workflows/deploy-api.yml
       - .github/workflows/api-pr-checks.yml
 
 permissions:
@@ -31,11 +45,33 @@ jobs:
       - name: Verify JavaScript syntax
         run: |
           node --check server.mjs
-          find lib test -name '*.mjs' -print0 | xargs -0 -n1 node --check
+          find lib test scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check
+          find api-site admin-site \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
       - name: Run API contract and queue tests
         run: npm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify Ejari worker and encryption compatibility
+        run: |
+          python -m pip install -r ejari-verifier/requirements.txt
+          PYTHONPATH=ejari-verifier/src python -m unittest discover -s ejari-verifier/tests -v
+          docker build --file ejari-verifier/Dockerfile --tag ejari-verifier:pr ejari-verifier
+      - name: Check customer case dashboard in desktop and mobile Chromium
+        run: |
+          npx playwright-core install chromium
+          node scripts/smoke-case-manager-ui.mjs
+          node scripts/smoke-login-otp-ui.mjs
+          node scripts/smoke-ejari-ui.mjs
       - name: Validate document OCR Bicep
         run: |
           az bicep build --file infrastructure/api.bicep
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
           az bicep build --file infrastructure/api-document-ocr-purge-bootstrap.bicep
+          az bicep build --file infrastructure/api-case-manager-platform.bicep
+          az bicep build --file infrastructure/api-case-manager-network.bicep
+          az bicep build --file infrastructure/api-case-manager-private-probe.bicep
+          az bicep build --file infrastructure/api-case-manager-qa-job.bicep
+          az bicep build --file infrastructure/api-case-manager-cutover-certificates.bicep
+          az bicep build --file infrastructure/api-case-manager-release-reader.bicep
+          az bicep build --file infrastructure/api-ejari-platform.bicep

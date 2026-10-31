@@ -4,13 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#071f43" />
-    <meta name="description" content="Sign in to the AI7 UAE Verification API developer portal." />
-    <title>KYCProbe — Developer Portal</title>
+    <meta name="description" content="Sign in to the KYCProbe API Platform." />
+    <title>KYCProbe — API Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=10" />
-    <script src="/portal-login.js?v=3" defer></script>
+    <script src="/portal-login.js?v=4" defer></script>
   </head>
   <body class="login-page">
     <main class="login-shell">
@@ -21,13 +21,13 @@
           <h1>One workspace.<br /><em>Every check.</em></h1>
           <p>Access verification APIs, live testing, technical documentation, and consolidated Forms through one controlled developer workspace.</p>
         </div>
-        <p class="login-company">AI7LAB Tech Innovation Limited · DIFC, Dubai, UAE</p>
+        <p class="login-company">ai7lab IP solutions FZ LLC · Dubai, UAE</p>
       </section>
 
       <section class="login-panel">
         <div class="login-card">
           <img class="login-card-logo" src="/assets/kycprobe-logo-dark.png" alt="KYCProbe by AI7Lab" />
-          <p class="eyebrow">AI7 DEVELOPER PORTAL</p>
+          <p class="eyebrow">API PLATFORM</p>
           <h2 id="auth-title">Welcome back</h2>
           <p class="login-intro" id="auth-intro">Sign in with your workspace email and password.</p>
 
@@ -36,6 +36,12 @@
             <label>Password<input id="login-password" type="password" autocomplete="current-password" required /></label>
             <p class="auth-error" id="login-error" role="alert"></p>
             <button type="submit">Sign in to workspace →</button>
+          </form>
+          <form class="auth-form" id="code-form" novalidate hidden>
+            <label>Email sign-in code<input id="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" maxlength="8" required /></label>
+            <p class="auth-error" id="code-error" role="alert"></p>
+            <button type="submit">Verify code →</button>
+            <small>Codes expire after 10 minutes and can be used once. To request another, return to sign in after one minute.</small>
           </form>
           <button class="auth-link" type="button" id="show-forgot">Forgot password?</button>
 
