@@ -51,6 +51,9 @@ concurrency:
 
 jobs:
   test-build-deploy:
+    # Hold the merge-triggered run while the VNet cutover variables and certificates
+    # are staged. Clear the environment variable before the reviewed promotion run.
+    if: vars.CASE_MANAGER_RELEASE_HOLD != 'true'
     runs-on: ubuntu-latest
     environment: ai7uae-api
     steps:
