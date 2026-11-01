@@ -184,13 +184,15 @@ The API Engine manages these records inside the dedicated Key Vault:
 `infrastructure/api-openai.bicep` defines the separate UAE North Azure OpenAI
 account. It disables API keys and grants only the dedicated API runtime managed
 identity the `Cognitive Services OpenAI User` role on that account. The public
-endpoint uses Microsoft Entra authentication; the resource does not expose a
-model until a deployment SKU is explicitly selected. The template defaults to
-no model deployment. When selecting `GlobalStandard`, prompts and responses may
-be processed outside the UAE. Select `Standard` only after confirming that a
-regional pay-per-token SKU and quota are available in the subscription. Do not
-select provisioned throughput for a low-volume test because it reserves paid
-capacity. The model deployment name is `ai7uae-gpt-5-mini`.
+endpoint uses Microsoft Entra authentication. The separately scoped
+`infrastructure/api-openai-gpt5-mini.bicep` defines the approved
+`ai7uae-gpt-5-mini` model deployment using `GlobalStandard` and 10 capacity
+units of the pay-per-token tier. Its model version is pinned to `2025-08-07`
+with automatic version upgrades disabled. Global Standard prompts and responses may be
+processed outside the UAE. The model template references the existing account
+and does not reapply the account or its role assignment. Preview its exact
+resource change before applying it; the account template does not deploy a
+model.
 
 The existing Gemini-backed adverse-media and document OCR integrations remain
 active until their Azure OpenAI replacements pass separate contract, quality,
