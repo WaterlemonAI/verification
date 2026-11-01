@@ -29,6 +29,9 @@ param ejariPurgeJobName string = 'caj-ai7uae-ejari-purge'
 @description('Enable the eight document OCR APIs only after all sample and credential validation gates pass.')
 param enableDocumentOcr bool = false
 
+@description('Switch all eight document OCR APIs to Ollama after the new worker and representative samples pass QA.')
+param forceDocumentOcrOllama bool = false
+
 @description('Start the isolated document OCR worker before customer routes are enabled for queue and malware-gate smoke tests.')
 param enableDocumentOcrWorker bool = false
 
@@ -384,18 +387,19 @@ resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (!paral
             { name: 'DOCUMENT_OCR_APPROVED_REGION', value: location }
             { name: 'DOCUMENT_OCR_CLAMD_HOST', value: '127.0.0.1' }
             { name: 'DOCUMENT_OCR_CLAMD_PORT', value: '3310' }
+            { name: 'DOCUMENT_OCR_WORKER_IMAGE', value: documentOcrWorkerImage }
           ]
-          resources: { cpu: json('2.0'), memory: '4Gi' }
+          resources: { cpu: json('2.0'), memory: '6Gi' }
         }
         {
           name: 'clamav'
           image: bankStatementClamavImage
-          resources: { cpu: json('2.0'), memory: '4Gi' }
+          resources: { cpu: json('2.0'), memory: '2Gi' }
         }
       ]
       scale: {
         minReplicas: 0
-        maxReplicas: 2
+        maxReplicas: 10
         rules: [
           {
             name: 'document-ocr-queue'
@@ -720,6 +724,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
             { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: !parallelDeployment && enableDocumentOcr ? '1' : '0' }
+            { name: 'DOCUMENT_OCR_FORCE_OLLAMA', value: !parallelDeployment && enableDocumentOcr && forceDocumentOcrOllama ? '1' : '0' }
             { name: 'CASE_MANAGER_ENABLED', value: caseManagerRuntimeEnabled ? 'true' : 'false' }
             { name: 'EJARI_PLATFORM_ENABLED', value: !parallelDeployment && enableEjari ? '1' : '0' }
           ], parallelDeployment ? [] : [
@@ -731,6 +736,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
+            { name: 'DOCUMENT_OCR_WORKER_IMAGE', value: documentOcrWorkerImage }
           ] : [], caseManagerRuntimeEnabled ? [
             { name: 'CASE_MANAGER_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }

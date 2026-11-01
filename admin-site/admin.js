@@ -265,7 +265,14 @@ function renderBsa(result) {
 }
 
 async function loadIntegrations() {
-  const data = await request('/admin/api/integrations');
+  const [data, capabilityResult] = await Promise.all([
+    request('/admin/api/integrations'),
+    request('/admin/api/document-ocr/capability').catch(() => null)
+  ]);
+  const capability = capabilityResult?.capability;
+  byId('document-ocr-capability').textContent = capability?.recent
+    ? `Document OCR worker last checked ${new Date(capability.checkedAt).toLocaleString()}: Ollama ${capability.ollama ? 'model verified' : 'unverified'}, Azure ${capability.azure ? 'configured' : 'unconfigured'}. Current image match: ${capability.imageMatches ? 'yes' : 'unconfirmed'}.`
+    : 'Document OCR worker capability has not been verified recently. Ollama selection is unavailable.';
   integrationCatalog = data.integrations.filter((item) => item.enabled && item.formsCompatible !== false && item.id !== 'adverse-media-ai');
   const list = byId('integration-list');
   list.replaceChildren();
@@ -284,7 +291,8 @@ async function loadIntegrations() {
     pill.textContent = item.enabled ? 'Active' : 'Disabled';
     pill.classList.toggle('off', !item.enabled);
     const credentialButton = row.querySelector('.set-credential');
-    credentialButton.hidden = item.id === 'merchant-screening' || (item.id !== 'document-ocr-ai' && item.id.endsWith('-ocr')) || item.id === 'moa-analysis';
+    credentialButton.hidden = item.id === 'merchant-screening' || item.extractionEngine !== undefined
+      || (item.id !== 'document-ocr-ai' && item.id.endsWith('-ocr')) || item.id === 'moa-analysis';
     credentialButton.textContent = item.id === 'ejari-verification' ? 'Configure Ejari'
       : item.masterAuthKeyConfigured ? 'Replace credential' : 'Set credential';
     credentialButton.addEventListener('click', () => {
@@ -314,10 +322,41 @@ async function loadIntegrations() {
           : isAdverseMediaAi
             ? 'This write-only Google AI API key enables bounded AI classification for adverse-media results. The key is never returned or shown again.'
           : isDocumentOcrAi
-            ? 'Use the dedicated document OCR ai7edd model key. It is applied only after malware scanning and Azure OCR complete, and is never shown again.'
+            ? 'Legacy document OCR ai7edd model key for Azure jobs. Ollama extraction does not use this key. The value is never shown again.'
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });
+    if (item.extractionEngine !== undefined) {
+      const selector = document.createElement('select');
+      selector.className = 'ocr-engine-select';
+      selector.setAttribute('aria-label', `${item.name} extraction engine`);
+      for (const [value, label] of (capability?.forceOllama
+        ? [['ollama', 'Ollama CPU (Qwen3 VL)']]
+        : [['ollama', 'Ollama CPU (Qwen3 VL)'],
+          ['azure', 'Azure Document Intelligence']])) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        option.disabled = value === 'ollama' && (!capability?.recent || !capability[value]
+          || (capability.imageDigest && !capability.imageMatches));
+        selector.append(option);
+      }
+      selector.value = item.extractionEngine;
+      selector.addEventListener('change', async () => {
+        const previous = item.extractionEngine;
+        selector.disabled = true;
+        try {
+          await request(`/admin/api/document-ocr/engines/${encodeURIComponent(item.id)}`, {
+            method: 'PUT', body: JSON.stringify({ engine: selector.value })
+          });
+          item.extractionEngine = selector.value;
+        } catch (error) {
+          selector.value = previous;
+          byId('document-ocr-capability').textContent = error.message || 'Extraction setting could not be saved.';
+        } finally { selector.disabled = false; }
+      });
+      row.querySelector('div').append(selector);
+    }
     list.append(row);
   });
   await loadEjariConfig();

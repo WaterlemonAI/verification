@@ -172,3 +172,29 @@ test('two-file upload is accepted only for Emirates ID', async (t) => {
   assert.equal(rejected.status, 400);
   assert.equal(acceptedFiles, 2);
 });
+
+test('customer admission snapshots the current engine and exposes no engine control', async (t) => {
+  const store = new EnvironmentStore();
+  const issued = await store.createClient('Engine snapshot test');
+  const accepted = [];
+  const documentOcrStore = { async createJob(input) {
+    accepted.push(input.extractionEngine);
+    return { job: { id: jobId, service_id: input.serviceId, status: 'queued' }, reused: false };
+  } };
+  const server = createAppServer({ store, documentOcrStore, startWorker: false });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const submit = (key) => {
+    const form = new FormData();
+    form.set('file', new Blob([new Uint8Array([255, 216, 255])], { type: 'image/jpeg' }), 'cheque.jpg');
+    form.set('engine', 'azure');
+    return fetch(`${base}/service/cheque_ocr`, { method: 'POST',
+      headers: { authorization: `Bearer ${issued.apiKey}`, 'idempotency-key': key }, body: form });
+  };
+  await store.setDocumentOcrEngine('cheque-ocr', 'ollama', 'admin@example.test');
+  assert.equal((await submit('snapshot-engine-00001')).status, 202);
+  await store.setDocumentOcrEngine('cheque-ocr', 'azure', 'admin@example.test');
+  assert.equal((await submit('snapshot-engine-00002')).status, 202);
+  assert.deepEqual(accepted, ['ollama', 'azure']);
+});

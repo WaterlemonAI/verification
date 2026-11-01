@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { after, before, test } from 'node:test';
 
 process.env.NODE_ENV = 'test';
+process.env.DOCUMENT_OCR_WORKER_IMAGE = 'registry.example/ocr@sha256:test';
 const setupKey = 'ai7_admin_setup_test_key';
 process.env.AI7_ADMIN_KEY_HASHES = createHash('sha256').update(setupKey).digest('hex');
 
@@ -16,9 +17,14 @@ let app;
 let appUrl;
 let cookie = '';
 let csrf = '';
+let ollamaReady = false;
+let capabilityRecent = true;
+let capabilityImage = process.env.DOCUMENT_OCR_WORKER_IMAGE;
 
 before(async () => {
-  app = createAppServer({ store, mailer, startWorker: false });
+  app = createAppServer({ store, mailer, startWorker: false,
+    documentOcrStore: { getWorkerCapability: async () => ({ azure: true, ollama: ollamaReady,
+      recent: capabilityRecent, imageDigest: capabilityImage, checkedAt: new Date().toISOString() }) } });
   await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
   appUrl = `http://127.0.0.1:${app.address().port}`;
 });
@@ -102,6 +108,34 @@ test('state-changing admin operations require the session CSRF token', async () 
     method: 'POST', headers: { cookie, 'x-ai7-csrf': csrf, 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Secure Client' })
   });
   assert.equal(created.status, 201);
+});
+
+test('only a signed-in administrator can select a verified OCR engine', async () => {
+  const path = `${appUrl}/admin/api/document-ocr/engines/cheque-ocr`;
+  const put = (headers, engine) => fetch(path, { method: 'PUT', headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify({ engine }) });
+  assert.equal((await put({}, 'ollama')).status, 401);
+  assert.equal((await put({ cookie }, 'ollama')).status, 403);
+  assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'azure')).status, 200);
+  assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'ollama')).status, 409);
+  assert.equal(await store.getDocumentOcrEngine('cheque-ocr'), 'azure');
+  ollamaReady = true;
+  capabilityRecent = false;
+  assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'ollama')).status, 409);
+  capabilityRecent = true;
+  capabilityImage = 'registry.example/ocr@sha256:other';
+  assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'ollama')).status, 409);
+  capabilityImage = process.env.DOCUMENT_OCR_WORKER_IMAGE;
+  const selected = await put({ cookie, 'x-ai7-csrf': csrf }, 'ollama');
+  assert.equal(selected.status, 200);
+  assert.equal((await selected.json()).extractionEngine, 'ollama');
+  assert.equal(await store.getDocumentOcrEngine('cheque-ocr'), 'ollama');
+  assert.equal(store.documentOcrEngineAudit.at(-1).actor, 'admin@example.com');
+  const adminCatalog = await fetch(`${appUrl}/admin/api/integrations`, { headers: { cookie } });
+  assert.equal((await adminCatalog.json()).integrations.find((item) => item.id === 'cheque-ocr').extractionEngine, 'ollama');
+  const publicCatalog = await store.listIntegrations({ publicOnly: true });
+  assert.equal(Object.hasOwn(publicCatalog.find((item) => item.id === 'cheque-ocr'), 'extractionEngine'), false);
+  assert.equal((await put({ cookie, 'x-ai7-csrf': csrf }, 'azure')).status, 200);
 });
 
 test('Ejari admin setup requires the signed session and never returns provider keys', async (t) => {

@@ -14,6 +14,8 @@ dialog{width:min(760px,calc(100% - 2rem));max-height:90vh;padding:0;border:0;col
 .bsa-model-options{border:1px solid var(--line);padding:1rem;background:#f5f9fd}.bsa-model-options legend{font-weight:800;font-size:.78rem;padding:0 .3rem}.bsa-model-options p{margin:.2rem 0 1rem;color:var(--muted);font-size:.72rem}.bsa-model-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}.bsa-model-grid label{font-weight:600;line-height:1.4}.bsa-table-wrap{overflow:auto;margin:.7rem 0;border:1px solid var(--line)}.bsa-table{width:100%;border-collapse:collapse;font-size:.72rem;min-width:620px}.bsa-table th{background:var(--navy);color:#fff;text-align:left;font-weight:700;padding:.8rem}.bsa-table td{border-top:1px solid var(--line);padding:.72rem .8rem;vertical-align:top}.bsa-table tbody tr:nth-child(even){background:#f5f9fd}.bsa-risk{border-left:4px solid #9bbba9}.bsa-risk.high{border-left-color:#c7523e;background:#fff8f6}.bsa-risk.medium{border-left-color:#d6a348;background:#fffcf6}.bsa-risk-priority{display:inline-block;margin-bottom:.4rem;font:.62rem "DM Mono",monospace;color:#80532a}.bsa-risk small{color:var(--muted)}@media(max-width:750px){.bsa-model-grid{grid-template-columns:1fr}}
 
 /* Keep the administration workspace aligned with the KYCProbe site. */
+.ocr-engine-select{max-width:260px;margin-top:.5rem;padding:.4rem .55rem;font-size:.72rem}
+#document-ocr-capability{margin:0;padding:.8rem 1.5rem;border-bottom:1px solid var(--line);color:var(--muted);font-size:.72rem}
 .login-story{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 72%,#2e3192 100%)}
 .login-story>.brand{width:210px}
 .login-panel>.brand{width:190px}

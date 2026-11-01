@@ -1,0 +1,33 @@
+name: Review isolated document OCR image
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile.document-ocr
+      - lib/document-ocr-*.mjs
+      - scripts/run-document-ocr-worker.mjs
+      - scripts/document-ocr-ollama-smoke.mjs
+      - .github/workflows/document-ocr-pr-checks.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build private document OCR worker image
+        run: docker build --pull --file Dockerfile.document-ocr --tag document-ocr-pr-check .
+      - name: Verify bundled Ollama models
+        run: |
+          docker run --rm --entrypoint sh document-ocr-pr-check -c 'test -f /opt/ollama-models/manifests/registry.ollama.ai/library/qwen3-vl/4b-instruct'
+      - name: Run CPU-only Ollama OCR and eight-schema smoke
+        run: |
+          docker run --rm --memory=6g --cpus=2 --entrypoint sh document-ocr-pr-check -ec '
+            ollama serve >/tmp/ollama-smoke.log 2>&1 &
+            pid=$!
+            trap "kill $pid 2>/dev/null || true" EXIT
+            for i in $(seq 1 60); do ollama list >/dev/null 2>&1 && break; sleep 2; done
+            node scripts/document-ocr-ollama-smoke.mjs
+          '

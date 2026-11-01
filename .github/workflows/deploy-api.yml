@@ -27,6 +27,10 @@ on:
       - .github/workflows/deploy-api.yml
   workflow_dispatch:
     inputs:
+      documentOcrOnly:
+        description: Preserve existing bank statement and screenshot images and enforce the scoped OCR what-if gate
+        type: boolean
+        default: false
       enableDeepResearchWorker:
         description: Keep the adverse-media deep-research worker enabled; uncheck only for a controlled pause
         type: boolean
@@ -62,6 +66,30 @@ jobs:
     steps:
       - name: Check out reviewed source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Identify focused document OCR release
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          focused=false
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.documentOcrOnly }}" == "true" ]]; then
+            focused=true
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            before="${{ github.event.before }}"
+            if git cat-file -e "${before}^{commit}" 2>/dev/null; then
+              focused=true
+              while IFS= read -r path; do
+                case "${path}" in
+                  Dockerfile.document-ocr|admin-site/admin.js|admin-site/admin.css|admin-site/index.html|lib/api-store.mjs|lib/document-ocr-*.mjs|server.mjs|scripts/document-ocr-ollama-smoke.mjs|scripts/run-document-ocr-worker.mjs|scripts/guard-document-ocr-whatif.mjs|infrastructure/api.bicep|.github/workflows/deploy-api.yml|.github/workflows/document-ocr-pr-checks.yml|test/document-ocr-*.test.mjs|test/admin-auth.test.mjs|test/document-ocr-api.test.mjs) ;;
+                  *) focused=false ;;
+                esac
+              done < <(git diff --name-only "${before}" "${GITHUB_SHA}")
+            fi
+          fi
+          echo "ocr_only=${focused}" >> "${GITHUB_OUTPUT}"
 
       - name: Install locked API dependencies
         run: npm ci --omit=dev
@@ -168,6 +196,7 @@ jobs:
 
       - name: Build and publish immutable merchant screenshot worker image
         id: merchant_screenshot_image
+        if: steps.scope.outputs.ocr_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -187,6 +216,7 @@ jobs:
 
       - name: Build and publish immutable bank statement worker image
         id: bank_statement_image
+        if: steps.scope.outputs.ocr_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -201,6 +231,24 @@ jobs:
           echo "image=${image}" >> "${GITHUB_OUTPUT}"
           jq --arg repository "${repository}" --arg digest "${digest}" --arg image "${image}" \
             '.bank_statement_worker = {repository: $repository, digest: $digest, image: $image}' \
+            api-deployment-evidence.json > api-deployment-evidence.next.json
+          mv api-deployment-evidence.next.json api-deployment-evidence.json
+
+      - name: Preserve unrelated worker image digests
+        if: steps.scope.outputs.ocr_only == 'true'
+        id: preserved_images
+        shell: bash
+        run: |
+          set -euo pipefail
+          group="${{ vars.AZURE_RESOURCE_GROUP }}"
+          merchant="$(az containerapp show -g "${group}" -n ca-ai7uae-merchant-screenshot --query 'properties.template.containers[0].image' -o tsv)"
+          bank="$(az containerapp show -g "${group}" -n ca-ai7uae-bsa-worker --query 'properties.template.containers[0].image' -o tsv)"
+          [[ "${merchant}" =~ @sha256:[0-9a-f]{64}$ ]]
+          [[ "${bank}" =~ @sha256:[0-9a-f]{64}$ ]]
+          echo "merchant_image=${merchant}" >> "${GITHUB_OUTPUT}"
+          echo "bank_image=${bank}" >> "${GITHUB_OUTPUT}"
+          jq --arg merchant "${merchant}" --arg bank "${bank}" \
+            '.merchant_screenshot_worker = {image: $merchant, preserved: true} | .bank_statement_worker = {image: $bank, preserved: true}' \
             api-deployment-evidence.json > api-deployment-evidence.next.json
           mv api-deployment-evidence.next.json api-deployment-evidence.json
 
@@ -334,6 +382,9 @@ jobs:
           jq -e '.location == "uaenorth" and (.principalId | type == "string" and length > 0)' <<< "${identity}" > /dev/null
 
       - name: Preview API infrastructure change
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         run: |
           az deployment group what-if \
             --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
@@ -341,12 +392,13 @@ jobs:
             --template-file infrastructure/api.bicep \
             --parameters \
               image="${{ steps.image.outputs.image }}" \
-              merchantScreenshotWorkerImage="${{ steps.merchant_screenshot_image.outputs.image }}" \
-              bankStatementWorkerImage="${{ steps.bank_statement_image.outputs.image }}" \
+              merchantScreenshotWorkerImage="${{ steps.preserved_images.outputs.merchant_image || steps.merchant_screenshot_image.outputs.image }}" \
+              bankStatementWorkerImage="${{ steps.preserved_images.outputs.bank_image || steps.bank_statement_image.outputs.image }}" \
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               ejariWorkerImage="${{ steps.ejari_image.outputs.image }}" \
               enableEjari="${{ vars.EJARI_PLATFORM_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
+              forceDocumentOcrOllama="${{ vars.DOCUMENT_OCR_FORCE_OLLAMA == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
@@ -366,7 +418,11 @@ jobs:
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
               appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}" \
-              enableDeepResearchWorker="${{ github.event_name == 'push' && 'true' || (inputs.enableDeepResearchWorker && 'true' || 'false') }}"
+              enableDeepResearchWorker="${{ github.event_name == 'push' && 'true' || (inputs.enableDeepResearchWorker && 'true' || 'false') }}" \
+            --output json > api-whatif.json
+          if [[ "${{ steps.scope.outputs.ocr_only }}" == "true" ]]; then
+            node scripts/guard-document-ocr-whatif.mjs < api-whatif.json
+          fi
 
       - name: Deploy digest-pinned API revision
         run: |
@@ -376,12 +432,13 @@ jobs:
             --template-file infrastructure/api.bicep \
             --parameters \
               image="${{ steps.image.outputs.image }}" \
-              merchantScreenshotWorkerImage="${{ steps.merchant_screenshot_image.outputs.image }}" \
-              bankStatementWorkerImage="${{ steps.bank_statement_image.outputs.image }}" \
+              merchantScreenshotWorkerImage="${{ steps.preserved_images.outputs.merchant_image || steps.merchant_screenshot_image.outputs.image }}" \
+              bankStatementWorkerImage="${{ steps.preserved_images.outputs.bank_image || steps.bank_statement_image.outputs.image }}" \
               documentOcrWorkerImage="${{ steps.document_ocr_image.outputs.image }}" \
               ejariWorkerImage="${{ steps.ejari_image.outputs.image }}" \
               enableEjari="${{ vars.EJARI_PLATFORM_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
+              forceDocumentOcrOllama="${{ vars.DOCUMENT_OCR_FORCE_OLLAMA == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \

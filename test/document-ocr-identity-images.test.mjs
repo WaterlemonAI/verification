@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import sharp from 'sharp';
-import { cropIdentityRegion, verifiedTd1FromText } from '../lib/document-ocr-identity-images.mjs';
+import { cropIdentityRegion, renderEmiratesIdPages, verifiedTd1FromText } from '../lib/document-ocr-identity-images.mjs';
 import { mrzCheckDigit } from '../lib/icao-mrz.mjs';
 
 function syntheticTd1() {
@@ -32,4 +32,13 @@ test('identity crops are tight and never return a full card', async () => {
   assert.equal(meta.width, 60);
   assert.equal(meta.height, 80);
   await assert.rejects(cropIdentityRegion(page, { x1: 0, y1: 0, x2: 1000, y2: 1000 }), /crop_invalid/);
+});
+
+test('Ollama identity rendering skips the legacy Tesseract MRZ pass', async () => {
+  const image = await sharp({ create: { width: 400, height: 200, channels: 3,
+    background: '#ffffff' } }).jpeg().toBuffer();
+  const rendered = await renderEmiratesIdPages({ bytes: image, mediaType: 'image/jpeg',
+    maxPages: 1, detectMrz: false });
+  assert.equal(rendered.figures.length, 1);
+  assert.equal(rendered.verifiedMrz, null);
 });
