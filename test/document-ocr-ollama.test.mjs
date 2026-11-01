@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { test } from 'node:test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import sharp from 'sharp';
 import { EnvironmentStore, KeyVaultStore } from '../lib/api-store.mjs';
 import { DOCUMENT_OCR_APIS } from '../lib/document-ocr-contracts.mjs';
 import { analyzeDocumentWithOllama, OLLAMA_OCR_MODEL, OLLAMA_STRUCTURE_MODEL,
-  ollamaGenerate, structureDocumentWithOllama } from '../lib/document-ocr-ollama.mjs';
+  localOllamaFetch, ollamaGenerate, structureDocumentWithOllama } from '../lib/document-ocr-ollama.mjs';
 import { processDocumentOcrJob } from '../lib/document-ocr-worker.mjs';
 import { mrzCheckDigit } from '../lib/icao-mrz.mjs';
 
@@ -46,6 +47,23 @@ test('Ollama requests stay on loopback and reject truncated output', async () =>
   await assert.rejects(ollamaGenerate({ model: 'unapproved:latest', prompt: 'x' }), /model_invalid/);
   await assert.rejects(ollamaGenerate({ model: OLLAMA_STRUCTURE_MODEL, prompt: 'x',
     fetchImpl: async () => Response.json({ done: true, response: '{}', done_reason: 'length' }) }), /response_invalid/);
+});
+
+test('local Ollama transport accepts a delayed response', async () => {
+  const server = createServer(async (_request, response) => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end('{"done":true,"response":"{}"}');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    const response = await localOllamaFetch(`http://127.0.0.1:${address.port}/api/generate`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+      signal: AbortSignal.timeout(1_000) });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).response, '{}');
+  } finally { server.close(); }
 });
 
 test('vision OCR returns page text without following document instructions', async () => {
