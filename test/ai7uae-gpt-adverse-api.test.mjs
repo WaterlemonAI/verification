@@ -51,3 +51,26 @@ test('unsupported GPT quotes are withheld for human review', async () => {
   assert.equal(outcome.results[0].ai_classification, undefined);
   assert.equal(outcome.candidates, 1);
 });
+
+test('publisher markup does not break a verbatim supported allegation', async () => {
+  const classify = createGptAdverseClassifier({
+    credential: { getToken: async () => ({ token: 'synthetic-managed-token' }) }
+  });
+  const results = [{ result_id: 'R3', title: 'Nirav Modi PNB case',
+    excerpt: '<strong>Nirav Modi was charged</strong> by Indian authorities for bank fraud.',
+    publisher: 'Synthetic News', url: 'https://example.test/r3', categories: ['fraud'] }];
+  const request = { entity_type: 'individual', name: 'Nirav Modi', aliases: [], countries: ['IN'] };
+  let sent;
+  const outcome = await classify(results, request, { fetchImpl: async (_url, options) => {
+    sent = JSON.parse(options.body);
+    return Response.json({ status: 'completed', output_text: JSON.stringify({ facts: [{
+      result_id: 'R3', party_relation: 'screened_subject', acted_party: 'Nirav Modi',
+      event_kind: 'legal_action', reported_stage: 'charged',
+      supporting_quote: 'Nirav Modi was charged by Indian authorities for bank fraud.'
+    }] }), usage: { input_tokens: 100, output_tokens: 30 } });
+  } });
+  assert.doesNotMatch(sent.input, /<strong>/);
+  assert.match(sent.input, /Nirav Modi was charged by Indian authorities/);
+  assert.equal(outcome.status, 'completed');
+  assert.equal(outcome.results[0].ai_classification.media_bucket, 'adverse_media');
+});
