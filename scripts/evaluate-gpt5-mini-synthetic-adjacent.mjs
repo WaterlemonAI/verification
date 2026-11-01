@@ -5,6 +5,7 @@ const fixture = JSON.parse(await readFile(new URL('../test/fixtures/gpt5-mini-sy
 const endpoint = process.env.AZURE_OPENAI_ENDPOINT || 'https://aoai-ai7uae-uaen-001.openai.azure.com';
 const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || 'ai7uae-gpt-5-mini';
 const dryRun = process.argv.includes('--dry-run');
+const refined = process.argv.includes('--refined');
 
 async function credential() {
   const url = new URL(process.env.IDENTITY_ENDPOINT);
@@ -20,10 +21,10 @@ async function credential() {
 
 const token = dryRun ? null : await credential();
 const results = [];
-async function call(label, evidence, schema, taskInstructions) {
+async function call(label, evidence, schema, taskInstructions, workflow) {
   const payload = {
     model: deployment,
-    instructions: ai7uaeGptInstructions('edd') + '\n\n' + taskInstructions,
+    instructions: ai7uaeGptInstructions('edd', workflow) + (taskInstructions ? '\n\n' + taskInstructions : ''),
     input: 'Process this fictional test evidence only. ' + ai7uaeUntrustedEvidence(evidence),
     reasoning: { effort: 'minimal' },
     max_output_tokens: 2048,
@@ -85,7 +86,8 @@ const association = await call('association', {
     { id: 'S2', text: 'Another person named Mira Vale is a singer and has no stated connection to the company.' }
   ]
 }, associationSchema,
-  'Extract only an explicitly stated alias or organization founded, owned, led, or employing the specified person. Do not infer a relationship from a similar name.');
+  refined ? '' : 'Extract only an explicitly stated alias or organization founded, owned, led, or employing the specified person. Do not infer a relationship from a similar name.',
+  refined ? 'association_resolution' : undefined);
 if (association.value) {
   association.score = { expected_organization: association.value.search_terms.some((item) =>
     item.type === 'organization' && item.value === 'Cedar Dune Trading LLC'),
@@ -107,7 +109,8 @@ const narrative = await call('audit_narrative', {
   evidence: fixture.evidence.filter((item) => ['R1', 'R3', 'R5'].includes(item.id))
     .map(({ expected_bucket, expected_role, expected_stage, ...item }) => item)
 }, narrativeSchema,
-  'Write a neutral adverse-media audit summary using only the supplied screening output. Distinguish company action from director personal action, do not call layoffs fraud, do not claim complete coverage, and require human review.');
+  refined ? '' : 'Write a neutral adverse-media audit summary using only the supplied screening output. Distinguish company action from director personal action, do not call layoffs fraud, do not claim complete coverage, and require human review.',
+  refined ? 'audit_narrative' : undefined);
 if (narrative.value) {
   const joined = JSON.stringify(narrative.value).toLowerCase();
   narrative.score = { mentions_human_review: /human review|manual review|reviewer/.test(joined),

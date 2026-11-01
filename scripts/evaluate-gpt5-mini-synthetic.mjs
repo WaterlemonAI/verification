@@ -1,8 +1,34 @@
 import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { ai7uaeGptInstructions, ai7uaeUntrustedEvidence } from '../lib/ai7uae-gpt-guidelines.mjs';
+import { guardGptAdverseClassifications } from '../lib/ai7uae-gpt-adverse-guard.mjs';
 
-const fixture = JSON.parse(await readFile(new URL('../test/fixtures/gpt5-mini-synthetic-case.json', import.meta.url), 'utf8'));
+const fixtureArg = process.argv.indexOf('--fixture');
+if (fixtureArg >= 0 && (!process.argv[fixtureArg + 1] || !process.argv.includes('--classification-only'))) {
+  throw new TypeError('fixture_override_requires_classification_only');
+}
+const fixturePath = fixtureArg >= 0 ? resolve(process.argv[fixtureArg + 1])
+  : new URL('../test/fixtures/gpt5-mini-synthetic-case.json', import.meta.url);
+const fixture = JSON.parse(await readFile(fixturePath, 'utf8'));
+const idsArg = process.argv.indexOf('--result-ids');
+const selectedIds = idsArg >= 0 ? new Set((process.argv[idsArg + 1] || '').split(',').filter(Boolean)) : null;
+if (selectedIds && (!selectedIds.size || !process.argv.includes('--classification-only'))) {
+  throw new TypeError('result_ids_require_classification_only');
+}
+const selectedEvidence = selectedIds ? fixture.evidence.filter((item) => selectedIds.has(item.id)) : fixture.evidence;
+if (selectedIds && selectedEvidence.length !== selectedIds.size) throw new TypeError('unknown_result_id');
 const useAppLibs = process.env.AI7UAE_EVAL_USE_APP_LIBS === '1';
+const refined = process.argv.includes('--refined');
+const researchOnly = process.argv.includes('--research-only');
+if (researchOnly && (process.argv.includes('--classification-only') || fixtureArg >= 0)) {
+  throw new TypeError('research_only_requires_default_fixture');
+}
+const effortArg = process.argv.indexOf('--reasoning-effort');
+const reasoningEffort = effortArg >= 0 ? process.argv[effortArg + 1] : 'minimal';
+if (!['minimal', 'low', 'medium'].includes(reasoningEffort)) throw new TypeError('invalid_reasoning_effort');
+if (refined && process.argv.includes('--production-classifier-prompt')) {
+  throw new TypeError('choose_one_classifier_prompt');
+}
 const contractUrl = useAppLibs ? 'file:///app/lib/document-ocr-contracts.mjs'
   : new URL('../lib/document-ocr-contracts.mjs', import.meta.url).href;
 const validatorUrl = useAppLibs ? 'file:///app/lib/document-ocr-engine.mjs'
@@ -60,16 +86,16 @@ async function managedIdentityToken() {
 
 const token = process.argv.includes('--dry-run') ? null : await managedIdentityToken();
 
-async function callModel(label, task, evidence, schema, extraInstructions = '') {
-  const instructions = ai7uaeGptInstructions(task) + (extraInstructions ? '\n\n' + extraInstructions : '');
+async function callModel(label, task, evidence, schema, extraInstructions = '', workflow) {
+  const instructions = ai7uaeGptInstructions(task, workflow) + (extraInstructions ? '\n\n' + extraInstructions : '');
   const formatSchema = strictSchema(schema);
   verifyStrictSchema(formatSchema);
   const payload = {
     model: deployment,
     instructions,
     input: 'Process only this synthetic case evidence. ' + ai7uaeUntrustedEvidence(evidence),
-    reasoning: { effort: 'minimal' },
-    max_output_tokens: 8192,
+    reasoning: { effort: reasoningEffort },
+    max_output_tokens: task === 'research' ? 3072 : 8192,
     text: { format: { type: 'json_schema', name: label.replace(/[^A-Za-z0-9_-]/g, '_'),
       schema: formatSchema, strict: true } }
   };
@@ -84,10 +110,12 @@ async function callModel(label, task, evidence, schema, extraInstructions = '') 
   const body = await response.json();
   const elapsed_ms = Math.round(performance.now() - started);
   const common = { label, http: response.status, elapsed_ms,
-    input_tokens: body.usage?.input_tokens || 0, output_tokens: body.usage?.output_tokens || 0 };
+    input_tokens: body.usage?.input_tokens || 0, output_tokens: body.usage?.output_tokens || 0,
+    reasoning_tokens: body.usage?.output_tokens_details?.reasoning_tokens || 0 };
   if (!response.ok || body.status !== 'completed') {
     return { ...common, status: body.status || 'error', error_code: body.error?.code || body.error?.innererror?.code || null,
-      error_message: String(body.error?.message || '').slice(0, 160) };
+      error_message: String(body.error?.message || '').slice(0, 160),
+      incomplete_reason: body.incomplete_details?.reason || null };
   }
   try {
     return { ...common, status: body.status, value: JSON.parse(outputText(body)) };
@@ -137,64 +165,72 @@ if (process.argv.includes('--production-classifier-prompt')) {
   selectedClassificationInstructions = productionPrompt;
 }
 
-const evidence = fixture.evidence.map(({ expected_bucket, expected_role, expected_stage, ...item }) => item);
-const classification = await callModel('adverse_classification', 'edd',
-  { subject: fixture.subject, evidence }, classificationSchema, selectedClassificationInstructions);
-if (classification.value) {
-  const actual = new Map(classification.value.classifications?.map((item) => [item.result_id, item]) || []);
-  classification.score = {
-    exact_count: actual.size === fixture.evidence.length,
-    bucket_matches: fixture.evidence.filter((item) => actual.get(item.id)?.media_bucket === item.expected_bucket).length,
-    role_matches: fixture.evidence.filter((item) => actual.get(item.id)?.subject_role === item.expected_role).length,
-    stage_matches: fixture.evidence.filter((item) => actual.get(item.id)?.legal_stage === item.expected_stage).length,
-    mismatches: fixture.evidence.filter((item) => {
-      const found = actual.get(item.id);
-      return !found || found.media_bucket !== item.expected_bucket
-        || found.subject_role !== item.expected_role || found.legal_stage !== item.expected_stage;
-    }).map((item) => ({ id: item.id, expected: [item.expected_bucket, item.expected_role, item.expected_stage],
-      actual: actual.get(item.id) ? [actual.get(item.id).media_bucket, actual.get(item.id).subject_role, actual.get(item.id).legal_stage] : null }))
-  };
-  delete classification.value;
-}
-results.push(classification);
-console.log('CASE_RESULT ' + JSON.stringify(classification));
-if (process.argv.includes('--classification-only')) {
-  console.log('REPLAY_TOTAL ' + JSON.stringify({ case_id: fixture.case_id, calls: 1,
-    input_tokens: classification.input_tokens || 0, output_tokens: classification.output_tokens || 0,
-    elapsed_ms: classification.elapsed_ms || 0 }));
-  process.exit(0);
-}
-
-for (const [index, document] of fixture.documents.entries()) {
-  const definition = DOCUMENT_OCR_BY_ID.get(document.id);
-  if (!definition) throw new Error('unknown_document_definition_' + document.id);
-  const schema = geminiExtractionSchema(definition);
-  const label = 'document_' + String(index + 1).padStart(2, '0') + '_' + document.id;
-  const result = await callModel(label, 'document_processing',
-    { document_type: document.id, pages: [{ page: 1, text: document.ocr_text }] }, schema,
-    'Return the exact production document extraction JSON contract. Use Not Found for absent scalar fields, [] for absent lists, and short verbatim page evidence for populated values. Use unclassified for a wrong document type. No images were supplied.');
-  if (result.value) {
-    try {
-      const validated = validateExtraction(definition, result.value, [{ page: 1, text: document.ocr_text }]);
-      result.score = {
-        classification_match: validated.document_classification === document.expected_classification,
-        expected_field_matches: Object.entries(document.expected_fields)
-          .filter(([field, expected]) => validated.data[field] === expected).length,
-        expected_field_count: Object.keys(document.expected_fields).length,
-        field_mismatches: Object.entries(document.expected_fields)
-          .filter(([field, expected]) => validated.data[field] !== expected)
-          .map(([field, expected]) => ({ field, expected, actual: validated.data[field] })),
-        review_required: validated.review_required,
-        review_flags: validated.review_flags,
-        evidence_count: validated.evidence.length
-      };
-    } catch (error) {
-      result.score = { validator_error: String(error.message || error).slice(0, 120) };
-    }
-    delete result.value;
+const evidence = selectedEvidence.map(({ expected_bucket, expected_role, expected_stage, ...item }) => item);
+if (!researchOnly) {
+  const classification = await callModel('adverse_classification', 'edd',
+    { subject: fixture.subject, evidence }, classificationSchema,
+    refined ? '' : selectedClassificationInstructions,
+    refined ? 'adverse_media_classification' : undefined);
+  if (classification.value) {
+    const actual = new Map(classification.value.classifications?.map((item) => [item.result_id, item]) || []);
+    const guarded = guardGptAdverseClassifications(classification.value.classifications);
+    const guardedById = new Map(guarded.classifications.map((item) => [item.result_id, item]));
+    classification.score = {
+      exact_count: actual.size === selectedEvidence.length,
+      bucket_matches: selectedEvidence.filter((item) => actual.get(item.id)?.media_bucket === item.expected_bucket).length,
+      role_matches: selectedEvidence.filter((item) => actual.get(item.id)?.subject_role === item.expected_role).length,
+      stage_matches: selectedEvidence.filter((item) => actual.get(item.id)?.legal_stage === item.expected_stage).length,
+      guarded_stage_matches: selectedEvidence.filter((item) => guardedById.get(item.id)?.legal_stage === item.expected_stage).length,
+      guard_review: guarded.review,
+      mismatches: selectedEvidence.filter((item) => {
+        const found = actual.get(item.id);
+        return !found || found.media_bucket !== item.expected_bucket
+          || found.subject_role !== item.expected_role || found.legal_stage !== item.expected_stage;
+      }).map((item) => ({ id: item.id, expected: [item.expected_bucket, item.expected_role, item.expected_stage],
+        actual: actual.get(item.id) ? [actual.get(item.id).media_bucket, actual.get(item.id).subject_role, actual.get(item.id).legal_stage] : null }))
+    };
+    delete classification.value;
   }
-  results.push(result);
-  console.log('CASE_RESULT ' + JSON.stringify(result));
+  results.push(classification);
+  console.log('CASE_RESULT ' + JSON.stringify(classification));
+  if (process.argv.includes('--classification-only')) {
+    console.log('REPLAY_TOTAL ' + JSON.stringify({ case_id: fixture.case_id, calls: classification.dry_run ? 0 : 1,
+      input_tokens: classification.input_tokens || 0, output_tokens: classification.output_tokens || 0,
+      elapsed_ms: classification.elapsed_ms || 0 }));
+    process.exit(0);
+  }
+
+  for (const [index, document] of fixture.documents.entries()) {
+    const definition = DOCUMENT_OCR_BY_ID.get(document.id);
+    if (!definition) throw new Error('unknown_document_definition_' + document.id);
+    const schema = geminiExtractionSchema(definition);
+    const label = 'document_' + String(index + 1).padStart(2, '0') + '_' + document.id;
+    const result = await callModel(label, 'document_processing',
+      { document_type: document.id, pages: [{ page: 1, text: document.ocr_text }] }, schema,
+      'Return the exact production document extraction JSON contract. Use Not Found for absent scalar fields, [] for absent lists, and short verbatim page evidence for populated values. Use unclassified for a wrong document type. No images were supplied.');
+    if (result.value) {
+      try {
+        const validated = validateExtraction(definition, result.value, [{ page: 1, text: document.ocr_text }]);
+        result.score = {
+          classification_match: validated.document_classification === document.expected_classification,
+          expected_field_matches: Object.entries(document.expected_fields)
+            .filter(([field, expected]) => validated.data[field] === expected).length,
+          expected_field_count: Object.keys(document.expected_fields).length,
+          field_mismatches: Object.entries(document.expected_fields)
+            .filter(([field, expected]) => validated.data[field] !== expected)
+            .map(([field, expected]) => ({ field, expected, actual: validated.data[field] })),
+          review_required: validated.review_required,
+          review_flags: validated.review_flags,
+          evidence_count: validated.evidence.length
+        };
+      } catch (error) {
+        result.score = { validator_error: String(error.message || error).slice(0, 120) };
+      }
+      delete result.value;
+    }
+    results.push(result);
+    console.log('CASE_RESULT ' + JSON.stringify(result));
+  }
 }
 
 const researchSchema = {
@@ -212,10 +248,13 @@ const researchSchema = {
 const research = await callModel('research_reconcile', 'research',
   { subject: fixture.subject, question: 'What is directly supported and what remains disputed?',
     sources: evidence.filter((item) => ['R1', 'R3', 'R7'].includes(item.id)) },
-  researchSchema, 'Use only source IDs R1, R3, and R7. Do not attribute the brokers penalty or director personal penalty to the company.');
+  researchSchema, refined ? 'Use only source IDs R1, R3, and R7.'
+    : 'Use only source IDs R1, R3, and R7. Do not attribute the brokers penalty or director personal penalty to the company.',
+  refined ? 'source_reconciliation' : undefined);
 if (research.value) {
   research.score = { cited_ids: [...new Set(research.value.findings.flatMap((item) => item.source_ids))],
     human_review_required: research.value.human_review_required,
+    cross_event_conflict_claimed: research.value.unresolved_conflicts.some((item) => /\bR1\b/.test(item) && /\bR7\b/.test(item)),
     findings: research.value.findings.map((item) => item.claim),
     conflicts: research.value.unresolved_conflicts,
     limitations: research.value.coverage_limitations };

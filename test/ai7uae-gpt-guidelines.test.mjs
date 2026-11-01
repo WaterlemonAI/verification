@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AI7UAE_GPT_TASKS, ai7uaeGptMessages, ai7uaeUntrustedEvidence } from '../lib/ai7uae-gpt-guidelines.mjs';
+import { AI7UAE_GPT_TASKS, AI7UAE_GPT_WORKFLOWS, ai7uaeGptInstructions, ai7uaeGptMessages, ai7uaeUntrustedEvidence } from '../lib/ai7uae-gpt-guidelines.mjs';
 
 test('only the three KYCProbe tasks can produce trusted GPT instructions', () => {
   assert.deepEqual(AI7UAE_GPT_TASKS, ['edd', 'document_processing', 'research']);
@@ -10,6 +10,18 @@ test('only the three KYCProbe tasks can produce trusted GPT instructions', () =>
   assert.match(messages[0].content, /AI7 UAE KYCProbe/);
   assert.match(messages[0].content, /enhanced due diligence/);
   assert.match(messages[1].content, /Example Person/);
+});
+
+test('specialized instructions retain the task boundary and subject attribution rule', () => {
+  assert.deepEqual(AI7UAE_GPT_WORKFLOWS, [
+    'adverse_media_classification', 'association_resolution', 'source_reconciliation', 'audit_narrative'
+  ]);
+  const classifier = ai7uaeGptInstructions('edd', 'adverse_media_classification');
+  assert.match(classifier, /legal_stage=media_mention/);
+  assert.match(classifier, /screened subject/);
+  assert.match(ai7uaeGptInstructions('research', 'source_reconciliation'), /supplied primary record/);
+  assert.throws(() => ai7uaeGptInstructions('research', 'adverse_media_classification'), /unsupported_ai7uae_gpt_workflow/);
+  assert.throws(() => ai7uaeGptInstructions('edd', 'unapproved'), /unsupported_ai7uae_gpt_workflow/);
 });
 
 test('evidence cannot break out of its document boundary or become a system message', () => {

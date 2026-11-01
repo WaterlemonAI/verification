@@ -1,0 +1,102 @@
+{
+  "case_id": "synthetic-blue-gulf-holdout-001",
+  "notice": "Entirely fictional holdout evidence. Names, organizations, publishers, and URLs are test data.",
+  "subject": {
+    "type": "business",
+    "name": "Blue Gulf Devices LLC",
+    "jurisdiction": "UAE",
+    "director": "Nora Reed"
+  },
+  "evidence": [
+    {
+      "id": "H1",
+      "title": "Blue Gulf Devices LLC charged over import declarations",
+      "excerpt": "A fictional court filing names Blue Gulf Devices LLC itself as the defendant charged over import declarations. The charge is pending; no conviction is reported.",
+      "publisher": "Fictional Court Registry",
+      "url": "https://court.example/blue-gulf-h1",
+      "expected_bucket": "adverse_media",
+      "expected_role": "direct_actor",
+      "expected_stage": "charged"
+    },
+    {
+      "id": "H2",
+      "title": "Blue Gulf Devices director charged in personal matter",
+      "excerpt": "Nora Reed, a director of Blue Gulf Devices LLC, was charged in a personal tax matter. The filing names Reed alone and does not charge the company.",
+      "publisher": "Fictional Court Registry",
+      "url": "https://court.example/nora-reed-h2",
+      "expected_bucket": "general_news_mentions",
+      "expected_role": "related_party",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "H3",
+      "title": "Blue Gulf Logistics LLC convicted in import case",
+      "excerpt": "Blue Gulf Logistics LLC has a different registration number and no stated ownership link to Blue Gulf Devices LLC. Only Blue Gulf Logistics LLC was convicted.",
+      "publisher": "Fictional Court Registry",
+      "url": "https://court.example/blue-gulf-logistics-h3",
+      "expected_bucket": "no_impact_media",
+      "expected_role": "namesake",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "H4",
+      "title": "Brokers fined for trades in Blue Gulf Devices shares",
+      "excerpt": "A fictional regulator fined two named brokers for their own trading violations in Blue Gulf Devices LLC shares. The notice does not fine or accuse Blue Gulf Devices LLC.",
+      "publisher": "Fictional Markets Authority",
+      "url": "https://regulator.example/brokers-h4",
+      "expected_bucket": "general_news_mentions",
+      "expected_role": "related_party",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "H5",
+      "title": "Blue Gulf Devices fined, report says",
+      "excerpt": "This secondary headline describes a fictional regulator notice. The notice itself names two brokers as fined and states no penalty against Blue Gulf Devices LLC.",
+      "publisher": "Fictional Business Wire",
+      "url": "https://wire.example/blue-gulf-h5",
+      "expected_bucket": "general_news_mentions",
+      "expected_role": "related_party",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "H6",
+      "title": "Blue Gulf Devices discloses customer-data exposure",
+      "excerpt": "Blue Gulf Devices LLC disclosed that an attacker accessed customer records through its service. The company is the subject of the incident report; no offence by the company is alleged.",
+      "publisher": "Fictional Security News",
+      "url": "https://news.example/blue-gulf-exposure-h6",
+      "expected_bucket": "adverse_media",
+      "expected_role": "direct_actor",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "H7",
+      "title": "Blue Gulf Devices LLC reduces headcount",
+      "excerpt": "The company announced routine layoffs after changing product lines. The article reports no misconduct, lawsuit, or regulatory action.",
+      "publisher": "Fictional Business News",
+      "url": "https://news.example/blue-gulf-workforce-h7",
+      "expected_bucket": "general_news_mentions",
+      "expected_role": "context_only",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "H8",
+      "title": "Anonymous post alleges Blue Gulf Devices is a scam",
+      "excerpt": "A forum user gives no transaction, document, named complainant, or independent corroboration for the allegation.",
+      "publisher": "Anonymous Forum",
+      "url": "https://forum.example/blue-gulf-h8",
+      "expected_bucket": "general_news_mentions",
+      "expected_role": "unclear",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "H9",
+      "title": "Regulator fines Blue Gulf Devices LLC for recordkeeping failures",
+      "excerpt": "The fictional regulator notice names Blue Gulf Devices LLC as the penalized party for recordkeeping failures. It does not report a criminal conviction.",
+      "publisher": "Fictional Commerce Authority",
+      "url": "https://regulator.example/blue-gulf-h9",
+      "expected_bucket": "adverse_media",
+      "expected_role": "direct_actor",
+      "expected_stage": "regulatory_action"
+    }
+  ]
+}

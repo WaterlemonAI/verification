@@ -206,6 +206,14 @@ the task and tools, validate a strict output schema, and send only necessary
 evidence. The shared helper does not turn current Gemini flows into Azure OpenAI
 flows and does not accept image evidence directly.
 
+The helper also offers allowlisted workflow instructions for adverse-media
+classification, association resolution, source reconciliation, and audit
+narratives. `lib/ai7uae-gpt-adverse-guard.mjs` is an unconnected candidate guard
+for model-generated legal stages and conflicting bucket/role combinations.
+The [synthetic prompt-refinement evaluation](docs/gpt5-mini-prompt-refinement-2026-11-01.md)
+records remaining attribution and source-linkage failures; neither helper is a
+replacement authorization or a live routing change.
+
 The existing Gemini-backed adverse-media and document OCR integrations remain
 active until their Azure OpenAI replacements pass separate contract, quality,
 privacy, and cost checks and the protected API deployment path is used.
