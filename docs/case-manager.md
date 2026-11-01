@@ -15,6 +15,7 @@ The signed-in portal can filter `/portal/api/cases` with `transaction_id=<UUID>`
 | `/service/iban_verification` | `iban-verification` | synchronous final response | 45 days |
 | `/service/entity_search` | `entity-search` | synchronous final response | 45 days |
 | `/service/adverse_media` | `adverse-media` | synchronous, or saved deep-research final result | 45 days |
+| `/service/adverse_media_search_plus` | `adverse-media-search-plus` | synchronous, mandatory human review | 45 days |
 | `/service/merchant_screening` | `merchant-screening` | synchronous final response | 45 days |
 | `/service/bank_statement_analysis` | `bank-statement-analysis` | saved asynchronous final result | 45 days |
 | `/service/uae_trade_license_ocr` | `uae-trade-license-ocr` | saved asynchronous final result | 30 days |

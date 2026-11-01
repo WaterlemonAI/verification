@@ -29,6 +29,9 @@ param ejariPurgeJobName string = 'caj-ai7uae-ejari-purge'
 @description('Enable the eight document OCR APIs only after all sample and credential validation gates pass.')
 param enableDocumentOcr bool = false
 
+@description('Enable the separate GPT-backed Adverse Media (Search+) API only after its privacy, cost, and quality gates pass.')
+param enableAdverseMediaSearchPlusGpt bool = false
+
 @description('Start the isolated document OCR worker before customer routes are enabled for queue and malware-gate smoke tests.')
 param enableDocumentOcrWorker bool = false
 
@@ -695,6 +698,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'API_HOSTS', value: 'api.ai7uae.com,app.kycprobe.com' }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
+            { name: 'ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED', value: enableAdverseMediaSearchPlusGpt ? '1' : '0' }
             { name: 'ADVERSE_MEDIA_WORKER_ENABLED', value: !parallelDeployment && enableDeepResearchWorker ? 'true' : 'false' }
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }

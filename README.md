@@ -32,12 +32,14 @@ POST /service/uae_tlv
 POST /service/iban_verification
 POST /service/entity_search
 POST /service/adverse_media
+POST /service/adverse_media_search_plus
 POST /service/merchant_screening
 POST /service/bank_statement_analysis
 GET  /service/bank_statement_analysis/{analysisId}
 GET  /service/bank_statement_analysis/{analysisId}/result
 POST /forms/{formId}/submissions
 GET  /service/adverse_media/reports/{reportId}.pdf
+GET  /service/adverse_media_search_plus/reports/{reportId}.pdf
 GET  /service/merchant_screening/reports/{reportId}.pdf
 GET  /service/forms/reports/{reportId}.pdf
 ```
@@ -164,6 +166,8 @@ The default schedule is `01:30 UTC` daily. All raw files and index entries remai
 ### Approved publisher search
 
 The owner-approved [publisher catalog](top_50_media_publishers_30_largest_economies_2026.json) contains 1,500 unique domains across 30 economies, including curated specialist outlets. Set `search_plus: true` per request to reserve bounded search capacity for explicit site-restricted publisher batches, prioritising requested countries, curated sources, and high-value news/finance outlets, then consolidate those results with the normal evidence set. The response and PDF record every publisher included in a successfully completed batch and every publisher in an incomplete batch. Search+ does not crawl publisher websites or claim that an index contains every article. See the [current design and cost gate](docs/dynamic-adverse-media-publisher-search.md).
+
+The separate [Adverse Media (Search+) API](docs/adverse-media-search-plus-gpt.md) forces publisher-targeted Search+ and classifies source facts with the refined Azure GPT-5 mini instructions. It has its own module ID, route and report URL. The existing `/service/adverse_media` route remains on its current workflow. The parallel route is off by default and always returns a review-required, decision-ineligible result when enabled.
 
 The adverse-event taxonomy separately identifies corporate misconduct, founder/leadership disputes, workforce restructuring, and financial distress. Layoffs, downsizing, founder departures, and restructurings are reviewable corporate events; their presence does not by itself label the company or its leadership as fraudulent.
 
