@@ -39,6 +39,30 @@ test('inclusive rate tiers, prepaid balance, and postpay usage stay consistent',
   assert.equal((await usage.account(id, true)).balance, '0.000000');
 });
 
+test('Search+ uses the workspace Adverse Media rate schedule with its own hit count', async () => {
+  const usage = new MemoryCustomerUsageStore();
+  const workspaceId = 'synthetic-search-plus-workspace';
+  const modules = new Set(['adverse-media', 'adverse-media-search-plus']);
+  const policy = validateUsagePolicy({ mode: 'postpay', currency: 'USD',
+    allowed_modules: ['adverse-media', 'adverse-media-search-plus'], rates: {
+      'adverse-media': [{ up_to: 1, price: '0.25' }, { up_to: null, price: '0.20' }]
+    } }, modules);
+  await usage.configure(workspaceId, policy);
+  const admit = (module, id) => usage.admit(workspaceId, { transactionId: id, moduleIds: [module],
+    method: 'POST', path: `/service/${module}` });
+  assert.equal((await admit('adverse-media-search-plus', 'sp-1')).cost, '0.250000');
+  assert.equal((await admit('adverse-media', 'legacy-1')).cost, '0.250000');
+  assert.equal((await admit('adverse-media-search-plus', 'sp-2')).cost, '0.200000');
+  assert.equal((await usage.account(workspaceId)).counts['adverse-media'], 1);
+  assert.equal((await usage.account(workspaceId)).counts['adverse-media-search-plus'], 2);
+  const updated = validateUsagePolicy({ mode: 'postpay', currency: 'USD',
+    allowed_modules: ['adverse-media', 'adverse-media-search-plus'], rates: {
+      'adverse-media': [{ up_to: null, price: '0.30' }]
+    } }, modules);
+  await usage.configure(workspaceId, updated);
+  assert.equal((await admit('adverse-media-search-plus', 'sp-3')).cost, '0.300000');
+});
+
 test('large inclusive boundaries use the correct tier without making thousands of calls', async () => {
   const usage = new MemoryCustomerUsageStore();
   const id = 'aabbccddeeff0011';

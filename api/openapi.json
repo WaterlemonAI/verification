@@ -417,7 +417,7 @@
           "200": { "description": "Source-bound screening completed for mandatory human review.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdverseMediaResponse" } } } },
           "400": { "description": "The request is invalid or asks for asynchronous callbacks." },
           "401": { "description": "The AI7 API key is missing or invalid." },
-          "403": { "description": "The Search+ module lacks explicit workspace entitlement or a configured rate." },
+          "403": { "description": "The Search+ module lacks explicit workspace entitlement or an Adverse Media rate." },
           "429": { "description": "Request capacity or usage policy limit was reached." },
           "502": { "description": "The media search service is unavailable." },
           "503": { "description": "The parallel API is disabled or a required service is unavailable." }

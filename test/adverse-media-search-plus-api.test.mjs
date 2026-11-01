@@ -76,7 +76,7 @@ after(async () => {
   delete process.env.IDENTITY_ENDPOINT;
 });
 
-test('Search+ requires a separate workspace entitlement and explicit rate', async () => {
+test('Search+ requires a separate entitlement and an existing Adverse Media rate', async () => {
   const response = await fetch(`${appUrl}/service/adverse_media_search_plus`, {
     method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({ entity_type: 'business', name: 'Search Plus Example' })
@@ -85,9 +85,9 @@ test('Search+ requires a separate workspace entitlement and explicit rate', asyn
   assert.equal(azureCalls, 0);
   const client = await store.getClientForKey(apiKey);
   const policy = validateUsagePolicy({ mode: 'postpay', currency: 'USD',
-    allowed_modules: ['adverse-media-search-plus'], rates: {
-      'adverse-media-search-plus': [{ up_to: null, price: '0.20' }]
-    } }, new Set(['adverse-media-search-plus']));
+    allowed_modules: ['adverse-media', 'adverse-media-search-plus'], rates: {
+      'adverse-media': [{ up_to: null, price: '0.20' }]
+    } }, new Set(['adverse-media', 'adverse-media-search-plus']));
   await usageStore.configure(client.id, policy);
 });
 
@@ -102,6 +102,9 @@ test('parallel Search+ uses GPT and produces a separate review-only report', asy
   const body = await response.json();
   assert.ok(azureCalls > 0);
   assert.equal(geminiCalls, 0);
+  const client = await store.getClientForKey(apiKey);
+  const charged = (await usageStore.logs(client.id)).find((item) => item.path === '/service/adverse_media_search_plus' && item.response_code === 200);
+  assert.equal(charged.cost, '0.200000');
   assert.equal(body.status, 'partial');
   assert.equal(body.coverage.search_plus.requested, true);
   assert.equal(body.coverage.complete, false);
