@@ -202,6 +202,18 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
       console.warn('case_manager_rejected_attempt_capture_failed', JSON.stringify({ transaction_id: transactionId }));
     }
   };
+  if (route.moduleIds.includes('adverse-media-search-plus') && process.env.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED === '1') {
+    const account = await usageStore.account(workspaceId, managed);
+    if (!account.allowed_modules.includes('adverse-media-search-plus')
+      || !Array.isArray(account.rates['adverse-media-search-plus'])
+      || account.rates['adverse-media-search-plus'].length === 0) {
+      await usageStore.record(workspaceId, details, 403);
+      const body = { status: 'Error', error: 'Adverse Media (Search+) requires explicit workspace access and pricing.' };
+      await captureRejectedAttempt(403, body);
+      json(res, 403, body);
+      return false;
+    }
+  }
   if (req.method !== route.method) {
     await usageStore.record(workspaceId, details, 405);
     const body = { status: 'Error', error: `Method must be ${route.method}.` };

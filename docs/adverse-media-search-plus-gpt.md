@@ -2,7 +2,7 @@
 
 ## Contract
 
-`POST /service/adverse_media_search_plus` is a separate customer module, `adverse-media-search-plus`. It accepts the existing adverse-media JSON fields and requires an active AI7 API key and workspace entitlement. The route forces `search_plus: true` even if omitted or false. It runs synchronously; `deep_research`, `callback_url`, and `callback_access_key` are rejected. The response uses the existing customer-safe adverse-media structure and has a separate PDF URL under `/service/adverse_media_search_plus/reports/{reportId}.pdf`.
+`POST /service/adverse_media_search_plus` is a separate customer module, `adverse-media-search-plus`. It accepts the existing adverse-media JSON fields and requires an active AI7 API key, explicit workspace entitlement, and an explicit rate tier. A wildcard entitlement or absent rate does not admit this module. The route forces `search_plus: true` even if omitted or false. It runs synchronously; `deep_research`, `callback_url`, and `callback_access_key` are rejected. The response uses the existing customer-safe adverse-media structure and has a separate PDF URL under `/service/adverse_media_search_plus/reports/{reportId}.pdf`.
 
 The existing `POST /service/adverse_media` route, its optional Search+ mode, Gemini classifier, billing module, report path, and deep-research behavior are unchanged. Customers can compare the two APIs without replacing the current route. Search+ remains bounded publisher-site index search, not a direct crawl or exhaustive publisher coverage claim.
 

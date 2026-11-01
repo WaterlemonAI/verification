@@ -12,9 +12,11 @@ process.env.AI7_API_KEY_HASHES = createHash('sha256').update(apiKey).digest('hex
 
 const { createAppServer } = await import('../server.mjs');
 const { EnvironmentStore } = await import('../lib/api-store.mjs');
+const { MemoryCustomerUsageStore, validateUsagePolicy } = await import('../lib/customer-usage.mjs');
 
 const store = new EnvironmentStore();
 await store.setMasterKey('adverse-media', 'synthetic-brave-key');
+const usageStore = new MemoryCustomerUsageStore();
 let app;
 let appUrl;
 let identityServer;
@@ -29,7 +31,7 @@ before(async () => {
   });
   await new Promise((resolve) => identityServer.listen(0, '127.0.0.1', resolve));
   process.env.IDENTITY_ENDPOINT = `http://127.0.0.1:${identityServer.address().port}/token`;
-  app = createAppServer({ store, fetchImpl: async (input, options) => {
+  app = createAppServer({ store, usageStore, fetchImpl: async (input, options) => {
     const url = new URL(input);
     if (url.hostname === 'api.search.brave.com') {
       assert.equal(options.headers['x-subscription-token'], 'synthetic-brave-key');
@@ -72,6 +74,21 @@ after(async () => {
   await new Promise((resolve) => app.close(resolve));
   await new Promise((resolve) => identityServer.close(resolve));
   delete process.env.IDENTITY_ENDPOINT;
+});
+
+test('Search+ requires a separate workspace entitlement and explicit rate', async () => {
+  const response = await fetch(`${appUrl}/service/adverse_media_search_plus`, {
+    method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: 'Search Plus Example' })
+  });
+  assert.equal(response.status, 403);
+  assert.equal(azureCalls, 0);
+  const client = await store.getClientForKey(apiKey);
+  const policy = validateUsagePolicy({ mode: 'postpay', currency: 'USD',
+    allowed_modules: ['adverse-media-search-plus'], rates: {
+      'adverse-media-search-plus': [{ up_to: null, price: '0.20' }]
+    } }, new Set(['adverse-media-search-plus']));
+  await usageStore.configure(client.id, policy);
 });
 
 test('parallel Search+ uses GPT and produces a separate review-only report', async () => {
