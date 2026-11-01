@@ -1,12 +1,20 @@
-# CPU Ollama document OCR: performance review
+# Document OCR release performance review: Azure/Gemini and CPU Ollama
 
 Date: 1 November 2026. Scope: the eight document extraction APIs in PR #106 and the isolated UAE North CPU QA run. This report contains no source document text, identity values, images, or model responses.
 
 ## Decision
 
-**Performance gate failed.** The stated acceptance limit is 10 seconds for a simple two-page OCR result. The one-page Emirates ID sample took about **265 seconds to finish page transcription** on a 3-vCPU, 6-GiB Azure Container Apps job. Field structuring then waited about **301 seconds** and failed at Node's default response-header timeout. No valid API result was produced. The original attempt failed after about 559 seconds; the diagnosed repeat failed after 566 seconds. The other four supplied PDFs were not completed, so their field accuracy and latency are unverified.
+**Performance gate failed for both extraction paths.** The stated acceptance limit is 10 seconds for a simple two-page **completed OCR result**. The user reports that the existing Azure/Gemini production path also fails this gate; its measured elapsed time was not provided in this review. The proposed Ollama path independently failed: a one-page Emirates ID took about **265 seconds to finish page transcription** on a 3-vCPU, 6-GiB Azure Container Apps job. Field structuring then waited about **301 seconds** and failed at Node's default response-header timeout. No valid Ollama result was produced. The original Ollama attempt failed after about 559 seconds; the diagnosed repeat failed after 566 seconds. The other four supplied PDFs were not completed on Ollama, so their field accuracy and latency are unverified.
 
-The production Azure/Gemini engine must remain selected. Do not enable `DOCUMENT_OCR_FORCE_OLLAMA` or select Ollama per API from the admin control until a replacement design meets the latency and field-quality gates on real samples. PR #106 is a draft.
+Neither path is release-gate compliant. Azure/Gemini remains the configured default only to prevent an unverified Ollama cutover; that default is **not** a performance approval. Do not enable `DOCUMENT_OCR_FORCE_OLLAMA` or select Ollama per API from the admin control. The production API currently has `DOCUMENT_OCR_PRODUCTION_ENABLED=1`, so the existing routes remain available despite the reported latency failure. Changing customer admission requires an explicit rollout decision. PR #106 is a draft.
+
+## Existing production path: latency review
+
+The live worker in UAE North has two 2-vCPU containers, one for document OCR and one for ClamAV. It scales from zero to at most two replicas and its Azure Queue scaling rule polls every 30 seconds. The API returns HTTP 202 after enqueueing; customers poll a separate result URL until HTTP 200. The release gate must therefore measure submission to **result availability**, not the initial 202 response.
+
+After the worker starts, it downloads and decrypts the file, scans it with ClamAV, submits it to Azure Document Intelligence, polls for analysis completion, checkpoints OCR, calls Gemini for structured fields, validates evidence and MRZ where applicable, stores the encrypted result, and settles billing. Code bounds are 90 seconds for Azure submission, up to 180 one-second Azure polls, and 60 seconds for Gemini. These are limits, **not observed stage durations**. Scale-to-zero and a 30-second polling interval make a strict 10-second end-to-end guarantee implausible for the current design, even before provider time is counted; a warm-worker benchmark is still needed to isolate provider latency.
+
+The production Container App configuration and enabled API flag were read on 1 November 2026. The Log Analytics workspace contains no usable OCR-worker stage timings for this review. Querying `DocumentOcrJobs` for created-to-completed timestamps was denied because this session lacks Storage Table Data Reader permission. No exact production percentile or stage breakdown is claimed here. The user's report of the failed release test is the current acceptance evidence until a sanitized timing export is available.
 
 ## End-to-end process reviewed
 
@@ -56,4 +64,4 @@ The Google Drive MOA placeholder was unreadable locally; an equal-sized readable
 
 ## Required next gate
 
-Choose a CPU-only OCR/structuring design that can be measured against **completed** two-page results in at most 10 seconds, including cold and warm runs, while retaining all eight output schemas and evidence checks. Instrument separate timings for queue wait, image pull, model load, render, vision prefill/generation, each structuring call, validation, and storage. Record p50 and p95 latency, CPU/memory, field accuracy, MRZ validity, and prompt-injection behavior on representative documents. The current Qwen 4B, 2-vCPU, scale-to-zero design should not be enabled on the basis of a timeout increase or synthetic smoke tests.
+Measure both the existing Azure/Gemini path and any replacement against **completed** two-page results in at most 10 seconds, including cold and warm runs, while retaining all eight output schemas and evidence checks. Instrument separate timings for admission/storage, queue wait, image pull, malware scan, Azure submit/poll or local render/vision, model load, field structuring, validation, and result storage. Record p50 and p95 latency, CPU/memory, field accuracy, MRZ validity, and prompt-injection behavior on representative documents. The current Qwen 4B, 2-vCPU, scale-to-zero design should not be enabled on the basis of a timeout increase or synthetic smoke tests. The existing Azure/Gemini path should not be described as release-gate compliant merely because it is the current production default.
