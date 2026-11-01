@@ -1,0 +1,35 @@
+# Temporary QA image. It is never referenced by the production deployment.
+FROM node:22-bookworm-slim AS node-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+FROM ollama/ollama:0.40.13
+ENV DEBIAN_FRONTEND=noninteractive \
+    OLLAMA_HOST=127.0.0.1:11434 \
+    OLLAMA_NO_CLOUD=true \
+    OLLAMA_NUM_PARALLEL=1 \
+    OLLAMA_MAX_LOADED_MODELS=1 \
+    OLLAMA_MODELS=/opt/ollama-models \
+    HOME=/tmp/ollama-home
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates poppler-utils tesseract-ocr tesseract-ocr-eng libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=node-deps /usr/local/bin/node /usr/local/bin/node
+WORKDIR /app
+COPY --from=node-deps /app/node_modules ./node_modules
+COPY package.json ./
+COPY lib/ ./lib/
+COPY scripts/document-ocr-azure-ollama-qa.mjs ./scripts/
+RUN set -eu; mkdir -p "$OLLAMA_MODELS" "$HOME"; \
+    (set -eu; ollama serve >/tmp/ollama-build.log 2>&1 & \
+        pid=$!; \
+        for i in $(seq 1 60); do ollama list >/dev/null 2>&1 && break; sleep 1; done; \
+        ollama pull qwen3:0.6b; \
+        ollama pull qwen3:1.7b; \
+        kill "$pid"; wait "$pid" 2>/dev/null || true)
+RUN useradd --uid 10001 --home-dir "$HOME" --no-create-home --shell /usr/sbin/nologin ocr \
+    && chown -R 10001:10001 "$OLLAMA_MODELS" "$HOME" /app
+USER 10001
+ENTRYPOINT []
+CMD ["node", "scripts/document-ocr-azure-ollama-qa.mjs"]
