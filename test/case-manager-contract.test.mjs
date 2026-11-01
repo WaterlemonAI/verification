@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { CASE_DIRECT_SERVICES, CASE_PAYLOAD_SCHEMA, classifyCaseSubmission, caseExpiresAt,
   caseIsReadable, effectiveCaseTtlDays } from '../lib/case-manager-contract.mjs';
 
-test('v1 covers fifteen current direct submissions and excludes non-submissions', () => {
-  assert.equal(CASE_DIRECT_SERVICES.length, 15);
+test('v1 covers sixteen current direct submissions and excludes non-submissions', () => {
+  assert.equal(CASE_DIRECT_SERVICES.length, 16);
   for (const service of CASE_DIRECT_SERVICES) assert.equal(classifyCaseSubmission('POST', service.path)?.service, service.service);
   assert.equal(CASE_PAYLOAD_SCHEMA.properties.schema_version.const, 1);
   for (const path of ['/service/health', '/service/bank_statement_analysis/bsa_123/result',
-    '/service/adverse_media/reports/123.pdf', '/reports/entity-search.pdf']) {
+    '/service/adverse_media/reports/123.pdf', '/service/adverse_media_search_plus/reports/123.pdf', '/reports/entity-search.pdf']) {
     assert.equal(classifyCaseSubmission('POST', path), null);
   }
   assert.equal(classifyCaseSubmission('GET', '/service/entity_search'), null);
