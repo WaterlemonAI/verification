@@ -405,8 +405,8 @@
     },
     "/service/adverse_media_search_plus": {
       "post": {
-        "summary": "Adverse Media (Search+) — GPT-backed parallel screening",
-        "description": "Runs the existing bounded Search+ publisher and general-source retrieval with GPT source-fact classification. The endpoint is separately enabled, synchronous only, and always returns a review-required partial result. It does not replace the existing Adverse Media API or make a final compliance decision. search_plus is forced true; deep_research and callbacks are unavailable. Every result includes a permanent PDF report.",
+        "summary": "Adverse Media (Search+) — parallel screening",
+        "description": "Runs the existing bounded Search+ publisher and general-source retrieval with source-fact classification. The endpoint is separately enabled, synchronous only, and always returns a review-required partial result. It does not replace the existing Adverse Media API or make a final compliance decision. search_plus is forced true; deep_research and callbacks are unavailable. Every result includes a permanent PDF report.",
         "operationId": "screenAdverseMediaSearchPlus",
         "security": [{ "ApiKey": [] }],
         "requestBody": {

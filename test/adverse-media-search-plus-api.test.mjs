@@ -108,7 +108,9 @@ test('parallel Search+ uses GPT and produces a separate review-only report', asy
   assert.equal(body.status, 'partial');
   assert.equal(body.coverage.search_plus.requested, true);
   assert.equal(body.coverage.complete, false);
-  assert.ok(body.coverage.reason_codes.includes('parallel_gpt_review_required'));
+  assert.ok(body.coverage.reason_codes.includes('search_plus_review_required'));
+  assert.equal(body.summary.statement, 'Search+ screening requires documented human review and is not a final compliance decision.');
+  assert.doesNotMatch(JSON.stringify(body), /\b(?:gpt|gemini|azure.openai)\b/i);
   assert.equal(body.summary.decision_eligible, false);
   assert.equal(body.summary.outcome, 'inconclusive');
   assert.equal(body.summary.risk_level, 'indeterminate');

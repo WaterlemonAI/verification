@@ -685,10 +685,10 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       presented.summary.profile_status = 'inconclusive';
       presented.summary.human_review_required = true;
       presented.summary.threshold_status = 'incomplete_coverage';
-      presented.summary.statement = 'Parallel GPT screening requires documented human review and is not a final compliance decision.';
+      presented.summary.statement = 'Search+ screening requires documented human review and is not a final compliance decision.';
       presented.coverage.complete = false;
       presented.coverage.retryable = false;
-      presented.coverage.reason_codes = [...new Set([...presented.coverage.reason_codes, 'parallel_gpt_review_required'])];
+      presented.coverage.reason_codes = [...new Set([...presented.coverage.reason_codes, 'search_plus_review_required'])];
     }
     const response = await finalizeAdverseMediaReport({
       request,
