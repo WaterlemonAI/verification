@@ -18,6 +18,10 @@ The Bicep parameter `enableAdverseMediaSearchPlusGpt` defaults to `false`. The p
 
 Rollback is to set `ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED` to `false` through the protected workflow and confirm the route and catalog entry are disabled. This does not change the existing adverse-media route or previously created report URLs.
 
+## First entitlement scope
+
+The owner selected an internal test workspace first. The existing AI7LAB UAE test workspace is the candidate named in prior platform evidence; verify its current workspace identity and Adverse Media rate before changing its policy. Enable the Search+ entitlement only for that verified workspace, use synthetic requests for the initial authenticated API and PDF check, and leave all other workspace policies unchanged. Record the exact billing ledger entry and confirm the Search+ charge matches the current Adverse Media tier for that workspace. Customer entitlement follows only after the larger blinded quality and privacy-path review.
+
 ## Example
 
 ```http
