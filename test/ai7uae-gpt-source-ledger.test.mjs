@@ -69,3 +69,47 @@ test('matching namesake headline and excerpt are not a source conflict', () => {
   assert.equal(result.observations[0].headline_disputed, false);
   assert.deepEqual(result.review, [{ source_id: 'namesake', reasons: ['matching_headline_normalized'] }]);
 });
+
+test('multi-company data-leak headline is flagged when the excerpt documents only weak certificate keys', () => {
+  const result = validateGptSourceLedger({ sources: [
+    { id: 'mixed', title: 'SBI, HDFC और eMudhra में डेटा लीक की जांच शुरू',
+      excerpt: 'भारतीय कंपनी eMudhra की आठ डिजिटल कीज में गंभीर कमजोरी सामने आई है।' }
+  ], observations: [
+    { source_id: 'mixed', acted_party: 'eMudhra', action_kind: 'unsupported_claim',
+      supporting_quote: 'भारतीय कंपनी eMudhra की आठ डिजिटल कीज में गंभीर कमजोरी सामने आई है।',
+      headline_disputed: false }
+  ] });
+  assert.equal(result.observations[0].headline_disputed, true);
+  assert.equal(result.observations[0].action_kind, 'material_incident');
+  assert.deepEqual(result.review, [
+    { source_id: 'mixed', reasons: ['documented_key_defect_normalized'] },
+    { source_id: 'mixed', reasons: ['headline_data_leak_scope_review'] }
+  ]);
+});
+
+test('confirmed data leak in the excerpt is not overridden by the key-defect headline check', () => {
+  const result = validateGptSourceLedger({ sources: [
+    { id: 'confirmed', title: 'Helix CA data leak disclosed',
+      excerpt: 'Helix CA confirmed a data leak and separately found weak digital keys.' }
+  ], observations: [
+    { source_id: 'confirmed', acted_party: 'Helix CA', action_kind: 'material_incident',
+      supporting_quote: 'Helix CA confirmed a data leak and separately found weak digital keys.',
+      headline_disputed: false }
+  ] });
+  assert.equal(result.observations[0].headline_disputed, false);
+  assert.deepEqual(result.review, []);
+});
+
+test('anonymous speculation about a key defect remains unsupported', () => {
+  const result = validateGptSourceLedger({ sources: [
+    { id: 'rumor', title: 'Unverified key discussion',
+      excerpt: 'Helix CA private keys were weak, according to an anonymous forum post.',
+      publisher: 'Anonymous Forum' }
+  ], observations: [
+    { source_id: 'rumor', acted_party: 'Helix CA', action_kind: 'unsupported_claim',
+      supporting_quote: 'Helix CA private keys were weak, according to an anonymous forum post.',
+      headline_disputed: false }
+  ] });
+  assert.equal(result.observations[0].action_kind, 'unsupported_claim');
+  assert.deepEqual(result.review, []);
+});

@@ -75,7 +75,7 @@ for (const fixture of fixtures) {
     model: deployment,
     instructions: ai7uaeGptInstructions('edd', 'adverse_media_party_facts') +
       '\n\nFor every supporting_quote, copy one verbatim clause from its own item that contains acted_party and, when a formal stage is reported, the word supporting that stage. If no party is supported, use acted_party="" and party_relation=unclear. Return JSON only.',
-    input: 'Extract source facts for this fictional test subject. ' + ai7uaeUntrustedEvidence({ subject: fixture.subject, evidence }),
+    input: 'Extract source facts for this test subject. ' + ai7uaeUntrustedEvidence({ subject: fixture.subject, evidence }),
     reasoning: { effort: reasoningEffort }, max_output_tokens: 4096,
     text: { format: { type: 'json_schema', name: 'party_facts', schema, strict: true } }
   };
@@ -110,7 +110,7 @@ for (const fixture of fixtures) {
       if (boundedRetry && missing.length && missing.length <= 3) {
         const retryEvidence = evidence.filter((item) => missing.some((miss) => miss.id === item.id));
         const retryPayload = { ...payload,
-          input: 'Extract source facts for this fictional test subject. '
+          input: 'Extract source facts for this test subject. '
             + ai7uaeUntrustedEvidence({ subject: fixture.subject, evidence: retryEvidence }),
           reasoning: { effort: 'low' }, max_output_tokens: 2048 };
         const retryStarted = performance.now();

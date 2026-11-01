@@ -222,6 +222,11 @@ application-verified event references. Both retain review reasons for corrected
 or unsupported facts. They do not change the current public response contract,
 Gemini routing, or customer decisions.
 
+A [public-source spot check](docs/gpt5-mini-public-source-spot-check-2026-11-01.md)
+uses short excerpts from AI7Lab and eMudhra sources, including a Hindi
+multi-company headline, to test attribution and headline scope. It remains a
+limited candidate evaluation rather than a production screening.
+
 The existing Gemini-backed adverse-media and document OCR integrations remain
 active until their Azure OpenAI replacements pass separate contract, quality,
 privacy, and cost checks and the protected API deployment path is used.

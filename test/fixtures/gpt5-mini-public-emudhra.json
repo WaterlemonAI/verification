@@ -1,0 +1,43 @@
+{
+  "case_id": "public-emudhra-source-sample-2026-11-01",
+  "notice": "Public primary-source excerpts only. No legal breach, customer-data breach, or misuse is inferred from the certificate incident. This is not a complete screening.",
+  "subject": {
+    "type": "business",
+    "name": "eMudhra",
+    "aliases": ["eMudhra Limited"],
+    "jurisdiction": "India",
+    "website": "https://emudhra.com/"
+  },
+  "evidence": [
+    {
+      "id": "E1",
+      "title": "eMudhra Statement on Recent Certificate Security Incident",
+      "excerpt": "eMudhra is actively investigating a security incident involving a specific set of intermediate CA certificates",
+      "publisher": "eMudhra",
+      "url": "https://emudhra.com/en/post/certificate-security-incident",
+      "expected_bucket": "adverse_media",
+      "expected_role": "direct_actor",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "E2",
+      "title": "Protecting Chrome and Android Users from Compromised eMudhra Intermediate CA Certificates",
+      "excerpt": "compromise of private keys associated with eight eMudhra subordinate Certification Authority (CA) certificates",
+      "publisher": "Google Chrome Security",
+      "url": "https://blog.google/security/protecting-chrome-and-android-users-from-compromised-emudhra-intermediate-ca-certificates/",
+      "expected_bucket": "adverse_media",
+      "expected_role": "direct_actor",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "E3",
+      "title": "बैंकिंग और डिजिटल सुरक्षा पर बड़ा खतरा; SBI, HDFC और eMudhra में डेटा लीक की जांच शुरू",
+      "excerpt": "लेकिन भारतीय कंपनी eMudhra की आठ डिजिटल कीज में गंभीर कमजोरी सामने आई है।",
+      "publisher": "Navbharat Times",
+      "url": "https://navbharattimes.indiatimes.com/metro/delhi/other-news/sbi-probes-alleged-dark-web-data-leak-as-hdfc-investigates-confidential-information-sharing-and-emudhra-fixes-security-flaws/articleshow/135107446.cms",
+      "expected_bucket": "adverse_media",
+      "expected_role": "direct_actor",
+      "expected_stage": "media_mention"
+    }
+  ]
+}

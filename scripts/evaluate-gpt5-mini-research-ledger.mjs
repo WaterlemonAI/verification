@@ -44,7 +44,7 @@ const payload = {
   model: deployment,
   instructions: ai7uaeGptInstructions('research', 'source_ledger') +
     '\n\nCopy a short supporting_quote containing acted_party exactly from each source. Use the excerpt and any cited notice described there to decide who was acted against. Return observations for every source ID exactly once.',
-  input: 'Create a source ledger for this fictional case. ' + ai7uaeUntrustedEvidence({ subject: fixture.subject, sources }),
+  input: 'Create a source ledger for this test case. ' + ai7uaeUntrustedEvidence({ subject: fixture.subject, sources }),
   reasoning: { effort: 'minimal' }, max_output_tokens: 2048,
   text: { format: { type: 'json_schema', name: 'source_ledger', schema, strict: true } }
 };
