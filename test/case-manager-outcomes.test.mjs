@@ -24,7 +24,7 @@ test('HTTP success is not business success, partial results require review', () 
     summary: { outcome: 'no_material_results', decision_eligible: true, human_review_required: false } }, { httpStatus: 200 }).outcome, 'passed');
   assert.equal(caseOutcome('adverse-media', {}, { httpStatus: 202 }).outcome, 'pending');
   assert.deepEqual(caseOutcome('adverse-media-search-plus', { status: 'partial' }, { httpStatus: 200 }),
-    { outcome: 'review_required', reasonCodes: ['PARALLEL_GPT_SCREENING_REVIEW_REQUIRED'] });
+    { outcome: 'review_required', reasonCodes: ['SEARCH_PLUS_SCREENING_REVIEW_REQUIRED'] });
   assert.equal(caseOutcome('future-integration', 'plain supplier error', { httpStatus: 200 }).outcome, 'unclassified');
 });
 
