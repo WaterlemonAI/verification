@@ -30,6 +30,16 @@ test('party facts produce subject-specific legal stages', () => {
   ]);
 });
 
+test('an omitted fact does not discard a separately supported source', () => {
+  const result = adjudicateGptPartyFacts({ subject, evidence: evidence.slice(0, 2), facts: [
+    { result_id: 'company', party_relation: 'screened_subject', event_kind: 'legal_action',
+      acted_party: 'Cedar Dune Trading LLC', reported_stage: 'regulatory_action',
+      supporting_quote: 'Cedar Dune Trading LLC was fined for recordkeeping failures.' }
+  ] });
+  assert.deepEqual(result.results.map((item) => item.result_id), ['company']);
+  assert.deepEqual(result.review, [{ result_id: 'director', reasons: ['missing_party_fact'] }]);
+});
+
 test('unsupported quotes are withheld instead of becoming a decision', () => {
   const result = adjudicateGptPartyFacts({ subject, evidence: evidence.slice(0, 1), facts: [
     { result_id: 'company', party_relation: 'screened_subject', event_kind: 'legal_action',
