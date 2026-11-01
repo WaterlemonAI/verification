@@ -422,14 +422,24 @@ async function openUsageDialog(customer) {
   const list = byId('usage-modules'); list.replaceChildren();
   for (const module of catalog.modules) {
     const row = document.createElement('div'); row.className = 'usage-module'; row.dataset.module = module.id;
+    const inheritsAdverseRate = module.id === 'adverse-media-search-plus';
     const label = document.createElement('label'); label.className = 'check';
-    const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = data.account.allowed_modules.includes('*') || data.account.allowed_modules.includes(module.id);
+    const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = inheritsAdverseRate
+      ? data.account.allowed_modules.includes(module.id)
+      : data.account.allowed_modules.includes('*') || data.account.allowed_modules.includes(module.id);
     const name = document.createElement('span'); name.textContent = `${module.name}${module.available ? '' : ' (unavailable)'}`;
     label.append(checkbox, name);
     const tiers = document.createElement('textarea'); tiers.rows = 2; tiers.spellcheck = false;
     tiers.placeholder = '*:0.00'; tiers.setAttribute('aria-label', `Rate tiers for ${module.name}`);
-    tiers.value = (data.account.rates[module.id] || []).map((tier) => `${tier.up_to ?? '*'}:${tier.price}`).join('\n');
-    row.append(label, tiers); list.append(row);
+    tiers.value = (data.account.rates[inheritsAdverseRate ? 'adverse-media' : module.id] || [])
+      .map((tier) => `${tier.up_to ?? '*'}:${tier.price}`).join('\n');
+    if (inheritsAdverseRate) {
+      tiers.disabled = true;
+      const note = document.createElement('small');
+      note.textContent = 'Uses this workspace’s Adverse Media rate tiers; Search+ access must be selected explicitly.';
+      row.append(label, tiers, note);
+    } else row.append(label, tiers);
+    list.append(row);
   }
   const body = byId('admin-usage-logs'); body.replaceChildren();
   for (const log of data.logs) {
@@ -470,7 +480,11 @@ byId('usage-form').addEventListener('submit', async (event) => {
     const rows = [...byId('usage-modules').children];
     const allowed_modules = rows.filter((row) => row.querySelector('input').checked).map((row) => row.dataset.module);
     const rates = {};
-    for (const row of rows) { const tiers = parseTierLines(row.querySelector('textarea').value); if (tiers.length) rates[row.dataset.module] = tiers; }
+    for (const row of rows) {
+      if (row.dataset.module === 'adverse-media-search-plus') continue;
+      const tiers = parseTierLines(row.querySelector('textarea').value);
+      if (tiers.length) rates[row.dataset.module] = tiers;
+    }
     await request(`/admin/api/customers/${form.elements.workspace_id.value}/usage`, { method: 'PUT', body: JSON.stringify({ mode: form.elements.mode.value, currency: form.elements.currency.value, allowed_modules, rates }) });
     byId('usage-dialog').close(); await loadClients();
   } catch (error) { byId('usage-error').textContent = error.message; }
