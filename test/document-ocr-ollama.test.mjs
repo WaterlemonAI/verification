@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import sharp from 'sharp';
@@ -60,7 +61,13 @@ test('vision OCR returns page text without following document instructions', asy
   assert.match(result.pages[0].text, /Cheque Number 123/);
 });
 
-test('text PDFs use their source text while identity PDFs still receive vision OCR', async () => {
+test('text PDFs use their source text while identity PDFs still receive vision OCR', async (t) => {
+  for (const command of ['pdftotext', 'pdftoppm']) {
+    if (spawnSync(command, ['-v'], { stdio: 'ignore' }).error?.code === 'ENOENT') {
+      t.skip(`${command} is unavailable in this test environment`);
+      return;
+    }
+  }
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([600, 800]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
