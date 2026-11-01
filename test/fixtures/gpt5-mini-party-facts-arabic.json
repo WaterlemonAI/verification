@@ -1,0 +1,49 @@
+{
+  "case_id": "synthetic-arabic-oasis-pearl-001",
+  "notice": "جميع الأسماء والجهات والروابط في هذه العينة خيالية ومخصصة للاختبار فقط.",
+  "subject": { "type": "business", "name": "شركة واحة اللؤلؤ للتجارة", "jurisdiction": "UAE" },
+  "evidence": [
+    {
+      "id": "A1", "title": "غرامة على شركة واحة اللؤلؤ للتجارة",
+      "excerpt": "فرضت الهيئة التجارية الخيالية غرامة على شركة واحة اللؤلؤ للتجارة بسبب مخالفات في حفظ السجلات. الشركة هي الطرف المعاقب ولا توجد إدانة جنائية.",
+      "publisher": "الهيئة التجارية الخيالية", "url": "https://regulator.example/ar/oasis-a1",
+      "expected_bucket": "adverse_media", "expected_role": "direct_actor", "expected_stage": "regulatory_action"
+    },
+    {
+      "id": "A2", "title": "غرامة شخصية على مديرة الشركة",
+      "excerpt": "فرضت الهيئة الضريبية الخيالية غرامة شخصية على المديرة ليلى رائد. لم تفرض غرامة على شركة واحة اللؤلؤ للتجارة.",
+      "publisher": "الهيئة الضريبية الخيالية", "url": "https://tax.example/ar/director-a2",
+      "expected_bucket": "general_news_mentions", "expected_role": "related_party", "expected_stage": "media_mention"
+    },
+    {
+      "id": "A3", "title": "اتهام شركة واحة اللؤلؤ للخدمات في قضية منفصلة",
+      "excerpt": "وجهت المحكمة اتهاما إلى شركة واحة اللؤلؤ للخدمات، وهي شركة أخرى برقم تسجيل مختلف ولا ترتبط بشركة واحة اللؤلؤ للتجارة.",
+      "publisher": "سجل المحاكم الخيالي", "url": "https://court.example/ar/namesake-a3",
+      "expected_bucket": "no_impact_media", "expected_role": "namesake", "expected_stage": "media_mention"
+    },
+    {
+      "id": "A4", "title": "ادعاء مجهول بشأن شركة واحة اللؤلؤ للتجارة",
+      "excerpt": "يدعي منشور مجهول أن شركة واحة اللؤلؤ للتجارة احتيالية دون مستند أو معاملة أو شاهد معروف أو تأكيد مستقل.",
+      "publisher": "منتدى مجهول", "url": "https://forum.example/ar/claim-a4",
+      "expected_bucket": "general_news_mentions", "expected_role": "unclear", "expected_stage": "media_mention"
+    },
+    {
+      "id": "A5", "title": "افتتاح فرع جديد للشركة",
+      "excerpt": "افتتحت شركة واحة اللؤلؤ للتجارة فرعا جديدا في دبي. لا يتضمن الخبر مخالفة أو إجراء تنظيميا.",
+      "publisher": "أخبار الأعمال الخيالية", "url": "https://news.example/ar/branch-a5",
+      "expected_bucket": "general_news_mentions", "expected_role": "context_only", "expected_stage": "media_mention"
+    },
+    {
+      "id": "A6", "title": "تسرب بيانات في بوابة الشركة",
+      "excerpt": "تعرضت بوابة شركة واحة اللؤلؤ للتجارة لاختراق من مهاجم خارجي وتسربت بيانات عملاء. لم يذكر التقرير أن الشركة ارتكبت جريمة.",
+      "publisher": "أخبار التقنية الخيالية", "url": "https://news.example/ar/breach-a6",
+      "expected_bucket": "adverse_media", "expected_role": "direct_actor", "expected_stage": "media_mention"
+    },
+    {
+      "id": "A7", "title": "غرامة على وسيطين في تداول أسهم الشركة",
+      "excerpt": "فرضت هيئة الأسواق الخيالية غرامة على وسيطين بسبب تداول أسهم شركة واحة اللؤلؤ للتجارة. لم تفرض الهيئة غرامة على الشركة نفسها.",
+      "publisher": "هيئة الأسواق الخيالية", "url": "https://regulator.example/ar/brokers-a7",
+      "expected_bucket": "general_news_mentions", "expected_role": "related_party", "expected_stage": "media_mention"
+    }
+  ]
+}

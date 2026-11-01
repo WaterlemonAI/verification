@@ -347,6 +347,7 @@ jobs:
               ejariWorkerImage="${{ steps.ejari_image.outputs.image }}" \
               enableEjari="${{ vars.EJARI_PLATFORM_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableAdverseMediaSearchPlusGpt="${{ vars.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
@@ -382,6 +383,7 @@ jobs:
               ejariWorkerImage="${{ steps.ejari_image.outputs.image }}" \
               enableEjari="${{ vars.EJARI_PLATFORM_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableAdverseMediaSearchPlusGpt="${{ vars.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \

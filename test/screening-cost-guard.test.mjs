@@ -47,6 +47,24 @@ test('model input and maximum output are reserved before a paid call', async () 
   assert.equal(dialed, 1);
 });
 
+test('GPT-5 mini Azure calls reserve a bounded cost before dialing', async () => {
+  let dialed = 0;
+  const guard = createScreeningCostGuard(async () => { dialed += 1; return Response.json({ status: 'completed' }); });
+  const url = 'https://aoai-ai7uae-uaen-001.openai.azure.com/openai/v1/responses';
+  const request = (input) => ({ method: 'POST', body: JSON.stringify({
+    model: 'ai7uae-gpt-5-mini', input, max_output_tokens: 4096
+  }) });
+  await guard.fetch(url, request('synthetic evidence'));
+  assert.equal(guard.providerCalls.azure_openai, 1);
+  assert.ok(guard.reservedProviderCostUsd >= 0.008);
+  assert.equal(dialed, 1);
+  await assert.rejects(guard.fetch(url, request('x'.repeat(600_000))), /screening_cost_limit/);
+  await assert.rejects(guard.fetch(url, { method: 'POST', body: JSON.stringify({
+    model: 'unknown-deployment', input: 'test', max_output_tokens: 4096
+  }) }), /screening_cost_unknown_ai_request/);
+  assert.equal(dialed, 1);
+});
+
 test('the report narrative falls back without dialing Gemini when the shared request allowance is exhausted', async () => {
   const hosts = [];
   const guard = createScreeningCostGuard(async (input) => { hosts.push(new URL(input).hostname); return Response.json({}); });

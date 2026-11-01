@@ -32,12 +32,14 @@ POST /service/uae_tlv
 POST /service/iban_verification
 POST /service/entity_search
 POST /service/adverse_media
+POST /service/adverse_media_search_plus
 POST /service/merchant_screening
 POST /service/bank_statement_analysis
 GET  /service/bank_statement_analysis/{analysisId}
 GET  /service/bank_statement_analysis/{analysisId}/result
 POST /forms/{formId}/submissions
 GET  /service/adverse_media/reports/{reportId}.pdf
+GET  /service/adverse_media_search_plus/reports/{reportId}.pdf
 GET  /service/merchant_screening/reports/{reportId}.pdf
 GET  /service/forms/reports/{reportId}.pdf
 ```
@@ -165,6 +167,8 @@ The default schedule is `01:30 UTC` daily. All raw files and index entries remai
 
 The owner-approved [publisher catalog](top_50_media_publishers_30_largest_economies_2026.json) contains 1,500 unique domains across 30 economies, including curated specialist outlets. Set `search_plus: true` per request to reserve bounded search capacity for explicit site-restricted publisher batches, prioritising requested countries, curated sources, and high-value news/finance outlets, then consolidate those results with the normal evidence set. The response and PDF record every publisher included in a successfully completed batch and every publisher in an incomplete batch. Search+ does not crawl publisher websites or claim that an index contains every article. See the [current design and cost gate](docs/dynamic-adverse-media-publisher-search.md).
 
+The separate [Adverse Media (Search+) API](docs/adverse-media-search-plus-gpt.md) forces publisher-targeted Search+ and classifies source facts with the refined Azure GPT-5 mini instructions. It has its own module ID, route and report URL. The existing `/service/adverse_media` route remains on its current workflow. The parallel route is off by default and always returns a review-required, decision-ineligible result when enabled.
+
 The adverse-event taxonomy separately identifies corporate misconduct, founder/leadership disputes, workforce restructuring, and financial distress. Layoffs, downsizing, founder departures, and restructurings are reviewable corporate events; their presence does not by itself label the company or its leadership as fraudulent.
 
 The API Engine manages these records inside the dedicated Key Vault:
@@ -178,6 +182,58 @@ The API Engine manages these records inside the dedicated Key Vault:
 - `integration-<id>-master-key`: one write-only upstream master key per integration.
 
 `adverse-media` and `adverse-media-ai` are runtime-managed integrations. Their private credentials are stored separately as `integration-adverse-media-master-key` and `integration-adverse-media-ai-master-key`; either can be set or rotated from the protected administration console. The AI credential is optional and deterministic screening remains available without it.
+
+### Azure OpenAI account
+
+`infrastructure/api-openai.bicep` defines the separate UAE North Azure OpenAI
+account. It disables API keys and grants only the dedicated API runtime managed
+identity the `Cognitive Services OpenAI User` role on that account. The public
+endpoint uses Microsoft Entra authentication. The separately scoped
+`infrastructure/api-openai-gpt5-mini.bicep` defines the approved
+`ai7uae-gpt-5-mini` model deployment using `GlobalStandard` and 10 capacity
+units of the pay-per-token tier. Its model version is pinned to `2025-08-07`
+with automatic version upgrades disabled. Global Standard prompts and responses may be
+processed outside the UAE. The model template references the existing account
+and does not reapply the account or its role assignment. Preview its exact
+resource change before applying it; the account template does not deploy a
+model. The model template also creates the `ai7uae-kycprobe-shield-v1` guardrail.
+It preserves the blocking filters in `Microsoft.DefaultV2` and enables blocking
+for indirect attacks in document content. Document attack detection requires
+the caller to mark untrusted evidence as a document.
+
+`lib/ai7uae-gpt-guidelines.mjs` supplies the shared instructions for EDD,
+document processing, and research, and formats text evidence inside Azure's
+document boundary. Every future Azure OpenAI call must use these instructions;
+the model deployment does not retain a system prompt between requests. The
+application must authorize the AI7 UAE tenant and case before a call, constrain
+the task and tools, validate a strict output schema, and send only necessary
+evidence. The shared helper does not turn current Gemini flows into Azure OpenAI
+flows and does not accept image evidence directly.
+
+The helper also offers allowlisted workflow instructions for adverse-media
+classification, association resolution, source reconciliation, and audit
+narratives. `lib/ai7uae-gpt-adverse-guard.mjs` is an unconnected candidate guard
+for model-generated legal stages and conflicting bucket/role combinations.
+The [synthetic prompt-refinement evaluation](docs/gpt5-mini-prompt-refinement-2026-11-01.md)
+records remaining attribution and source-linkage failures; neither helper is a
+replacement authorization or a live routing change.
+
+The later [source-fact and research-ledger evaluation](docs/gpt5-mini-evidence-ledger-evaluation-2026-11-01.md)
+tests an unconnected GPT adapter candidate. `lib/ai7uae-gpt-party-facts.mjs`
+derives subject-specific adverse-media labels from quoted party facts, and
+`lib/ai7uae-gpt-source-ledger.mjs` links research observations only through
+application-verified event references. Both retain review reasons for corrected
+or unsupported facts. They do not change the current public response contract,
+Gemini routing, or customer decisions.
+
+A [public-source spot check](docs/gpt5-mini-public-source-spot-check-2026-11-01.md)
+uses short excerpts from AI7Lab and eMudhra sources, including a Hindi
+multi-company headline, to test attribution and headline scope. It remains a
+limited candidate evaluation rather than a production screening.
+
+The existing Gemini-backed adverse-media and document OCR integrations remain
+active until their Azure OpenAI replacements pass separate contract, quality,
+privacy, and cost checks and the protected API deployment path is used.
 
 Do not commit or place plaintext credentials in GitHub variables. Bootstrap the admin hash in the dedicated API vault, then manage integrations and customer credentials through the protected console.
 

@@ -1,0 +1,67 @@
+{
+  "case_id": "synthetic-cobalt-palm-fresh-001",
+  "notice": "Entirely fictional names, publishers, and URLs. This case was created after the party-fact prompt and validator were frozen for the next replay.",
+  "subject": { "type": "business", "name": "Cobalt Palm Holdings LLC", "jurisdiction": "UAE" },
+  "evidence": [
+    {
+      "id": "F1", "title": "Cobalt Palm Holdings LLC receives regulator penalty",
+      "excerpt": "The Fictional Trade Authority imposed a penalty on Cobalt Palm Holdings LLC for inaccurate filings. The company is the named penalized party; no criminal conviction is reported.",
+      "publisher": "Fictional Trade Authority", "url": "https://regulator.example/cobalt-f1",
+      "expected_bucket": "adverse_media", "expected_role": "direct_actor", "expected_stage": "regulatory_action"
+    },
+    {
+      "id": "F2", "title": "Cobalt Palm chief executive convicted",
+      "excerpt": "Chief executive Sana Kaye was convicted in a personal tax case. The court record does not name Cobalt Palm Holdings LLC as a defendant or convicted party.",
+      "publisher": "Fictional Court Registry", "url": "https://court.example/sana-f2",
+      "expected_bucket": "general_news_mentions", "expected_role": "related_party", "expected_stage": "media_mention"
+    },
+    {
+      "id": "F3", "title": "Cobalt Palm Logistics LLC indicted",
+      "excerpt": "Cobalt Palm Logistics LLC has a different registration number and no stated link to Cobalt Palm Holdings LLC. Only Cobalt Palm Logistics LLC was indicted.",
+      "publisher": "Fictional Court Registry", "url": "https://court.example/logistics-f3",
+      "expected_bucket": "no_impact_media", "expected_role": "namesake", "expected_stage": "media_mention"
+    },
+    {
+      "id": "F4", "title": "Customer data exposed at Cobalt Palm Holdings LLC",
+      "excerpt": "Cobalt Palm Holdings LLC disclosed that an outside attacker accessed customer records in its portal. The company is the affected service, with no offence alleged against it.",
+      "publisher": "Fictional Technology News", "url": "https://news.example/portal-f4",
+      "expected_bucket": "adverse_media", "expected_role": "direct_actor", "expected_stage": "media_mention"
+    },
+    {
+      "id": "F5", "title": "Anonymous complaint calls Cobalt Palm Holdings LLC corrupt",
+      "excerpt": "A forum user gives no document, named complainant, transaction, or independent reporting for the claim.",
+      "publisher": "Anonymous Forum", "url": "https://forum.example/cobalt-f5",
+      "expected_bucket": "general_news_mentions", "expected_role": "unclear", "expected_stage": "media_mention"
+    },
+    {
+      "id": "F6", "title": "Whistleblower complaint alleges Cobalt Palm falsified records",
+      "excerpt": "A named former employee filed a complaint alleging Cobalt Palm Holdings LLC falsified inventory records. The allegation is disputed and no finding is reported.",
+      "publisher": "Fictional Court Wire", "url": "https://court.example/complaint-f6",
+      "expected_bucket": "adverse_media", "expected_role": "direct_actor", "expected_stage": "allegation"
+    },
+    {
+      "id": "F7", "title": "Cobalt Palm Holdings LLC defrauded by supplier",
+      "excerpt": "A supplier diverted payments from Cobalt Palm Holdings LLC. The company was the victim and brought a civil claim; the report does not accuse the company of fraud.",
+      "publisher": "Fictional Court Wire", "url": "https://court.example/supplier-f7",
+      "expected_bucket": "no_impact_media", "expected_role": "victim", "expected_stage": "media_mention"
+    },
+    {
+      "id": "F8", "title": "Shareholders fined over Cobalt Palm securities trades",
+      "excerpt": "The Fictional Markets Authority fined two shareholders for their own trades in Cobalt Palm Holdings LLC shares. The notice does not penalize the company.",
+      "publisher": "Fictional Markets Authority", "url": "https://regulator.example/shareholders-f8",
+      "expected_bucket": "general_news_mentions", "expected_role": "related_party", "expected_stage": "media_mention"
+    },
+    {
+      "id": "F9", "title": "Cobalt Palm Holdings LLC settles contract suit",
+      "excerpt": "Cobalt Palm Holdings LLC signed a settlement resolving allegations that the company breached a supplier contract. The notice names the company as the settling party.",
+      "publisher": "Fictional Court Registry", "url": "https://court.example/settlement-f9",
+      "expected_bucket": "adverse_media", "expected_role": "direct_actor", "expected_stage": "settled"
+    },
+    {
+      "id": "F10", "title": "Subsidiary receives separate fine",
+      "excerpt": "Cobalt Palm Retail FZE, a subsidiary of Cobalt Palm Holdings LLC, received a fine for its own permit violation. The parent company is not named as the penalized party.",
+      "publisher": "Fictional Licensing Office", "url": "https://regulator.example/subsidiary-f10",
+      "expected_bucket": "general_news_mentions", "expected_role": "related_party", "expected_stage": "media_mention"
+    }
+  ]
+}
