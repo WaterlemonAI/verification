@@ -192,6 +192,7 @@ test('customer admission snapshots the current engine and exposes no engine cont
     return fetch(`${base}/service/cheque_ocr`, { method: 'POST',
       headers: { authorization: `Bearer ${issued.apiKey}`, 'idempotency-key': key }, body: form });
   };
+  await store.setDocumentOcrEngine('cheque-ocr', 'ollama', 'admin@example.test');
   assert.equal((await submit('snapshot-engine-00001')).status, 202);
   await store.setDocumentOcrEngine('cheque-ocr', 'azure', 'admin@example.test');
   assert.equal((await submit('snapshot-engine-00002')).status, 202);

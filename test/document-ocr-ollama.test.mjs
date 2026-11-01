@@ -30,6 +30,7 @@ test('production OCR selections stay Azure until all eight are switched to Ollam
     else process.env.DOCUMENT_OCR_FORCE_OLLAMA = previous;
   }
   const local = new EnvironmentStore();
+  for (const api of DOCUMENT_OCR_APIS) assert.equal(await local.getDocumentOcrEngine(api.id), 'azure');
   const customer = await local.listIntegrations({ publicOnly: true });
   assert.equal(customer.find((item) => item.id === 'cheque-ocr').extractionEngine, undefined);
 });
