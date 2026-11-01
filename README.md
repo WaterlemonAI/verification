@@ -179,6 +179,23 @@ The API Engine manages these records inside the dedicated Key Vault:
 
 `adverse-media` and `adverse-media-ai` are runtime-managed integrations. Their private credentials are stored separately as `integration-adverse-media-master-key` and `integration-adverse-media-ai-master-key`; either can be set or rotated from the protected administration console. The AI credential is optional and deterministic screening remains available without it.
 
+### Azure OpenAI account
+
+`infrastructure/api-openai.bicep` defines the separate UAE North Azure OpenAI
+account. It disables API keys and grants only the dedicated API runtime managed
+identity the `Cognitive Services OpenAI User` role on that account. The public
+endpoint uses Microsoft Entra authentication; the resource does not expose a
+model until a deployment SKU is explicitly selected. The template defaults to
+no model deployment. When selecting `GlobalStandard`, prompts and responses may
+be processed outside the UAE. Select `Standard` only after confirming that a
+regional pay-per-token SKU and quota are available in the subscription. Do not
+select provisioned throughput for a low-volume test because it reserves paid
+capacity. The model deployment name is `ai7uae-gpt-5-mini`.
+
+The existing Gemini-backed adverse-media and document OCR integrations remain
+active until their Azure OpenAI replacements pass separate contract, quality,
+privacy, and cost checks and the protected API deployment path is used.
+
 Do not commit or place plaintext credentials in GitHub variables. Bootstrap the admin hash in the dedicated API vault, then manage integrations and customer credentials through the protected console.
 
 ### Platform email and recovery
