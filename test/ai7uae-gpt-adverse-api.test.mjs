@@ -74,3 +74,29 @@ test('publisher markup does not break a verbatim supported allegation', async ()
   assert.equal(outcome.status, 'completed');
   assert.equal(outcome.results[0].ai_classification.media_bucket, 'adverse_media');
 });
+
+test('large batches retry omitted facts in bounded groups without relaxing grounding', async () => {
+  const classify = createGptAdverseClassifier({
+    credential: { getToken: async () => ({ token: 'synthetic-managed-token' }) }
+  });
+  const results = Array.from({ length: 8 }, (_, index) => ({
+    result_id: `R${index + 1}`, title: `Example Ltd charged in case ${index + 1}`,
+    excerpt: `Example Ltd charged in case ${index + 1}.`,
+    publisher: 'Synthetic News', url: `https://example.test/r${index + 1}`, categories: ['fraud']
+  }));
+  const request = { entity_type: 'business', name: 'Example Ltd', aliases: [], countries: [] };
+  const callSizes = [];
+  const outcome = await classify(results, request, { fetchImpl: async (_url, options) => {
+    const input = JSON.parse(options.body).input;
+    const selected = results.filter((item) => input.includes(`"id":"${item.result_id}"`));
+    callSizes.push(selected.length);
+    const returned = callSizes.length === 1 ? selected.slice(0, 1) : selected;
+    return Response.json({ status: 'completed', output_text: JSON.stringify({ facts: returned.map((item) => ({
+      result_id: item.result_id, party_relation: 'screened_subject', acted_party: 'Example Ltd',
+      event_kind: 'legal_action', reported_stage: 'charged', supporting_quote: item.title
+    })) }), usage: { input_tokens: 100, output_tokens: 30 } });
+  } });
+  assert.deepEqual(callSizes, [8, 3, 3, 1]);
+  assert.equal(outcome.status, 'completed');
+  assert.equal(outcome.results.filter((item) => item.ai_classification?.media_bucket === 'adverse_media').length, 8);
+});
