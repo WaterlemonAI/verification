@@ -192,7 +192,19 @@ with automatic version upgrades disabled. Global Standard prompts and responses 
 processed outside the UAE. The model template references the existing account
 and does not reapply the account or its role assignment. Preview its exact
 resource change before applying it; the account template does not deploy a
-model.
+model. The model template also creates the `ai7uae-kycprobe-shield-v1` guardrail.
+It preserves the blocking filters in `Microsoft.DefaultV2` and enables blocking
+for indirect attacks in document content. Document attack detection requires
+the caller to mark untrusted evidence as a document.
+
+`lib/ai7uae-gpt-guidelines.mjs` supplies the shared instructions for EDD,
+document processing, and research, and formats text evidence inside Azure's
+document boundary. Every future Azure OpenAI call must use these instructions;
+the model deployment does not retain a system prompt between requests. The
+application must authorize the AI7 UAE tenant and case before a call, constrain
+the task and tools, validate a strict output schema, and send only necessary
+evidence. The shared helper does not turn current Gemini flows into Azure OpenAI
+flows and does not accept image evidence directly.
 
 The existing Gemini-backed adverse-media and document OCR integrations remain
 active until their Azure OpenAI replacements pass separate contract, quality,
