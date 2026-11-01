@@ -14,7 +14,8 @@ test('only the three KYCProbe tasks can produce trusted GPT instructions', () =>
 
 test('specialized instructions retain the task boundary and subject attribution rule', () => {
   assert.deepEqual(AI7UAE_GPT_WORKFLOWS, [
-    'adverse_media_classification', 'association_resolution', 'source_reconciliation', 'audit_narrative'
+    'adverse_media_party_facts', 'adverse_media_classification', 'association_resolution',
+    'source_reconciliation', 'source_ledger', 'audit_narrative'
   ]);
   const classifier = ai7uaeGptInstructions('edd', 'adverse_media_classification');
   assert.match(classifier, /legal_stage=media_mention/);

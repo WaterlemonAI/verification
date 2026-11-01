@@ -1,0 +1,51 @@
+{
+  "case_id": "synthetic-marina-quartz-research-001",
+  "notice": "All entities, sources, and event references are fictional; trusted references are withheld from the model.",
+  "subject": { "type": "business", "name": "Marina Quartz Services LLC" },
+  "verified_event_refs": {
+    "Q1": "TEST-COMPANY-NOTICE-A",
+    "Q2": "TEST-DIRECTOR-NOTICE-B",
+    "Q3": "TEST-DIRECTOR-NOTICE-B",
+    "Q4": "TEST-NAMESAKE-CASE-C",
+    "Q5": "TEST-EXPANSION-D",
+    "Q6": "TEST-ANONYMOUS-E"
+  },
+  "sources": [
+    {
+      "id": "Q1", "title": "Marina Quartz Services LLC fined for filing breach",
+      "excerpt": "The Fictional Licensing Authority fined Marina Quartz Services LLC for submitting incomplete permit records. The notice names the company as the penalized party.",
+      "publisher": "Fictional Licensing Authority", "url": "https://regulator.example/marina-q1",
+      "expected_party": "Marina Quartz Services LLC", "expected_kind": "formal_action", "expected_headline_disputed": false
+    },
+    {
+      "id": "Q2", "title": "Marina Quartz Services LLC fined for director conduct",
+      "excerpt": "The cited Fictional Tax Authority notice instead imposed a personal penalty on director Safira Noor. It does not penalize Marina Quartz Services LLC.",
+      "publisher": "Fictional Secondary Wire", "url": "https://wire.example/marina-q2",
+      "expected_party": "Safira Noor", "expected_kind": "formal_action", "expected_headline_disputed": true
+    },
+    {
+      "id": "Q3", "title": "Director receives personal tax penalty",
+      "excerpt": "The Fictional Tax Authority imposed a personal penalty on Safira Noor for late individual tax filing. Marina Quartz Services LLC is not named as a penalized party.",
+      "publisher": "Fictional Tax Authority", "url": "https://tax.example/safira-q3",
+      "expected_party": "Safira Noor", "expected_kind": "formal_action", "expected_headline_disputed": false
+    },
+    {
+      "id": "Q4", "title": "Marina Quartz Logistics Ltd convicted abroad",
+      "excerpt": "Marina Quartz Logistics Ltd is a separate company with a different registration number. The court convicted Marina Quartz Logistics Ltd, not Marina Quartz Services LLC.",
+      "publisher": "Fictional Court Registry", "url": "https://court.example/logistics-q4",
+      "expected_party": "Marina Quartz Logistics Ltd", "expected_kind": "formal_action", "expected_headline_disputed": false
+    },
+    {
+      "id": "Q5", "title": "Marina Quartz Services LLC opens new office",
+      "excerpt": "Marina Quartz Services LLC opened a new service office and hired five staff. No allegation or enforcement action is reported.",
+      "publisher": "Fictional Business News", "url": "https://news.example/office-q5",
+      "expected_party": "Marina Quartz Services LLC", "expected_kind": "ordinary_news", "expected_headline_disputed": false
+    },
+    {
+      "id": "Q6", "title": "Anonymous post calls Marina Quartz Services LLC a scam",
+      "excerpt": "An anonymous user calls Marina Quartz Services LLC a scam without a document, transaction, identified complainant, or independent corroboration.",
+      "publisher": "Anonymous Forum", "url": "https://forum.example/marina-q6",
+      "expected_party": "Marina Quartz Services LLC", "expected_kind": "unsupported_claim", "expected_headline_disputed": false
+    }
+  ]
+}

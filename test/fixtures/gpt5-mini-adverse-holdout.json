@@ -51,7 +51,7 @@
     {
       "id": "H5",
       "title": "Blue Gulf Devices fined, report says",
-      "excerpt": "This secondary headline describes a fictional regulator notice. The notice itself names two brokers as fined and states no penalty against Blue Gulf Devices LLC.",
+      "excerpt": "This secondary headline describes a fictional regulator notice. The notice itself names two brokers as fined for trades in Blue Gulf Devices LLC shares and states no penalty against Blue Gulf Devices LLC.",
       "publisher": "Fictional Business Wire",
       "url": "https://wire.example/blue-gulf-h5",
       "expected_bucket": "general_news_mentions",

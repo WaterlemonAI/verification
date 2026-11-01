@@ -214,6 +214,14 @@ The [synthetic prompt-refinement evaluation](docs/gpt5-mini-prompt-refinement-20
 records remaining attribution and source-linkage failures; neither helper is a
 replacement authorization or a live routing change.
 
+The later [source-fact and research-ledger evaluation](docs/gpt5-mini-evidence-ledger-evaluation-2026-11-01.md)
+tests an unconnected GPT adapter candidate. `lib/ai7uae-gpt-party-facts.mjs`
+derives subject-specific adverse-media labels from quoted party facts, and
+`lib/ai7uae-gpt-source-ledger.mjs` links research observations only through
+application-verified event references. Both retain review reasons for corrected
+or unsupported facts. They do not change the current public response contract,
+Gemini routing, or customer decisions.
+
 The existing Gemini-backed adverse-media and document OCR integrations remain
 active until their Azure OpenAI replacements pass separate contract, quality,
 privacy, and cost checks and the protected API deployment path is used.
