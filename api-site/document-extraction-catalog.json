@@ -338,6 +338,28 @@
             "phone_number": {
               "type": "string",
               "description": "Phone number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "number_of_shares": {
+              "type": "string",
+              "description": "Number of shares held by this shareholder, if stated. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "date_of_joining": {
+              "type": "string",
+              "description": "Date the shareholder joined, as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "date_of_removal": {
+              "type": "string",
+              "description": "Date the shareholder was removed, as printed, when applicable. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "current_status": {
+              "type": "string",
+              "enum": [
+                "Active Shareholder",
+                "Removed Shareholder",
+                "Not Found",
+                "Not Readable"
+              ],
+              "description": "Current shareholder status only when explicitly supported by the memorandum."
             }
           },
           "required": [
@@ -345,7 +367,11 @@
             "shareholding_percent",
             "nationality",
             "id_number",
-            "phone_number"
+            "phone_number",
+            "number_of_shares",
+            "date_of_joining",
+            "date_of_removal",
+            "current_status"
           ],
           "additionalProperties": false
         }

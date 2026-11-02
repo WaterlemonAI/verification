@@ -4,6 +4,46 @@ import { test } from 'node:test';
 import { AzureDocumentOcrStore } from '../lib/document-ocr-store.mjs';
 import { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } from '../lib/customer-usage.mjs';
 
+test('MOA stores its chosen pipeline and omits provider calls from public job status', async () => {
+  const previousKey = process.env.DOCUMENT_OCR_DATA_KEY_HEX;
+  process.env.DOCUMENT_OCR_DATA_KEY_HEX = 'a'.repeat(64);
+  try {
+    const rows = new Map();
+    const table = {
+      async getEntity(partition, key) {
+        const value = rows.get(`${partition}/${key}`);
+        if (!value) throw Object.assign(new Error('not found'), { statusCode: 404 });
+        return value;
+      },
+      async createEntity(row) { rows.set(`${row.partitionKey}/${row.rowKey}`, row); },
+      async submitTransaction(actions) {
+        for (const [, row] of actions) rows.set(`${row.partitionKey}/${row.rowKey}`, row);
+      },
+      async updateEntity(patch) { Object.assign(rows.get(`${patch.partitionKey}/${patch.rowKey}`), patch); }
+    };
+    const container = { getBlockBlobClient: () => ({ uploadData: async () => {} }) };
+    const queue = { sendMessage: async () => {} };
+    const store = new AzureDocumentOcrStore({ container, queue, table });
+    const created = await store.createJob({ ownerId: 'moa-workspace', serviceId: 'moa-analysis',
+      files: [{ bytes: Buffer.from('%PDF-synthetic'), mediaType: 'application/pdf' }],
+      idempotencyKey: 'moa-pipeline-test-1234', transactionId: 'synthetic-transaction', pipeline: 'taed' });
+    assert.equal(created.job.provider_calls, undefined);
+    const row = await store.getRow(store.partition('moa-workspace'), created.job.id);
+    assert.equal(row.pipeline, 'taed');
+    assert.equal((await store.getJob('moa-workspace', created.job.id)).provider_calls, undefined);
+    row.stage = 'taed_in_flight';
+    assert.equal((await store.getJob('moa-workspace', created.job.id)).stage, 'extracting');
+    const replay = await store.createJob({ ownerId: 'moa-workspace', serviceId: 'moa-analysis',
+      files: [{ bytes: Buffer.from('%PDF-synthetic'), mediaType: 'application/pdf' }],
+      idempotencyKey: 'moa-pipeline-test-1234', transactionId: 'synthetic-transaction', pipeline: 'legacy' });
+    assert.equal(replay.reused, true);
+    assert.equal(replay.job.provider_calls, undefined);
+  } finally {
+    if (previousKey === undefined) delete process.env.DOCUMENT_OCR_DATA_KEY_HEX;
+    else process.env.DOCUMENT_OCR_DATA_KEY_HEX = previousKey;
+  }
+});
+
 test('an idempotency race re-enqueues the winning job if its first enqueue was lost', async () => {
   const previousKey = process.env.DOCUMENT_OCR_DATA_KEY_HEX;
   process.env.DOCUMENT_OCR_DATA_KEY_HEX = 'a'.repeat(64);

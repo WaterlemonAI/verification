@@ -25,4 +25,9 @@ test('OpenAPI documents every OCR route and every structured output field', () =
   assert.equal(JSON.stringify(spec).toLowerCase().includes('gemini'), false);
   assert.deepEqual(spec.components.schemas.DocumentOcrJob.properties.provider_calls.required,
     ['azure', 'ai7edd_model']);
+  assert.equal(spec.components.schemas.DocumentOcrJob.required.includes('provider_calls'), false);
+  assert.ok(spec.components.schemas.DocumentOcrResult.oneOf.some((item) =>
+    item.$ref === '#/components/schemas/moa_analysis_TaedResult'));
+  assert.deepEqual(spec.components.schemas.moa_analysis_TaedResult.required,
+    ['transaction_id', 'job_id', 'service_id', 'status', 'processed_at', 'data']);
 });
