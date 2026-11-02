@@ -38,6 +38,16 @@ test('MOA stores its chosen pipeline and omits provider calls from public job st
       idempotencyKey: 'moa-pipeline-test-1234', transactionId: 'synthetic-transaction', pipeline: 'legacy' });
     assert.equal(replay.reused, true);
     assert.equal(replay.job.provider_calls, undefined);
+    const tradeLicense = await store.createJob({ ownerId: 'moa-workspace',
+      serviceId: 'uae-trade-license-ocr',
+      files: [{ bytes: Buffer.from('%PDF-trade-license'), mediaType: 'application/pdf' }],
+      idempotencyKey: 'trade-license-pipeline-test-1234', transactionId: 'synthetic-transaction', pipeline: 'taed' });
+    assert.equal(tradeLicense.job.provider_calls, undefined);
+    assert.equal((await store.getRow(store.partition('moa-workspace'), tradeLicense.job.id)).pipeline, 'taed');
+    await assert.rejects(store.createJob({ ownerId: 'moa-workspace', serviceId: 'cheque-ocr',
+      files: [{ bytes: Buffer.from('%PDF-cheque'), mediaType: 'application/pdf' }],
+      idempotencyKey: 'cheque-pipeline-test-1234', transactionId: 'synthetic-transaction', pipeline: 'taed' }),
+    /document_ocr_pipeline_invalid/);
   } finally {
     if (previousKey === undefined) delete process.env.DOCUMENT_OCR_DATA_KEY_HEX;
     else process.env.DOCUMENT_OCR_DATA_KEY_HEX = previousKey;

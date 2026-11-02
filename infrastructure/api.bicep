@@ -32,6 +32,9 @@ param enableDocumentOcr bool = false
 @description('Use the TAED extraction API for MOA jobs after its protected credential is configured.')
 param enableTaedMoa bool = false
 
+@description('Use the TAED extraction API for UAE Trade License jobs after its protected credential is configured.')
+param enableTaedTradeLicense bool = false
+
 @description('Enable the separate GPT-backed Adverse Media (Search+) API only after its privacy, cost, and quality gates pass.')
 param enableAdverseMediaSearchPlusGpt bool = false
 
@@ -728,6 +731,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
             { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: !parallelDeployment && enableDocumentOcr ? '1' : '0' }
             { name: 'DOCUMENT_OCR_TAED_MOA_ENABLED', value: !parallelDeployment && enableDocumentOcr && enableTaedMoa ? 'true' : 'false' }
+            { name: 'DOCUMENT_OCR_TAED_TRADE_LICENSE_ENABLED', value: !parallelDeployment && enableDocumentOcr && enableTaedTradeLicense ? 'true' : 'false' }
             { name: 'CASE_MANAGER_ENABLED', value: caseManagerRuntimeEnabled ? 'true' : 'false' }
             { name: 'EJARI_PLATFORM_ENABLED', value: !parallelDeployment && enableEjari ? '1' : '0' }
           ], parallelDeployment ? [] : [

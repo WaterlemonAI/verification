@@ -71,6 +71,30 @@ test('MOA jobs admitted to TAED use it after malware scan without Azure or Gemin
   assert.equal(store.result().metadata, undefined);
 });
 
+test('Trade License TAED job returns extracted rows without verification or model metadata', async () => {
+  const store = fakeStore('queued', 'uae-trade-license-ocr');
+  store.state.pipeline = 'taed';
+  let scanned = false;
+  const outcome = await processDocumentOcrJob({ store, partitionKey: store.state.partitionKey,
+    jobId: store.state.jobId,
+    scan: async () => { scanned = true; },
+    getTaedKey: async () => 'synthetic-taed-key',
+    getGeminiKey: async () => { throw new Error('Gemini should not be called'); },
+    analyze: async () => { throw new Error('Azure should not be called'); },
+    taedExtract: async ({ apiId }) => {
+      assert.equal(scanned, true);
+      assert.equal(apiId, '0e6e2e97-e185-4933-85d8-6344b004ca99');
+      return { data: { 'License Number': 'TEST-123',
+        'Directors/Business Owner': 'Name: Alice Example, Nationality: Exampleland, ID Number: TEST1, Phone Number: Null, email: Null, Shareholding Percentage: 100%' },
+      metadata: { fileName: 'private.pdf' } };
+    } });
+  assert.equal(outcome.status, 'completed');
+  assert.equal(store.result().data.license_number, 'TEST-123');
+  assert.equal(store.result().data.directors_business_owners[0].shareholding_percent, '100%');
+  for (const field of ['processing', 'review_flags', 'review_required', 'metadata', 'confidence'])
+    assert.equal(store.result()[field], undefined);
+});
+
 test('a replayed MOA TAED call cannot make a duplicate paid request', async () => {
   const store = fakeStore('taed_in_flight', 'moa-analysis');
   store.state.pipeline = 'taed';
