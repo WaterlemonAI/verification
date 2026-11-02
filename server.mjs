@@ -2578,7 +2578,8 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
   }
   try {
     const maxBytes = 25 * 1024 * 1024;
-    const pipeline = definition.id === 'moa-analysis' && process.env.DOCUMENT_OCR_TAED_MOA_ENABLED === 'true'
+    const pipeline = (definition.id === 'moa-analysis' && process.env.DOCUMENT_OCR_TAED_MOA_ENABLED === 'true')
+      || (definition.id === 'uae-trade-license-ocr' && process.env.DOCUMENT_OCR_TAED_TRADE_LICENSE_ENABLED === 'true')
       ? 'taed' : 'legacy';
     const raw = await readBody(req, maxBytes + 262144);
     const form = await new Request('http://localhost/', { method: 'POST',

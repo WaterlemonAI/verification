@@ -30,4 +30,10 @@ test('OpenAPI documents every OCR route and every structured output field', () =
     item.$ref === '#/components/schemas/moa_analysis_TaedResult'));
   assert.deepEqual(spec.components.schemas.moa_analysis_TaedResult.required,
     ['transaction_id', 'job_id', 'service_id', 'status', 'processed_at', 'data']);
+  assert.ok(spec.components.schemas.DocumentOcrResult.oneOf.some((item) =>
+    item.$ref === '#/components/schemas/uae_trade_license_ocr_TaedResult'));
+  assert.deepEqual(spec.components.schemas.uae_trade_license_ocr_Result.properties.data.oneOf, [
+    { $ref: '#/components/schemas/uae_trade_license_ocr_LegacyData' },
+    { $ref: '#/components/schemas/uae_trade_license_ocr_Data' }
+  ]);
 });

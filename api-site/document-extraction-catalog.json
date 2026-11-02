@@ -72,6 +72,103 @@
             "shareholding_percent": {
               "type": "string",
               "description": "Printed percentage including the percent sign, if available. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "nationality": {
+              "type": "string",
+              "description": "Nationality as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "id_number": {
+              "type": "string",
+              "description": "ID number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "phone_number": {
+              "type": "string",
+              "description": "Phone number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "email": {
+              "type": "string",
+              "description": "Email address, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            }
+          },
+          "required": [
+            "name",
+            "shareholding_percent",
+            "nationality",
+            "id_number",
+            "phone_number",
+            "email"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "company_type": {
+        "type": "string",
+        "description": "Legal company type, such as sole establishment or limited liability company. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+      },
+      "business_managers": {
+        "type": [
+          "array",
+          "string"
+        ],
+        "description": "One row for each business manager identified on the license. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Business manager name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "nationality": {
+              "type": "string",
+              "description": "Nationality as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "id_number": {
+              "type": "string",
+              "description": "ID number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "phone_number": {
+              "type": "string",
+              "description": "Phone number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "email": {
+              "type": "string",
+              "description": "Email address, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            }
+          },
+          "required": [
+            "name",
+            "nationality",
+            "id_number",
+            "phone_number",
+            "email"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "emirates": {
+        "type": "string",
+        "description": "Emirate selected by the Trade License extraction API. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+      },
+      "authorizing_authority": {
+        "type": "string",
+        "description": "Authority selected by the Trade License extraction API. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+      },
+      "parent_entity": {
+        "type": [
+          "array",
+          "string"
+        ],
+        "description": "Entity shareholders of the parent company, with their printed percentage. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Parent entity name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            },
+            "shareholding_percent": {
+              "type": "string",
+              "description": "Printed ownership percentage, if available. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
             }
           },
           "required": [
@@ -81,9 +178,9 @@
           "additionalProperties": false
         }
       },
-      "company_type": {
+      "sanction_country": {
         "type": "string",
-        "description": "Legal company type, such as sole establishment or limited liability company. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+        "description": "Sanction-country field returned by Trade License extraction; this is document data, not a verification decision. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
       }
     },
     "maxFiles": 1,

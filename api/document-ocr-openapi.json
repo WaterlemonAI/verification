@@ -3,7 +3,7 @@
   "info": {
     "title": "KYCProbe Document Extraction API",
     "version": "1.0.0",
-    "description": "Eight asynchronous document extraction modules. MOA submissions can use a TAED wrapper when enabled. Results and original documents are encrypted and retained for 30 days."
+    "description": "Eight asynchronous document extraction modules. MOA and Trade License submissions can use TAED wrappers when enabled. Results and original documents are encrypted and retained for 30 days."
   },
   "servers": [
     {
@@ -19,7 +19,7 @@
         ],
         "summary": "UAE Trade License OCR (All Emirates)",
         "operationId": "submit_uae_trade_license_ocr",
-        "description": "Asynchronous extraction. One file, 20 pages and 25 MiB combined. Encrypted input, OCR text, result and crops are retained 30 days. Missing fields return Not Found; unreadable fields return Not Readable. Human review is required when review_required is true.",
+        "description": "Asynchronous Trade License extraction. One file, 20 pages and 25 MiB combined. When the TAED Trade License pipeline is enabled, PDF, PNG, JPEG and WEBP are accepted, and results contain extracted fields without review or model metadata. Encrypted input and result are retained 30 days.",
         "security": [
           {
             "ApiKey": []
@@ -52,7 +52,7 @@
                   "file": {
                     "type": "string",
                     "format": "binary",
-                    "description": "Required PDF, PNG or JPEG document."
+                    "description": "Required PDF, PNG or JPEG document. WEBP is also accepted when the TAED Trade License pipeline is enabled."
                   }
                 },
                 "additionalProperties": false
@@ -1814,7 +1814,12 @@
           "managers",
           "business_activity",
           "directors_business_owners",
-          "company_type"
+          "company_type",
+          "business_managers",
+          "emirates",
+          "authorizing_authority",
+          "parent_entity",
+          "sanction_country"
         ],
         "properties": {
           "issuing_authority": {
@@ -1885,6 +1890,103 @@
                 "shareholding_percent": {
                   "type": "string",
                   "description": "Printed percentage including the percent sign, if available. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "nationality": {
+                  "type": "string",
+                  "description": "Nationality as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "id_number": {
+                  "type": "string",
+                  "description": "ID number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "phone_number": {
+                  "type": "string",
+                  "description": "Phone number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "email": {
+                  "type": "string",
+                  "description": "Email address, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                }
+              },
+              "required": [
+                "name",
+                "shareholding_percent",
+                "nationality",
+                "id_number",
+                "phone_number",
+                "email"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "company_type": {
+            "type": "string",
+            "description": "Legal company type, such as sole establishment or limited liability company. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "business_managers": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "One row for each business manager identified on the license. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Business manager name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "nationality": {
+                  "type": "string",
+                  "description": "Nationality as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "id_number": {
+                  "type": "string",
+                  "description": "ID number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "phone_number": {
+                  "type": "string",
+                  "description": "Phone number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "email": {
+                  "type": "string",
+                  "description": "Email address, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                }
+              },
+              "required": [
+                "name",
+                "nationality",
+                "id_number",
+                "phone_number",
+                "email"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "emirates": {
+            "type": "string",
+            "description": "Emirate selected by the Trade License extraction API. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "authorizing_authority": {
+            "type": "string",
+            "description": "Authority selected by the Trade License extraction API. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "parent_entity": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Entity shareholders of the parent company, with their printed percentage. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Parent entity name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "shareholding_percent": {
+                  "type": "string",
+                  "description": "Printed ownership percentage, if available. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
                 }
               },
               "required": [
@@ -1894,9 +1996,9 @@
               "additionalProperties": false
             }
           },
-          "company_type": {
+          "sanction_country": {
             "type": "string",
-            "description": "Legal company type, such as sole establishment or limited liability company. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+            "description": "Sanction-country field returned by Trade License extraction; this is document data, not a verification decision. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
           }
         },
         "additionalProperties": false
@@ -1946,7 +2048,14 @@
             "type": "string"
           },
           "data": {
-            "$ref": "#/components/schemas/uae_trade_license_ocr_Data"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/uae_trade_license_ocr_LegacyData"
+              },
+              {
+                "$ref": "#/components/schemas/uae_trade_license_ocr_Data"
+              }
+            ]
           },
           "evidence": {
             "type": "array",
@@ -1972,7 +2081,12 @@
                     "managers",
                     "business_activity",
                     "directors_business_owners",
-                    "company_type"
+                    "company_type",
+                    "business_managers",
+                    "emirates",
+                    "authorizing_authority",
+                    "parent_entity",
+                    "sanction_country"
                   ]
                 },
                 "page": {
@@ -3665,6 +3779,9 @@
             "$ref": "#/components/schemas/uae_trade_license_ocr_Result"
           },
           {
+            "$ref": "#/components/schemas/uae_trade_license_ocr_TaedResult"
+          },
+          {
             "$ref": "#/components/schemas/passport_icao_ocr_Result"
           },
           {
@@ -3803,6 +3920,144 @@
               ],
               "additionalProperties": false
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "uae_trade_license_ocr_LegacyData": {
+        "type": "object",
+        "required": [
+          "issuing_authority",
+          "license_number",
+          "company_name_english",
+          "company_name_arabic",
+          "formation_number",
+          "address",
+          "issue_date",
+          "expiry_date",
+          "managers",
+          "business_activity",
+          "directors_business_owners",
+          "company_type"
+        ],
+        "properties": {
+          "issuing_authority": {
+            "type": "string",
+            "description": "Organization that issued the trade license. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "license_number": {
+            "type": "string",
+            "description": "Trade license number exactly as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "company_name_english": {
+            "type": "string",
+            "description": "Company legal name in English, when printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "company_name_arabic": {
+            "type": "string",
+            "description": "Company legal name in Arabic, when printed. Preserve Arabic script. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "formation_number": {
+            "type": "string",
+            "description": "Company formation or registration number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "address": {
+            "type": "string",
+            "description": "Complete business address from the document. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "issue_date": {
+            "type": "string",
+            "description": "License issue date in DD/MM/YYYY when an unambiguous full date is printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "expiry_date": {
+            "type": "string",
+            "description": "License expiry date in DD/MM/YYYY when an unambiguous full date is printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "managers": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Names of managers explicitly identified in the document. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "string"
+            }
+          },
+          "business_activity": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Business activities printed on the license. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "string"
+            }
+          },
+          "directors_business_owners": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Only people explicitly labeled as directors, shareholders, or business owners. A manager is not an owner unless the document says so. Preserve printed shareholding percentages; return [] if none are listed. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Name as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "shareholding_percent": {
+                  "type": "string",
+                  "description": "Printed percentage including the percent sign, if available. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                }
+              },
+              "required": [
+                "name",
+                "shareholding_percent"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "company_type": {
+            "type": "string",
+            "description": "Legal company type, such as sole establishment or limited liability company. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          }
+        },
+        "additionalProperties": false
+      },
+      "uae_trade_license_ocr_TaedResult": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "job_id",
+          "service_id",
+          "status",
+          "processed_at",
+          "data"
+        ],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "const": "uae-trade-license-ocr"
+          },
+          "status": {
+            "type": "string",
+            "const": "completed"
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "$ref": "#/components/schemas/uae_trade_license_ocr_Data"
           }
         },
         "additionalProperties": false
