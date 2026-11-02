@@ -1,0 +1,43 @@
+{
+  "case_id": "public-ai7lab-source-sample-2026-11-01",
+  "notice": "Public website excerpts only. This is a limited source-bound evaluation, not a complete adverse-media search or customer decision.",
+  "subject": {
+    "type": "business",
+    "name": "AI7Lab",
+    "aliases": ["AI7LAB Tech Innovation Limited"],
+    "jurisdiction": "UAE",
+    "website": "https://www.ai7lab.net/"
+  },
+  "evidence": [
+    {
+      "id": "A1",
+      "title": "AI7Lab | Agentic AI Products Built for Real Work",
+      "excerpt": "AI7Lab builds and scales agentic AI products",
+      "publisher": "AI7Lab",
+      "url": "https://www.ai7lab.net/",
+      "expected_bucket": "general_news_mentions",
+      "expected_role": "context_only",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "A2",
+      "title": "rolefield.ai launches a voice-led AI workforce for the GCC",
+      "excerpt": "AI7Lab’s in-house speech-to-speech research now powers multilingual agents that converse, act, and complete customer workflows.",
+      "publisher": "AI7Lab",
+      "url": "https://www.ai7lab.net/announcements",
+      "expected_bucket": "general_news_mentions",
+      "expected_role": "context_only",
+      "expected_stage": "media_mention"
+    },
+    {
+      "id": "A3",
+      "title": "Contact | AI7Lab",
+      "excerpt": "AI7LAB Tech Innovation Limited, DIFC, Dubai, UAE",
+      "publisher": "AI7Lab",
+      "url": "https://www.ai7lab.net/contact",
+      "expected_bucket": "general_news_mentions",
+      "expected_role": "context_only",
+      "expected_stage": "media_mention"
+    }
+  ]
+}

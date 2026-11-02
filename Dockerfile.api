@@ -13,6 +13,7 @@ COPY api-site/ ./api-site/
 COPY admin-site/ ./admin-site/
 COPY api/openapi.json ./api/openapi.json
 COPY api/document-ocr-openapi.json ./api/document-ocr-openapi.json
+COPY api/ejari-openapi.json ./api/ejari-openapi.json
 COPY bank-statement-analysis/openapi.local.json ./bank-statement-analysis/openapi.local.json
 
 RUN mkdir /data && chown node:node /data

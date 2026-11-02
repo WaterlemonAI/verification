@@ -1,0 +1,87 @@
+{
+  "case_id": "synthetic-lena-shore-untuned-001",
+  "notice": "All names, records, publishers, and URLs are fictional test evidence.",
+  "subject": { "type": "individual", "name": "Lena Shore", "jurisdiction": "UAE" },
+  "evidence": [
+    {
+      "id": "I1",
+      "title": "Lena Shore charged over false invoices",
+      "excerpt": "The fictional court filing charges Lena Shore personally over false invoices. The case is pending and no conviction is reported.",
+      "publisher": "Fictional Court Registry",
+      "url": "https://court.example/lena-i1",
+      "expected_bucket": "adverse_media", "expected_role": "direct_actor", "expected_stage": "charged"
+    },
+    {
+      "id": "I2",
+      "title": "Employer fined after audit",
+      "excerpt": "Fictional Blue Harbor Bank, where Lena Shore works, received a regulatory fine for recordkeeping failures. The notice does not name Shore as a violator or fined party.",
+      "publisher": "Fictional Banking Authority",
+      "url": "https://regulator.example/employer-i2",
+      "expected_bucket": "general_news_mentions", "expected_role": "related_party", "expected_stage": "media_mention"
+    },
+    {
+      "id": "I3",
+      "title": "Lena Shore convicted in foreign court",
+      "excerpt": "The convicted Lena Shore is a different person with a different birth year and occupation; the filing does not refer to the screened Lena Shore.",
+      "publisher": "Fictional Court Registry",
+      "url": "https://court.example/namesake-i3",
+      "expected_bucket": "no_impact_media", "expected_role": "namesake", "expected_stage": "media_mention"
+    },
+    {
+      "id": "I4",
+      "title": "Fraudsters impersonate Lena Shore",
+      "excerpt": "An unrelated group used Lena Shore's name to solicit payments. The report identifies Shore as the person impersonated, not an organizer or beneficiary.",
+      "publisher": "Fictional Consumer Alert",
+      "url": "https://alerts.example/impersonation-i4",
+      "expected_bucket": "no_impact_media", "expected_role": "victim", "expected_stage": "media_mention"
+    },
+    {
+      "id": "I5",
+      "title": "Regulator investigates Lena Shore",
+      "excerpt": "The fictional regulator opened a formal investigation into Lena Shore personally over market disclosures. No charge or finding is reported.",
+      "publisher": "Fictional Markets Authority",
+      "url": "https://regulator.example/investigation-i5",
+      "expected_bucket": "adverse_media", "expected_role": "direct_actor", "expected_stage": "investigation"
+    },
+    {
+      "id": "I6",
+      "title": "Lena Shore appointed to board",
+      "excerpt": "Fictional Blue Harbor Bank appointed Lena Shore to its board. The article describes no allegation, misconduct, or enforcement action.",
+      "publisher": "Fictional Business News",
+      "url": "https://news.example/appointment-i6",
+      "expected_bucket": "general_news_mentions", "expected_role": "context_only", "expected_stage": "media_mention"
+    },
+    {
+      "id": "I7",
+      "title": "Anonymous comment alleges wrongdoing",
+      "excerpt": "An anonymous forum comment calls Lena Shore a scammer without a named complainant, transaction, document, or independent corroboration.",
+      "publisher": "Anonymous Forum",
+      "url": "https://forum.example/comment-i7",
+      "expected_bucket": "general_news_mentions", "expected_role": "unclear", "expected_stage": "media_mention"
+    },
+    {
+      "id": "I8",
+      "title": "Bank settles case about Lena Shore statements",
+      "excerpt": "A complaint alleges Lena Shore personally made misleading statements. Fictional Blue Harbor Bank settled the case about those statements, but the record does not say Shore personally settled.",
+      "publisher": "Fictional Court Wire",
+      "url": "https://court.example/bank-settlement-i8",
+      "expected_bucket": "adverse_media", "expected_role": "direct_actor", "expected_stage": "allegation"
+    },
+    {
+      "id": "I9",
+      "title": "Lena Shore receives pardon",
+      "excerpt": "A fictional pardon order names Lena Shore as pardoned after an earlier conviction in her own case. The order does not erase the historical conviction.",
+      "publisher": "Fictional Official Gazette",
+      "url": "https://gazette.example/pardon-i9",
+      "expected_bucket": "adverse_media", "expected_role": "direct_actor", "expected_stage": "pardoned"
+    },
+    {
+      "id": "I10",
+      "title": "Lena Shore named alongside charged colleague",
+      "excerpt": "The filing charges only colleague Omar Flint. Lena Shore is mentioned as a witness and has no allegation or charge in the filing.",
+      "publisher": "Fictional Court Registry",
+      "url": "https://court.example/witness-i10",
+      "expected_bucket": "no_impact_media", "expected_role": "context_only", "expected_stage": "media_mention"
+    }
+  ]
+}

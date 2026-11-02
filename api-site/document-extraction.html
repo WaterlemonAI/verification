@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/api.css?v=7" />
+  <link rel="stylesheet" href="/api.css?v=9" />
   <script src="/portal-auth.js?v=5" defer></script>
   <script src="/document-extraction.js?v=1" defer></script>
 </head>
@@ -22,10 +22,28 @@
       <h1 id="service-title">Document <em>extraction.</em></h1>
       <p>Extract named fields from an uploaded document with page-specific evidence and explicit review flags. Machine-readable zones are checked deterministically where applicable.</p>
       <div class="meta"><span>POST</span><code id="endpoint-path">Loading…</code><button class="copy" id="copy-endpoint">Copy endpoint</button></div>
+      <figure class="hero-infographic" role="img" aria-label="Document upload to Field extraction to Evidence and flags">
+        <figcaption>HOW THIS API HELPS</figcaption>
+        <div class="flow-steps">
+          <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>INPUT</small><strong>Document upload</strong></div></div>
+          <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><div><small>PROCESS</small><strong>Field extraction</strong></div></div>
+          <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 12 5 5L20 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>OUTPUT</small><strong>Evidence and flags</strong></div></div>
+        </div>
+      </figure>
     </section>
     <section class="layout">
-      <aside aria-label="On this page"><p>ON THIS PAGE</p><a href="#authentication">Authentication</a><a href="#request">Request</a><a href="#responses">Responses</a><a href="#security">Data handling</a><a href="#tester">Live tester</a></aside>
+      <aside aria-label="On this page"><p>ON THIS PAGE</p><a href="#quick-start">How to use</a><a href="#authentication">Authentication</a><a href="#request">Request</a><a href="#responses">Responses</a><a href="#security">Data handling</a><a href="#tester">Live tester</a></aside>
       <div class="content">
+        <article id="quick-start" class="quick-start">
+          <p class="label">INSTRUCTIONS TO USE</p>
+          <h2>How to use this API</h2>
+          <p>Start here, then use the detailed request and response reference below.</p>
+          <ol class="quick-steps">
+            <li><span>01</span><strong>Get your API key</strong><p>Use a workspace API key in the Bearer header.</p></li>
+            <li><span>02</span><strong>Upload a document</strong><p>Send a file and a unique Idempotency-Key in a multipart POST.</p></li>
+            <li><span>03</span><strong>Poll and review</strong><p>Follow the returned status and result URLs; check fields, evidence, and review flags.</p></li>
+          </ol>
+        </article>
         <article id="authentication"><p class="label">AUTHENTICATION</p><h2>Use your KYCProbe API key</h2><p>Send the API key as a Bearer token. Keep the key on your server. Your workspace must be enabled for this module.</p><div class="code-block"><code>Authorization: Bearer YOUR_AI7_API_KEY</code></div></article>
         <article id="request"><p class="label">REQUEST</p><h2>Upload and extract</h2><p>Send <code>multipart/form-data</code> with one required <code>file</code>. Emirates ID accepts one optional <code>additional_file</code> for the second side. PDF, PNG and JPEG are supported. The combined upload limit is 25 MiB; the page limit appears below.</p><p><strong id="limits"></strong></p><p>Every submission requires a unique <code>Idempotency-Key</code> header (16–128 allowed characters). Repeating the same key and exact files returns the original job without charging again. The API returns HTTP 202 while processing; poll the status and result URLs.</p><div class="code-block sample"><pre id="sample-code"></pre><button class="copy" id="copy-sample">Copy</button></div><h3>Returned fields</h3><div class="field-grid" id="fields"></div></article>
         <article id="responses"><p class="label">RESPONSE</p><h2>Structured data with a trace</h2><div class="schema-table"><div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div><div><code>transaction_id</code><span>UUID</span><span>Unique request reference in the job and result.</span></div><div><code>status</code><span>string</span><span>Queued, completed, review required, or failed.</span></div><div><code>data</code><span>object</span><span>All documented fields. Any absent field, including a list, is <code>Not Found</code>; a visibly present but unreadable field is <code>Not Readable</code>.</span></div><div><code>evidence</code><span>array</span><span>Field, page, and verified verbatim OCR quote for extracted values.</span></div><div><code>mrz</code><span>object or null</span><span>ICAO checksums for passport or Emirates ID MRZ; integrity is distinct from authenticity.</span></div><div><code>review_flags</code><span>array</span><span>Unverified evidence, data mismatch, unreadable fields, document instructions, or failed MRZ checks.</span></div><div><code>processing</code><span>object</span><span>Page count, malware gate, model versions and bounded provider-call counts.</span></div></div><p>HTTP 202 accepts a job; 200 returns its completed result. HTTP 400/413/415 reject invalid files before processing, 401/403 reject unauthorized access, 422 reports a failed job, and 503 reports unavailable capacity or configuration. A <code>review_required</code> result needs a human check before reliance.</p><p><a href="/document-extraction/openapi.json" target="_blank" rel="noopener">Open the complete OpenAPI 3.1 contract ↗</a></p></article>
@@ -34,6 +52,6 @@
       </div>
     </section>
   </main>
-  <footer><div><strong>KYCProbe Verification API</strong><span>A brand by AI7Lab UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">Parent company</a><a href="mailto:contact@ai7lab.net">Contact</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
+  <footer><div><strong>KYCProbe Verification API</strong><span>ai7lab IP solutions FZ LLC · Dubai, UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">AI7lab</a><a href="mailto:contact@ai7lab.net">Contact</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
 </body>
 </html>

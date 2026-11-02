@@ -15,6 +15,7 @@ const samples = {
     "search_plus": true,
     "deep_research": true,
     "callback_url": "https://your-domain.example/webhooks/ai7",
+    "callback_access_key": "YOUR_CALLBACK_BEARER_KEY",
     "customer_logo_url": "https://your-domain.example/logo.png",
     "max_results": 25
   }'`,
@@ -38,6 +39,7 @@ const samples = {
       search_plus: true,
       deep_research: true,
       callback_url: 'https://your-domain.example/webhooks/ai7',
+      callback_access_key: 'YOUR_CALLBACK_BEARER_KEY',
       customer_logo_url: 'https://your-domain.example/logo.png',
       max_results: 25
     })
@@ -62,6 +64,7 @@ response = requests.post(
         "search_plus": True,
         "deep_research": True,
         "callback_url": "https://your-domain.example/webhooks/ai7",
+        "callback_access_key": "YOUR_CALLBACK_BEARER_KEY",
         "customer_logo_url": "https://your-domain.example/logo.png",
         "max_results": 25,
     },
@@ -80,6 +83,8 @@ const formError = byId('form-error');
 const deepResearch = byId('deep-research');
 const callbackField = byId('callback-field');
 const callbackUrl = byId('callback-url');
+const callbackAccessKeyField = byId('callback-access-key-field');
+const callbackAccessKey = byId('callback-access-key');
 const customerLogoUrl = byId('customer-logo-url');
 const downloadReport = byId('download-report');
 let latestReportUrl = '';
@@ -171,6 +176,10 @@ function requestBody() {
     try { parsed = new URL(callbackUrl.value.trim()); } catch { throw new Error('Callback URL must be a valid HTTPS URL.'); }
     if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new Error('Callback URL must be a public HTTPS URL without embedded credentials.');
   }
+  if (callbackAccessKey.value && (!deepResearch.checked || !callbackUrl.value.trim()
+    || callbackAccessKey.value.length > 512 || !/^[A-Za-z0-9._~+/-]+=*$/.test(callbackAccessKey.value))) {
+    throw new Error('Callback access key requires a callback URL and must be a Bearer token without whitespace.');
+  }
   if (customerLogoUrl.value.trim()) {
     let parsed;
     try { parsed = new URL(customerLogoUrl.value.trim()); } catch { throw new Error('Customer logo URL must be a valid HTTPS URL.'); }
@@ -191,6 +200,7 @@ function requestBody() {
     max_results: maxResults,
     deep_research: deepResearch.checked,
     callback_url: deepResearch.checked ? callbackUrl.value.trim() : '',
+    callback_access_key: deepResearch.checked ? callbackAccessKey.value : '',
     customer_logo_url: customerLogoUrl.value.trim()
   };
   return Object.fromEntries(Object.entries(body).filter(([, value]) => value !== '' && (!Array.isArray(value) || value.length)));
@@ -198,8 +208,10 @@ function requestBody() {
 
 deepResearch.addEventListener('change', () => {
   callbackField.hidden = !deepResearch.checked;
+  callbackAccessKeyField.hidden = !deepResearch.checked;
   callbackUrl.disabled = !deepResearch.checked;
-  if (!deepResearch.checked) callbackUrl.value = '';
+  callbackAccessKey.disabled = !deepResearch.checked;
+  if (!deepResearch.checked) { callbackUrl.value = ''; callbackAccessKey.value = ''; }
 });
 
 byId('regions').addEventListener('change', (event) => {

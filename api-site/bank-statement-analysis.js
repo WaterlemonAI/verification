@@ -8,12 +8,14 @@ const samples = {
   --form 'country_code=AE' \\
   --form 'entity_type=company' \\
   --form 'callback_url=https://your-system.example/webhooks/ai7' \\
+  --form 'callback_access_key=YOUR_CALLBACK_BEARER_KEY' \\
   --form 'get_pdf=true'`,
   javascript: `const form = new FormData();
 form.append('statement_file', file);
 form.append('country_code', 'AE');
 form.append('entity_type', 'company');
 form.append('callback_url', 'https://your-system.example/webhooks/ai7');
+form.append('callback_access_key', 'YOUR_CALLBACK_BEARER_KEY');
 form.append('get_pdf', 'true');
 
 const accepted = await fetch('${endpoint}', {
@@ -37,7 +39,8 @@ with open("statement.pdf", "rb") as statement:
         },
         files={"statement_file": ("statement.pdf", statement, "application/pdf")},
         data={"country_code": "AE", "entity_type": "company", "get_pdf": "true",
-              "callback_url": "https://your-system.example/webhooks/ai7"},
+              "callback_url": "https://your-system.example/webhooks/ai7",
+              "callback_access_key": "YOUR_CALLBACK_BEARER_KEY"},
         timeout=60,
     )
 print(response.status_code, response.json())`
@@ -101,6 +104,7 @@ function formData(values) {
   }
   if (byId('customer-reference').value.trim()) body.append('customer_reference', byId('customer-reference').value.trim());
   if (byId('callback-url').value.trim()) body.append('callback_url', byId('callback-url').value.trim());
+  if (byId('callback-access-key').value) body.append('callback_access_key', byId('callback-access-key').value);
   body.append('get_pdf', String(byId('get-pdf').checked));
   body.append('get_xlsx', String(byId('get-xlsx').checked));
   body.append('credit_models', JSON.stringify(Array.from(document.querySelectorAll('[name="credit-model"]:checked'), (input) => input.value)));

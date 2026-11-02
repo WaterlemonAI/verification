@@ -1,0 +1,28 @@
+{
+  "case_id": "public-ai7lab-ledger-sample-2026-11-01",
+  "notice": "Public website excerpts only. No external adverse search or clearance conclusion.",
+  "subject": { "type": "business", "name": "AI7Lab", "aliases": ["AI7LAB Tech Innovation Limited"] },
+  "verified_event_refs": {},
+  "sources": [
+    {
+      "id": "A1",
+      "title": "AI7Lab | Agentic AI Products Built for Real Work",
+      "excerpt": "AI7Lab builds and scales agentic AI products",
+      "publisher": "AI7Lab",
+      "url": "https://www.ai7lab.net/",
+      "expected_party": "AI7Lab",
+      "expected_kind": "ordinary_news",
+      "expected_headline_disputed": false
+    },
+    {
+      "id": "A2",
+      "title": "rolefield.ai launches a voice-led AI workforce for the GCC",
+      "excerpt": "AI7Lab’s in-house speech-to-speech research now powers multilingual agents that converse, act, and complete customer workflows.",
+      "publisher": "AI7Lab",
+      "url": "https://www.ai7lab.net/announcements",
+      "expected_party": "AI7Lab",
+      "expected_kind": "ordinary_news",
+      "expected_headline_disputed": false
+    }
+  ]
+}

@@ -43,7 +43,8 @@ test('customer email designs include inline logo, usable actions, safe copy and 
   await mailer.sendInvitation({ to: 'customer@example.com', url: invitationUrl, customerName: 'A&B <Vendor>', hours: 24 });
   await mailer.sendPasswordReset({ to: 'customer@example.com', url: resetUrl, minutes: 30 });
   await mailer.sendSecurityAlert({ to: 'customer@example.com', event: 'reset' });
-  assert.equal(messages.length, 3);
+  await mailer.sendLoginCode({ to: 'customer@example.com', code: '01234567', minutes: 10, kind: 'portal' });
+  assert.equal(messages.length, 4);
   for (const message of messages) {
     assert.match(message.html, /<img src="cid:kycprobe-dark-logo@kycprobe\.com"/);
     assert.match(message.html, /https:\/\/kycprobe\.com\/terms/);
@@ -61,9 +62,12 @@ test('customer email designs include inline logo, usable actions, safe copy and 
   assert.match(messages[1].html, /login\?reset=one-time-token/);
   assert.match(messages[2].html, /Review your account/);
   assert.match(messages[2].html, /https:\/\/app\.kycprobe\.com\/account/);
+  assert.match(messages[3].html, /01234567/);
+  assert.match(messages[3].text, /01234567/);
+  assert.match(messages[3].text, /10 minutes/);
   await mailer.sendPasswordReset({ to: 'admin@example.com', url: 'https://app.kycprobe.com/admin?reset=one-time-token', minutes: 30 });
-  assert.match(messages[3].html, /href="https:\/\/app\.kycprobe\.com\/admin\?reset=one-time-token"/);
-  assert.doesNotMatch(messages[3].html.split('KYCProbe by AI7Lab UAE')[1], /\/admin/);
+  assert.match(messages[4].html, /href="https:\/\/app\.kycprobe\.com\/admin\?reset=one-time-token"/);
+  assert.doesNotMatch(messages[4].html.split('KYCProbe by AI7Lab UAE')[1], /\/admin/);
   await assert.rejects(() => mailer.sendPasswordReset({ to: 'customer@example.com', url: 'https://evil.example/reset', minutes: 30 }),
     /platform_email_invalid_action_url/);
 });
@@ -81,8 +85,10 @@ test('portal and admin recovery email resets passwords; customer invitations do 
   const key = 'setup-key-for-mail-test';
   process.env.AI7_ADMIN_KEY_HASHES = createHash('sha256').update(key).digest('hex');
   const messages = [];
+  const codes = [];
   const mailer = {
     configured: true,
+    sendLoginCode: async (value) => { codes.push(value); },
     sendPasswordReset: async (value) => { messages.push({ type: 'reset', ...value }); },
     sendInvitation: async (value) => { messages.push({ type: 'invitation', ...value }); },
     sendSecurityAlert: async (value) => { messages.push({ type: 'alert', ...value }); }
@@ -97,8 +103,15 @@ test('portal and admin recovery email resets passwords; customer invitations do 
   const base = `http://127.0.0.1:${server.address().port}`;
 
   const portalLogin = await post(base, '/portal/api/auth/login', { email: 'user@example.com', password: 'OldPortalPass!123' });
-  assert.equal(portalLogin.status, 200);
-  const oldPortalCookie = portalLogin.headers.get('set-cookie').split(';')[0];
+  assert.equal(portalLogin.status, 202);
+  const portalVerify = await post(base, '/portal/api/auth/verify-code', { email: 'user@example.com',
+    challenge_id: (await portalLogin.json()).challenge_id, code: codes.at(-1).code });
+  assert.equal(portalVerify.status, 200);
+  const oldPortalCookie = portalVerify.headers.get('set-cookie').split(';')[0];
+  const pendingLogin = await post(base, '/portal/api/auth/login', { email: 'user@example.com', password: 'OldPortalPass!123' });
+  assert.equal(pendingLogin.status, 202);
+  const pendingChallenge = (await pendingLogin.json()).challenge_id;
+  const pendingCode = codes.at(-1).code;
   const unknown = await post(base, '/portal/api/auth/forgot-password', { email: 'unknown@example.com' });
   const known = await post(base, '/portal/api/auth/forgot-password', { email: 'user@example.com' });
   assert.equal(unknown.status, 202);
@@ -110,13 +123,23 @@ test('portal and admin recovery email resets passwords; customer invitations do 
   const portalReset = await post(base, '/portal/api/auth/reset-password', { token: portalToken, password: 'NewPortalPass!123' });
   assert.equal(portalReset.status, 200);
   assert.equal((await fetch(`${base}/portal/api/auth/session`, { headers: { cookie: oldPortalCookie } })).status, 401);
+  assert.equal((await post(base, '/portal/api/auth/verify-code', { email: 'user@example.com',
+    challenge_id: pendingChallenge, code: pendingCode })).status, 401);
   assert.equal((await post(base, '/portal/api/auth/reset-password', { token: portalToken, password: 'AnotherPass!123' })).status, 400);
-  assert.equal((await post(base, '/portal/api/auth/login', { email: 'user@example.com', password: 'NewPortalPass!123' })).status, 200);
+  const newPortalLogin = await post(base, '/portal/api/auth/login', { email: 'user@example.com', password: 'NewPortalPass!123' });
+  assert.equal(newPortalLogin.status, 202);
+  assert.equal((await post(base, '/portal/api/auth/verify-code', { email: 'user@example.com',
+    challenge_id: (await newPortalLogin.json()).challenge_id, code: codes.at(-1).code })).status, 200);
 
   const setup = await post(base, '/admin/api/auth/setup', { email: 'admin@example.com', password: 'OldAdminPass!123' }, { authorization: `Bearer ${key}` });
   assert.equal(setup.status, 201);
-  const adminCookie = setup.headers.get('set-cookie').split(';')[0];
-  const csrf = (await setup.json()).csrf_token;
+  const firstAdminLogin = await post(base, '/admin/api/auth/login', { email: 'admin@example.com', password: 'OldAdminPass!123' });
+  assert.equal(firstAdminLogin.status, 202);
+  const firstAdminVerify = await post(base, '/admin/api/auth/verify-code', { email: 'admin@example.com',
+    challenge_id: (await firstAdminLogin.json()).challenge_id, code: codes.at(-1).code });
+  assert.equal(firstAdminVerify.status, 200);
+  const adminCookie = firstAdminVerify.headers.get('set-cookie').split(';')[0];
+  const csrf = (await firstAdminVerify.json()).csrf_token;
   const adminForgot = await post(base, '/admin/api/auth/forgot-password', { email: 'admin@example.com' });
   assert.equal(adminForgot.status, 202);
   const adminLink = messages.findLast(item => item.type === 'reset').url;
@@ -125,9 +148,12 @@ test('portal and admin recovery email resets passwords; customer invitations do 
   assert.equal((await post(base, '/admin/api/auth/reset-password', { token: adminToken, password: 'NewAdminPass!123' })).status, 200);
   assert.equal((await fetch(`${base}/admin/api/auth/session`, { headers: { cookie: adminCookie } })).status, 401);
   const login = await post(base, '/admin/api/auth/login', { email: 'admin@example.com', password: 'NewAdminPass!123' });
-  assert.equal(login.status, 200);
-  const activeCookie = login.headers.get('set-cookie').split(';')[0];
-  const activeCsrf = (await login.json()).csrf_token;
+  assert.equal(login.status, 202);
+  const verifiedLogin = await post(base, '/admin/api/auth/verify-code', { email: 'admin@example.com',
+    challenge_id: (await login.json()).challenge_id, code: codes.at(-1).code });
+  assert.equal(verifiedLogin.status, 200);
+  const activeCookie = verifiedLogin.headers.get('set-cookie').split(';')[0];
+  const activeCsrf = (await verifiedLogin.json()).csrf_token;
   const issued = await post(base, '/admin/api/customers', { name: 'New Workspace', admin_email: 'customer@example.com' }, { cookie: activeCookie, 'x-ai7-csrf': activeCsrf });
   assert.equal(issued.status, 201);
   const issuedBody = await issued.json();

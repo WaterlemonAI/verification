@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/api.css?v=7" />
+    <link rel="stylesheet" href="/api.css?v=9" />
     <script src="/portal-auth.js?v=4" defer></script>
     <script src="/merchant-screening.js?v=2" defer></script>
   </head>
@@ -27,11 +27,20 @@
         <h1>Merchant website<br /><em>screening.</em></h1>
         <p>Collect bounded website evidence for merchant identity, policies, products, candidate MCCs, outgoing destinations, domain age, and transport security through one authenticated API.</p>
         <div class="meta"><span>POST</span><code>/service/merchant_screening</code><button class="copy" data-copy="https://api.ai7uae.com/service/merchant_screening">Copy endpoint</button></div>
+        <figure class="hero-infographic" role="img" aria-label="Public website to Bounded site evidence to Risk and coverage">
+          <figcaption>HOW THIS API HELPS</figcaption>
+          <div class="flow-steps">
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>INPUT</small><strong>Public website</strong></div></div>
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><div><small>PROCESS</small><strong>Bounded site evidence</strong></div></div>
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 12 5 5L20 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>OUTPUT</small><strong>Risk and coverage</strong></div></div>
+          </div>
+        </figure>
       </section>
 
       <section class="layout">
         <aside aria-label="On this page">
           <p>ON THIS PAGE</p>
+          <a href="#quick-start">How to use</a>
           <a href="#authentication">Authentication</a>
           <a href="#request">Request</a>
           <a href="#responses">Responses</a>
@@ -40,6 +49,17 @@
         </aside>
 
         <div class="content">
+          <article id="quick-start" class="quick-start">
+            <p class="label">INSTRUCTIONS TO USE</p>
+            <h2>How to use this API</h2>
+            <p>Start here, then use the detailed request and response reference below.</p>
+            <ol class="quick-steps">
+              <li><span>01</span><strong>Get your API key</strong><p>Use a workspace API key in the Bearer header.</p></li>
+              <li><span>02</span><strong>Submit the website</strong><p>Send the public HTTPS URL and a two-letter country code.</p></li>
+              <li><span>03</span><strong>Review eligibility</strong><p>Inspect evidence, coverage, and risk level; partial results require review.</p></li>
+            </ol>
+          </article>
+
           <article id="authentication">
             <p class="label">AUTHENTICATION</p>
             <h2>Use your existing AI7 credential</h2>
@@ -135,6 +155,6 @@
         </div>
       </section>
     </main>
-    <footer><div><strong>AI7 UAE Verification API</strong><span>AI7LAB Tech Innovation Limited · DIFC, Dubai, UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">Parent company</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
+    <footer><div><strong>AI7 UAE Verification API</strong><span>ai7lab IP solutions FZ LLC · Dubai, UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">AI7lab</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
   </body>
 </html>

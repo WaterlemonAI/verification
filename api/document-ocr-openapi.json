@@ -3,7 +3,7 @@
   "info": {
     "title": "KYCProbe Document Extraction API",
     "version": "1.0.0",
-    "description": "Eight asynchronous Azure Document Intelligence and Gemini extraction modules. No document data is accepted or returned on unrelated verification routes. Results and original documents are encrypted and retained for 30 days."
+    "description": "Eight asynchronous Azure Document Intelligence and ai7edd model extraction modules. No document data is accepted or returned on unrelated verification routes. Results and original documents are encrypted and retained for 30 days."
   },
   "servers": [
     {
@@ -1580,7 +1580,7 @@
             "type": "object",
             "required": [
               "azure",
-              "gemini"
+              "ai7edd_model"
             ],
             "properties": {
               "azure": {
@@ -1588,7 +1588,7 @@
                 "minimum": 0,
                 "maximum": 2
               },
-              "gemini": {
+              "ai7edd_model": {
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 1
@@ -1673,7 +1673,7 @@
             "type": "object",
             "required": [
               "azure",
-              "gemini"
+              "ai7edd_model"
             ],
             "properties": {
               "azure": {
@@ -1681,7 +1681,7 @@
                 "minimum": 0,
                 "maximum": 2
               },
-              "gemini": {
+              "ai7edd_model": {
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 1

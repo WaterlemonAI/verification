@@ -1,0 +1,64 @@
+{
+  "case_id": "synthetic-separate-notices-001",
+  "notice": "All sources and event references are fictional. verified_event_refs are trusted test metadata and are not sent to the model.",
+  "subject": { "type": "business", "name": "Cedar Dune Trading LLC" },
+  "verified_event_refs": {
+    "S1": "TEST-NOTICE-COMPANY-1",
+    "S2": "TEST-NOTICE-BROKERS-2",
+    "S3": "TEST-NOTICE-BROKERS-2",
+    "S4": "TEST-NOTICE-DIRECTOR-3",
+    "S5": "TEST-NEWS-WORKFORCE-4"
+  },
+  "sources": [
+    {
+      "id": "S1",
+      "title": "Cedar Dune Trading LLC receives recordkeeping penalty",
+      "excerpt": "The Fictional Commerce Authority imposed an administrative penalty on Cedar Dune Trading LLC for recordkeeping failures. This is the company notice, not the brokers notice.",
+      "publisher": "Fictional Commerce Authority",
+      "url": "https://regulator.example/notices/company-1",
+      "expected_party": "Cedar Dune Trading LLC",
+      "expected_kind": "formal_action",
+      "expected_headline_disputed": false
+    },
+    {
+      "id": "S2",
+      "title": "Cedar Dune Trading LLC fined in securities case",
+      "excerpt": "The cited Fictional Markets Authority notice instead fines two brokers for their own trades in Cedar Dune Trading LLC shares. The cited notice does not fine the company.",
+      "publisher": "Fictional Secondary Wire",
+      "url": "https://wire.example/company-headline-2",
+      "expected_party": "two brokers",
+      "expected_kind": "formal_action",
+      "expected_headline_disputed": true
+    },
+    {
+      "id": "S3",
+      "title": "Brokers fined over trades in Cedar Dune Trading LLC shares",
+      "excerpt": "The Fictional Markets Authority imposed penalties on two brokers for their own trading violations. Cedar Dune Trading LLC was not penalized in this notice.",
+      "publisher": "Fictional Markets Authority",
+      "url": "https://regulator.example/notices/brokers-2",
+      "expected_party": "two brokers",
+      "expected_kind": "formal_action",
+      "expected_headline_disputed": false
+    },
+    {
+      "id": "S4",
+      "title": "Director receives personal tax penalty",
+      "excerpt": "The Fictional Tax Authority imposed a personal tax penalty on Mira Vale, a director of Cedar Dune Trading LLC. The company is not the penalized party.",
+      "publisher": "Fictional Tax Authority",
+      "url": "https://tax.example/notices/director-3",
+      "expected_party": "Mira Vale",
+      "expected_kind": "formal_action",
+      "expected_headline_disputed": false
+    },
+    {
+      "id": "S5",
+      "title": "Cedar Dune Trading LLC announces routine restructuring",
+      "excerpt": "Cedar Dune Trading LLC announced ten layoffs during a routine restructuring. No misconduct or enforcement action is reported.",
+      "publisher": "Fictional Business News",
+      "url": "https://news.example/workforce-4",
+      "expected_party": "Cedar Dune Trading LLC",
+      "expected_kind": "ordinary_news",
+      "expected_headline_disputed": false
+    }
+  ]
+}

@@ -9,9 +9,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/api.css?v=6" />
+    <link rel="stylesheet" href="/api.css?v=9" />
     <script src="/portal-auth.js?v=4" defer></script>
-    <script src="/adverse-media.js?v=6" defer></script>
+    <script src="/adverse-media.js?v=7" defer></script>
   </head>
   <body>
     <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
@@ -27,11 +27,20 @@
         <h1>Multilingual media<br /><em>screening.</em></h1>
         <p>Screen an individual or business across current and archived global news plus open-web indexes, with evidence links, entity-match scoring, risk categories, legal stage, documented coverage, and focused regional packs.</p>
         <div class="meta"><span>POST</span><code>/service/adverse_media</code><button class="copy" data-copy="https://api.ai7uae.com/service/adverse_media">Copy endpoint</button></div>
+        <figure class="hero-infographic" role="img" aria-label="Person or business to News and web sources to Evidence with context">
+          <figcaption>HOW THIS API HELPS</figcaption>
+          <div class="flow-steps">
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>INPUT</small><strong>Person or business</strong></div></div>
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><div><small>PROCESS</small><strong>News and web sources</strong></div></div>
+            <div class="flow-step"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m4 12 5 5L20 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><small>OUTPUT</small><strong>Evidence with context</strong></div></div>
+          </div>
+        </figure>
       </section>
 
       <section class="layout">
         <aside aria-label="On this page">
           <p>ON THIS PAGE</p>
+          <a href="#quick-start">How to use</a>
           <a href="#authentication">Authentication</a>
           <a href="#request">Request</a>
           <a href="#responses">Responses</a>
@@ -40,6 +49,17 @@
         </aside>
 
         <div class="content">
+          <article id="quick-start" class="quick-start">
+            <p class="label">INSTRUCTIONS TO USE</p>
+            <h2>How to use this API</h2>
+            <p>Start here, then use the detailed request and response reference below.</p>
+            <ol class="quick-steps">
+              <li><span>01</span><strong>Get your API key</strong><p>Use a workspace API key in the Bearer header.</p></li>
+              <li><span>02</span><strong>Choose screening scope</strong><p>Send a name and entity type; add countries, languages, or deep research if needed.</p></li>
+              <li><span>03</span><strong>Review evidence</strong><p>Check coverage, identity match, and cited findings before making a decision.</p></li>
+            </ol>
+          </article>
+
           <article id="authentication">
             <p class="label">AUTHENTICATION</p>
             <h2>Use your existing AI7 credential</h2>
@@ -164,6 +184,7 @@
                 <label><span>Search+ <code>search_plus</code></span><span><input id="search-plus" type="checkbox" /> Run publisher-targeted searches</span><small class="field-help">Prioritises requested countries and curated specialist sources, and records the exact publishers searched. Provider indexes can omit articles, so this is not a direct crawl of all 1,500 publishers.</small></label>
                 <label><span>Deep research <code>deep_research</code></span><span><input id="deep-research" type="checkbox" /> Queue an asynchronous signed callback</span></label>
                 <label id="callback-field" hidden>Callback URL <code>callback_url</code><input id="callback-url" type="url" inputmode="url" placeholder="https://your-domain.example/webhooks/ai7" disabled /><small class="field-help">Optional. The queued response returns a one-time signing secret for verifying callbacks.</small></label>
+                <label id="callback-access-key-field" hidden>Callback access key <code>callback_access_key</code><input id="callback-access-key" type="password" maxlength="512" autocomplete="off" placeholder="Bearer token required by your endpoint" disabled /><small class="field-help">Optional. Sent only as Authorization: Bearer on callback delivery.</small></label>
                 <label>Customer logo URL <code>customer_logo_url</code><input id="customer-logo-url" type="url" inputmode="url" placeholder="https://your-domain.example/logo.png" /><small class="field-help">Optional PNG/JPEG. Every completed check creates a permanently stored PDF with an unguessable public download link.</small></label>
               </div>
               <fieldset>
@@ -196,6 +217,6 @@
         </div>
       </section>
     </main>
-    <footer><div><strong>AI7 UAE Verification API</strong><span>AI7LAB Tech Innovation Limited · DIFC, Dubai, UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">Parent company</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
+    <footer><div><strong>AI7 UAE Verification API</strong><span>ai7lab IP solutions FZ LLC · Dubai, UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">AI7lab</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
   </body>
 </html>

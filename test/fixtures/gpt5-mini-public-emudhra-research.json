@@ -1,0 +1,38 @@
+{
+  "case_id": "public-emudhra-ledger-sample-2026-11-01",
+  "notice": "Public primary-source excerpts only. Event link is a human-verified test reference for the same intermediate-CA incident, not a model claim.",
+  "subject": { "type": "business", "name": "eMudhra", "aliases": ["eMudhra Limited"] },
+  "verified_event_refs": { "E1": "EMUDHRA-2026-INTERMEDIATE-CA", "E2": "EMUDHRA-2026-INTERMEDIATE-CA", "E3": "EMUDHRA-2026-INTERMEDIATE-CA" },
+  "sources": [
+    {
+      "id": "E1",
+      "title": "eMudhra Statement on Recent Certificate Security Incident",
+      "excerpt": "eMudhra is actively investigating a security incident involving a specific set of intermediate CA certificates",
+      "publisher": "eMudhra",
+      "url": "https://emudhra.com/en/post/certificate-security-incident",
+      "expected_party": "eMudhra",
+      "expected_kind": "material_incident",
+      "expected_headline_disputed": false
+    },
+    {
+      "id": "E2",
+      "title": "Protecting Chrome and Android Users from Compromised eMudhra Intermediate CA Certificates",
+      "excerpt": "compromise of private keys associated with eight eMudhra subordinate Certification Authority (CA) certificates",
+      "publisher": "Google Chrome Security",
+      "url": "https://blog.google/security/protecting-chrome-and-android-users-from-compromised-emudhra-intermediate-ca-certificates/",
+      "expected_party": "eMudhra",
+      "expected_kind": "material_incident",
+      "expected_headline_disputed": false
+    },
+    {
+      "id": "E3",
+      "title": "बैंकिंग और डिजिटल सुरक्षा पर बड़ा खतरा; SBI, HDFC और eMudhra में डेटा लीक की जांच शुरू",
+      "excerpt": "लेकिन भारतीय कंपनी eMudhra की आठ डिजिटल कीज में गंभीर कमजोरी सामने आई है।",
+      "publisher": "Navbharat Times",
+      "url": "https://navbharattimes.indiatimes.com/metro/delhi/other-news/sbi-probes-alleged-dark-web-data-leak-as-hdfc-investigates-confidential-information-sharing-and-emudhra-fixes-security-flaws/articleshow/135107446.cms",
+      "expected_party": "eMudhra",
+      "expected_kind": "material_incident",
+      "expected_headline_disputed": true
+    }
+  ]
+}

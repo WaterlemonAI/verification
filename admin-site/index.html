@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/admin/admin.css?v=11" />
-    <script src="/admin/admin.js?v=14" defer></script>
+    <script src="/admin/admin.js?v=17" defer></script>
 
   </head>
   <body>
@@ -38,7 +38,19 @@
           </form>
           <p class="error" id="login-error" aria-live="polite"></p>
           <button type="button" class="text-link" id="show-admin-forgot">Forgot password?</button>
-          <small>Protected by an encrypted, HttpOnly session. MFA is not enabled.</small>
+          <small>Sign-in requires an email code sent to your administrator address.</small>
+        </div>
+        <div class="login-card" id="code-card" hidden>
+          <p class="eyebrow">EMAIL VERIFICATION</p>
+          <h2>Check your email</h2>
+          <p id="admin-code-intro">Enter the eight digit code sent to your administrator email.</p>
+          <form id="code-form">
+            <label>Sign-in code<input id="admin-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{8}" maxlength="8" required /></label>
+            <button type="submit">Verify code <span>→</span></button>
+          </form>
+          <p class="error" id="admin-code-error" role="alert"></p>
+          <button type="button" class="text-link" id="back-from-code">Back to sign in</button>
+          <small>Codes expire after 10 minutes and can be used once. Request another after one minute.</small>
         </div>
         <div class="login-card" id="forgot-card" hidden>
           <p class="eyebrow">ACCOUNT RECOVERY</p>
@@ -76,7 +88,7 @@
           <p class="error" id="setup-error" aria-live="polite"></p>
           <small>Use uppercase, lowercase, a number, and a symbol. The setup key will stop working for console access.</small>
         </div>
-        <footer class="login-footer"><span>AI7LAB Tech Innovation Limited</span><span>DIFC · Dubai · UAE</span></footer>
+        <footer class="login-footer"><span>ai7lab IP solutions FZ LLC</span><span>Dubai · UAE</span></footer>
       </section>
     </div>
 
@@ -107,6 +119,24 @@
             <div><span>Configured APIs</span><strong id="integration-count">0</strong></div>
             <div><span>Active routes</span><strong id="active-count">0</strong></div>
             <button id="new-integration">＋ Add API</button>
+          </div>
+          <div class="panel" id="ejari-setup-panel">
+            <div class="panel-head"><div><p class="eyebrow">DUBAI EJARI VERIFICATION</p><h2>Set up the Ejari API</h2></div></div>
+            <p class="notice">The supplied DLD certificate flow uses CapSolver for the website CAPTCHA and OpenAI to read certificate fields. Keys are write-only in Key Vault. Certificates and results stay private to each workspace for 30 days.</p>
+            <form id="ejari-config-form">
+              <div class="grid two">
+                <label>OpenAI API key<input name="openai_key" type="password" autocomplete="off" placeholder="Leave blank to keep the saved key" /></label>
+                <label>CapSolver API key<input name="capsolver_key" type="password" autocomplete="off" placeholder="Leave blank to keep the saved key" /></label>
+              </div>
+              <div class="grid two">
+                <label>Image-capable OCR model<input name="ocr_model" value="gpt-6-luna" required /></label>
+                <label>Image detail<select name="ocr_detail"><option value="high">High</option><option value="auto">Auto</option><option value="low">Low</option><option value="original">Original</option></select></label>
+              </div>
+              <label class="check"><input name="enabled" type="checkbox" /> Enable customer Ejari requests after both keys and the Azure worker are ready</label>
+              <p id="ejari-config-status" class="field-help" role="status"></p>
+              <p id="ejari-config-error" class="error" role="alert"></p>
+              <button type="submit">Save Ejari setup securely</button>
+            </form>
           </div>
           <div class="panel">
             <div class="panel-head"><div><p class="eyebrow">ROUTE REGISTRY</p><h2>Configured APIs</h2></div><button class="refresh" data-refresh="integrations">Refresh</button></div>
