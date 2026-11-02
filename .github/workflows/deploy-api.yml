@@ -349,6 +349,8 @@ jobs:
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableAdverseMediaSearchPlusGpt="${{ vars.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableDocumentOcrPaddle="${{ vars.DOCUMENT_OCR_PADDLE_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableFormsAiAction="${{ vars.FORMS_AI_ACTION_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
               parallelDeployment="${{ vars.CASE_MANAGER_PARALLEL_QA == 'true' && 'true' || 'false' }}" \
@@ -385,6 +387,8 @@ jobs:
               enableDocumentOcr="${{ vars.DOCUMENT_OCR_ENABLED == 'true' && 'true' || 'false' }}" \
               enableAdverseMediaSearchPlusGpt="${{ vars.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableDocumentOcrPaddle="${{ vars.DOCUMENT_OCR_PADDLE_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableFormsAiAction="${{ vars.FORMS_AI_ACTION_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
               parallelDeployment="${{ vars.CASE_MANAGER_PARALLEL_QA == 'true' && 'true' || 'false' }}" \

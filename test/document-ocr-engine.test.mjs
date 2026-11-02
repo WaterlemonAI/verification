@@ -100,6 +100,16 @@ test('missing and illegible fields keep their required structure and exact label
   assert.equal(checked.review_required, true);
 });
 
+test('Arabic page evidence is preserved while unsupported fields remain unavailable', () => {
+  const value = candidate();
+  value.data.company_name_arabic = 'شركة تجريبية';
+  value.evidence = [{ field: 'company_name_arabic', page: 1, quote: 'شركة تجريبية' }];
+  const checked = validateExtraction(trade, value, [{ page: 1, text: 'اسم الشركة: شركة تجريبية' }]);
+  assert.equal(checked.data.company_name_arabic, 'شركة تجريبية');
+  assert.equal(checked.data.license_number, 'Not Found');
+  assert.equal(checked.review_flags.includes('EVIDENCE_NOT_FOUND:company_name_arabic'), false);
+});
+
 test('a visibly present but unreadable list is distinct from an absent list', () => {
   const checked = validateExtraction(trade, { ...candidate(),
     unreadable_list_fields: ['directors_business_owners'] }, [{ page: 1, text: 'Trade License' }]);
@@ -167,6 +177,18 @@ test('a valid cited passport MRZ can corroborate a one-character gender value', 
   assert.equal(checked.data.gender, 'M');
   assert.equal(checked.mrz.integrity_status, 'Passed');
   assert.equal(checked.review_flags.includes('EVIDENCE_NOT_FOUND:gender'), false);
+});
+
+test('a bad passport MRZ check digit cannot pass integrity validation', () => {
+  const passport = DOCUMENT_OCR_BY_ID.get('passport-icao-ocr');
+  const upper = `P<UTO${'SAMPLE<<ALEX'.padEnd(39, '<')}`;
+  const lower = 'AB12345670UTO9001011M3001019<<<<<<<<<<<<<<0';
+  const checked = validateExtraction(passport, {
+    document_classification: 'passport', data: { document_type: 'Passport', mrz_lines: [upper, lower] },
+    evidence: [{ field: 'mrz_lines', page: 1, quote: upper }], figure_roles: []
+  }, [{ page: 1, text: `${upper}\n${lower}` }]);
+  assert.notEqual(checked.mrz.integrity_status, 'Passed');
+  assert.equal(checked.review_required, true);
 });
 
 test('a checksum-valid passport MRZ overrides an AI mistranscription without another model call', async () => {

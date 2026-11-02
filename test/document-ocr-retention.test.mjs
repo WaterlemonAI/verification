@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { AzureDocumentOcrStore } from '../lib/document-ocr-store.mjs';
+import { AzureAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } from '../lib/customer-usage.mjs';
 
 test('an idempotency race re-enqueues the winning job if its first enqueue was lost', async () => {
@@ -114,4 +115,74 @@ test('expired OCR records remove encrypted blobs, idempotency and due indexes', 
     `${partitionKey}/job_${jobId}`, `${partitionKey}/idem_example`,
     `ocr-index-pending/${expiresAt}_${jobId}`, `ocr-index-expiry/${expiresAt}_${jobId}`
   ]);
+});
+
+test('OCR retention job purges expired Form PDF and pending callback without touching live data', async () => {
+  const now = new Date('2026-10-28T12:00:00.000Z');
+  const expired = '2026-10-28T11:00:00.000Z';
+  const live = '2026-10-29T12:00:00.000Z';
+  const deleted = [];
+  const table = {
+    async *listEntities() {
+      yield { partitionKey: 'forms-expiry', rowKey: 'expired-report', reportType: 'forms',
+        blobName: 'forms-ocr-reports/owner/expired-report.pdf', ownerPartition: 'forms-owner', expiresAt: expired };
+      yield { partitionKey: 'forms-expiry', rowKey: 'live-report', reportType: 'forms',
+        blobName: 'forms-ocr-reports/owner/live-report.pdf', ownerPartition: 'forms-owner', expiresAt: live };
+    },
+    async deleteEntity(partition, key) { deleted.push(`${partition}/${key}`); }
+  };
+  const container = {
+    getBlockBlobClient(name) { return {
+      async getProperties() { return { metadata: { expiresat: name.includes('expired') ? expired : live } }; },
+      async deleteIfExists() { deleted.push(name); }
+    }; },
+    async *listBlobsFlat() {
+      yield { name: 'forms-ocr-pending/owner/expired.json' };
+      yield { name: 'forms-ocr-pending/owner/live.json' };
+    }
+  };
+  const store = new AzureDocumentOcrStore({ container, queue: {}, table });
+  assert.equal(await store.purgeExpiredFormArtifacts(now), 2);
+  assert.deepEqual(deleted, [
+    'forms-ocr-reports/owner/expired-report.pdf', 'forms-owner/expired-report',
+    'forms-public/expired-report', 'forms-expiry/expired-report',
+    'forms-ocr-pending/owner/expired.json'
+  ]);
+});
+
+test('an OCR Form PDF remains purgeable if the public report index write fails', async () => {
+  const expiresAt = new Date(Date.now() - 1_000).toISOString();
+  const rows = new Map();
+  const deleted = [];
+  const table = {
+    async upsertEntity(row) {
+      if (row.partitionKey === 'forms-public') throw new Error('synthetic_public_index_outage');
+      rows.set(`${row.partitionKey}/${row.rowKey}`, row);
+    },
+    async *listEntities() { for (const row of rows.values()) if (row.partitionKey === 'forms-expiry') yield row; },
+    async deleteEntity(partition, key) { rows.delete(`${partition}/${key}`); deleted.push(`${partition}/${key}`); }
+  };
+  const container = {
+    getBlockBlobClient(name) { return {
+      async uploadData() { rows.set(`blob/${name}`, { name }); },
+      async deleteIfExists() { rows.delete(`blob/${name}`); deleted.push(name); }
+    }; },
+    async *listBlobsFlat() {}
+  };
+  const reports = new AzureAdverseMediaReportStore({
+    blobServiceUrl: 'https://reports.blob.core.windows.net',
+    ocrBlobServiceUrl: 'https://ocr.blob.core.windows.net',
+    credential: { async getToken() { return { token: 'synthetic' }; } }
+  });
+  reports.ocrTable = table;
+  reports.ocrContainer = container;
+  await assert.rejects(reports.save({ ownerId: 'owner', reportId: 'orphan-report',
+    bytes: Buffer.from('synthetic-pdf'), metadata: { report_type: 'forms', expires_at: expiresAt }
+  }), /synthetic_public_index_outage/);
+  assert.ok(rows.has('forms-expiry/orphan-report'));
+  const store = new AzureDocumentOcrStore({ container, queue: {}, table });
+  assert.equal(await store.purgeExpiredFormArtifacts(new Date()), 1);
+  assert.ok(deleted.some((item) => item.endsWith('/orphan-report.pdf')));
+  assert.equal(rows.has('forms-expiry/orphan-report'), false);
+  assert.equal([...rows.keys()].some((key) => key.startsWith('blob/')), false);
 });

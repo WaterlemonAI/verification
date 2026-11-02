@@ -13,3 +13,8 @@ test
 docs
 infrastructure
 *.log
+*.pdf
+outputs
+work
+__pycache__
+*.pyc

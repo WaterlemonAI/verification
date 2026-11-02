@@ -49,6 +49,22 @@ jobs:
           find api-site admin-site \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
       - name: Run API contract and queue tests
         run: npm test
+      - name: Build API image
+        run: docker build --pull --file Dockerfile.api --tag ai7uae-api:pr .
+      - name: Build document OCR image
+        run: docker build --pull --file Dockerfile.document-ocr --tag ai7uae-document-ocr:pr .
+      - name: Verify bundled Paddle inference
+        run: |
+          docker run --rm ai7uae-document-ocr:pr /app/paddle-venv/bin/python -c '
+          import sys
+          sys.path.insert(0, "/app/scripts")
+          import numpy as np
+          from document_ocr_paddle import engine, models_ready
+          assert models_ready()
+          image = np.full((64, 128, 3), 255, dtype=np.uint8)
+          for language in ("english", "arabic"):
+              list(engine(language).predict(image))
+          '
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

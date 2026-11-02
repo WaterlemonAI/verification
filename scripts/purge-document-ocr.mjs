@@ -6,4 +6,6 @@ if (!store) throw new Error('document_ocr_storage_unavailable');
 const usageStore = createCustomerUsageStore();
 const reconciled = await store.reconcileUsage(usageStore);
 const count = await store.purgeExpired(new Date(), usageStore);
-console.info('document_ocr_retention_purge', JSON.stringify({ usage_rows_reconciled: reconciled, expired_jobs_removed: count }));
+const formsCount = await store.purgeExpiredFormArtifacts(new Date());
+console.info('document_ocr_retention_purge', JSON.stringify({ usage_rows_reconciled: reconciled,
+  expired_jobs_removed: count, expired_form_artifacts_removed: formsCount }));
