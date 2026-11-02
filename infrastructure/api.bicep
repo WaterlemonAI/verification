@@ -403,7 +403,7 @@ resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (!paral
         }
       ]
       scale: {
-        minReplicas: 0
+        minReplicas: 1
         maxReplicas: 2
         rules: [
           {
