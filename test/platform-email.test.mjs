@@ -67,9 +67,26 @@ test('customer email designs include inline logo, usable actions, safe copy and 
   assert.match(messages[3].text, /10 minutes/);
   await mailer.sendPasswordReset({ to: 'admin@example.com', url: 'https://app.kycprobe.com/admin?reset=one-time-token', minutes: 30 });
   assert.match(messages[4].html, /href="https:\/\/app\.kycprobe\.com\/admin\?reset=one-time-token"/);
-  assert.doesNotMatch(messages[4].html.split('KYCProbe by AI7Lab UAE')[1], /\/admin/);
+  assert.doesNotMatch(messages[4].html.split('AETHERIX SYSTEMS - FZCO, UAE')[1], /\/admin/);
   await assert.rejects(() => mailer.sendPasswordReset({ to: 'customer@example.com', url: 'https://evil.example/reset', minutes: 30 }),
     /platform_email_invalid_action_url/);
+});
+
+test('billing emails include sales guidance, legal entity, and an escaped per-API usage breakdown', async () => {
+  const messages = [];
+  const mailer = createPlatformMailer({ password: 'test-only', transportFactory: () => ({
+    sendMail: async (value) => messages.push(value)
+  }) });
+  await mailer.sendLowCredit({ to: 'owner@example.test', balance: '4.500000', currency: 'USD' });
+  await mailer.sendCreditAdded({ to: 'owner@example.test', amount: '10.000000', balance: '14.500000', currency: 'USD' });
+  await mailer.sendDailyUsage({ to: 'owner@example.test', usage: { date: '2026-11-02', currency: 'USD',
+    total: '0.200000', services: [{ service_id: '<script>', calls: 2, cost: '0.200000' }] } });
+  assert.match(messages[0].text, /Reply to this email.*sales team.*post-pay/);
+  assert.match(messages[1].text, /10\.000000.*14\.500000/);
+  assert.match(messages[2].text, /<script>: 2 call/);
+  assert.match(messages[2].html, /&lt;script&gt;/);
+  assert.doesNotMatch(messages[2].html, /<script>/);
+  assert.ok(messages.every((message) => message.html.includes('AETHERIX SYSTEMS - FZCO, UAE')));
 });
 
 test('reset tokens are scoped, expire, and fail after a password version change', () => {

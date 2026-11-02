@@ -206,7 +206,7 @@ test('serves the public KYCProbe marketplace homepage and terms on the new apex 
   const termsHtml = terms.body.toString('utf8');
   assert.equal(terms.status, 200);
   assert.match(termsHtml, /Terms of Use/);
-  assert.match(termsHtml, /ai7lab IP solutions FZ LLC/);
+  assert.match(termsHtml, /AETHERIX SYSTEMS - FZCO, UAE/);
   assert.doesNotMatch(termsHtml, /AI7LAB Tech Innovation Limited|DIFC/);
 
   const vendoreyeLogo = await getWithHost('/assets/vendoreye-logo.png', 'kycprobe.com');
