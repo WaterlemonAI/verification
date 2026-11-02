@@ -18,4 +18,4 @@ The adapter validates upload type and size, bounds the response, and maps docume
 
 ## Remaining before activation
 
-Add the TAED credential to the protected store, then enable `DOCUMENT_OCR_TAED_MOA_ENABLED=true` for the API deployment. This PR does not activate the switch. No real document has been sent to TAED during development. The seven remaining document types need their TAED IDs and example responses before they can be integrated.
+Add the TAED credential to the protected store, then set `DOCUMENT_OCR_TAED_MOA_ENABLED=true` in the `ai7uae-api` GitHub environment and run the reviewed main-branch deployment workflow. The deployment template defaults the switch off until then. No real document has been sent to TAED during development. The seven remaining document types need their TAED IDs and example responses before they can be integrated.
