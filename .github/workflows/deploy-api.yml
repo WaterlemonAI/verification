@@ -172,16 +172,28 @@ jobs:
         run: |
           set -euo pipefail
           repository="ai7uae-merchant-screenshot"
-          tag="${GITHUB_SHA}"
-          tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
-          docker build --pull --file Dockerfile.merchant-screenshot --tag "${tagged_image}" .
-          docker push "${tagged_image}"
-          digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}:${tag}" --query digest --output tsv)"
-          test -n "${digest}"
+          context_digest="$(git ls-tree -r HEAD -- .dockerignore Dockerfile.merchant-screenshot package.json package-lock.json merchant-screenshot-worker.mjs lib/merchant-screening.mjs lib/merchant-screening-network.mjs lib/merchant-screenshot.mjs | sha256sum | cut -d ' ' -f 1)"
+          if test "${context_digest}" = '0712e1f3a4c93e4fbed3c6eb21c2343efad4d0faac5dcdbbecfaa34b0f2e1b51'; then
+            digest='sha256:e40a66f7934e8312047b3daca989b27ca281b8e7b7e340ae88d3817d5edde28b'
+            image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
+            live_image="$(az containerapp show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name "${{ vars.MERCHANT_SCREENSHOT_WORKER_NAME || 'ca-ai7uae-merchant-screenshot' }}" --query 'properties.template.containers[0].image' --output tsv)"
+            test "${live_image}" = "${image}"
+            registry_digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}@${digest}" --query digest --output tsv)"
+            test "${registry_digest}" = "${digest}"
+            reused_from='41375647682-1:0fa711bc923a6d0bb433a51d3637a31f7ad3af4f'
+          else
+            tag="${GITHUB_SHA}"
+            tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
+            docker build --pull --file Dockerfile.merchant-screenshot --tag "${tagged_image}" .
+            docker push "${tagged_image}"
+            digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}:${tag}" --query digest --output tsv)"
+            test -n "${digest}"
+            reused_from=''
+          fi
           image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
           echo "image=${image}" >> "${GITHUB_OUTPUT}"
-          jq --arg repository "${repository}" --arg digest "${digest}" --arg image "${image}" \
-            '.merchant_screenshot_worker = {repository: $repository, digest: $digest, image: $image}' \
+          jq --arg repository "${repository}" --arg digest "${digest}" --arg image "${image}" --arg reused_from "${reused_from}" \
+            '.merchant_screenshot_worker = ({repository: $repository, digest: $digest, image: $image} + (if $reused_from == "" then {} else {reused_from: $reused_from} end))' \
             api-deployment-evidence.json > api-deployment-evidence.next.json
           mv api-deployment-evidence.next.json api-deployment-evidence.json
 
@@ -243,16 +255,27 @@ jobs:
         run: |
           set -euo pipefail
           repository="ai7uae-ejari-worker"
-          tag="${GITHUB_SHA}"
-          tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
-          docker build --pull --file ejari-verifier/Dockerfile --tag "${tagged_image}" ejari-verifier
-          docker push "${tagged_image}"
-          digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}:${tag}" --query digest --output tsv)"
-          test -n "${digest}"
+          if test "${{ vars.EJARI_PLATFORM_ENABLED }}" = 'true' && test "$(git rev-parse HEAD:ejari-verifier)" = '139433aca32581d9343f190fa18ee8aecbbc056a'; then
+            digest='sha256:9e77ce9d77a70f77e043e67161f64fe59e354df8401c803e7b24544e0e3e2955'
+            image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
+            live_image="$(az containerapp show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name 'ca-ai7uae-ejari-worker' --query 'properties.template.containers[0].image' --output tsv)"
+            test "${live_image}" = "${image}"
+            registry_digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}@${digest}" --query digest --output tsv)"
+            test "${registry_digest}" = "${digest}"
+            reused_from='41375647682-1:0fa711bc923a6d0bb433a51d3637a31f7ad3af4f'
+          else
+            tag="${GITHUB_SHA}"
+            tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
+            docker build --pull --file ejari-verifier/Dockerfile --tag "${tagged_image}" ejari-verifier
+            docker push "${tagged_image}"
+            digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}:${tag}" --query digest --output tsv)"
+            test -n "${digest}"
+            reused_from=''
+          fi
           image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
           echo "image=${image}" >> "${GITHUB_OUTPUT}"
-          jq --arg repository "${repository}" --arg digest "${digest}" --arg image "${image}" \
-            '.ejari_worker = {repository: $repository, digest: $digest, image: $image}' \
+          jq --arg repository "${repository}" --arg digest "${digest}" --arg image "${image}" --arg reused_from "${reused_from}" \
+            '.ejari_worker = ({repository: $repository, digest: $digest, image: $image} + (if $reused_from == "" then {} else {reused_from: $reused_from} end))' \
             api-deployment-evidence.json > api-deployment-evidence.next.json
           mv api-deployment-evidence.next.json api-deployment-evidence.json
 
