@@ -191,16 +191,30 @@ jobs:
         run: |
           set -euo pipefail
           repository="ai7uae-bank-statement-worker"
-          tag="${GITHUB_SHA}"
-          tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
-          docker build --pull --file bank-statement-analysis/Dockerfile --tag "${tagged_image}" bank-statement-analysis
-          docker push "${tagged_image}"
-          digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}:${tag}" --query digest --output tsv)"
-          test -n "${digest}"
+          # Run 41353275323 built this digest from the exact source tree below.
+          # Reuse it only while the BSA source and deployed image still match;
+          # the pinned ModelScope download currently returns HTTP 500.
+          if test "$(git rev-parse HEAD:bank-statement-analysis)" = 'cd4d54a755cd56e981ba5409e4f9cf6b4b640ae8'; then
+            digest='sha256:513c825e40322833e60ce0577c3f63f048dd3970ce593e8a7c2b654605414ae7'
+            image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
+            live_image="$(az containerapp show --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name "${{ vars.BSA_WORKER_NAME || 'ca-ai7uae-bsa-worker' }}" --query 'properties.template.containers[0].image' --output tsv)"
+            test "${live_image}" = "${image}"
+            registry_digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}@${digest}" --query digest --output tsv)"
+            test "${registry_digest}" = "${digest}"
+            reused_from='41353275323-1:b4fdeab34a24cbab2c509aa41d288a60fdf092d9'
+          else
+            tag="${GITHUB_SHA}"
+            tagged_image="${{ vars.ACR_LOGIN_SERVER }}/${repository}:${tag}"
+            docker build --pull --file bank-statement-analysis/Dockerfile --tag "${tagged_image}" bank-statement-analysis
+            docker push "${tagged_image}"
+            digest="$(az acr repository show --name "${{ vars.ACR_NAME }}" --image "${repository}:${tag}" --query digest --output tsv)"
+            test -n "${digest}"
+            reused_from=''
+          fi
           image="${{ vars.ACR_LOGIN_SERVER }}/${repository}@${digest}"
           echo "image=${image}" >> "${GITHUB_OUTPUT}"
-          jq --arg repository "${repository}" --arg digest "${digest}" --arg image "${image}" \
-            '.bank_statement_worker = {repository: $repository, digest: $digest, image: $image}' \
+          jq --arg repository "${repository}" --arg digest "${digest}" --arg image "${image}" --arg reused_from "${reused_from}" \
+            '.bank_statement_worker = ({repository: $repository, digest: $digest, image: $image} + (if $reused_from == "" then {} else {reused_from: $reused_from} end))' \
             api-deployment-evidence.json > api-deployment-evidence.next.json
           mv api-deployment-evidence.next.json api-deployment-evidence.json
 
