@@ -1717,6 +1717,20 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
     return json(res, 200, { forms: await store.listForms() });
   }
 
+  if (req.method === 'POST' && /^\/admin\/api\/forms\/[a-z0-9-]+\/validate$/.test(url.pathname)) {
+    try {
+      const body = await readJson(req, 256 * 1024);
+      if (body.ai_action?.enabled && process.env.FORMS_AI_ACTION_ENABLED !== '1')
+        return json(res, 409, { status: 'Error', error: 'Forms AI Action is disabled for this release.' });
+      const id = url.pathname.split('/')[4];
+      validateFormDefinition({ ...body, id }, await store.listIntegrations());
+      return json(res, 200, { valid: true });
+    } catch (error) {
+      return json(res, error.statusCode || 400, { status: 'Error',
+        error: error.statusCode ? 'The request is invalid.' : error.message });
+    }
+  }
+
   if (req.method === 'PUT' && /^\/admin\/api\/forms\/[a-z0-9-]+$/.test(url.pathname)) {
     try {
       const body = await readJson(req, 256 * 1024);
@@ -2208,7 +2222,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         if (job.billing?.workspace_id && job.billing?.log_key) {
           if (job.expired_result) await usageStore.settleAsyncResult(job.billing.workspace_id,
             job.billing.log_key, { successful: false, reason: 'ocr_reference_expired' });
-          else await usageStore.settleFormResult(job.billing.workspace_id, job.billing.log_key, result.services);
+          else if (!job.expired_after_completion) await usageStore.settleFormResult(job.billing.workspace_id,
+            job.billing.log_key, result.services);
         }
       },
       resultStore: reportStore

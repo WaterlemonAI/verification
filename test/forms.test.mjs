@@ -97,6 +97,11 @@ test('AI Action is versioned, allowlisted, and absent from the public Form schem
     enabled: true, task: 'Find synthetic business review evidence.',
     input_fields: ['unknown'], result_services: [], ocr_job_fields: []
   } }, [{ id: 'company-search', enabled: true, method: 'POST', acceptedContentTypes: ['application/json'] }]), /invalid selection/);
+  assert.throws(() => validateFormDefinition({ ...formDefinition,
+    fields: [...formDefinition.fields, { key: 'ocr_job_id', label: 'OCR job ID', type: 'text', required: false }],
+    ai_action: { enabled: true, task: 'Review synthetic OCR evidence.',
+      input_fields: [], result_services: [], ocr_job_fields: ['ocr_job_id'] }
+  }, [{ id: 'company-search', enabled: true, method: 'POST', acceptedContentTypes: ['application/json'] }]), /invalid selection/);
 });
 
 test('AI Action Form setup requires a protected credential and never returns its value', async () => {
@@ -113,6 +118,18 @@ test('AI Action Form setup requires a protected credential and never returns its
     });
     assert.equal(missing.status, 409);
     assert.match((await missing.json()).error, /credential during Form setup/);
+
+    const validation = await fetch(`${baseUrl}/admin/api/forms/${definition.id}/validate`, {
+      method: 'POST', headers, body: JSON.stringify(definition)
+    });
+    assert.equal(validation.status, 200);
+    assert.deepEqual(await validation.json(), { valid: true });
+    const invalid = await fetch(`${baseUrl}/admin/api/forms/${definition.id}/validate`, {
+      method: 'POST', headers, body: JSON.stringify({ ...definition, ai_action: {
+        ...definition.ai_action, input_fields: ['not_a_field']
+      } })
+    });
+    assert.equal(invalid.status, 400);
 
     const credential = await fetch(`${baseUrl}/admin/api/integrations/forms-ai-action/credential`, {
       method: 'PUT', headers, body: JSON.stringify({ credential: 'synthetic-form-setup-key' })
@@ -626,6 +643,52 @@ test('expired OCR-backed Form settles and sends one customer-safe final callback
   assert.equal(settled, 1);
   assert.equal(delivered, 1);
   assert.equal(completed, 1);
+});
+
+test('expired OCR result after settlement sends a safe notice without refunding completed checks', async () => {
+  let available = true;
+  let completed = 0;
+  let deleted = 0;
+  const delivered = [];
+  const job = {
+    submission_id: 'completed-submission', owner_id: 'completed-owner',
+    delivery_id: 'original-delivery', callback_url: 'https://example.com/callback',
+    callback_secret: 'synthetic-secret', settled: true, result_reference: true,
+    ocr_expires_at: new Date(Date.now() - 1_000).toISOString(),
+    data: { private_value: 'must-not-appear' },
+    form: { id: 'synthetic-form', name: 'Synthetic Form', version: 1,
+      ai_action: { ocr_job_fields: ['ocr_job_id'] } }
+  };
+  const message = { messageId: 'completed', popReceipt: 'a', messageText: JSON.stringify(job) };
+  const queue = {
+    async receive() { if (!available) return null; available = false; return message; },
+    async complete() { completed += 1; },
+    async deadLetter() { throw new Error('safe_expiry_notice_must_complete'); }
+  };
+  const worker = startFormsWorker({ queue,
+    resultStore: {
+      async getFormResult() { throw new Error('expired_result_must_not_be_read'); },
+      async deleteFormResult() { deleted += 1; }
+    },
+    execute: async () => { throw new Error('completed_checks_must_not_rerun'); },
+    onResult: async (processedJob) => {
+      assert.equal(processedJob.expired_result, false);
+      assert.equal(processedJob.expired_after_completion, true);
+      assert.equal(processedJob.settled, true);
+    },
+    deliver: async (processedJob, result) => {
+      delivered.push({ processedJob, result });
+      assert.notEqual(processedJob.delivery_id, 'original-delivery');
+      assert.equal(result.status, 'failed');
+      assert.deepEqual(result.services, []);
+      assert.doesNotMatch(JSON.stringify({ processedJob, result }), /must-not-appear/);
+    }
+  });
+  for (let attempt = 0; attempt < 30 && !completed; attempt++) await new Promise((resolve) => setTimeout(resolve, 10));
+  worker.stop();
+  assert.equal(delivered.length, 1);
+  assert.equal(completed, 1);
+  assert.equal(deleted, 1);
 });
 
 test('Forms report-storage retry reuses completed supplier responses and a stable report ID', async () => {

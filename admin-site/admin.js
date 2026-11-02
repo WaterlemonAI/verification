@@ -365,10 +365,11 @@ function refreshAiActionCredentialInput() {
   const form = byId('form-form');
   const enabled = form.elements.ai_action_enabled.checked;
   form.elements.ai_action_credential.required = enabled && !formsAiCredentialConfigured;
+  form.elements.ai_action_credential.disabled = formsAiCredentialConfigured;
   form.elements.ai_action_credential.placeholder = formsAiCredentialConfigured
-    ? 'Protected key configured; leave blank to keep it' : 'Enter the dedicated Gemini API key';
+    ? 'Protected key configured' : 'Enter the dedicated Gemini API key';
   byId('ai-action-credential-status').textContent = formsAiCredentialConfigured
-    ? 'A protected Forms AI Action key is configured. Leave this blank to keep it, or enter a replacement during Form setup.'
+    ? 'A protected Forms AI Action key is configured. Rotate it separately from the Integrations screen.'
     : 'A dedicated Gemini key is required when enabling AI Action. It is saved write-only in the AI7 UAE Key Vault, never in the Form definition.';
 }
 
@@ -383,7 +384,7 @@ function renderAiActionSources(saved = null) {
   for (const [containerId, items, valueKey, selected] of [
     ['ai-action-fields', fields, 'key', saved?.input_fields || checkedAiActionValues('ai-action-fields')],
     ['ai-action-services', services, 'service_id', saved?.result_services || checkedAiActionValues('ai-action-services')],
-    ['ai-action-ocr-fields', fields.filter((field) => field.type === 'text'), 'key', saved?.ocr_job_fields || checkedAiActionValues('ai-action-ocr-fields')]
+    ['ai-action-ocr-fields', fields.filter((field) => field.type === 'text' && field.required), 'key', saved?.ocr_job_fields || checkedAiActionValues('ai-action-ocr-fields')]
   ]) {
     const container = byId(containerId); container.replaceChildren();
     for (const item of items) {
@@ -833,6 +834,9 @@ byId('form-form').addEventListener('submit', async (event) => {
       } } : {}),
       enabled: form.elements.enabled.checked
     };
+    await request(`/admin/api/forms/${form.elements.id.value}/validate`, {
+      method: 'POST', body: JSON.stringify(body)
+    });
     if (body.ai_action) {
       const credential = form.elements.ai_action_credential.value.trim();
       if (!credential && !formsAiCredentialConfigured) throw new Error('Enter the dedicated Gemini API key for AI Action.');
