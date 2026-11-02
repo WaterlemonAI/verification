@@ -75,6 +75,42 @@ test('OCR routes enforce entitlement, accept one file, and refund an idempotent 
   assert.equal(noAuth.status, 401);
 });
 
+test('MOA admission records TAED selection and accepts WEBP without exposing provider calls', async (t) => {
+  const prior = process.env.DOCUMENT_OCR_TAED_MOA_ENABLED;
+  process.env.DOCUMENT_OCR_TAED_MOA_ENABLED = 'true';
+  t.after(() => {
+    if (prior === undefined) delete process.env.DOCUMENT_OCR_TAED_MOA_ENABLED;
+    else process.env.DOCUMENT_OCR_TAED_MOA_ENABLED = prior;
+  });
+  const store = new EnvironmentStore();
+  const usageStore = new MemoryCustomerUsageStore();
+  const issued = await store.createClient('MOA TAED test workspace');
+  const workspaceId = issued.client.workspaceId;
+  await store.setCustomer({ id: workspaceId, name: 'MOA TAED test workspace', status: 'active', usagePolicyVersion: 1 });
+  await usageStore.configure(workspaceId, validateUsagePolicy({ mode: 'prepaid', currency: 'USD',
+    allowed_modules: ['moa-analysis'], rates: { 'moa-analysis': [{ up_to: null, price: '0.10' }] }
+  }, new Set(['moa-analysis'])), true);
+  await usageStore.addCredit(workspaceId, moneyMicros('0.10'), true);
+  let admitted;
+  const documentOcrStore = { async createJob(input) {
+    admitted = input;
+    return { job: { id: jobId, service_id: input.serviceId, status: 'queued' }, reused: false };
+  } };
+  const server = createAppServer({ store, usageStore, documentOcrStore, startWorker: false });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const form = new FormData();
+  form.set('file', new Blob([Buffer.from('RIFF1234WEBPsynthetic')], { type: 'image/webp' }), 'sample.webp');
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/service/moa_analysis`, {
+    method: 'POST', headers: { authorization: `Bearer ${issued.apiKey}`,
+      'idempotency-key': 'ocr-taed-moa-test-1234' }, body: form
+  });
+  assert.equal(response.status, 202);
+  assert.equal(admitted.pipeline, 'taed');
+  assert.equal(admitted.files[0].mediaType, 'image/webp');
+  assert.equal((await response.json()).provider_calls, undefined);
+});
+
 test('saved OCR cases present the ai7edd label without rewriting stored evidence', async (t) => {
   process.env.CASE_MANAGER_ENABLED = 'true';
   t.after(() => { delete process.env.CASE_MANAGER_ENABLED; });

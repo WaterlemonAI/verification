@@ -45,6 +45,45 @@ test('a completed OCR job never calls Azure or Gemini again', async () => {
   assert.equal(store.result().processing.provider_calls.gemini, 1);
 });
 
+test('MOA jobs admitted to TAED use it after malware scan without Azure or Gemini', async () => {
+  const store = fakeStore('queued', 'moa-analysis');
+  store.state.pipeline = 'taed';
+  let scanned = false;
+  const outcome = await processDocumentOcrJob({ store, partitionKey: store.state.partitionKey,
+    jobId: store.state.jobId,
+    scan: async () => { scanned = true; },
+    getTaedKey: async () => 'synthetic-taed-key',
+    getGeminiKey: async () => { throw new Error('Gemini should not be called'); },
+    analyze: async () => { throw new Error('Azure should not be called'); },
+    taedExtract: async ({ apiId, apiKey }) => {
+      assert.equal(scanned, true);
+      assert.equal(apiId, '5070ccf6-a243-4e5e-8fb1-e5360ffb3ab0');
+      assert.equal(apiKey, 'synthetic-taed-key');
+      return { data: { 'Company Name': 'Example LLC',
+        shareholders: '[{"name":"Sample Person","current status":"Active Shareholder"}]' },
+      metadata: { fileName: 'private.pdf' } };
+    } });
+  assert.equal(outcome.status, 'completed');
+  assert.equal(store.result().data.company_name, 'Example LLC');
+  assert.equal(store.result().data.shareholders[0].phone_number, 'Not Found');
+  assert.equal(store.result().processing, undefined);
+  assert.equal(store.result().review_flags, undefined);
+  assert.equal(store.result().metadata, undefined);
+});
+
+test('a replayed MOA TAED call cannot make a duplicate paid request', async () => {
+  const store = fakeStore('taed_in_flight', 'moa-analysis');
+  store.state.pipeline = 'taed';
+  store.state.timestamp = new Date().toISOString();
+  let calls = 0;
+  const outcome = await processDocumentOcrJob({ store, partitionKey: store.state.partitionKey,
+    jobId: store.state.jobId,
+    getTaedKey: async () => { calls += 1; return 'synthetic-key'; },
+    taedExtract: async () => { calls += 1; } });
+  assert.equal(outcome.status, 'in_progress');
+  assert.equal(calls, 0);
+});
+
 test('Emirates ID saves only a tight crop from a high-confidence page region', async () => {
   const store = fakeStore('queued', 'emirates-id-ocr');
   const portrait = Buffer.from('synthetic-png');

@@ -2578,6 +2578,8 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
   }
   try {
     const maxBytes = 25 * 1024 * 1024;
+    const pipeline = definition.id === 'moa-analysis' && process.env.DOCUMENT_OCR_TAED_MOA_ENABLED === 'true'
+      ? 'taed' : 'legacy';
     const raw = await readBody(req, maxBytes + 262144);
     const form = await new Request('http://localhost/', { method: 'POST',
       headers: { 'content-type': req.headers['content-type'] }, body: raw }).formData();
@@ -2595,14 +2597,16 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
       if (!bytes.length || totalBytes > maxBytes) { json(res, 413, { status: 'Error', reasonCode: 'FILE_TOO_LARGE' }); return true; }
       const mediaType = bytes.subarray(0, 5).toString('ascii') === '%PDF-' ? 'application/pdf'
         : bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ? 'image/png'
-          : bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? 'image/jpeg' : null;
+          : bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? 'image/jpeg'
+            : pipeline === 'taed' && bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF'
+              && bytes.toString('ascii', 8, 12) === 'WEBP' ? 'image/webp' : null;
       if (!mediaType || (upload.type && upload.type !== mediaType && !(mediaType === 'image/jpeg' && upload.type === 'image/jpg'))) {
         json(res, 415, { status: 'Error', reasonCode: 'UNSUPPORTED_FILE_TYPE' }); return true;
       }
       files.push({ bytes, mediaType });
     }
     const created = await documentStore.createJob({ ownerId: req.ai7Client.id, serviceId: definition.id,
-      files, idempotencyKey, transactionId: res.getHeader('x-ai7-transaction-id'),
+      files, idempotencyKey, pipeline, transactionId: res.getHeader('x-ai7-transaction-id'),
       billingLogKey: req.ai7Usage?.logKey || '' });
     if (created.reused && req.ai7Usage) {
       await usageStore.settleAsyncResult(req.ai7Usage.workspaceId, req.ai7Usage.logKey, {

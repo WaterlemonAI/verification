@@ -3,7 +3,7 @@
   "info": {
     "title": "KYCProbe Document Extraction API",
     "version": "1.0.0",
-    "description": "Eight asynchronous Azure Document Intelligence and ai7edd model extraction modules. No document data is accepted or returned on unrelated verification routes. Results and original documents are encrypted and retained for 30 days."
+    "description": "Eight asynchronous document extraction modules. MOA submissions can use a TAED wrapper when enabled. Results and original documents are encrypted and retained for 30 days."
   },
   "servers": [
     {
@@ -779,7 +779,7 @@
         ],
         "summary": "MOA Analysis",
         "operationId": "submit_moa_analysis",
-        "description": "Asynchronous extraction. One file, 50 pages and 25 MiB combined. Encrypted input, OCR text, result and crops are retained 30 days. Missing fields return Not Found; unreadable fields return Not Readable. Human review is required when review_required is true.",
+        "description": "Asynchronous extraction. One file, 50 pages and 25 MiB combined. When the TAED MOA pipeline is enabled, PDF, PNG, JPEG and WEBP are accepted, and results contain extracted fields without review or model metadata. Encrypted input and result are retained 30 days.",
         "security": [
           {
             "ApiKey": []
@@ -812,7 +812,7 @@
                   "file": {
                     "type": "string",
                     "format": "binary",
-                    "description": "Required PDF, PNG or JPEG document."
+                    "description": "Required PDF, PNG or JPEG document. WEBP is also accepted when the TAED MOA pipeline is enabled."
                   }
                 },
                 "additionalProperties": false
@@ -1518,8 +1518,7 @@
           "status",
           "stage",
           "created_at",
-          "expires_at",
-          "provider_calls"
+          "expires_at"
         ],
         "properties": {
           "id": {
@@ -1609,7 +1608,6 @@
           "stage",
           "created_at",
           "expires_at",
-          "provider_calls",
           "reused",
           "status_url",
           "result_url"
@@ -2995,6 +2993,28 @@
                 "phone_number": {
                   "type": "string",
                   "description": "Phone number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "number_of_shares": {
+                  "type": "string",
+                  "description": "Number of shares held by this shareholder, if stated. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "date_of_joining": {
+                  "type": "string",
+                  "description": "Date the shareholder joined, as printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "date_of_removal": {
+                  "type": "string",
+                  "description": "Date the shareholder was removed, as printed, when applicable. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "current_status": {
+                  "type": "string",
+                  "enum": [
+                    "Active Shareholder",
+                    "Removed Shareholder",
+                    "Not Found",
+                    "Not Readable"
+                  ],
+                  "description": "Current shareholder status only when explicitly supported by the memorandum."
                 }
               },
               "required": [
@@ -3002,7 +3022,11 @@
                 "shareholding_percent",
                 "nationality",
                 "id_number",
-                "phone_number"
+                "phone_number",
+                "number_of_shares",
+                "date_of_joining",
+                "date_of_removal",
+                "current_status"
               ],
               "additionalProperties": false
             }
@@ -3055,7 +3079,7 @@
             "type": "string"
           },
           "data": {
-            "$ref": "#/components/schemas/moa_analysis_Data"
+            "$ref": "#/components/schemas/moa_analysis_LegacyData"
           },
           "evidence": {
             "type": "array",
@@ -3656,12 +3680,132 @@
             "$ref": "#/components/schemas/moa_analysis_Result"
           },
           {
+            "$ref": "#/components/schemas/moa_analysis_TaedResult"
+          },
+          {
             "$ref": "#/components/schemas/articles_of_association_ocr_Result"
           },
           {
             "$ref": "#/components/schemas/emirates_id_ocr_Result"
           }
         ]
+      },
+      "moa_analysis_TaedResult": {
+        "type": "object",
+        "required": [
+          "transaction_id",
+          "job_id",
+          "service_id",
+          "status",
+          "processed_at",
+          "data"
+        ],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^ocr_[0-9a-f-]{36}$"
+          },
+          "service_id": {
+            "type": "string",
+            "const": "moa-analysis"
+          },
+          "status": {
+            "type": "string",
+            "const": "completed"
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "$ref": "#/components/schemas/moa_analysis_Data"
+          }
+        },
+        "additionalProperties": false
+      },
+      "moa_analysis_LegacyData": {
+        "type": "object",
+        "required": [
+          "company_name",
+          "registration_number",
+          "business_objectives",
+          "authorized_capital",
+          "date_of_incorporation",
+          "shareholders"
+        ],
+        "properties": {
+          "company_name": {
+            "type": "string",
+            "description": "Legal company name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "registration_number": {
+            "type": "string",
+            "description": "Company registration number. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "business_objectives": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "Business objectives stated in the memorandum. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "string"
+            }
+          },
+          "authorized_capital": {
+            "type": "string",
+            "description": "Authorized capital and currency, if stated. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "date_of_incorporation": {
+            "type": "string",
+            "description": "Incorporation date in DD/MM/YYYY when unambiguous. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+          },
+          "shareholders": {
+            "type": [
+              "array",
+              "string"
+            ],
+            "description": "One row for each explicitly named shareholder. In the API response, an absent list is \"Not Found\" and a visibly present but unreadable list is \"Not Readable\".",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Shareholder name. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "shareholding_percent": {
+                  "type": "string",
+                  "description": "Shareholding percentage, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "nationality": {
+                  "type": "string",
+                  "description": "Nationality, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "id_number": {
+                  "type": "string",
+                  "description": "ID number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                },
+                "phone_number": {
+                  "type": "string",
+                  "description": "Phone number, if printed. Return \"Not Found\" if absent, or \"Not Readable\" if present but illegible or ambiguous."
+                }
+              },
+              "required": [
+                "name",
+                "shareholding_percent",
+                "nationality",
+                "id_number",
+                "phone_number"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
       }
     }
   }

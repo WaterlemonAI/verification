@@ -23,4 +23,5 @@ if (!malwareReady) throw new Error('document_ocr_malware_scanner_unavailable');
 await consumeDocumentOcrQueue({ store: documentStore,
   usageStore: createCustomerUsageStore(),
   getGeminiKey: () => credentials.getMasterKey('document-ocr-ai'),
+  getTaedKey: () => credentials.getMasterKey('document-ocr-taed'),
   stopSignal: controller.signal });
