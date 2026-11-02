@@ -20,6 +20,7 @@ on:
       - package.json
       - package-lock.json
       - infrastructure/api.bicep
+      - infrastructure/api-billing-notifications-bootstrap.bicep
       - infrastructure/api-document-ocr-platform.bicep
       - infrastructure/api-ejari-platform.bicep
       - infrastructure/api-document-ocr-purge-bootstrap.bicep
@@ -66,6 +67,7 @@ jobs:
       - name: Validate document OCR Bicep
         run: |
           az bicep build --file infrastructure/api.bicep
+          az bicep build --file infrastructure/api-billing-notifications-bootstrap.bicep
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
           az bicep build --file infrastructure/api-document-ocr-purge-bootstrap.bicep
           az bicep build --file infrastructure/api-case-manager-platform.bicep

@@ -351,11 +351,12 @@ test('Azure credit adjustment retries are atomic and idempotent', async () => {
       entities.set(key(entity), { ...entity, etag: String(++version) });
     },
     async submitTransaction(actions) {
-      const [update, create] = actions;
-      const current = entities.get(key(update[1]));
-      if (current.etag !== update[3].etag || entities.has(key(create[1]))) throw fail(412);
-      entities.set(key(update[1]), { ...update[1], etag: String(++version) });
-      entities.set(key(create[1]), { ...create[1], etag: String(++version) });
+      for (const [verb, entity, , options] of actions) {
+        const current = entities.get(key(entity));
+        if (verb === 'update' && current?.etag !== options.etag) throw fail(412);
+        if (verb === 'create' && current) throw fail(409);
+      }
+      for (const [, entity] of actions) entities.set(key(entity), { ...entity, etag: String(++version) });
     }
   };
   const usage = new AzureCustomerUsageStore({ tableClient });
@@ -367,6 +368,7 @@ test('Azure credit adjustment retries are atomic and idempotent', async () => {
   ]);
   assert.deepEqual(results.map((item) => item.balance), ['1.250000', '1.250000']);
   assert.equal([...entities.values()].filter((item) => item.rowKey.startsWith('credit-')).length, 1);
+  assert.equal([...entities.values()].filter((item) => item.kind === 'credit_added').length, 1);
   assert.equal((await usage.account(id, true)).balance, '1.250000');
   await assert.rejects(usage.addCredit(id, moneyMicros('1.26'), true, options), /different credit amount/);
 });
