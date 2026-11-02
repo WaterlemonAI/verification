@@ -36,3 +36,24 @@ test('TAED adapter reduces HTTP and malformed response failures to safe codes', 
   await assert.rejects(extractDocumentWithTaed({ ...sample,
     fetchImpl: async () => new Response('not JSON', { status: 200 }) }), /document_ocr_taed_response_invalid/);
 });
+
+test('TAED adapter recognizes documented failures without leaking provider text', async () => {
+  for (const [status, code] of [[500, 'EXTRACTION_PIPELINE_FAILURE'],
+    [403, 'MODEL_COMPLIANCE_REFUSAL'], [422, 'SCHEMA_MISMATCH_EMPTY_OUTPUT'],
+    [422, 'UNREADABLE_IMAGE_CONTENT']]) {
+    await assert.rejects(extractDocumentWithTaed({ ...sample,
+      fetchImpl: async () => new Response(JSON.stringify({ error: { code, message: 'private details' } }), { status }) }),
+    new RegExp(`document_ocr_taed_${code.toLowerCase()}`));
+  }
+});
+
+test('TAED adapter accepts WebP and bounds response bytes', async () => {
+  await extractDocumentWithTaed({ ...sample, mediaType: 'image/webp',
+    fetchImpl: async (_url, options) => {
+      assert.equal(options.body.get('file').name, 'document.webp');
+      return new Response('{}', { status: 200 });
+    } });
+  await assert.rejects(extractDocumentWithTaed({ ...sample,
+    fetchImpl: async () => new Response('x'.repeat(1024 * 1024 + 1), { status: 200 }) }),
+  /document_ocr_taed_response_limit/);
+});
