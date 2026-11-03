@@ -117,8 +117,9 @@ test('admin can register a provider-neutral API without exposing its upstream de
 
   const listing = await fetch(`${appUrl}/admin/api/integrations`, { headers: adminHeaders() });
   const body = await listing.json();
-  assert.equal(body.integrations.length, 16);
-  assert.equal(body.integrations.filter((item) => item.formsCompatible === false && item.publicPath.startsWith('/service/')).length, 10);
+  assert.equal(body.integrations.length, 17);
+  assert.equal(body.integrations.filter((item) => item.formsCompatible === false && item.publicPath.startsWith('/service/')).length, 11);
+  assert.ok(body.integrations.some((item) => item.id === 'peppol-directory' && item.publicPath === '/service/peppol_check'));
   assert.ok(body.integrations.some((item) => item.id === 'adverse-media-search-plus' && item.enabled === false));
   assert.ok(body.integrations.some((item) => item.id === 'ejari-verification'));
   assert.ok(body.integrations.some((item) => item.id === 'merchant-screening'));

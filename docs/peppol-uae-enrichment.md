@@ -18,6 +18,9 @@ published receiving document types, names, country, and any published identifier
 websites, contacts, address text, extra information and registration date. The
 response includes `snapshot_at`, `stale` (older than 48 hours), and a match status:
 
+Both API paths pass the ISO alpha-2 country code `AE` explicitly. The separate
+[global Peppol check](peppol-global-search.md) has an optional country input.
+
 - `name_match`: a published name matches after case and punctuation normalization.
 - `possible_matches`: similar UAE names, requiring human review.
 - `not_found`: no name candidate in this UAE snapshot. This does not establish

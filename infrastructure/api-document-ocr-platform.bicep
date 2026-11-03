@@ -119,6 +119,10 @@ resource jobsTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-
   parent: tableService
   name: 'DocumentOcrJobs'
 }
+resource peppolNamesTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  parent: tableService
+  name: 'PeppolDirectoryNames'
+}
 resource documentIntelligence 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
   name: documentIntelligenceName
   location: location

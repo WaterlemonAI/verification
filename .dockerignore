@@ -1,6 +1,7 @@
 .git
 .github
 .codex
+.local-peppol
 node_modules
 **/node_modules
 .env
