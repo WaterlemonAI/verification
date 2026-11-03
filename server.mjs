@@ -21,7 +21,7 @@ import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs'
 import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
-import { createGptAdverseClassifier } from './lib/ai7uae-gpt-adverse-api.mjs';
+import { createGeminiAdverseClassifier } from './lib/ai7uae-gemini-adverse-api.mjs';
 import { publicFormDefinition, resolveFormServiceInput, validateFormDefinition, validateFormSubmission } from './lib/forms.mjs';
 import { createFormsQueue, makeFormsJob, startFormsWorker, validateFormsCallbackUrl } from './lib/forms-queue.mjs';
 import { createFormsSubmissionStore, formSubmissionFingerprint, publicFormQueueReceipt } from './lib/forms-submission-store.mjs';
@@ -202,7 +202,9 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
       console.warn('case_manager_rejected_attempt_capture_failed', JSON.stringify({ transaction_id: transactionId }));
     }
   };
-  if (route.moduleIds.includes('adverse-media-search-plus') && process.env.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED === '1') {
+  if (route.moduleIds.includes('adverse-media-search-plus')
+    && (process.env.ADVERSE_MEDIA_SEARCH_PLUS_ENABLED === '1'
+      || process.env.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED === '1')) {
     const account = await usageStore.account(workspaceId, managed);
     if (!account.allowed_modules.includes('adverse-media-search-plus')
       || !Array.isArray(account.rates['adverse-media'])
@@ -519,8 +521,8 @@ async function createEntitySearchReport(req, res, store, reportStore) {
 export async function finalizeAdverseMediaReport({ request, response, ownerId, origin, aiApiKey, fetchImpl, reportStore,
   jsonStore = createAdverseMediaJsonStore(), inputPayload = request, transactionId = null, reportId = null,
   variant = 'legacy' }) {
-  const reportBase = variant === 'search_plus_gpt' ? '/service/adverse_media_search_plus' : '/service/adverse_media';
-  const reportType = variant === 'search_plus_gpt' ? 'adverse_media_search_plus' : 'adverse_media';
+  const reportBase = variant === 'search_plus' ? '/service/adverse_media_search_plus' : '/service/adverse_media';
+  const reportType = variant === 'search_plus' ? 'adverse_media_search_plus' : 'adverse_media';
   try {
     if (reportId) {
       const existing = await reportStore.get({ ownerId, reportId });
@@ -585,7 +587,7 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
 
 async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
   variant = 'legacy') {
-  const gptSearchPlus = variant === 'search_plus_gpt';
+  const dedicatedSearchPlus = variant === 'search_plus';
   const startedAt = Date.now();
   let screeningResult;
   let screeningFinishedAt;
@@ -593,7 +595,7 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
   const logMetrics = (reportStatus) => {
     if (!screeningResult) return;
     const usage = screeningResult.usage || {};
-    console.info(gptSearchPlus ? 'adverse_media_search_plus_request_metrics' : 'adverse_media_request_metrics', JSON.stringify({
+    console.info(dedicatedSearchPlus ? 'adverse_media_search_plus_request_metrics' : 'adverse_media_request_metrics', JSON.stringify({
       transaction_id: res.getHeader('x-ai7-transaction-id'),
       screening_id: screeningResult.screening_id,
       status: screeningResult.status,
@@ -622,7 +624,8 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
   if (!req.ai7Client && !(await store.isClientKey(token))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
-  if (gptSearchPlus && process.env.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED !== '1') {
+  if (dedicatedSearchPlus && process.env.ADVERSE_MEDIA_SEARCH_PLUS_ENABLED !== '1'
+    && process.env.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED !== '1') {
     return json(res, 503, { status: 'Error', error: 'Adverse Media (Search+) is not enabled.' });
   }
   if (jsonStore?.ready === false) {
@@ -633,10 +636,10 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     if (Buffer.byteLength(JSON.stringify(input)) > 32 * 1024) {
       return json(res, 413, { status: 'Error', error: 'Adverse-media input must be 32 KiB or smaller.' });
     }
-    if (gptSearchPlus && (input.deep_research === true || input.callback_url || input.callback_access_key)) {
+    if (dedicatedSearchPlus && (input.deep_research === true || input.callback_url || input.callback_access_key)) {
       return json(res, 400, { status: 'Error', error: 'Deep research callbacks are not available for Adverse Media (Search+).' });
     }
-    const request = validateAdverseMediaRequest(gptSearchPlus ? { ...input, search_plus: true } : input);
+    const request = validateAdverseMediaRequest(dedicatedSearchPlus ? { ...input, search_plus: true } : input);
     const callbackAccessKey = validateCallbackAccessKey(input.callback_access_key, request.callback_url);
     if (request.deep_research && request.callback_url) {
       if (!deepResearchQueue) return json(res, 503, { status: 'Error', error: 'Deep research callback processing is temporarily unavailable.' });
@@ -665,41 +668,39 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     }
     const providerKey = await store.getMasterKey('adverse-media');
     if (!providerKey) return providerUnavailable(res);
-    const aiApiKey = gptSearchPlus ? '' : await store.getMasterKey('adverse-media-ai');
-    const aiClassifier = gptSearchPlus ? createGptAdverseClassifier() : null;
-    costGuard = createScreeningCostGuard(fetchImpl);
-    const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, aiClassifier, fetchImpl, costGuard });
-    screeningResult = result;
-    screeningFinishedAt = Date.now();
-    if (gptSearchPlus && (result.methodology.ai_classification.status === 'failed'
-      || result.results.length > 0 && !result.results.some((item) => item.ai_classification?.provider === 'azure_openai'))) {
-      logMetrics('gpt_unavailable');
+    const aiApiKey = await store.getMasterKey('adverse-media-ai');
+    if (dedicatedSearchPlus && !aiApiKey) {
+      logMetrics('classification_unavailable');
       return json(res, 503, { status: 'Error', error: 'Adverse Media (Search+) classification is temporarily unavailable.' });
     }
+    const aiClassifier = dedicatedSearchPlus ? createGeminiAdverseClassifier(aiApiKey) : null;
+    costGuard = createScreeningCostGuard(fetchImpl);
+    const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, aiClassifier, fetchImpl, costGuard,
+      deferAiUntilSourcesComplete: dedicatedSearchPlus, sourceAttemptsExhausted: !dedicatedSearchPlus });
+    screeningResult = result;
+    screeningFinishedAt = Date.now();
     const presented = presentAdverseMediaResponse(result);
-    if (gptSearchPlus) {
-      presented.status = 'partial';
-      presented.summary.outcome = 'inconclusive';
-      presented.summary.risk_level = 'indeterminate';
-      presented.summary.decision_eligible = false;
-      presented.summary.profile_status = 'inconclusive';
-      presented.summary.human_review_required = true;
-      presented.summary.threshold_status = 'incomplete_coverage';
-      presented.summary.statement = 'Search+ screening requires documented human review and is not a final compliance decision.';
-      presented.coverage.complete = false;
-      presented.coverage.retryable = false;
-      presented.coverage.reason_codes = [...new Set([...presented.coverage.reason_codes, 'search_plus_review_required'])];
+    if (dedicatedSearchPlus && !result.coverage.complete) {
+      logMetrics('search_incomplete');
+      return json(res, 503, { status: 'Error', reason_code: 'SEARCH_INCOMPLETE',
+        error: 'Required Adverse Media (Search+) searches did not complete. Please try again shortly.',
+        reason_codes: presented.coverage.reason_codes });
+    }
+    if (dedicatedSearchPlus && (result.methodology.ai_classification.status === 'failed'
+      || result.results.length > 0 && !result.results.some((item) => item.ai_classification?.provider === 'gemini_party_facts'))) {
+      logMetrics('classification_unavailable');
+      return json(res, 503, { status: 'Error', error: 'Adverse Media (Search+) classification is temporarily unavailable.' });
     }
     const response = await finalizeAdverseMediaReport({
       request,
       response: presented,
       ownerId: reportOwnerId(token),
       origin: requestOrigin(req),
-      aiApiKey,
+      aiApiKey: dedicatedSearchPlus ? '' : aiApiKey,
       fetchImpl: costGuard.fetch,
       reportStore,
       jsonStore,
-      inputPayload: gptSearchPlus ? { ...input, search_plus: true } : input,
+      inputPayload: dedicatedSearchPlus ? { ...input, search_plus: true } : input,
       transactionId: res.getHeader('x-ai7-transaction-id'),
       variant
     });
@@ -707,7 +708,7 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     return json(res, 200, response);
   } catch (error) {
     if (screeningResult) logMetrics('failed');
-    else console.warn(gptSearchPlus ? 'adverse_media_search_plus_request_failure' : 'adverse_media_request_failure', JSON.stringify({
+    else console.warn(dedicatedSearchPlus ? 'adverse_media_search_plus_request_failure' : 'adverse_media_request_failure', JSON.stringify({
       transaction_id: res.getHeader('x-ai7-transaction-id'),
       elapsed_ms: Date.now() - startedAt,
       failure_stage: error.message === 'search_provider_unavailable' ? 'search' : 'request_or_configuration',
@@ -2755,7 +2756,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'POST' && url.pathname === '/service/adverse_media')
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media_search_plus')
-        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore, 'search_plus_gpt');
+        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore, 'search_plus');
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/dubai_ejari_verification' || url.pathname.startsWith('/service/dubai_ejari_verification/'))
         return await handleEjari(req, res, url, store, ejariStore, usageStore);

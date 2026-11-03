@@ -66,6 +66,15 @@ test('report narrative uses a strict single-purpose JSON contract', async () => 
   assert.match(narrative.recommendations[0], /human review/);
 });
 
+test('clean report narrative uses the No Adverse Media Found label', async () => {
+  const clean = { ...response, summary: { ...response.summary,
+    outcome: 'no_material_results', outcome_label: 'No Adverse Media Found',
+    potentially_relevant_results: 0, human_review_required: false,
+    statement: 'No materially adverse results were identified in the sources searched.' } };
+  const narrative = await createAdverseMediaNarrative({ response: clean, apiKey: '' });
+  assert.match(narrative.summary, /^No Adverse Media Found\./);
+});
+
 test('PDF includes a complete multi-page audit artifact and stable integrity metadata', async () => {
   const report = await createAdverseMediaAuditPdf({
     request, response,

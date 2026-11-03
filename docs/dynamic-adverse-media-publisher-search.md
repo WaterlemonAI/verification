@@ -1,5 +1,7 @@
 # Request-time adverse-media publisher search
 
+This records the 26 October design baseline. For the current 39-market, 1,527-domain selection pool and actual per-run limits, use the [Search+ coverage map](adverse-media-search-plus-coverage-map-2026-11-03.md).
+
 Owner direction, 26 October 2026: search dynamically for the given entity name and aliases across the approved media list. Do not crawl publishers or build an article index. Consolidate approved-publisher matches with the standard evidence set. The fully loaded ceiling remains below USD 0.15 for each screening request.
 
 ## Current local implementation
