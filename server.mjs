@@ -677,19 +677,6 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       return json(res, 503, { status: 'Error', error: 'Adverse Media (Search+) classification is temporarily unavailable.' });
     }
     const presented = presentAdverseMediaResponse(result);
-    if (gptSearchPlus) {
-      presented.status = 'partial';
-      presented.summary.outcome = 'inconclusive';
-      presented.summary.risk_level = 'indeterminate';
-      presented.summary.decision_eligible = false;
-      presented.summary.profile_status = 'inconclusive';
-      presented.summary.human_review_required = true;
-      presented.summary.threshold_status = 'incomplete_coverage';
-      presented.summary.statement = 'Search+ screening requires documented human review and is not a final compliance decision.';
-      presented.coverage.complete = false;
-      presented.coverage.retryable = false;
-      presented.coverage.reason_codes = [...new Set([...presented.coverage.reason_codes, 'search_plus_review_required'])];
-    }
     const response = await finalizeAdverseMediaReport({
       request,
       response: presented,

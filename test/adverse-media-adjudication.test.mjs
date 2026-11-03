@@ -63,6 +63,7 @@ test('victim and namesake evidence cannot make Tim Cook high risk', async () => 
   ] });
   assert.equal(response.status, 'completed');
   assert.equal(response.summary.outcome, 'no_material_results');
+  assert.equal(response.summary.outcome_label, 'No Adverse Media Found');
   assert.equal(response.summary.profile_status, 'safe');
   assert.equal(response.results.length, 0);
   assert.equal(response.media_buckets.general_news_mentions.length, 1);

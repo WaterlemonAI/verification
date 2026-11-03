@@ -97,7 +97,8 @@
             <div class="schema-table" aria-label="Adverse media response fields">
               <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
               <div><code>screening_id</code><span>UUID</span><span>Unique screening reference.</span></div>
-              <div><code>summary.outcome</code><span>string</span><span>Potential match, no material results, or inconclusive when required processing is incomplete.</span></div>
+              <div><code>summary.outcome</code><span>string</span><span>High risk, review required, safe, no material results, or inconclusive when required processing is incomplete.</span></div>
+              <div><code>summary.outcome_label</code><span>string</span><span>Human-readable outcome. A completed screening with no adverse-media results reads “No Adverse Media Found.”</span></div>
               <div><code>summary.risk_level</code><span>string</span><span>High, review, safe, no material results, or indeterminate for an incomplete run.</span></div>
               <div><code>summary.profile_status</code><span>string</span><span>Safe, unsafe, or inconclusive. Only classified adverse-media results may set unsafe; incomplete assessment is inconclusive.</span></div>
               <div><code>summary.media_bucket_counts</code><span>object</span><span>Counts for Adverse Media, General News Mentions, and No Impact Media.</span></div>

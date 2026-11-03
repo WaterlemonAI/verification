@@ -35,10 +35,18 @@ before(async () => {
     const url = new URL(input);
     if (url.hostname === 'api.search.brave.com') {
       assert.equal(options.headers['x-subscription-token'], 'synthetic-brave-key');
-      const name = url.searchParams.get('q').includes('GPT Failure Example') ? 'GPT Failure Example' : 'Search Plus Example';
-      const result = { title: `${name} fined by regulator`,
+      const query = url.searchParams.get('q');
+      const name = query.includes('GPT Failure Example') ? 'GPT Failure Example'
+        : query.includes('Positive News Example') ? 'Positive News Example'
+          : query.includes('Uncertain News Example') ? 'Uncertain News Example' : 'Search Plus Example';
+      const positive = name === 'Positive News Example';
+      const uncertain = name === 'Uncertain News Example';
+      const result = { title: positive ? `${name} completes restructuring and opens a research center`
+        : uncertain ? `${name} accused of fraud in anonymous post` : `${name} fined by regulator`,
         url: 'https://publisher.example/news/search-plus-example',
-        description: `Regulator fined ${name} for a reporting breach.`,
+        description: positive ? `${name} completed a planned restructuring and opened a research center with new jobs.`
+          : uncertain ? `An anonymous post accused ${name} of fraud without supporting records.`
+            : `Regulator fined ${name} for a reporting breach.`,
         page_age: '2026-10-20T10:00:00Z', meta_url: { hostname: 'publisher.example' } };
       return Response.json(url.pathname.includes('/news/') ? { results: [result] } : { web: { results: [result] } });
     }
@@ -54,11 +62,18 @@ before(async () => {
       const evidence = JSON.parse(body.input.match(/<documents>\n([^]*?)\n<\/documents>/)[1]);
       const facts = evidence.evidence.map((item) => ({
         result_id: item.id,
-        party_relation: 'screened_subject',
-        acted_party: 'Search Plus Example',
-        event_kind: 'legal_action',
-        reported_stage: 'regulatory_action',
-        supporting_quote: 'Regulator fined Search Plus Example for a reporting breach.'
+        party_relation: item.title.includes('Uncertain News Example') ? 'unclear' : 'screened_subject',
+        acted_party: item.title.includes('Positive News Example') ? 'Positive News Example'
+          : item.title.includes('Uncertain News Example') ? 'Uncertain News Example' : 'Search Plus Example',
+        event_kind: item.title.includes('Positive News Example') ? 'ordinary_event'
+          : item.title.includes('Uncertain News Example') ? 'unsupported_claim' : 'legal_action',
+        reported_stage: item.title.includes('Positive News Example') || item.title.includes('Uncertain News Example')
+          ? 'media_mention' : 'regulatory_action',
+        supporting_quote: item.title.includes('Positive News Example')
+          ? 'Positive News Example completed a planned restructuring and opened a research center with new jobs.'
+          : item.title.includes('Uncertain News Example')
+            ? 'An anonymous post accused Uncertain News Example of fraud without supporting records.'
+          : 'Regulator fined Search Plus Example for a reporting breach.'
       }));
       return Response.json({ status: 'completed', output_text: JSON.stringify({ facts }),
         usage: { input_tokens: 800, output_tokens: 120 } });
@@ -91,7 +106,7 @@ test('Search+ requires a separate entitlement and an existing Adverse Media rate
   await usageStore.configure(client.id, policy);
 });
 
-test('parallel Search+ uses GPT and produces a separate review-only report', async () => {
+test('parallel Search+ uses GPT and retains a completed adverse assessment', async () => {
   const response = await fetch(`${appUrl}/service/adverse_media_search_plus`, {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
@@ -105,15 +120,14 @@ test('parallel Search+ uses GPT and produces a separate review-only report', asy
   const client = await store.getClientForKey(apiKey);
   const charged = (await usageStore.logs(client.id)).find((item) => item.path === '/service/adverse_media_search_plus' && item.response_code === 200);
   assert.equal(charged.cost, '0.200000');
-  assert.equal(body.status, 'partial');
+  assert.equal(body.status, 'completed');
   assert.equal(body.coverage.search_plus.requested, true);
-  assert.equal(body.coverage.complete, false);
-  assert.ok(body.coverage.reason_codes.includes('search_plus_review_required'));
-  assert.equal(body.summary.statement, 'Search+ screening requires documented human review and is not a final compliance decision.');
+  assert.equal(body.coverage.complete, true);
+  assert.deepEqual(body.coverage.reason_codes, []);
   assert.doesNotMatch(JSON.stringify(body), /\b(?:gpt|gemini|azure.openai)\b/i);
-  assert.equal(body.summary.decision_eligible, false);
-  assert.equal(body.summary.outcome, 'inconclusive');
-  assert.equal(body.summary.risk_level, 'indeterminate');
+  assert.equal(body.summary.decision_eligible, true);
+  assert.equal(body.summary.outcome, 'high_risk');
+  assert.equal(body.summary.profile_status, 'unsafe');
   assert.equal(body.summary.human_review_required, true);
   assert.equal(body.results[0].legal_stage, 'regulatory_action');
   assert.match(body.report.download_url, /\/service\/adverse_media_search_plus\/reports\/[0-9a-f-]{36}\.pdf$/);
@@ -122,6 +136,42 @@ test('parallel Search+ uses GPT and produces a separate review-only report', asy
   assert.equal(Buffer.from(await report.arrayBuffer()).subarray(0, 5).toString(), '%PDF-');
   const oldReportPath = new URL(body.report.download_url).pathname.replace('adverse_media_search_plus', 'adverse_media');
   assert.equal((await fetch(`${appUrl}${oldReportPath}`)).status, 404);
+});
+
+test('Search+ positive general news returns No Adverse Media Found', async () => {
+  const response = await fetch(`${appUrl}/service/adverse_media_search_plus`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: 'Positive News Example', countries: ['AE'],
+      languages: ['en'], max_results: 5 })
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.status, 'completed');
+  assert.equal(body.coverage.complete, true);
+  assert.equal(body.summary.outcome, 'no_material_results');
+  assert.equal(body.summary.outcome_label, 'No Adverse Media Found');
+  assert.equal(body.summary.profile_status, 'safe');
+  assert.equal(body.summary.decision_eligible, true);
+  assert.equal(body.summary.human_review_required, false);
+  assert.equal(body.media_buckets.adverse_media.length, 0);
+  assert.equal(body.media_buckets.general_news_mentions.length, 1);
+});
+
+test('Search+ unresolved allegation remains inconclusive', async () => {
+  const response = await fetch(`${appUrl}/service/adverse_media_search_plus`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: 'Uncertain News Example', countries: ['AE'],
+      languages: ['en'], max_results: 5 })
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.status, 'partial');
+  assert.equal(body.summary.outcome, 'inconclusive');
+  assert.equal(body.summary.decision_eligible, false);
+  assert.equal(body.coverage.complete, false);
+  assert.deepEqual(body.coverage.reason_codes, ['classification_uncertain']);
 });
 
 test('Search+ rejects async deep research callbacks', async () => {
