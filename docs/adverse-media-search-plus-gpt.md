@@ -1,5 +1,7 @@
 # Adverse Media (Search+) parallel API
 
+> Historical GPT design record. The Gemini migration candidate and measured model comparison are in [the Gemini comparison](adverse-media-search-plus-gemini-comparison-2026-11-03.md). The route and response contract are unchanged.
+
 ## Contract
 
 `POST /service/adverse_media_search_plus` is a separate customer module, `adverse-media-search-plus`. It accepts the existing adverse-media JSON fields and requires an active AI7 API key and explicit workspace entitlement. A wildcard entitlement does not admit this module. Its price follows that workspace's existing `adverse-media` rate tiers in the same currency, while Search+ keeps a separate hit count. An absent Adverse Media rate blocks Search+. A later rate change to Adverse Media also changes the Search+ rate; a separate Search+ rate entry is ignored. The route forces `search_plus: true` even if omitted or false. It runs synchronously; `deep_research`, `callback_url`, and `callback_access_key` are rejected. The response uses the existing customer-safe adverse-media structure and has a separate PDF URL under `/service/adverse_media_search_plus/reports/{reportId}.pdf`.
