@@ -57,7 +57,7 @@
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": {
           "name": { "type": "string", "minLength": 3, "maxLength": 200, "example": "Etihad Airways Engineering" },
           "country": { "type": "string", "pattern": "^[A-Z]{2}$", "description": "Optional country code. AE means United Arab Emirates.", "example": "AE" }
-        }, "additionalProperties": false } } } },
+        } } } } },
         "responses": {
           "200": { "description": "Search completed, including no-match results.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeppolGlobalResult" } } } },
           "400": { "description": "The request is invalid." },

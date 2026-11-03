@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream the official Directory XML export into a compact UAE-only JSONL index."""
+"""Stream the official Directory XML export into UAE or global JSONL records."""
 
 import argparse
 import gzip
