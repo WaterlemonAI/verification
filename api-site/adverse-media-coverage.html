@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#071412" />
+    <meta name="description" content="Detailed, supplier-neutral coverage for KYCProbe Adverse Media screening: sources, languages, publisher markets, history, limits and per-run evidence." />
+    <title>Adverse Media Coverage | KYCProbe API</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/api.css?v=9" />
+    <link rel="stylesheet" href="/adverse-media-coverage.css?v=1" />
+  </head>
+  <body>
+    <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · DIFC, Dubai ↗</a></div>
+    <a class="skip-link" href="#coverage">Skip to coverage</a>
+    <header>
+      <a class="brand" href="https://kycprobe.com" aria-label="KYCProbe home"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a>
+      <nav aria-label="Document navigation"><a href="/adverse-media">API reference</a><a href="/adverse-media-publisher-catalog.json">Publisher catalog</a></nav>
+    </header>
+
+    <main id="coverage" class="coverage-page">
+      <section class="hero coverage-hero">
+        <p class="eyebrow">ADVERSE MEDIA / COVERAGE STATEMENT</p>
+        <h1>Know the scope<br /><em>of every search.</em></h1>
+        <p>Configured search channels, markets, languages, historical access, and limits. Every response and audit PDF also records what the individual run actually completed.</p>
+        <p class="coverage-version">Version 4 November 2026 · Applies to the Adverse Media and Adverse Media Search+ API configuration described below</p>
+      </section>
+
+      <section class="coverage-facts" aria-label="Coverage at a glance">
+        <div><strong>Worldwide</strong><span>indexed news and public web search scope</span></div>
+        <div><strong>17</strong><span>configured query languages</span></div>
+        <div><strong>39</strong><span>publisher catalog markets</span></div>
+        <div><strong>1,527</strong><span>unique approved publisher domains</span></div>
+      </section>
+
+      <div class="layout">
+        <aside aria-label="On this page">
+          <p>ON THIS PAGE</p>
+          <a href="#meaning">How to read coverage</a>
+          <a href="#channels">Search channels</a>
+          <a href="#history">Historical access</a>
+          <a href="#languages">Languages</a>
+          <a href="#geography">Geography</a>
+          <a href="#publishers">Publisher markets</a>
+          <a href="#limits">Run limits</a>
+          <a href="#failures">Failure behavior</a>
+          <a href="#audit">Run-level proof</a>
+        </aside>
+
+        <div class="content">
+          <article id="meaning">
+            <p class="label">INTERPRETATION</p>
+            <h2>Three different coverage measures</h2>
+            <div class="coverage-cards">
+              <div><b>Available scope</b><p>The search channels, language options and publisher selection pool configured for this API.</p></div>
+              <div><b>Run scope</b><p>The languages, source queries, publisher domains and archive path attempted for one screening.</p></div>
+              <div><b>Returned evidence</b><p>The indexed articles and pages found, deduplicated, classified and retained in the result.</p></div>
+            </div>
+            <p>A domain in the catalog is eligible for selection; it was searched only if it appears in <code>coverage.search_plus.publishers_screened</code> for that run. A completed indexed query does not establish that every article from that domain was indexed. “No Adverse Media Found” means no qualifying adverse evidence was identified within the completed search scope.</p>
+          </article>
+
+          <article id="channels">
+            <p class="label">SOURCES</p>
+            <h2>Search channels and depth</h2>
+            <div class="coverage-table-wrap"><table class="coverage-table">
+              <thead><tr><th>Channel</th><th>Scope and method</th><th>Per-query or per-run limit</th><th>Evidence window</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Current news</th><td>Worldwide indexed news; name, alias and adverse-event terms in requested languages.</td><td>Up to 50 returned items per Search+ query; 20 for the standard route.</td><td>Indexed news available at search time; optional publication-date filter.</td></tr>
+                <tr><th scope="row">Open web</th><td>Worldwide indexed public pages, including configured official-domain searches.</td><td>Up to 20 returned items per query.</td><td>Indexed pages available at search time; optional publication-date filter.</td></tr>
+                <tr><th scope="row">Publisher-targeted Search+</th><td>Site-restricted index queries for selected approved editorial domains.</td><td>At most six batches of up to ten domains; up to 20 returned items per batch query.</td><td>Indexed articles available at search time; optional publication-date filter.</td></tr>
+                <tr><th scope="row">Local historical index</th><td>Locally stored, entity-indexed public-news records matched by supplied names, aliases and resolved associations.</td><td>Up to 12 normalized names and 250 rows per name and entity type; not a full archive crawl.</td><td>Actual start/end watermark and freshness shown on each run.</td></tr>
+                <tr><th scope="row">Historical fallback</th><td>Public-news archive query when the local index does not cover the requested period.</td><td>Up to 50 newest matching items returned before date and identity filtering.</td><td>Up to one year of archive search; older history is not assured.</td></tr>
+                <tr><th scope="row">Applicable official records</th><td>Focused official-domain web queries and a dedicated warning-list check where the relevant regional pack applies.</td><td>Web queries share the 12-query budget; the dedicated check is separate.</td><td>Depends on the official record source.</td></tr>
+              </tbody>
+            </table></div>
+            <p>Publicly inaccessible, paywalled, removed, unpublished or unindexed material is outside the assured retrieval scope. Search results may also omit articles because of ranking and result caps. This is adverse-media discovery, not a complete census of publications.</p>
+          </article>
+
+          <article id="history">
+            <p class="label">LOOKBACK AND CONTINUITY</p>
+            <h2>Historical coverage is recorded, not assumed</h2>
+            <p>Without dates, the local-index coverage check uses a rolling 72-hour requested window. It is treated as complete only when its watermark spans the requested period and its latest indexed time is within the 36-hour freshness allowance. A requested earlier period, a stale or missing watermark, or an incomplete local read triggers the hosted historical fallback.</p>
+            <div class="coverage-table-wrap"><table class="coverage-table">
+              <thead><tr><th>Local index</th><th>Historical fallback</th><th>Reported outcome</th></tr></thead>
+              <tbody>
+                <tr><td>Covers the requested window and is fresh</td><td>Not needed</td><td>Local archive can complete; response reports its exact watermark.</td></tr>
+                <tr><td>Incomplete, stale or unavailable</td><td>Completes</td><td>Historical channel can complete through fallback; response identifies the fallback path.</td></tr>
+                <tr><td>Incomplete, stale or unavailable</td><td>Fails after retries</td><td>Historical coverage is incomplete. The API cannot issue a clean completed screening.</td></tr>
+              </tbody>
+            </table></div>
+            <p>The fallback searches up to one year and returns no more than 50 newest matching records. A date filter does not turn this into exhaustive one-year retrieval: older matching records can be displaced by newer matches before filtering. Requests older than one year have no historical completeness claim. The exact archive origin, watermark and source status in the response supersede any static description here.</p>
+          </article>
+
+          <article id="languages">
+            <p class="label">LANGUAGE SCOPE</p>
+            <h2>17 configured languages</h2>
+            <p>Request up to five languages. English and Arabic are the default. The response distinguishes requested languages from those actually queried; an omitted requested language blocks a completed search decision.</p>
+            <div class="language-list" aria-label="Supported language codes">
+              <span>Arabic <code>ar</code></span><span>German <code>de</code></span><span>English <code>en</code></span><span>Spanish <code>es</code></span><span>Persian <code>fa</code></span><span>French <code>fr</code></span><span>Hindi <code>hi</code></span><span>Indonesian <code>id</code></span><span>Italian <code>it</code></span><span>Dutch <code>nl</code></span><span>Polish <code>pl</code></span><span>Portuguese <code>pt</code></span><span>Russian <code>ru</code></span><span>Turkish <code>tr</code></span><span>Ukrainian <code>uk</code></span><span>Urdu <code>ur</code></span><span>Chinese <code>zh</code></span>
+            </div>
+            <p>Indonesian search terms are submitted with a broader index-language preference because a dedicated Indonesian filter is unavailable. Names are not automatically transliterated; provide alternate-script spellings as aliases. A configured language is a query capability, not a guarantee that every publisher in that language is indexed.</p>
+          </article>
+
+          <article id="geography">
+            <p class="label">GEOGRAPHIC SCOPE</p>
+            <h2>Worldwide index, focused regional packs</h2>
+            <p>Current-news and open-web queries use worldwide indexed scope. Country inputs help choose local publishers and activate relevant terms and official sources; they do not hard-filter the worldwide search. Countries outside the catalog can still appear in worldwide results.</p>
+            <div class="coverage-table-wrap"><table class="coverage-table">
+              <thead><tr><th>Focused pack</th><th>Markets</th><th>How it activates</th></tr></thead>
+              <tbody>
+                <tr><td>Gulf</td><td>United Arab Emirates, Saudi Arabia, Qatar, Kuwait, Bahrain, Oman</td><td>Relevant country input or language</td></tr>
+                <tr><td>Indonesia</td><td>Indonesia</td><td>Country, language or recognized listed-company name</td></tr>
+                <tr><td>China</td><td>China</td><td>Relevant country or language</td></tr>
+                <tr><td>Russia</td><td>Russia</td><td>Relevant country or language; applicable business warning-list check</td></tr>
+                <tr><td>India</td><td>India</td><td>Relevant country or language</td></tr>
+                <tr><td>United States</td><td>United States</td><td>Relevant country input</td></tr>
+                <tr><td>Australia / New Zealand</td><td>Australia, New Zealand</td><td>Relevant country input</td></tr>
+              </tbody>
+            </table></div>
+          </article>
+
+          <article id="publishers">
+            <p class="label">PUBLISHER SELECTION POOL</p>
+            <h2>39 catalog markets</h2>
+            <p>The approved catalog contains 1,527 unique domains; 1,391 are in categories eligible for site-restricted Search+ queries. Per-market counts can sum above the unique totals because a domain may appear in more than one market. Requested countries are prioritised; the actual run can search fewer than 60 domains because of its query budget, language allocation and query-length limit.</p>
+            <p><a class="coverage-download" href="/adverse-media-publisher-catalog.json" download>Download the complete domain-level catalog (JSON) ↗</a> The file lists every approved outlet, domain, category, market and targeted-search eligibility. It does not indicate that all listed outlets were searched in a particular run.</p>
+            <div class="coverage-table-wrap"><table class="coverage-table market-table">
+              <thead><tr><th>Market</th><th>Code</th><th>Catalog</th><th>Searchable</th></tr></thead>
+              <tbody>
+                <tr><td>United States</td><td>US</td><td>50</td><td>44</td></tr>
+                <tr><td>China</td><td>CN</td><td>50</td><td>46</td></tr>
+                <tr><td>Germany</td><td>DE</td><td>50</td><td>46</td></tr>
+                <tr><td>Japan</td><td>JP</td><td>50</td><td>49</td></tr>
+                <tr><td>United Kingdom</td><td>GB</td><td>50</td><td>44</td></tr>
+                <tr><td>India</td><td>IN</td><td>51</td><td>51</td></tr>
+                <tr><td>France</td><td>FR</td><td>50</td><td>46</td></tr>
+                <tr><td>Russia</td><td>RU</td><td>50</td><td>46</td></tr>
+                <tr><td>Italy</td><td>IT</td><td>50</td><td>41</td></tr>
+                <tr><td>Brazil</td><td>BR</td><td>50</td><td>45</td></tr>
+                <tr><td>Canada</td><td>CA</td><td>50</td><td>43</td></tr>
+                <tr><td>South Korea</td><td>KR</td><td>50</td><td>44</td></tr>
+                <tr><td>Mexico</td><td>MX</td><td>50</td><td>49</td></tr>
+                <tr><td>Australia</td><td>AU</td><td>50</td><td>41</td></tr>
+                <tr><td>Spain</td><td>ES</td><td>50</td><td>44</td></tr>
+                <tr><td>Türkiye</td><td>TR</td><td>50</td><td>47</td></tr>
+                <tr><td>Indonesia</td><td>ID</td><td>50</td><td>45</td></tr>
+                <tr><td>Netherlands</td><td>NL</td><td>50</td><td>39</td></tr>
+                <tr><td>Saudi Arabia</td><td>SA</td><td>50</td><td>48</td></tr>
+                <tr><td>Switzerland</td><td>CH</td><td>50</td><td>50</td></tr>
+                <tr><td>Poland</td><td>PL</td><td>50</td><td>38</td></tr>
+                <tr><td>Taiwan</td><td>TW</td><td>50</td><td>50</td></tr>
+                <tr><td>Belgium</td><td>BE</td><td>50</td><td>37</td></tr>
+                <tr><td>Argentina</td><td>AR</td><td>50</td><td>49</td></tr>
+                <tr><td>Israel</td><td>IL</td><td>50</td><td>48</td></tr>
+                <tr><td>Sweden</td><td>SE</td><td>50</td><td>49</td></tr>
+                <tr><td>Ireland</td><td>IE</td><td>50</td><td>47</td></tr>
+                <tr><td>Singapore</td><td>SG</td><td>50</td><td>49</td></tr>
+                <tr><td>United Arab Emirates</td><td>AE</td><td>50</td><td>42</td></tr>
+                <tr><td>Norway</td><td>NO</td><td>50</td><td>48</td></tr>
+                <tr><td>Qatar</td><td>QA</td><td>3</td><td>3</td></tr>
+                <tr><td>Kuwait</td><td>KW</td><td>3</td><td>3</td></tr>
+                <tr><td>Bahrain</td><td>BH</td><td>3</td><td>3</td></tr>
+                <tr><td>Oman</td><td>OM</td><td>3</td><td>3</td></tr>
+                <tr><td>Egypt</td><td>EG</td><td>3</td><td>3</td></tr>
+                <tr><td>Pakistan</td><td>PK</td><td>3</td><td>3</td></tr>
+                <tr><td>South Africa</td><td>ZA</td><td>3</td><td>3</td></tr>
+                <tr><td>Nigeria</td><td>NG</td><td>3</td><td>3</td></tr>
+                <tr><td>Kenya</td><td>KE</td><td>3</td><td>3</td></tr>
+              </tbody>
+            </table></div>
+          </article>
+
+          <article id="limits">
+            <p class="label">PER-RUN DEPTH</p>
+            <h2>Limits that shape a screening</h2>
+            <div class="coverage-table-wrap"><table class="coverage-table">
+              <thead><tr><th>Parameter</th><th>Limit or behavior</th></tr></thead>
+              <tbody>
+                <tr><td>Names and aliases</td><td>One primary name and up to ten supplied aliases; query construction uses bounded subsets.</td></tr>
+                <tr><td>Country inputs</td><td>Up to 20 two-letter country codes.</td></tr>
+                <tr><td>Language inputs</td><td>Up to five configured languages; English and Arabic by default.</td></tr>
+                <tr><td>Paid indexed queries</td><td>At most 12 total, shared across language passes, open web, association discovery, regional checks and publisher batches.</td></tr>
+                <tr><td>Publisher batches</td><td>At most six, with up to ten domains each; the 400-character query limit can reduce the number of domains or terms per batch.</td></tr>
+                <tr><td>Retained candidates</td><td>Default 25 and maximum 50 deduplicated results before final classification and grouping.</td></tr>
+                <tr><td>Retries</td><td>Bounded retries for transient search and archive failures. Exhaustion is reported as incomplete coverage.</td></tr>
+              </tbody>
+            </table></div>
+          </article>
+
+          <article id="failures">
+            <p class="label">FAIL CLOSED</p>
+            <h2>Incomplete search never becomes a clean result</h2>
+            <p>Search coverage and classification are separate. A source may complete while classification remains uncertain; that is an inconclusive profile, even though the search itself completed.</p>
+            <div class="coverage-table-wrap"><table class="coverage-table">
+              <thead><tr><th>Condition after retries</th><th>Standard Adverse Media route</th><th>Dedicated Search+ route</th></tr></thead>
+              <tbody>
+                <tr><td>Required searches and classification complete</td><td>Completed result; risk outcome follows classified adverse evidence.</td><td>Completed result; risk outcome follows classified adverse evidence.</td></tr>
+                <tr><td>Historical fallback fails while local index does not cover the requested window</td><td>Partial, decision-ineligible result; no clean conclusion.</td><td>HTTP 503 <code>SEARCH_INCOMPLETE</code>; no screening report issued.</td></tr>
+                <tr><td>Another required search or requested language is missing</td><td>Partial, decision-ineligible result, or an error when all search channels fail.</td><td>HTTP 503 <code>SEARCH_INCOMPLETE</code>; no screening report issued.</td></tr>
+                <tr><td>Search completes but classification is unavailable or uncertain</td><td>Partial, inconclusive profile; evidence remains visible where possible.</td><td>Unavailable classification returns HTTP 503; uncertain classification can return a partial, review-required result.</td></tr>
+              </tbody>
+            </table></div>
+            <p>The one-year historical fallback is a bounded search path, not a guarantee that a full year remains available if it fails. If both historical paths cannot establish the requested coverage, the API reports that gap explicitly. A completed run with neutral or positive general-news mentions and no confirmed adverse evidence can return <strong>No Adverse Media Found</strong>; a partial run cannot.</p>
+          </article>
+
+          <article id="audit">
+            <p class="label">EVIDENCE OF EXECUTION</p>
+            <h2>What each run records</h2>
+            <div class="coverage-table-wrap"><table class="coverage-table">
+              <thead><tr><th>Response field</th><th>What it establishes</th></tr></thead>
+              <tbody>
+                <tr><td><code>coverage.sources</code></td><td>Status for current news, open web, publisher search, archive and applicable official records.</td></tr>
+                <tr><td><code>coverage.languages_requested</code>, <code>languages_searched</code>, <code>languages_not_searched</code></td><td>Which requested languages actually received a query.</td></tr>
+                <tr><td><code>coverage.regional_packs</code>, <code>geographic_scope</code></td><td>Focused query packs and worldwide indexed scope.</td></tr>
+                <tr><td><code>coverage.archive_origin</code>, <code>archive_window</code>, <code>archive_snapshot</code></td><td>Historical path, actual index watermark and data age when available.</td></tr>
+                <tr><td><code>coverage.search_plus.publishers_screened</code>, <code>publishers_not_completed</code></td><td>Exact publisher domains included in completed site-restricted queries and those assigned to failed batches.</td></tr>
+                <tr><td><code>coverage.search_plus.search_depth</code>, <code>publisher_batches_attempted</code>, <code>publisher_batches_completed</code></td><td>Configured depth and the batch work that actually ran.</td></tr>
+                <tr><td><code>coverage.reason_codes</code>, <code>summary.processing_reason_codes</code></td><td>Search or classification gaps that prevent a completed decision.</td></tr>
+                <tr><td><code>status</code>, <code>summary.profile_status</code>, <code>summary.decision_eligible</code></td><td>Whether the response is complete, its risk profile and whether it can support a decision.</td></tr>
+              </tbody>
+            </table></div>
+            <p>The audit PDF repeats the historical source and Search+ publisher scope. The JSON response is the authoritative record for exact per-run fields. See the <a href="/adverse-media">API reference</a> for the request and response schema.</p>
+          </article>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
