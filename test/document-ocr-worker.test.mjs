@@ -102,8 +102,9 @@ test('opted-in Trade License OCR adds separate Peppol results using the extracte
   const outcome = await processDocumentOcrJob({ store, partitionKey: store.state.partitionKey,
     jobId: store.state.jobId, scan: async () => {}, getTaedKey: async () => 'synthetic-key',
     taedExtract: async () => ({ data: { 'Company Name (English)': 'Example Trading LLC' } }),
-    lookupPeppol: async (name) => {
+    lookupPeppol: async (name, options) => {
       assert.equal(name, 'Example Trading LLC');
+      assert.deepEqual(options, { country: 'AE' });
       return { status: 'possible_matches', source: 'peppol_directory_export', matches: [] };
     } });
   assert.equal(outcome.status, 'completed');

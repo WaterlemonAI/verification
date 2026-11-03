@@ -116,8 +116,8 @@ test('relays a successful response without changing its shape', async () => {
 
 test('Peppol opt-in enriches the verified name without changing supplier fields', async (t) => {
   const checkedNames = [];
-  const enrichedApp = createAppServer({ peppolLookup: async (name) => {
-    checkedNames.push(name);
+  const enrichedApp = createAppServer({ peppolLookup: async (name, options) => {
+    checkedNames.push({ name, options });
     return { status: 'name_match', source: 'peppol_directory_export', country: 'AE', matches: [] };
   } });
   await new Promise((resolve) => enrichedApp.listen(0, '127.0.0.1', resolve));
@@ -131,7 +131,7 @@ test('Peppol opt-in enriches the verified name without changing supplier fields'
   });
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.deepEqual(checkedNames, ['Example Trading LLC']);
+  assert.deepEqual(checkedNames, [{ name: 'Example Trading LLC', options: { country: 'AE' } }]);
   assert.deepEqual(body.uae_tl_verification, completeSuccess.uae_tl_verification);
   assert.equal(body.peppol.status, 'name_match');
 });
