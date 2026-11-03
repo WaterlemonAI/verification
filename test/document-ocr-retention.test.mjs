@@ -44,6 +44,11 @@ test('MOA stores its chosen pipeline and omits provider calls from public job st
       idempotencyKey: 'trade-license-pipeline-test-1234', transactionId: 'synthetic-transaction', pipeline: 'taed' });
     assert.equal(tradeLicense.job.provider_calls, undefined);
     assert.equal((await store.getRow(store.partition('moa-workspace'), tradeLicense.job.id)).pipeline, 'taed');
+    await assert.rejects(store.createJob({ ownerId: 'moa-workspace',
+      serviceId: 'uae-trade-license-ocr',
+      files: [{ bytes: Buffer.from('%PDF-trade-license'), mediaType: 'application/pdf' }],
+      idempotencyKey: 'trade-license-pipeline-test-1234', transactionId: 'synthetic-transaction',
+      pipeline: 'taed', peppolRequested: true }), /document_ocr_idempotency_conflict/);
     await assert.rejects(store.createJob({ ownerId: 'moa-workspace', serviceId: 'cheque-ocr',
       files: [{ bytes: Buffer.from('%PDF-cheque'), mediaType: 'application/pdf' }],
       idempotencyKey: 'cheque-pipeline-test-1234', transactionId: 'synthetic-transaction', pipeline: 'taed' }),

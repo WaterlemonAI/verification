@@ -131,6 +131,7 @@ const sendButton = document.querySelector('#send-request');
 const formError = document.querySelector('#form-error');
 const requestFormat = document.querySelector('#request-format');
 const documentHelp = document.querySelector('#document-help');
+const peppolCheck = document.querySelector('#peppol-check');
 
 const humanise = (value) => value.split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 const authoritySelect = document.querySelector('#authorising-body');
@@ -237,7 +238,8 @@ form.addEventListener('submit', async (event) => {
     const request = await buildRequest(requestFormat.value, values, documentFile);
     const response = await fetch('/service/uae_tlv', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, ...request.headers },
+      headers: { Authorization: `Bearer ${key}`, ...request.headers,
+        ...(peppolCheck.checked ? { 'X-AI7-Peppol-Check': 'true' } : {}) },
       body: request.body
     });
     const text = await response.text();

@@ -102,6 +102,7 @@ article > p:not(.label,.footnote) { color: var(--muted); line-height: 1.75; }
 .tester { padding: clamp(1.5rem, 4vw, 3rem); border: 1px solid #cad6e2; background: var(--white); box-shadow:0 22px 55px #102b4810; }
 .tester form { display: grid; gap: 1rem; margin: 2rem 0; }
 .tester label { display: grid; gap: .5rem; font-size: .76rem; font-weight: 700; }
+.tester [hidden] { display: none; }
 .tester label code { color: var(--green); font-size: .65rem; font-weight: 400; }
 .tester label.inline-toggle > span:nth-child(2) { display: flex; align-items: center; gap: .6rem; }
 .tester label.inline-toggle input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--green); }

@@ -27,6 +27,7 @@ async function load() {
   byId('endpoint-path').textContent = service.publicPath;
   byId('limits').textContent = `Maximum ${service.maxFiles} file${service.maxFiles > 1 ? 's' : ''} and ${service.maxPages} page${service.maxPages > 1 ? 's' : ''}.`;
   byId('additional-file-wrap').hidden = service.maxFiles === 1;
+  byId('peppol-check-wrap').hidden = service.id !== 'uae-trade-license-ocr';
   byId('fields').replaceChildren(...Object.entries(service.fields).map(([name, field]) => {
     const box = document.createElement('div');
     const title = document.createElement('strong'); title.textContent = name;
@@ -69,7 +70,9 @@ byId('ocr-form').addEventListener('submit', async (event) => {
   byId('response-status').textContent = 'Submitting…';
   try {
     const response = await fetch(service.publicPath, { method: 'POST',
-      headers: { authorization: `Bearer ${key}`, 'idempotency-key': crypto.randomUUID() }, body: form });
+      headers: { authorization: `Bearer ${key}`, 'idempotency-key': crypto.randomUUID(),
+        ...(service.id === 'uae-trade-license-ocr' && byId('peppol-check').checked
+          ? { 'X-AI7-Peppol-Check': 'true' } : {}) }, body: form });
     const data = await response.json();
     show(data, `HTTP ${response.status}`);
     if (response.status === 202 && data.result_url) await poll(data.result_url, key);

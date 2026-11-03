@@ -387,6 +387,7 @@ resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (!paral
             { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'PEPPOL_INDEX_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}/peppol-directory-index/uae-index.jsonl' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_AZURE_ENDPOINT', value: documentOcrEndpoint }
             { name: 'DOCUMENT_OCR_AZURE_REGION', value: location }
@@ -769,6 +770,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
             { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: !parallelDeployment && enableDocumentOcr ? '1' : '0' }
+            { name: 'PEPPOL_INDEX_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}/peppol-directory-index/uae-index.jsonl' }
             { name: 'DOCUMENT_OCR_TAED_MOA_ENABLED', value: !parallelDeployment && enableDocumentOcr && enableTaedMoa ? 'true' : 'false' }
             { name: 'DOCUMENT_OCR_TAED_TRADE_LICENSE_ENABLED', value: !parallelDeployment && enableDocumentOcr && enableTaedTradeLicense ? 'true' : 'false' }
             { name: 'CASE_MANAGER_ENABLED', value: caseManagerRuntimeEnabled ? 'true' : 'false' }

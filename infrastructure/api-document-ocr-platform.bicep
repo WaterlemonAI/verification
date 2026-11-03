@@ -89,6 +89,16 @@ resource dataContainer 'Microsoft.Storage/storageAccounts/blobServices/container
   name: 'document-ocr-private'
   properties: { publicAccess: 'None' }
 }
+resource peppolIndexContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'peppol-directory-index'
+  properties: { publicAccess: 'None' }
+}
+resource peppolSourceContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'peppol-directory-source'
+  properties: { publicAccess: 'None' }
+}
 resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
   parent: storage
   name: 'default'

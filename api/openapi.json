@@ -53,6 +53,11 @@
         "summary": "Verify a UAE trade licence",
         "description": "Verifies a UAE trade licence issued by any emirate or free zone.",
         "operationId": "verifyUaeTradeLicence",
+        "parameters": [
+          { "name": "X-AI7-Peppol-Check", "in": "header", "required": false,
+            "description": "Set to true to search the locally indexed UAE Peppol Directory export using the company name returned by trade licence verification. No result does not prove the company is absent from Peppol.",
+            "schema": { "type": "boolean", "default": false } }
+        ],
         "security": [
           {
             "ApiKey": []
@@ -888,9 +893,34 @@
           "trade_licence_verification_api": {
             "$ref": "#/components/schemas/VerificationResult",
             "description": "Compatibility response object name."
+          },
+          "peppol": {
+            "$ref": "#/components/schemas/PeppolDirectoryResult",
+            "description": "Present only when X-AI7-Peppol-Check is true and the licence verification returns JSON successfully. Separate directory evidence; not a trade licence verification decision."
           }
         },
         "additionalProperties": true
+      },
+      "PeppolDirectoryResult": {
+        "type": "object",
+        "required": ["status", "source", "country", "checked_at", "matches"],
+        "properties": {
+          "status": { "type": "string", "enum": ["name_match", "possible_matches", "not_found", "name_unavailable", "unavailable"] },
+          "source": { "type": "string", "const": "peppol_directory_export" },
+          "queried_name": { "type": "string" },
+          "country": { "type": "string", "const": "AE" },
+          "checked_at": { "type": "string", "format": "date-time" },
+          "snapshot_at": { "type": "string", "format": "date-time" },
+          "stale": { "type": "boolean", "description": "True when the loaded snapshot is more than 48 hours old." },
+          "total_results": { "type": "integer" },
+          "truncated": { "type": "boolean" },
+          "reason_code": { "type": "string" },
+          "matches": { "type": "array", "items": { "type": "object",
+            "properties": { "participant_id": { "type": ["object", "null"] },
+              "document_types": { "type": "array", "items": { "type": "object" } },
+              "entities": { "type": "array", "items": { "type": "object" } } } } }
+        },
+        "additionalProperties": false
       },
       "VerificationResult": {
         "type": "object",

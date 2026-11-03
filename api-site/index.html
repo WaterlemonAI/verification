@@ -77,6 +77,7 @@
               <div><strong>license_document</strong><span>file/base64 · optional*</span><p>Licence document as a file, base64, or data URI.</p></div>
               <div><strong>emirate</strong><span>enum · optional</span><p>Issuing emirate, such as <code>dubai</code>.</p></div>
               <div><strong>authorising_body</strong><span>enum · optional</span><p>Authority that issued the licence.</p></div>
+              <div><strong>X-AI7-Peppol-Check</strong><span>header · optional</span><p>Set to <code>true</code> to search the local UAE Peppol index using the name returned by licence verification. The response gains a separate <code>peppol</code> object with the snapshot time.</p></div>
             </div>
             <p class="footnote">* At least one of the four primary lookup fields is required.</p>
             <details class="enum-reference">
@@ -93,7 +94,7 @@
           <article id="responses">
             <p class="label">RESPONSES</p>
             <h2>Exact response contract</h2>
-            <p>The wrapper returns the original HTTP status and JSON body unchanged. A successful response contains the complete envelope and trade licence result below.</p>
+            <p>By default, the wrapper returns the supplier's HTTP status and JSON body unchanged. When Peppol is selected and verification succeeds, it adds a separate <code>peppol</code> object from the local UAE snapshot. The lookup does not send the company name to Peppol.</p>
             <div class="schema-table" aria-label="Success response fields">
               <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
               <div><code>status</code><span>string</span><span>Request result.</span></div>
@@ -101,6 +102,7 @@
               <div><code>seconds</code><span>number</span><span>Processing time.</span></div>
               <div><code>uae_tl_verification</code><span>object</span><span>Current verification result object.</span></div>
               <div><code>trade_licence_verification_api</code><span>object</span><span>Compatibility result object name.</span></div>
+              <div><code>peppol</code><span>object · optional</span><span>UAE Directory name search, matching participant IDs, business cards and document types, or an explicit unavailable/no-result status. This does not verify the licence holder's identity.</span></div>
               <div><code>↳ uae_licence_number</code><span>string</span><span>UAE licence number.</span></div>
               <div><code>↳ expiration_date</code><span>string</span><span>Licence expiration date.</span></div>
               <div><code>↳ registration_date</code><span>string</span><span>Licence registration date.</span></div>
@@ -154,6 +156,7 @@
                   <label>Emirate <code>emirate</code><select id="emirate"><option value="">Any emirate</option><option value="ajman">Ajman</option><option value="abu_dhabi">Abu Dhabi</option><option value="abu_dahbi">Abu Dahbi (accepted alias)</option><option value="dubai">Dubai</option><option value="fujairah">Fujairah</option><option value="fujirah">Fujirah (accepted alias)</option><option value="umm_al_quwain">Umm Al Quwain</option><option value="sharjah">Sharjah</option><option value="ras_al_khaimah">Ras Al Khaimah</option></select></label>
                   <label>Authorising body <code>authorising_body</code><select id="authorising-body"><option value="">Any issuing authority</option></select></label>
                 </div>
+                <label class="inline-toggle"><span>Peppol Directory</span><span><input id="peppol-check" type="checkbox" /> Search UAE participants using the returned licence name</span></label>
               </fieldset>
               <p class="form-error" id="form-error" role="alert"></p>
               <button type="submit" id="send-request">Send request <span>→</span></button>
