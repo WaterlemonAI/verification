@@ -1,0 +1,86 @@
+{
+  "verified_at": "2026-11-03",
+  "countries": [
+    {
+      "country": "Qatar",
+      "iso2": "QA",
+      "outlets": [
+        { "name": "Qatar News Agency", "domain": "qna.org.qa", "category": "news_agency" },
+        { "name": "Gulf Times", "domain": "gulf-times.com", "category": "newspaper" },
+        { "name": "The Peninsula Qatar", "domain": "thepeninsulaqatar.com", "category": "newspaper" }
+      ]
+    },
+    {
+      "country": "Kuwait",
+      "iso2": "KW",
+      "outlets": [
+        { "name": "Kuwait Times", "domain": "kuwaittimes.com", "category": "newspaper" },
+        { "name": "Al Qabas", "domain": "alqabas.com", "category": "newspaper" },
+        { "name": "Al Rai", "domain": "alraimedia.com", "category": "newspaper" }
+      ]
+    },
+    {
+      "country": "Bahrain",
+      "iso2": "BH",
+      "outlets": [
+        { "name": "Gulf Daily News", "domain": "gdnonline.com", "category": "newspaper" },
+        { "name": "Al Ayam", "domain": "alayam.com", "category": "newspaper" },
+        { "name": "Al Bilad", "domain": "albiladpress.com", "category": "newspaper" }
+      ]
+    },
+    {
+      "country": "Oman",
+      "iso2": "OM",
+      "outlets": [
+        { "name": "Times of Oman", "domain": "timesofoman.com", "category": "newspaper" },
+        { "name": "Oman Observer", "domain": "omanobserver.om", "category": "newspaper" },
+        { "name": "Muscat Daily", "domain": "muscatdaily.com", "category": "newspaper" }
+      ]
+    },
+    {
+      "country": "Egypt",
+      "iso2": "EG",
+      "outlets": [
+        { "name": "Ahram Online", "domain": "english.ahram.org.eg", "category": "newspaper" },
+        { "name": "Al Masry Al Youm", "domain": "almasryalyoum.com", "category": "newspaper" },
+        { "name": "Daily News Egypt", "domain": "dailynewsegypt.com", "category": "newspaper" }
+      ]
+    },
+    {
+      "country": "Pakistan",
+      "iso2": "PK",
+      "outlets": [
+        { "name": "Dawn", "domain": "dawn.com", "category": "newspaper" },
+        { "name": "Business Recorder", "domain": "brecorder.com", "category": "finance" },
+        { "name": "The Express Tribune", "domain": "tribune.com.pk", "category": "newspaper" }
+      ]
+    },
+    {
+      "country": "South Africa",
+      "iso2": "ZA",
+      "outlets": [
+        { "name": "TimesLIVE", "domain": "timeslive.co.za", "category": "newspaper" },
+        { "name": "Daily Maverick", "domain": "dailymaverick.co.za", "category": "online_news" },
+        { "name": "News24", "domain": "news24.com", "category": "online_news" }
+      ]
+    },
+    {
+      "country": "Nigeria",
+      "iso2": "NG",
+      "outlets": [
+        { "name": "Punch", "domain": "punchng.com", "category": "newspaper" },
+        { "name": "The Guardian Nigeria", "domain": "guardian.ng", "category": "newspaper" },
+        { "name": "Premium Times", "domain": "premiumtimesng.com", "category": "online_news" }
+      ]
+    },
+    {
+      "country": "Kenya",
+      "iso2": "KE",
+      "outlets": [
+        { "name": "Nation", "domain": "nation.africa", "category": "newspaper" },
+        { "name": "The Standard", "domain": "standardmedia.co.ke", "category": "newspaper" },
+        { "name": "Business Daily", "domain": "businessdailyafrica.com", "category": "finance" }
+      ]
+    }
+  ]
+}

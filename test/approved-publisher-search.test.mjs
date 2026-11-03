@@ -1,14 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { approvedPublisherCount, approvedPublisherForUrl, selectApprovedPublishers } from '../lib/approved-publishers.mjs';
+import { approvedPublisherCount, approvedPublisherCoverage, approvedSearchablePublisherCount,
+  approvedPublisherForUrl, selectApprovedPublishers } from '../lib/approved-publishers.mjs';
 import { presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from '../lib/adverse-media.mjs';
 
 const classifiedResults = (response) => Object.values(response.media_buckets).flat();
 
 test('approved catalog matches direct publisher article URLs only', () => {
-  assert.equal(approvedPublisherCount, 1500);
+  assert.equal(approvedPublisherCount, 1527);
+  assert.equal(approvedSearchablePublisherCount, 1391);
+  assert.equal(approvedPublisherCoverage.length, 39);
   assert.equal(approvedPublisherForUrl('https://www.nytimes.com/2026/10/20/business/story.html')?.name, 'The New York Times');
   assert.equal(approvedPublisherForUrl('https://www.medianama.com/2024/12/signzy-data-leak/')?.name, 'MediaNama');
+  assert.equal(approvedPublisherForUrl('https://www.gulf-times.com/article/example')?.country_code, 'QA');
+  assert.equal(approvedPublisherForUrl('https://www.premiumtimesng.com/news/example')?.country_code, 'NG');
   for (const url of [
     'https://nytimes.com.evil.example/article',
     'http://nytimes.com/article',
@@ -23,6 +28,17 @@ test('publisher selection prioritizes requested countries and excludes low-value
   assert.ok(selected.every((publisher) => ['AE', 'IN'].includes(publisher.country_code)));
   assert.ok(selected.every((publisher) => !['sports', 'music', 'culture'].includes(publisher.category)));
   assert.ok(new Set(selected.map((publisher) => publisher.country_code)).size === 2);
+});
+
+test('new local-market publishers are selected for their country and global searches', () => {
+  const local = selectApprovedPublishers({ countries: ['QA', 'KW'], limit: 20 });
+  assert.ok(local.slice(0, 6).every((publisher) => ['QA', 'KW'].includes(publisher.country_code)));
+  assert.ok(local.some((publisher) => publisher.domain === 'qna.org.qa'));
+  assert.ok(local.some((publisher) => publisher.domain === 'alqabas.com'));
+  const global = selectApprovedPublishers({ limit: 60 });
+  for (const country of ['QA', 'KW', 'BH', 'OM', 'EG', 'PK', 'ZA', 'NG', 'KE']) {
+    assert.ok(global.some((publisher) => publisher.country_code === country));
+  }
 });
 
 test('deep-research retries only the missing search query after successful Brave results are checkpointed', async () => {
@@ -99,6 +115,7 @@ test('Brave payment failures are reported as missing coverage without redialing 
 test('request-time search returns adverse article URLs about an alias from approved publishers without visiting publishers', async () => {
   const requestedHosts = [];
   const requestedQueries = [];
+  const requestedDepths = [];
   const request = validateAdverseMediaRequest({ entity_type: 'individual', name: 'Alice Smith', aliases: ['A. Smith'], languages: ['en'], search_plus: true });
   const adverseResult = (url, title) => ({ url, title, description: 'A. Smith was charged with fraud.', page_age: '2026-10-20T10:00:00Z' });
   const fetchImpl = async (input) => {
@@ -106,6 +123,7 @@ test('request-time search returns adverse article URLs about an alias from appro
     requestedHosts.push(url.hostname);
     if (url.hostname === 'api.search.brave.com') {
       requestedQueries.push(url.searchParams.get('q'));
+      requestedDepths.push({ path: url.pathname, count: url.searchParams.get('count') });
       assert.match(url.searchParams.get('q'), /A\. Smith/);
       const results = [
         adverseResult('https://www.nytimes.com/2026/10/20/business/fraud.html', 'A. Smith charged with fraud'),
@@ -127,7 +145,15 @@ test('request-time search returns adverse article URLs about an alias from appro
   assert.equal(classifiedResults(response).find((item) => item.search_plus_match).identity_match.type, 'exact_alias');
   assert.equal(classifiedResults(response).find((item) => item.search_plus_match).risk_level, 'not_applicable');
   assert.equal(response.summary.decision_eligible, false);
-  assert.equal(response.coverage.search_plus.publisher_catalog_size, 1500);
+  assert.equal(response.coverage.search_plus.publisher_catalog_size, 1527);
+  assert.equal(response.coverage.search_plus.publisher_searchable_count, 1391);
+  assert.equal(response.coverage.search_plus.publisher_catalog_countries.length, 39);
+  assert.equal(response.coverage.search_plus.indexed_search_scope, 'worldwide');
+  assert.equal(response.coverage.geographic_scope, 'global_index');
+  assert.equal(response.coverage.search_plus.search_depth.current_news_results_per_query, 50);
+  assert.equal(response.coverage.archive_origin, 'hosted_fallback');
+  assert.ok(requestedDepths.some((item) => item.path.includes('/news/') && item.count === '50'));
+  assert.ok(requestedDepths.every((item) => item.path.includes('/news/') ? item.count === '50' : item.count === '20'));
   assert.ok(response.coverage.search_plus.publishers_screened.length >= 30);
   assert.equal(response.coverage.search_plus.publishers_attempted, response.coverage.search_plus.publishers_screened.length);
   assert.deepEqual(response.coverage.search_plus.publishers_not_completed, []);

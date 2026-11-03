@@ -133,7 +133,7 @@ test('Search+ uses Gemini party facts and retains a completed adverse assessment
   assert.equal(body.coverage.search_plus.requested, true);
   assert.equal(body.coverage.complete, true);
   assert.deepEqual(body.coverage.reason_codes, []);
-  assert.doesNotMatch(JSON.stringify(body), /\b(?:gpt|gemini|azure.openai)\b/i);
+  assert.doesNotMatch(JSON.stringify(body), /\b(?:gpt|gemini|brave|gdelt|azure.openai)\b/i);
   assert.equal(body.summary.decision_eligible, true);
   assert.equal(body.summary.outcome, 'high_risk');
   assert.equal(body.summary.profile_status, 'unsafe');
