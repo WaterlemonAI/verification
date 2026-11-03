@@ -2,9 +2,15 @@
 
 ## Candidate change
 
-In this branch, the dedicated Search+ API uses the existing `adverse-media-ai` Gemini credential and the fixed `gemini-3.5-flash-lite` model. The public route, entitlement, search queries, report path, and response contract remain the same. The previous Azure GPT call is removed from this route. The legacy `ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED` switch remains accepted for deployment compatibility; `ADVERSE_MEDIA_SEARCH_PLUS_ENABLED` is the model-neutral switch.
+In this branch, the dedicated Search+ API uses the existing `adverse-media-ai` Gemini credential and the fixed `gemini-3.5-flash-lite` model. The public route, entitlement, search queries, and report path remain the same. The previous Azure GPT call is removed from this route. The legacy `ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED` switch remains accepted for deployment compatibility; `ADVERSE_MEDIA_SEARCH_PLUS_ENABLED` is the model-neutral switch.
 
 Gemini receives the same party-fact task instructions and strict source-fact schema used by the GPT candidate. The deterministic adjudicator checks result IDs, verbatim quotes, party identity, and subject-specific legal stages. It retries at most three withheld items once. Missing or unsupported facts remain incomplete. The reported `confidence` is a processing flag (0.9 accepted, 0.7 review-flagged), not a calibrated probability. No model weights were trained or fine-tuned. Prompt, schema, and post-model validation are the adaptation.
+
+## Search coverage contract
+
+Search+ requires all scheduled search components to complete: every paid current-news, open-web, and publisher query; the archive (local index or hosted fallback); any applicable official-record source; association discovery when requested; at least one query for each requested language; and at least one publisher batch. A paid query or hosted archive call gets up to two attempts for retryable failures. These are the complete conditions used by `coverage.complete`; the value does not depend on whether a query finds a match.
+
+If any required component remains incomplete, the dedicated API returns an error (`503 SEARCH_INCOMPLETE`, or `502 SEARCH_SOURCES_UNAVAILABLE` if every source fails), with no screening report or PDF. It does not return a successful Search+ response with partial search coverage. A successful search with zero adverse hits can return `No Adverse Media Found` once classification is complete. If the search completed but source-fact classification is uncertain, `coverage.complete` remains `true` and `coverage.reason_codes` is empty; the screening can still have `status: partial`, `profile_status: inconclusive`, and `summary.processing_reason_codes`. The PDF labels search coverage separately from profile status.
 
 ## Same-evidence replay
 

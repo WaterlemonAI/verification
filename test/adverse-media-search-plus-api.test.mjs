@@ -20,6 +20,7 @@ let app;
 let appUrl;
 let geminiCalls = 0;
 let failGemini = false;
+let failOneCoverageNewsCall = true;
 
 before(async () => {
   app = createAppServer({ store, usageStore, fetchImpl: async (input, options) => {
@@ -28,8 +29,13 @@ before(async () => {
       assert.equal(options.headers['x-subscription-token'], 'synthetic-brave-key');
       const query = url.searchParams.get('q');
       const name = query.includes('Gemini Failure Example') ? 'Gemini Failure Example'
+        : query.includes('Coverage Failure Example') ? 'Coverage Failure Example'
         : query.includes('Positive News Example') ? 'Positive News Example'
           : query.includes('Uncertain News Example') ? 'Uncertain News Example' : 'Search Plus Example';
+      if (name === 'Coverage Failure Example' && url.pathname.includes('/news/') && failOneCoverageNewsCall) {
+        failOneCoverageNewsCall = false;
+        return Response.json({ error: 'Search unavailable' }, { status: 403 });
+      }
       const positive = name === 'Positive News Example';
       const uncertain = name === 'Uncertain News Example';
       const result = { title: positive ? `${name} completes restructuring and opens a research center`
@@ -173,8 +179,25 @@ test('Search+ unresolved allegation remains inconclusive', async () => {
   assert.equal(body.status, 'partial');
   assert.equal(body.summary.outcome, 'inconclusive');
   assert.equal(body.summary.decision_eligible, false);
-  assert.equal(body.coverage.complete, false);
-  assert.deepEqual(body.coverage.reason_codes, ['classification_uncertain']);
+  assert.equal(body.coverage.complete, true);
+  assert.deepEqual(body.coverage.reason_codes, []);
+  assert.deepEqual(body.summary.processing_reason_codes, ['classification_uncertain']);
+  assert.equal(body.summary.threshold_status, 'classification_uncertain');
+});
+
+test('Search+ fails closed when a required search source is partial', async () => {
+  const callsBefore = geminiCalls;
+  const response = await fetch(`${appUrl}/service/adverse_media_search_plus`, {
+    method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: 'Coverage Failure Example',
+      countries: ['AE'], languages: ['en'], max_results: 5 })
+  });
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.reason_code, 'SEARCH_INCOMPLETE');
+  assert.deepEqual(body.reason_codes, ['current_news_partial']);
+  assert.equal(body.report, undefined);
+  assert.equal(geminiCalls, callsBefore);
 });
 
 test('Search+ rejects async deep research callbacks', async () => {

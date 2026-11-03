@@ -675,15 +675,22 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     }
     const aiClassifier = dedicatedSearchPlus ? createGeminiAdverseClassifier(aiApiKey) : null;
     costGuard = createScreeningCostGuard(fetchImpl);
-    const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, aiClassifier, fetchImpl, costGuard });
+    const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, aiClassifier, fetchImpl, costGuard,
+      deferAiUntilSourcesComplete: dedicatedSearchPlus, sourceAttemptsExhausted: !dedicatedSearchPlus });
     screeningResult = result;
     screeningFinishedAt = Date.now();
+    const presented = presentAdverseMediaResponse(result);
+    if (dedicatedSearchPlus && !result.coverage.complete) {
+      logMetrics('search_incomplete');
+      return json(res, 503, { status: 'Error', reason_code: 'SEARCH_INCOMPLETE',
+        error: 'Required Adverse Media (Search+) searches did not complete. Please try again shortly.',
+        reason_codes: presented.coverage.reason_codes });
+    }
     if (dedicatedSearchPlus && (result.methodology.ai_classification.status === 'failed'
       || result.results.length > 0 && !result.results.some((item) => item.ai_classification?.provider === 'gemini_party_facts'))) {
       logMetrics('classification_unavailable');
       return json(res, 503, { status: 'Error', error: 'Adverse Media (Search+) classification is temporarily unavailable.' });
     }
-    const presented = presentAdverseMediaResponse(result);
     const response = await finalizeAdverseMediaReport({
       request,
       response: presented,
