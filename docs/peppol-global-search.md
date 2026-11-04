@@ -11,7 +11,8 @@ search with an optional country dropdown.
 ```
 
 The API uses an Azure Table index built from the complete 2026-11-03 Peppol
-Directory export (9,440,021 business cards). It makes no live request to
+Directory export (9,440,027 indexed business cards and 9,335,177 generated
+name rows). It makes no live request to
 Peppol. A normalized exact name is hashed into one of 256 partitions. Within
 that partition, row keys group matches by country. Supplying `country` narrows
 the indexed row-key range before data is read; omitting it searches matches
@@ -59,3 +60,9 @@ should be removed after the new version has been validated.
 The public request requires a KYCProbe API key and the `peppol-directory`
 module. The admin page requires an administrator session. No Peppol API key
 is required.
+
+The initial Azure ingest job succeeded on 2026-11-04. The published index
+reports 119 country filters, including `AE` with 35,133 cards. Real index
+checks returned a French business card for `ENERTECH MONACO` with and without
+`country: FR`, no match with `country: AE`, and a UAE business card when
+filtered to `AE`.
