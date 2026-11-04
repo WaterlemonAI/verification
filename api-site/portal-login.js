@@ -34,6 +34,7 @@
   const loginForm = document.getElementById('login-form');
   const codeForm = document.getElementById('code-form');
   let pendingLogin = null;
+  const inviteKind = new URLSearchParams(location.hash.slice(1)).has('team-invite') ? 'team' : 'customer';
   const inviteForm = document.getElementById('invite-form');
   const forgotForm = document.getElementById('forgot-form');
   const resetForm = document.getElementById('reset-form');
@@ -58,8 +59,12 @@
     resetForm.hidden = mode !== 'reset';
     document.getElementById('show-forgot').hidden = mode !== 'login';
     document.getElementById('back-to-login').hidden = mode === 'login';
-    title.textContent = mode === 'code' ? 'Check your email' : mode === 'reset' ? 'Set a new password' : mode === 'forgot' ? 'Recover your account' : mode === 'invite' ? 'Set up your workspace' : 'Welcome back';
-    intro.textContent = mode === 'code' ? `Enter the eight digit code sent to ${pendingLogin?.email || 'your email'}.` : mode === 'reset' ? 'Choose a new password for your workspace.' : mode === 'forgot' ? 'We will email a reset link if this account exists.' : mode === 'invite' ? 'Your invitation links this account to the correct customer workspace.' : 'Sign in with your workspace email and password.';
+    title.textContent = mode === 'code' ? 'Check your email' : mode === 'reset' ? 'Set a new password' : mode === 'forgot' ? 'Recover your account' : mode === 'invite' ? (inviteKind === 'team' ? 'Join your team' : 'Set up your workspace') : 'Welcome back';
+    intro.textContent = mode === 'code' ? `Enter the eight digit code sent to ${pendingLogin?.email || 'your email'}.` : mode === 'reset' ? 'Choose a new password for your workspace.' : mode === 'forgot' ? 'We will email a reset link if this account exists.' : mode === 'invite' ? 'Your invitation links this account to your organization’s workspace.' : 'Sign in with your workspace email and password.';
+    if (mode === 'invite') {
+      document.getElementById('invite-email-label').textContent = inviteKind === 'team' ? 'Your email' : 'Administrator email';
+      document.getElementById('invite-submit').textContent = inviteKind === 'team' ? 'Create account and join team →' : 'Set password and open workspace →';
+    }
   }
 
   document.getElementById('show-forgot').addEventListener('click', () => setMode('forgot'));
@@ -143,8 +148,8 @@
     const button = inviteForm.querySelector('button[type="submit"]');
     button.disabled = true;
     try {
-      const token = new URLSearchParams(location.hash.slice(1)).get('invite');
-      const response = await fetch('/portal/api/invitations/accept', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, password }) });
+      const token = new URLSearchParams(location.hash.slice(1)).get(inviteKind === 'team' ? 'team-invite' : 'invite');
+      const response = await fetch(inviteKind === 'team' ? '/portal/api/team/invitations/accept' : '/portal/api/invitations/accept', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token, password }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'The invitation could not be accepted.');
       history.replaceState(null, '', '/login');
@@ -154,11 +159,11 @@
     } catch (error) { errorElement.textContent = error.message; button.disabled = false; }
   });
 
-  if (new URLSearchParams(location.hash.slice(1)).has('invite')) {
+  if (new URLSearchParams(location.hash.slice(1)).has(inviteKind === 'team' ? 'team-invite' : 'invite')) {
     setMode('invite');
-    fetch('/portal/api/invitations/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: new URLSearchParams(location.hash.slice(1)).get('invite') }) })
+    fetch(inviteKind === 'team' ? '/portal/api/team/invitations/preview' : '/portal/api/invitations/preview', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: new URLSearchParams(location.hash.slice(1)).get(inviteKind === 'team' ? 'team-invite' : 'invite') }) })
       .then(async (response) => { const result = await response.json(); if (!response.ok) throw new Error(result.error); return result; })
-      .then((result) => { document.getElementById('invite-workspace').textContent = result.customer.name; document.getElementById('invite-email').value = result.customer.admin_email; })
+      .then((result) => { document.getElementById('invite-workspace').textContent = (result.team || result.customer).name; document.getElementById('invite-email').value = result.team?.email || result.customer?.admin_email; })
       .catch((error) => { document.getElementById('invite-error').textContent = error.message || 'This setup link is invalid.'; inviteForm.querySelector('button[type="submit"]').disabled = true; });
   }
   else if (new URLSearchParams(location.search).has('reset')) setMode('reset');

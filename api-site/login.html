@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=10" />
-    <script src="/portal-login.js?v=4" defer></script>
+    <script src="/portal-login.js?v=5" defer></script>
   </head>
   <body class="login-page">
     <main class="login-shell">
@@ -47,11 +47,11 @@
 
           <form class="auth-form" id="invite-form" novalidate hidden>
             <p id="invite-workspace"></p>
-            <label>Administrator email<input id="invite-email" type="email" readonly /></label>
+            <label><span id="invite-email-label">Administrator email</span><input id="invite-email" type="email" readonly /></label>
             <label>Create password<input id="invite-password" type="password" autocomplete="new-password" minlength="12" required /><small>12–128 characters with uppercase, lowercase, number, and symbol.</small></label>
             <label>Confirm password<input id="invite-confirm" type="password" autocomplete="new-password" minlength="12" required /></label>
             <p class="auth-error" id="invite-error" role="alert"></p>
-            <button type="submit">Set password and open workspace →</button>
+            <button id="invite-submit" type="submit">Set password and open workspace →</button>
           </form>
           <form class="auth-form" id="forgot-form" novalidate hidden>
             <label>Account email<input id="forgot-email" type="email" autocomplete="email" required /></label>

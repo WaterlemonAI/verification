@@ -69,6 +69,13 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
   await store.setPortalUser(portalAccount);
   await store.setPortalSessionKey('portal-signing-key');
   assert.deepEqual(await store.getPortalUser('USER@example.com'), portalAccount);
+  assert.deepEqual(await store.listPortalUsers(issued.client.id), [portalAccount]);
+  const teamInvitation = { id: '0123456789abcdef', workspaceId: issued.client.id, email: 'colleague@example.com',
+    invitedBy: portalAccount.email, status: 'pending', tokenHash: 'b'.repeat(64), expiresAt: '2026-11-30T00:00:00.000Z' };
+  await store.setTeamInvitation(teamInvitation);
+  assert.deepEqual(await store.getTeamInvitation(teamInvitation.id), teamInvitation);
+  assert.deepEqual(await store.listTeamInvitations(issued.client.id), [teamInvitation]);
+  assert.equal((await store.listTeamInvitations('another-workspace')).length, 0);
   assert.equal(await store.getPortalSessionKey(), 'portal-signing-key');
   let lockTail = Promise.resolve();
   store.keyCreationLock = (_workspaceId, operation) => {
@@ -96,6 +103,8 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
   secrets.set(portalSecretName, { ...portalSecret, value: JSON.stringify({ ...portalAccount, version: 2 }) });
   assert.equal((await store.getPortalUser(portalAccount.email)).version, 1);
   assert.equal((await store.getPortalUser(portalAccount.email, { fresh: true })).version, 2);
+  await store.setPortalUser({ ...portalAccount, status: 'disabled', version: 3 });
+  assert.equal(await store.isClientKey(idempotent.apiKey), false);
 
   await store.revokeClient(issued.client.id);
   assert.equal(await store.isClientKey(issued.apiKey), false);

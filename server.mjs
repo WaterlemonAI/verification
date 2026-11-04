@@ -11,6 +11,7 @@ import { createStore } from './lib/api-store.mjs';
 import { createPlatformMailer } from './lib/platform-mail.mjs';
 import { createCustomerUsageStore, moneyMicros, validateUsagePolicy, validateCasePolicy } from './lib/customer-usage.mjs';
 import { createInvitation, invitationCustomerId, validInvitation, publicCustomer, INVITATION_HOURS } from './lib/customer-invitation.mjs';
+import { createTeamInvitation, emailDomain, publicTeamInvitation, teamInvitationId, validTeamInvitation, TEAM_INVITATION_HOURS } from './lib/team-invitation.mjs';
 import { createPasswordResetToken, parsePasswordResetToken, RESET_MINUTES } from './lib/password-reset.mjs';
 import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
 import { adverseMediaConfig, presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from './lib/adverse-media.mjs';
@@ -1554,7 +1555,10 @@ async function currentPortalSession(req, store) {
     const unsigned = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     const account = await store.getPortalUser(normalizeAdminEmail(unsigned.email), { fresh: true });
     const signingKey = await store.getPortalSessionKey();
-    return { account, session: verifyPortalSession(token, account, signingKey) };
+    const session = verifyPortalSession(token, account, signingKey);
+    if (!session) return { account, session: null };
+    const customer = await store.getCustomer(account.client_id);
+    return { account, session: customer && customer.status !== 'active' ? null : session };
   } catch {
     return { account: null, session: null };
   }
@@ -1628,7 +1632,8 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
       const throttleKey = loginThrottleKey(req, email);
       if (loginThrottle.blocked(throttleKey)) return json(res, 429, { status: 'Error', error: 'Too many sign-in attempts. Try again later.' });
       const account = await store.getPortalUser(email);
-      if (!verifyPortalPassword(account, email, body.password)) {
+      const customer = account ? await store.getCustomer(account.client_id) : null;
+      if (!verifyPortalPassword(account, email, body.password) || customer && customer.status !== 'active') {
         loginThrottle.failed(throttleKey);
         return json(res, 401, { status: 'Error', error: 'Email or password is incorrect.' });
       }
@@ -1646,7 +1651,9 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
       const email = normalizeAdminEmail(body.email);
       const account = await store.getPortalUser(email, { fresh: true });
       const signingKey = await store.getPortalSessionKey();
-      if (!(await consumeEmailLogin(req, { kind: 'portal', body, account, signingKey, otpStore }))) {
+      const customer = account ? await store.getCustomer(account.client_id) : null;
+      if (account?.status === 'disabled' || customer && customer.status !== 'active'
+        || !(await consumeEmailLogin(req, { kind: 'portal', body, account, signingKey, otpStore }))) {
         return json(res, 401, { status: 'Error', error: 'The code is invalid or expired.' });
       }
       let issued = null;
@@ -1680,6 +1687,96 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
     return json(res, 200, { signed_out: true }, { 'set-cookie': clearPortalCookie({ secure: secureRequest(req) }) });
   }
 
+  if (req.method === 'POST' && (url.pathname === '/portal/api/team/invitations/preview'
+    || url.pathname === '/portal/api/team/invitations/accept')) {
+    if (!sameOrigin(req)) return json(res, 403, { status: 'Error', error: 'Request origin is invalid.' });
+    try {
+      const body = await readJson(req);
+      const token = String(body.token || '');
+      const invitation = teamInvitationId(token) ? await store.getTeamInvitation(teamInvitationId(token)) : null;
+      const customer = invitation ? await store.getCustomer(invitation.workspaceId) : null;
+      const inviter = invitation ? await store.getPortalUser(invitation.invitedBy, { fresh: true }) : null;
+      if (!validTeamInvitation(invitation, token) || customer?.status !== 'active' || !customer.teamCreatedAt
+        || emailDomain(invitation.email) !== emailDomain(customer.adminEmail)
+        || inviter?.status === 'disabled' || (inviter?.role || 'org_admin') !== 'org_admin'
+        || inviter?.client_id !== invitation.workspaceId) {
+        return json(res, 400, { status: 'Error', error: 'This team invitation is invalid or has expired.' });
+      }
+      const previous = await store.getPortalUser(invitation.email, { fresh: true });
+      if (previous && (previous.status !== 'disabled' || previous.client_id !== invitation.workspaceId)) return json(res, 409, { status: 'Error', error: 'An account already exists for this email.' });
+      if (url.pathname.endsWith('/preview')) return json(res, 200, { team: { name: customer.name, email: invitation.email, expires_at: invitation.expiresAt } });
+      if (!mailer.configured || !mailer.sendLoginCode || !otpStore) return json(res, 503, { status: 'Error', error: 'Account setup is temporarily unavailable.' });
+      const account = createPortalAccount(invitation.email, body.password, { id: customer.id, name: customer.name, role: 'member', status: 'active' }, previous);
+      if (!(await store.claimInvitation(invitation.tokenHash))) return json(res, 409, { status: 'Error', error: 'This team invitation has already been used.' });
+      await store.setPortalUser(account);
+      try { await store.setTeamInvitation({ ...invitation, status: 'accepted', tokenHash: '', acceptedAt: new Date().toISOString() }); }
+      catch { console.warn('team_invitation_status_update_failed'); }
+      return json(res, 201, { account: safePortalAccount(account), message: 'Account created. Sign in to receive an email code.' });
+    } catch (error) {
+      return json(res, error.statusCode || 400, { status: 'Error', error: error.statusCode ? 'The setup request is invalid.' : error.message });
+    }
+  }
+
+  if (url.pathname === '/portal/api/team' || url.pathname === '/portal/api/team/invitations'
+    || url.pathname === '/portal/api/team/members/remove') {
+    const { account, session } = await currentPortalSession(req, store);
+    if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
+    const customer = await store.getCustomer(account.client_id);
+    if (!customer || customer.status !== 'active') return json(res, 403, { status: 'Error', error: 'This workspace is not active.' });
+    const isOrgAdmin = (account.role || 'org_admin') === 'org_admin';
+    if (req.method === 'GET' && url.pathname === '/portal/api/team') {
+      const members = await store.listPortalUsers(account.client_id);
+      const invitations = isOrgAdmin ? await store.listTeamInvitations(account.client_id) : [];
+      return json(res, 200, { name: customer.name, created: Boolean(customer.teamCreatedAt),
+        domain: emailDomain(customer.adminEmail), role: isOrgAdmin ? 'org_admin' : 'member',
+        members: members.map((item) => ({ email: item.email, role: item.role || 'org_admin', status: item.status || 'active' })),
+        invitations: invitations.filter((item) => item.status === 'pending' && Date.parse(item.expiresAt) > Date.now()
+          && !members.some((member) => member.email === item.email && member.status !== 'disabled')).map(publicTeamInvitation) });
+    }
+    if (req.method !== 'POST') return json(res, 405, { status: 'Error', error: 'Method must be GET or POST.' });
+    if (!isOrgAdmin) return json(res, 403, { status: 'Error', error: 'Organization administrator access is required.' });
+    if (!sameOrigin(req) || String(req.headers['x-ai7-csrf'] || '') !== session.csrf) {
+      return json(res, 403, { status: 'Error', error: 'The security token is missing or invalid.' });
+    }
+    if (url.pathname === '/portal/api/team') {
+      if (!customer.teamCreatedAt) await store.setCustomer({ ...customer, teamCreatedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      return json(res, 200, { created: true, name: customer.name });
+    }
+    if (!customer.teamCreatedAt) return json(res, 409, { status: 'Error', error: 'Create your team before inviting members.' });
+    const body = await readJson(req);
+    if (url.pathname === '/portal/api/team/invitations') {
+      const email = validEmail(body.email);
+      if (!email || emailDomain(email) !== emailDomain(customer.adminEmail)) return json(res, 400, {
+        status: 'Error', error: `Invite an email address at ${emailDomain(customer.adminEmail)}.` });
+      const previous = await store.getPortalUser(email, { fresh: true });
+      if (previous && (previous.status !== 'disabled' || previous.client_id !== account.client_id)) return json(res, 409, { status: 'Error', error: 'This email already has an account.' });
+      if (!mailer.configured || !mailer.sendTeamInvitation) return json(res, 503, { status: 'Error', error: 'Invitation email is unavailable.' });
+      const existing = (await store.listTeamInvitations(account.client_id)).find((item) => item.email === email && item.status === 'pending');
+      const created = createTeamInvitation(account.client_id, email, account.email);
+      if (existing) await store.setTeamInvitation({ ...existing, status: 'replaced', tokenHash: '' });
+      await store.setTeamInvitation(created.record);
+      try {
+        await mailer.sendTeamInvitation({ to: email, customerName: customer.name,
+          url: `${process.env.APP_PUBLIC_BASE_URL || 'https://app.kycprobe.com'}/login#team-invite=${encodeURIComponent(created.token)}`,
+          hours: TEAM_INVITATION_HOURS });
+      } catch {
+        return json(res, 503, { status: 'Error', error: 'The invitation could not be emailed. Retry to send a new link.' });
+      }
+      return json(res, 201, { invitation: publicTeamInvitation(created.record) });
+    }
+    if (url.pathname === '/portal/api/team/members/remove') {
+      const email = validEmail(body.email);
+      const member = email ? await store.getPortalUser(email, { fresh: true }) : null;
+      if (!member || member.client_id !== account.client_id || member.email === account.email || (member.role || 'org_admin') === 'org_admin') {
+        return json(res, 404, { status: 'Error', error: 'Removable team member was not found.' });
+      }
+      if (member.status !== 'disabled') await store.setPortalUser({ ...member, status: 'disabled', version: member.version + 1, updated_at: new Date().toISOString() });
+      const keys = (await store.listClients()).filter((item) => item.workspaceId === account.client_id && item.ownerEmail === email && item.status === 'active');
+      await Promise.all(keys.map((key) => store.revokeClient(key.id)));
+      return json(res, 200, { email, removed: true, revoked_keys: keys.length });
+    }
+  }
+
   if (url.pathname === '/portal/api/case-manager/settings') {
     const { account, session } = await currentPortalSession(req, store);
     if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' }, { 'cache-control': 'no-store' });
@@ -1690,6 +1787,7 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
       return json(res, 200, { available: globalEnabled, policy }, { 'cache-control': 'no-store' });
     }
     if (req.method !== 'PUT') return json(res, 405, { status: 'Error', error: 'Method must be GET or PUT.' }, { allow: 'GET, PUT' });
+    if ((account.role || 'org_admin') !== 'org_admin') return json(res, 403, { status: 'Error', error: 'Organization administrator access is required.' });
     if (!sameOrigin(req) || String(req.headers['x-ai7-csrf'] || '') !== session.csrf) {
       return json(res, 403, { status: 'Error', error: 'The security token is missing or invalid.' });
     }
@@ -1852,13 +1950,16 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
       }
     }
     const keyId = url.pathname.split('/')[4];
+    const selectedKey = keys.find((item) => item.id === keyId);
+    if (!selectedKey || ((account.role || 'org_admin') !== 'org_admin' && selectedKey.ownerEmail !== account.email)) {
+      return json(res, 404, { status: 'Error', error: 'Key was not found in this workspace.' });
+    }
     if (req.method === 'POST' && url.pathname.endsWith('/rotate')) {
       const rotated = await store.rotateClient(keyId, account.client_id);
       return rotated ? json(res, 200, { key: rotated.client, api_key: rotated.apiKey, notice: 'The previous key is invalid. Copy this replacement now.' })
         : json(res, 404, { status: 'Error', error: 'Active key was not found in this workspace.' });
     }
     if (req.method === 'POST' && url.pathname.endsWith('/revoke')) {
-      if (!keys.some((item) => item.id === keyId)) return json(res, 404, { status: 'Error', error: 'Key was not found in this workspace.' });
       const revoked = await store.revokeClient(keyId);
       return json(res, 200, { key: revoked });
     }
