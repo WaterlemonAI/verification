@@ -89,6 +89,16 @@ resource dataContainer 'Microsoft.Storage/storageAccounts/blobServices/container
   name: 'document-ocr-private'
   properties: { publicAccess: 'None' }
 }
+resource peppolIndexContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'peppol-directory-index'
+  properties: { publicAccess: 'None' }
+}
+resource peppolSourceContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'peppol-directory-source'
+  properties: { publicAccess: 'None' }
+}
 resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
   parent: storage
   name: 'default'
@@ -108,6 +118,10 @@ resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2023-05-0
 resource jobsTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
   parent: tableService
   name: 'DocumentOcrJobs'
+}
+resource peppolNamesTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  parent: tableService
+  name: 'PeppolDirectoryNames'
 }
 resource documentIntelligence 'Microsoft.CognitiveServices/accounts@2023-05-01' = {
   name: documentIntelligenceName

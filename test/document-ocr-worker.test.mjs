@@ -95,6 +95,23 @@ test('Trade License TAED job returns extracted rows without verification or mode
     assert.equal(store.result()[field], undefined);
 });
 
+test('opted-in Trade License OCR adds separate Peppol results using the extracted name', async () => {
+  const store = fakeStore('queued', 'uae-trade-license-ocr');
+  store.state.pipeline = 'taed';
+  store.state.peppolRequested = true;
+  const outcome = await processDocumentOcrJob({ store, partitionKey: store.state.partitionKey,
+    jobId: store.state.jobId, scan: async () => {}, getTaedKey: async () => 'synthetic-key',
+    taedExtract: async () => ({ data: { 'Company Name (English)': 'Example Trading LLC' } }),
+    lookupPeppol: async (name, options) => {
+      assert.equal(name, 'Example Trading LLC');
+      assert.deepEqual(options, { country: 'AE' });
+      return { status: 'possible_matches', source: 'peppol_directory_export', matches: [] };
+    } });
+  assert.equal(outcome.status, 'completed');
+  assert.equal(store.result().peppol.status, 'possible_matches');
+  assert.equal(store.result().data.company_name_english, 'Example Trading LLC');
+});
+
 test('a replayed MOA TAED call cannot make a duplicate paid request', async () => {
   const store = fakeStore('taed_in_flight', 'moa-analysis');
   store.state.pipeline = 'taed';

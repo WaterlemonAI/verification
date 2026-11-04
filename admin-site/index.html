@@ -9,8 +9,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/admin/admin.css?v=11" />
-    <script src="/admin/admin.js?v=17" defer></script>
+    <link rel="stylesheet" href="/admin/admin.css?v=12" />
+    <script src="/admin/admin.js?v=18" defer></script>
 
   </head>
   <body>
@@ -99,6 +99,7 @@
         <p class="nav-label">API ENGINE</p>
         <nav>
           <button class="active" data-view="integrations"><i>⌁</i> Integrations</button>
+          <button data-view="peppol"><i>◎</i> Peppol check</button>
           <button data-view="forms"><i>▦</i> Forms</button>
           <button data-view="analysis" id="analysis-nav"><i>▤</i> Analysis</button>
           <button data-view="clients"><i>◇</i> Customer keys</button>
@@ -142,6 +143,23 @@
             <div class="panel-head"><div><p class="eyebrow">ROUTE REGISTRY</p><h2>Configured APIs</h2></div><button class="refresh" data-refresh="integrations">Refresh</button></div>
             <div class="empty" id="integration-empty">No APIs are configured yet.</div>
             <div class="route-list" id="integration-list"></div>
+          </div>
+        </section>
+
+        <section id="peppol-view" hidden>
+          <div class="panel">
+            <div class="panel-head"><div><p class="eyebrow">GLOBAL DIRECTORY SEARCH</p><h2>Peppol check</h2><p class="field-help">Search published Peppol Directory business cards by organization name. Choose a country to narrow the indexed search. A name match is directory evidence, not legal identity verification.</p></div></div>
+            <div class="peppol-content">
+              <form id="peppol-search-form" class="peppol-form">
+                <div class="grid two">
+                  <label>Organization name<input id="peppol-name" name="name" minlength="3" maxlength="200" required placeholder="Enter the published company name" /></label>
+                  <label>Country (optional)<select id="peppol-country" name="country"><option value="">All countries</option></select></label>
+                </div>
+                <button type="submit">Search Peppol <span>→</span></button>
+              </form>
+              <p id="peppol-status" role="status" aria-live="polite">Loading available countries…</p>
+              <pre id="peppol-result" hidden></pre>
+            </div>
           </div>
         </section>
 

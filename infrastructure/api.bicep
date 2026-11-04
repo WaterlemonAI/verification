@@ -15,6 +15,9 @@ param bankStatementWorkerImage string
 @description('Digest-pinned document OCR worker image. Required only when document OCR is enabled.')
 param documentOcrWorkerImage string = ''
 
+@description('Optional digest-pinned image for the manual Peppol global index ingest job.')
+param peppolIngestImage string = ''
+
 @description('Digest-pinned Ejari verification worker image.')
 param ejariWorkerImage string = ''
 
@@ -387,6 +390,7 @@ resource documentOcrWorker 'Microsoft.App/containerApps@2025-07-01' = if (!paral
             { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'PEPPOL_INDEX_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}/peppol-directory-index/uae-index.jsonl' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_AZURE_ENDPOINT', value: documentOcrEndpoint }
             { name: 'DOCUMENT_OCR_AZURE_REGION', value: location }
@@ -527,6 +531,33 @@ resource billingNotificationsJob 'Microsoft.App/jobs@2024-03-01' = if (!parallel
         }
       ]
     }
+  }
+}
+
+resource peppolIngestJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && !empty(peppolIngestImage)) {
+  name: 'caj-ai7uae-peppol-ingest'
+  location: location
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
+  properties: {
+    environmentId: environmentId
+    configuration: {
+      triggerType: 'Manual'
+      replicaTimeout: 21600
+      replicaRetryLimit: 1
+      manualTriggerConfig: { parallelism: 1, replicaCompletionCount: 1 }
+      registries: [ { server: acrLoginServer, identity: runtimeIdentityResourceId } ]
+    }
+    template: { containers: [{
+      name: 'peppol-ingest'
+      image: peppolIngestImage
+      env: [
+        { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
+        { name: 'PEPPOL_GLOBAL_TABLE_URL', value: 'https://${documentOcrStorageName}.table.${environment().suffixes.storage}' }
+        { name: 'PEPPOL_GLOBAL_TABLE', value: 'PeppolDirectoryNames' }
+        { name: 'PEPPOL_SOURCE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}/peppol-directory-source/export-all-businesscards-2026-11-03.xml.gz' }
+      ]
+      resources: { cpu: json('2.0'), memory: '4Gi' }
+    }] }
   }
 }
 
@@ -769,6 +800,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'BSA_STORAGE_TABLE', value: 'BankStatementAnalysis' }
             { name: 'BSA_MAX_UPLOAD_BYTES', value: '26214400' }
             { name: 'DOCUMENT_OCR_PRODUCTION_ENABLED', value: !parallelDeployment && enableDocumentOcr ? '1' : '0' }
+            { name: 'PEPPOL_INDEX_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}/peppol-directory-index/uae-index.jsonl' }
+            { name: 'PEPPOL_GLOBAL_TABLE_URL', value: 'https://${documentOcrStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'PEPPOL_GLOBAL_TABLE', value: 'PeppolDirectoryNames' }
             { name: 'DOCUMENT_OCR_TAED_MOA_ENABLED', value: !parallelDeployment && enableDocumentOcr && enableTaedMoa ? 'true' : 'false' }
             { name: 'DOCUMENT_OCR_TAED_TRADE_LICENSE_ENABLED', value: !parallelDeployment && enableDocumentOcr && enableTaedTradeLicense ? 'true' : 'false' }
             { name: 'CASE_MANAGER_ENABLED', value: caseManagerRuntimeEnabled ? 'true' : 'false' }

@@ -139,10 +139,11 @@ test('Trade License TAED flag admits WEBP only for its OCR route', async (t) => 
   form.set('file', new Blob([Buffer.from('RIFF1234WEBPsynthetic')], { type: 'image/webp' }), 'synthetic.webp');
   const response = await fetch(`http://127.0.0.1:${server.address().port}/service/uae_trade_license_ocr`, {
     method: 'POST', headers: { authorization: `Bearer ${issued.apiKey}`,
-      'idempotency-key': 'ocr-taed-trade-license-1234' }, body: form
+      'idempotency-key': 'ocr-taed-trade-license-1234', 'x-ai7-peppol-check': 'true' }, body: form
   });
   assert.equal(response.status, 202);
   assert.equal(admitted.pipeline, 'taed');
+  assert.equal(admitted.peppolRequested, true);
   assert.equal(admitted.files[0].mediaType, 'image/webp');
   assert.equal((await response.json()).provider_calls, undefined);
 });

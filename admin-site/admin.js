@@ -99,13 +99,16 @@ async function bootstrapAuth() {
 function setView(name) {
   document.querySelectorAll('aside nav button').forEach((button) => button.classList.toggle('active', button.dataset.view === name));
   byId('integrations-view').hidden = name !== 'integrations';
+  byId('peppol-view').hidden = name !== 'peppol';
   byId('clients-view').hidden = name !== 'clients';
   byId('forms-view').hidden = name !== 'forms';
   byId('analysis-view').hidden = name !== 'analysis';
-  byId('page-title').textContent = name === 'clients' ? 'Customer keys' : name === 'forms' ? 'Forms' : name === 'analysis' ? 'Analysis' : 'Integrations';
+  byId('page-title').textContent = name === 'clients' ? 'Customer keys' : name === 'forms' ? 'Forms'
+    : name === 'analysis' ? 'Analysis' : name === 'peppol' ? 'Peppol check' : 'Integrations';
   if (name === 'clients') loadClients();
   else if (name === 'forms') loadForms();
   else if (name === 'analysis') loadBsaAvailability();
+  else if (name === 'peppol') loadPeppolCountries();
   else if (name === 'integrations') loadIntegrations();
 }
 
@@ -284,7 +287,8 @@ async function loadIntegrations() {
     pill.textContent = item.enabled ? 'Active' : 'Disabled';
     pill.classList.toggle('off', !item.enabled);
     const credentialButton = row.querySelector('.set-credential');
-    credentialButton.hidden = item.id === 'merchant-screening' || (item.id !== 'document-ocr-ai' && item.id.endsWith('-ocr')) || item.id === 'moa-analysis';
+    credentialButton.hidden = item.id === 'merchant-screening' || item.id === 'peppol-directory'
+      || (item.id !== 'document-ocr-ai' && item.id.endsWith('-ocr')) || item.id === 'moa-analysis';
     credentialButton.textContent = item.id === 'ejari-verification' ? 'Configure Ejari'
       : item.masterAuthKeyConfigured ? 'Replace credential' : 'Set credential';
     credentialButton.addEventListener('click', () => {
@@ -325,6 +329,43 @@ async function loadIntegrations() {
   });
   await loadEjariConfig();
 }
+
+async function loadPeppolCountries() {
+  const status = byId('peppol-status');
+  const select = byId('peppol-country');
+  const selected = select.value;
+  try {
+    const data = await request('/admin/api/peppol/countries');
+    const regions = new Intl.DisplayNames(['en'], { type: 'region' });
+    select.replaceChildren(new Option('All countries', ''));
+    for (const item of data.countries || []) {
+      const name = regions.of(item.code);
+      select.add(new Option(`${name} (${item.code})`, item.code));
+    }
+    select.value = selected;
+    status.textContent = `${data.cards?.toLocaleString() || '0'} published business cards · snapshot ${data.snapshot_at}`;
+  } catch (error) {
+    status.textContent = error.message || 'Peppol index is unavailable.';
+  }
+}
+
+byId('peppol-search-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const status = byId('peppol-status');
+  const result = byId('peppol-result');
+  status.textContent = 'Searching the Peppol index…';
+  result.hidden = true;
+  try {
+    const data = await request('/admin/api/peppol/search', { method: 'POST', body: JSON.stringify({
+      name: byId('peppol-name').value.trim(), country: byId('peppol-country').value || undefined
+    }) });
+    status.textContent = `${data.status.replaceAll('_', ' ')} · ${data.returned_count || 0} result${data.returned_count === 1 ? '' : 's'} · snapshot ${data.snapshot_at}`;
+    result.textContent = JSON.stringify(data, null, 2);
+    result.hidden = false;
+  } catch (error) {
+    status.textContent = error.message || 'Search failed.';
+  }
+});
 
 async function loadEjariConfig() {
   const form = byId('ejari-config-form');

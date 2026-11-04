@@ -37,6 +37,16 @@
               "maxLength": 128,
               "pattern": "^[A-Za-z0-9._:-]+$"
             }
+          },
+          {
+            "name": "X-AI7-Peppol-Check",
+            "in": "header",
+            "required": false,
+            "description": "Set to true to search the locally indexed UAE Peppol Directory export using the extracted company name. The result contains separate directory evidence and a snapshot time, not a licence verification decision.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
           }
         ],
         "requestBody": {
@@ -2176,6 +2186,10 @@
               }
             },
             "additionalProperties": false
+          },
+          "peppol": {
+            "$ref": "#/components/schemas/PeppolDirectoryResult",
+            "description": "Present only when X-AI7-Peppol-Check is true."
           }
         },
         "additionalProperties": false
@@ -4058,6 +4072,91 @@
           },
           "data": {
             "$ref": "#/components/schemas/uae_trade_license_ocr_Data"
+          },
+          "peppol": {
+            "$ref": "#/components/schemas/PeppolDirectoryResult",
+            "description": "Present only when X-AI7-Peppol-Check is true."
+          }
+        },
+        "additionalProperties": false
+      },
+      "PeppolDirectoryResult": {
+        "type": "object",
+        "required": [
+          "status",
+          "source",
+          "country",
+          "checked_at",
+          "matches"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "name_match",
+              "possible_matches",
+              "not_found",
+              "name_unavailable",
+              "unavailable"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "const": "peppol_directory_export"
+          },
+          "queried_name": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string",
+            "const": "AE"
+          },
+          "checked_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "total_results": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "reason_code": {
+            "type": "string"
+          },
+          "matches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "participant_id": {
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "document_types": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                },
+                "entities": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "snapshot_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "stale": {
+            "type": "boolean",
+            "description": "True when the loaded snapshot is more than 48 hours old."
           }
         },
         "additionalProperties": false

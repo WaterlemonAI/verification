@@ -38,6 +38,8 @@ import {
 import { bsaEnabled, bsaMode, bsaCapabilities, createBsaJob, getBsaJob, getBsaResult, getBsaArtifact, presentBsaResult } from './lib/bsa-store.mjs';
 import { DOCUMENT_OCR_BY_PATH } from './lib/document-ocr-contracts.mjs';
 import { createDocumentOcrStore } from './lib/document-ocr-store.mjs';
+import { searchPeppolIndex, tradeLicenseName } from './lib/peppol-index.mjs';
+import { searchPeppolGlobal, peppolGlobalCountries, validatePeppolSearchInput } from './lib/peppol-global.mjs';
 import { CASE_OUTCOMES, CASE_REQUEST_STATUSES, caseExpiresAt, caseRequestStatus,
   classifyCaseSubmission } from './lib/case-manager-contract.mjs';
 import { caseOutcome } from './lib/case-manager-outcomes.mjs';
@@ -117,9 +119,11 @@ async function classifyCustomerApi(req, url, store) {
     '/service/merchant_screening': 'merchant-screening',
     '/service/bank_statement_analysis': 'bank-statement-analysis',
     '/service/dubai_ejari_verification': 'ejari-verification',
+    '/service/peppol_check': 'peppol-directory',
     '/reports/entity-search.pdf': 'entity-search-report'
   };
   if (path === '/service/health') return { moduleIds: [], method: 'GET', billable: false };
+  if (path === '/service/peppol_check/countries') return { moduleIds: ['peppol-directory'], method: 'GET', billable: false };
   if (path === '/service/keys/self/rotate') return { moduleIds: [], method: 'POST', billable: false };
   const documentOcr = DOCUMENT_OCR_BY_PATH.get(path);
   if (documentOcr) return { moduleIds: [documentOcr.id], method: 'POST', billable: true };
@@ -994,7 +998,7 @@ async function encryptedJsonRelay(res, integration, store, fetchImpl, body) {
   }
 }
 
-async function proxyIntegration(req, res, url, integration, store, fetchImpl, reportStore) {
+async function proxyIntegration(req, res, url, integration, store, fetchImpl, reportStore, peppolLookup) {
   if (!req.ai7Client && !(await store.isClientKey(bearerToken(req)))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
@@ -1041,6 +1045,7 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl, re
     const headers = forwardHeaders(req);
     delete headers['x-ai7-generate-pdf'];
     delete headers['x-ai7-report-logo-url'];
+    delete headers['x-ai7-peppol-check'];
     if (integration.authType !== 'none') {
       const masterKey = await store.getMasterKey(integration.id);
       if (!masterKey) return providerUnavailable(res);
@@ -1053,6 +1058,17 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl, re
       signal: AbortSignal.timeout(Number(process.env.UPSTREAM_TIMEOUT_MS || 120000))
     });
     const responseBody = Buffer.from(await upstream.arrayBuffer());
+    let finalBody = responseBody;
+    if (integration.id === 'uae-trade-licence' && upstream.ok && req.headers['x-ai7-peppol-check'] === 'true') {
+      const parsed = parseJsonText(responseBody.toString('utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        let peppol;
+        try { peppol = await peppolLookup(tradeLicenseName(parsed), { country: 'AE' }); }
+        catch { peppol = { status: 'unavailable', source: 'peppol_directory_export', country: 'AE',
+          checked_at: new Date().toISOString(), reason_code: 'index_unavailable', matches: [] }; }
+        finalBody = Buffer.from(JSON.stringify({ ...parsed, peppol }));
+      }
+    }
     if (integration.id === 'entity-search' && req.headers['x-ai7-generate-pdf'] === 'true' && entityRequest) {
       try {
         const parsed = JSON.parse(responseBody.toString('utf8'));
@@ -1077,10 +1093,10 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl, re
     }
     res.writeHead(upstream.status, {
       'content-type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-      'content-length': responseBody.length,
+      'content-length': finalBody.length,
       'cache-control': 'no-store'
     });
-    res.end(responseBody);
+    res.end(finalBody);
   } catch {
     providerUnavailable(res);
   }
@@ -1935,7 +1951,8 @@ async function requireAdmin(req, res, store, { csrf = false } = {}) {
   return { account, session };
 }
 
-async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore) {
+async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore,
+  peppolGlobalLookup, peppolCountryList) {
   if (req.method === 'GET' && url.pathname === '/admin/api/auth/status') {
     const account = await store.getAdminAccount();
     return json(res, 200, { configured: Boolean(account) });
@@ -2032,6 +2049,20 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
 
   const access = await requireAdmin(req, res, store, { csrf: !['GET', 'HEAD'].includes(req.method || 'GET') });
   if (!access) return;
+
+  if (req.method === 'GET' && url.pathname === '/admin/api/peppol/countries') {
+    const result = await peppolCountryList();
+    return json(res, result.status === 'ready' ? 200 : 503, result);
+  }
+  if (req.method === 'POST' && url.pathname === '/admin/api/peppol/search') {
+    try {
+      const input = validatePeppolSearchInput(await readJson(req));
+      const result = await peppolGlobalLookup(input);
+      return json(res, result.status === 'unavailable' ? 503 : 200, result);
+    } catch (error) {
+      return json(res, 400, { status: 'Error', error: error.message });
+    }
+  }
 
   if (req.method === 'GET' && url.pathname === '/admin/api/modules') {
     return json(res, 200, { modules: moduleCatalog(await store.listIntegrations({ publicOnly: true })) });
@@ -2609,7 +2640,8 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
     }
     const created = await documentStore.createJob({ ownerId: req.ai7Client.id, serviceId: definition.id,
       files, idempotencyKey, pipeline, transactionId: res.getHeader('x-ai7-transaction-id'),
-      billingLogKey: req.ai7Usage?.logKey || '' });
+      billingLogKey: req.ai7Usage?.logKey || '',
+      peppolRequested: definition.id === 'uae-trade-license-ocr' && req.headers['x-ai7-peppol-check'] === 'true' });
     if (created.reused && req.ai7Usage) {
       await usageStore.settleAsyncResult(req.ai7Usage.workspaceId, req.ai7Usage.logKey, {
         successful: false, reason: 'idempotency_replay'
@@ -2628,6 +2660,8 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
 }
 
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
+  peppolLookup = searchPeppolIndex,
+  peppolGlobalLookup = searchPeppolGlobal, peppolCountryList = peppolGlobalCountries,
   otpStore = createLoginOtpStore(),
   deepResearchQueue = process.env.ADVERSE_MEDIA_WORKER_ENABLED === 'false' ? null : createDeepResearchQueue(),
   formsQueue = createFormsQueue(), formSubmissionStore = createFormsSubmissionStore(),
@@ -2752,6 +2786,24 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return rotated ? json(res, 200, { key: rotated.client, api_key: rotated.apiKey, notice: 'The previous key is invalid. Copy this replacement now.' })
           : json(res, 409, { status: 'Error', error: 'The key could not be rotated.' });
       }
+      if (url.pathname === '/service/peppol_check' || url.pathname === '/service/peppol_check/countries') {
+        if (!req.ai7Client && !(await store.isClientKey(bearerToken(req))))
+          return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+        if (req.method === 'GET' && url.pathname.endsWith('/countries')) {
+          const result = await peppolCountryList();
+          return json(res, result.status === 'ready' ? 200 : 503, result);
+        }
+        if (req.method === 'POST' && url.pathname === '/service/peppol_check') {
+          try {
+            const input = validatePeppolSearchInput(await readJson(req));
+            const result = await peppolGlobalLookup(input);
+            return json(res, result.status === 'unavailable' ? 503 : 200, result);
+          } catch (error) {
+            return json(res, 400, { status: 'Error', error: error.message });
+          }
+        }
+        return json(res, 405, { status: 'Error', error: 'Method not allowed.' });
+      }
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return await createEntitySearchReport(req, res, store, reportStore);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media')
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore);
@@ -2797,7 +2849,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       }
       if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle,
         mailer, otpStore, usageStore, caseStore, reportStore, documentOcrStore, ejariStore);
-      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore);
+      if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore,
+        peppolGlobalLookup, peppolCountryList);
       if (url.pathname === '/admin/bsa-synthetic-combined.pdf') {
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }
@@ -2844,7 +2897,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       }
 
       const integration = await store.getIntegration(url.pathname, req.method || 'GET');
-      if (integration) return await proxyIntegration(req, res, url, integration, store, fetchImpl, reportStore);
+      if (integration) return await proxyIntegration(req, res, url, integration, store, fetchImpl, reportStore, peppolLookup);
       if (url.pathname.startsWith('/service/')) return json(res, 404, { status: 'Error', error: 'Service was not found.' });
 
       const directory = apiHosts.has(host) || url.pathname.startsWith('/docs') ? join(root, 'api-site') : join(root, 'site');

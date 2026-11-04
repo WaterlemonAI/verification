@@ -57,6 +57,7 @@ before(async () => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     assert.equal(req.headers.authorization, `Bearer ${upstreamToken}`);
+    assert.equal(req.headers['x-ai7-peppol-check'], undefined);
     const contentType = req.headers['content-type'];
     const rawBody = Buffer.concat(chunks);
 
@@ -111,6 +112,28 @@ test('relays a successful response without changing its shape', async () => {
     seconds: 1.234,
     trade_licence_verification_api: { uae_licence_number: 'SUCCESS-123' }
   });
+});
+
+test('Peppol opt-in enriches the verified name without changing supplier fields', async (t) => {
+  const checkedNames = [];
+  const enrichedApp = createAppServer({ peppolLookup: async (name, options) => {
+    checkedNames.push({ name, options });
+    return { status: 'name_match', source: 'peppol_directory_export', country: 'AE', matches: [] };
+  } });
+  await new Promise((resolve) => enrichedApp.listen(0, '127.0.0.1', resolve));
+  t.after(() => enrichedApp.close());
+  const response = await fetch(`http://127.0.0.1:${enrichedApp.address().port}/service/uae_tlv`, {
+    method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json',
+      'x-ai7-peppol-check': 'true' }, body: JSON.stringify({ license_number: 'FULL-123',
+        licence_number: 'ALT-123', company_name: 'Example Trading LLC',
+        license_document: 'data:application/pdf;base64,VEVTVA==', emirate: 'dubai',
+        authorising_body: 'dubai_department_of_economy_and_tourism' })
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(checkedNames, [{ name: 'Example Trading LLC', options: { country: 'AE' } }]);
+  assert.deepEqual(body.uae_tl_verification, completeSuccess.uae_tl_verification);
+  assert.equal(body.peppol.status, 'name_match');
 });
 
 test('serves the Case Manager display module with a JavaScript MIME type', async () => {

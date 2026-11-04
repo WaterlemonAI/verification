@@ -3,7 +3,7 @@
   "info": {
     "title": "AI7 UAE Verification API",
     "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, merchant-website risk screening, Forms orchestration, and asynchronous bank statement analysis. Every user-facing API response includes the random X-AI7-Transaction-ID header. Signed-in customers can review UTC timestamps, HTTP codes and per-hit costs in Account settings. Modules must be enabled for the workspace (otherwise HTTP 403); prepaid workspaces need sufficient credit (otherwise HTTP 402). Supplier response JSON and HTTP codes are preserved. Supplier HTTP 4xx/5xx results and capacity rejections are refunded and logged. A business-level partial result returned with HTTP 2xx retains its charge. Form submissions reserve one Form hit and one hit per selected API; failed selected API results are refunded, and callback retries are free. Under peak demand, a request can wait in a bounded service lane before execution. If capacity is exhausted, HTTP 503 with reasonCode CAPACITY_BUSY, Retry-After: 5 and the transaction ID means no supplier call occurred and no charge was retained.",
-    "version": "1.9.0"
+    "version": "1.10.0"
   },
   "servers": [
     {
@@ -48,11 +48,57 @@
         }
       }
     },
+    "/service/peppol_check": {
+      "post": {
+        "summary": "Search the global Peppol Directory snapshot",
+        "operationId": "searchPeppolDirectory",
+        "description": "Searches published business cards by normalized organization name. Country is optional; when supplied, its ISO 3166-1 alpha-2 code narrows the indexed key range. This is directory evidence, not legal identity verification. A missing result does not prove the organization is absent from Peppol. No live Directory API call is made.",
+        "security": [{ "ApiKey": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": {
+          "name": { "type": "string", "minLength": 3, "maxLength": 200, "example": "Etihad Airways Engineering" },
+          "country": { "type": "string", "pattern": "^[A-Z]{2}$", "description": "Optional country code. AE means United Arab Emirates.", "example": "AE" }
+        } } } } },
+        "responses": {
+          "200": { "description": "Search completed, including no-match results.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeppolGlobalResult" } } } },
+          "400": { "description": "The request is invalid." },
+          "401": { "description": "An active API key is required." },
+          "402": { "description": "Insufficient prepaid credit." },
+          "403": { "description": "The Peppol module is not enabled for this workspace." },
+          "429": { "description": "Rate limit reached." },
+          "503": { "description": "The global index is not ready or temporarily unavailable." }
+        }
+      }
+    },
+    "/service/peppol_check/countries": {
+      "get": {
+        "summary": "List country filters available in the Peppol snapshot",
+        "operationId": "listPeppolCountries",
+        "security": [{ "ApiKey": [] }],
+        "responses": {
+          "200": { "description": "Available country codes and card counts.", "content": { "application/json": { "schema": { "type": "object", "properties": {
+            "status": { "type": "string", "const": "ready" },
+            "snapshot_at": { "type": "string", "format": "date-time" },
+            "cards": { "type": "integer" },
+            "countries": { "type": "array", "items": { "type": "object", "properties": {
+              "code": { "type": "string", "pattern": "^[A-Z]{2}$" }, "count": { "type": "integer" }
+            } } }
+          } } } } },
+          "401": { "description": "An active API key is required." },
+          "403": { "description": "The Peppol module is not enabled for this workspace." },
+          "503": { "description": "The global index is not ready or temporarily unavailable." }
+        }
+      }
+    },
     "/service/uae_tlv": {
       "post": {
         "summary": "Verify a UAE trade licence",
         "description": "Verifies a UAE trade licence issued by any emirate or free zone.",
         "operationId": "verifyUaeTradeLicence",
+        "parameters": [
+          { "name": "X-AI7-Peppol-Check", "in": "header", "required": false,
+            "description": "Set to true to search the locally indexed UAE Peppol Directory export using the company name returned by trade licence verification. No result does not prove the company is absent from Peppol.",
+            "schema": { "type": "boolean", "default": false } }
+        ],
         "security": [
           {
             "ApiKey": []
@@ -888,9 +934,57 @@
           "trade_licence_verification_api": {
             "$ref": "#/components/schemas/VerificationResult",
             "description": "Compatibility response object name."
+          },
+          "peppol": {
+            "$ref": "#/components/schemas/PeppolDirectoryResult",
+            "description": "Present only when X-AI7-Peppol-Check is true and the licence verification returns JSON successfully. Separate directory evidence; not a trade licence verification decision."
           }
         },
         "additionalProperties": true
+      },
+      "PeppolDirectoryResult": {
+        "type": "object",
+        "required": ["status", "source", "country", "checked_at", "matches"],
+        "properties": {
+          "status": { "type": "string", "enum": ["name_match", "possible_matches", "not_found", "name_unavailable", "unavailable"] },
+          "source": { "type": "string", "const": "peppol_directory_export" },
+          "queried_name": { "type": "string" },
+          "country": { "type": "string", "const": "AE" },
+          "checked_at": { "type": "string", "format": "date-time" },
+          "snapshot_at": { "type": "string", "format": "date-time" },
+          "stale": { "type": "boolean", "description": "True when the loaded snapshot is more than 48 hours old." },
+          "total_results": { "type": "integer" },
+          "truncated": { "type": "boolean" },
+          "reason_code": { "type": "string" },
+          "matches": { "type": "array", "items": { "type": "object",
+            "properties": { "participant_id": { "type": ["object", "null"] },
+              "document_types": { "type": "array", "items": { "type": "object" } },
+              "entities": { "type": "array", "items": { "type": "object" } } } } }
+        },
+        "additionalProperties": false
+      },
+      "PeppolGlobalResult": {
+        "type": "object",
+        "required": ["status", "source", "queried_name", "country", "checked_at", "matches"],
+        "properties": {
+          "status": { "type": "string", "enum": ["name_match", "not_found", "unavailable"] },
+          "source": { "type": "string", "const": "peppol_directory_export" },
+          "queried_name": { "type": "string" },
+          "country": { "type": ["string", "null"], "description": "Selected ISO alpha-2 country or null for global search." },
+          "checked_at": { "type": "string", "format": "date-time" },
+          "snapshot_at": { "type": "string", "format": "date-time" },
+          "stale": { "type": "boolean" },
+          "returned_count": { "type": "integer" },
+          "truncated": { "type": "boolean" },
+          "reason_code": { "type": "string" },
+          "matches": { "type": "array", "items": { "type": "object", "properties": {
+            "participant_id": { "type": "object" },
+            "document_types": { "type": "array", "items": { "type": "object" } },
+            "entities": { "type": "array", "items": { "type": "object" } },
+            "matched_name": { "type": "string" },
+            "country_code": { "type": "string" }
+          } } }
+        }
       },
       "VerificationResult": {
         "type": "object",
