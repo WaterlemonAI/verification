@@ -4,12 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#081d42" />
-    <meta name="description" content="KYCProbe is a UAE-native KYC marketplace for business and individual verification, AML, adverse media, PEP and sanctions screening, API orchestration, and continuous monitoring." />
-    <title>KYCProbe — UAE-native verification and KYC orchestration</title>
+    <meta name="description" content="KYCProbe helps organisations run and document risk-based KYC checks: business verification, identity-document review, sanctions, PEP and adverse-media screening, and multi-check Forms through one API platform." />
+    <title>KYCProbe — KYC checks, Forms and evidence for compliance teams</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/styles.css?v=7" />
+    <link rel="stylesheet" href="/styles.css?v=8" />
     <script src="/script.js?v=4" defer></script>
   </head>
   <body>
@@ -20,7 +20,7 @@
       <a class="brand" href="#top" aria-label="KYCProbe home"><img src="/assets/kycprobe-logo-dark.png" alt="KYCProbe by AI7Lab" /></a>
       <button class="menu-button" type="button" aria-expanded="false" aria-controls="site-navigation">Menu</button>
       <nav id="site-navigation" aria-label="Main navigation">
-        <a href="#marketplace">Marketplace</a><a href="#orchestration">Orchestration</a><a href="#use-cases">Use cases</a><a href="#monitoring">Monitoring</a><a href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Contact</a>
+        <a href="#compliance">Compliance</a><a href="#marketplace">Checks</a><a href="#orchestration">Forms &amp; orchestration</a><a href="#monitoring">Ongoing review</a><a href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Contact</a>
       </nav>
       <a class="button button-small" href="https://app.kycprobe.com">Open API Platform <span>↗</span></a>
     </header>
@@ -28,18 +28,18 @@
     <main id="main">
       <section class="hero">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span></span> THE UAE-NATIVE KYC MARKETPLACE</p>
-          <h1>Know who you are<br />doing business <em>with.</em></h1>
-          <p class="hero-intro">Verify businesses and individuals. Screen AML, adverse media, PEP and sanctions. Orchestrate the checks your policy requires—and return one clear, auditable record.</p>
-          <div class="hero-actions"><a class="button button-accent" href="https://app.kycprobe.com">Explore verification APIs <span>↗</span></a><a class="text-link" href="#orchestration">See API orchestration <span>↓</span></a></div>
-          <div class="proof-row" aria-label="Platform highlights"><div><strong>01</strong><span>One credential</span></div><div><strong>02</strong><span>One workflow</span></div><div><strong>03</strong><span>One audit record</span></div></div>
+          <p class="eyebrow"><span></span> KYC CHECKS FOR RISK-BASED COMPLIANCE</p>
+          <h1>Know who you deal with. <em>Show how you checked.</em></h1>
+          <p class="hero-intro">Put your customer due diligence policy into practice. Verify businesses, review identity documents, screen sanctions and PEP exposure, and investigate adverse media. Combine the checks you need in a KYCProbe Form, with evidence your team can assess and record.</p>
+          <div class="hero-actions"><a class="button button-accent" href="#compliance">See how checks support compliance <span>↓</span></a><a class="text-link" href="#orchestration">Explore Forms &amp; orchestration <span>↓</span></a></div>
+          <div class="proof-row" aria-label="Platform highlights"><div><strong>01</strong><span>Choose relevant checks</span></div><div><strong>02</strong><span>Combine them in a Form</span></div><div><strong>03</strong><span>Review the evidence</span></div></div>
         </div>
 
         <div class="hero-stage reveal" aria-label="Illustration of an orchestrated KYC workflow">
           <div class="orbit orbit-one" aria-hidden="true"></div><div class="orbit orbit-two" aria-hidden="true"></div>
           <div class="stage-tag stage-tag-a"><span>✓</span> Trade licence</div><div class="stage-tag stage-tag-b"><span>✓</span> Sanctions + PEP</div><div class="stage-tag stage-tag-c"><span>✓</span> Adverse media</div><div class="stage-tag stage-tag-d"><span>✓</span> Merchant risk</div>
           <div class="orchestrator-card">
-            <div class="orchestrator-top"><span>API ORCHESTRATION</span><i></i></div>
+            <div class="orchestrator-top"><span>KYCProbe FORM / API ORCHESTRATION</span><i></i></div>
             <div class="orchestrator-title"><div class="pulse-mark">K</div><div><small>WORKFLOW / UAE-001</small><h2>Vendor onboarding</h2></div></div>
             <div class="flow-line"><span>INPUT</span><i></i><i></i><i></i><b>REPORT</b></div>
             <div class="flow-result"><span>6 checks complete</span><strong>Review ready</strong></div>
@@ -49,31 +49,45 @@
         </div>
       </section>
 
-      <section class="capability-rail" aria-label="Verification coverage"><span>BUSINESS</span><i></i><span>INDIVIDUAL</span><i></i><span>AML</span><i></i><span>ADVERSE MEDIA</span><i></i><span>PEP</span><i></i><span>SANCTIONS</span></section>
+      <section class="capability-rail" aria-label="Verification coverage"><span>BUSINESS</span><i></i><span>IDENTITY DOCUMENTS</span><i></i><span>SANCTIONS</span><i></i><span>PEP</span><i></i><span>ADVERSE MEDIA</span><i></i><span>FORMS</span></section>
+
+      <section class="section compliance" id="compliance" aria-labelledby="compliance-title">
+        <div class="section-kicker reveal"><span>01</span><p>COMPLIANCE WORKFLOWS</p></div>
+        <div class="compliance-heading reveal"><h2 id="compliance-title">Turn due diligence duties into <em>documented checks.</em></h2><div><p>UAE CDD/KYC guidance for licensed financial institutions calls for risk-based identification, sanctions screening, ongoing review and recordkeeping. KYCProbe supports those controls with checks, Forms and evidence your team can assess under its own regulatory obligations.</p><a href="https://rulebook.centralbank.ae/en/rulebook/guidance-licensed-financial-institutions-customer-due-diligenceknow-your-customer-and" target="_blank" rel="noopener">Read UAE CDD/KYC guidance ↗</a></div></div>
+        <div class="compliance-grid">
+          <article class="compliance-card reveal"><span>01 / IDENTIFY</span><h3>Establish who you are onboarding</h3><p>Check UAE trade licence details and search entities. Extract fields from passports, Emirates IDs and corporate documents for reviewer comparison.</p><a href="https://app.kycprobe.com">Business and document checks ↗</a></article>
+          <article class="compliance-card reveal"><span>02 / SCREEN</span><h3>Find exposure that needs review</h3><p>Search sanctions, PEP and watchlist datasets. Use adverse-media results and source links to investigate potential risk signals.</p><a href="https://app.kycprobe.com/entity-search">Entity screening API ↗</a></article>
+          <article class="compliance-card reveal"><span>03 / ASSESS</span><h3>Add business and payment context</h3><p>Review merchant websites, IBAN details and bank statements where those signals are relevant to your risk policy.</p><a href="https://app.kycprobe.com/merchant-screening">Merchant screening API ↗</a></article>
+          <article class="compliance-card reveal"><span>04 / DOCUMENT</span><h3>Keep checks together in one review</h3><p>Build a Form from selected APIs, collect required inputs once and receive consolidated results with an audit PDF for the case file.</p><a href="#orchestration">How Forms work ↓</a></article>
+        </div>
+        <p class="compliance-note reveal">Your organisation defines which checks its rules require, resolves possible matches and makes the final decision. KYCProbe supplies verification results and supporting evidence.</p>
+      </section>
 
       <section class="section intro" id="marketplace">
-        <div class="section-kicker reveal"><span>01</span><p>KYC MARKETPLACE</p></div>
+        <div class="section-kicker reveal"><span>02</span><p>VERIFICATION CHECKS</p></div>
         <div class="intro-copy reveal"><h2>Choose the checks.<br /><em>Keep one integration.</em></h2><p>KYCProbe brings regional and global verification services into a provider-neutral marketplace. Start with one check, combine several into a Form, or embed the complete workflow in your product.</p></div>
         <div class="market-grid">
-          <a class="market-card reveal" href="https://app.kycprobe.com"><span class="card-index">01 / BUSINESS</span><div class="market-icon">⌂</div><h3>Business verification</h3><p>Validate UAE trade licence and entity information with structured evidence.</p><b>Explore API →</b></a>
-          <a class="market-card reveal" href="https://app.kycprobe.com/entity-search"><span class="card-index">02 / IDENTITY</span><div class="market-icon">◎</div><h3>Individual & entity</h3><p>Search people and organisations across identity and risk datasets.</p><b>Explore API →</b></a>
-          <a class="market-card reveal" href="https://app.kycprobe.com/adverse-media"><span class="card-index">03 / FINCRIME</span><div class="market-icon">◇</div><h3>AML, PEP & sanctions</h3><p>Screen financial-crime exposure with configurable decision thresholds.</p><b>Explore API →</b></a>
-          <a class="market-card reveal" href="https://app.kycprobe.com/merchant-screening"><span class="card-index">04 / DIGITAL</span><div class="market-icon">↗</div><h3>Merchant screening</h3><p>Turn a live website into a defensible merchant-risk review.</p><b>Explore API →</b></a>
+          <a class="market-card reveal" href="https://app.kycprobe.com"><span class="card-index">01 / BUSINESS</span><div class="market-icon">⌂</div><h3>Business verification</h3><p>Check UAE trade licence and entity information with structured results.</p><b>Explore API →</b></a>
+          <a class="market-card reveal" href="https://app.kycprobe.com/document-extraction/passport-icao-ocr"><span class="card-index">02 / DOCUMENTS</span><div class="market-icon">▤</div><h3>Identity & corporate documents</h3><p>Extract passport, Emirates ID and company-document fields for human comparison.</p><b>Explore API →</b></a>
+          <a class="market-card reveal" href="https://app.kycprobe.com/entity-search"><span class="card-index">03 / FINANCIAL CRIME</span><div class="market-icon">◎</div><h3>Sanctions, PEP & watchlists</h3><p>Search people and organisations for potential exposure that needs review.</p><b>Explore API →</b></a>
+          <a class="market-card reveal" href="https://app.kycprobe.com/adverse-media"><span class="card-index">04 / OPEN SOURCES</span><div class="market-icon">◇</div><h3>Adverse media</h3><p>Investigate relevant reporting with source links and review context.</p><b>Explore API →</b></a>
+          <a class="market-card reveal" href="https://app.kycprobe.com/merchant-screening"><span class="card-index">05 / DIGITAL</span><div class="market-icon">↗</div><h3>Merchant screening</h3><p>Review a live website for identity, policies and risk signals.</p><b>Explore API →</b></a>
+          <a class="market-card reveal" href="https://app.kycprobe.com/iban"><span class="card-index">06 / PAYMENTS</span><div class="market-icon">≡</div><h3>Bank & payment evidence</h3><p>Use IBAN checks and, where enabled, bank-statement analysis for supporting payment context.</p><b>Explore API →</b></a>
         </div>
       </section>
 
       <section class="section orchestration" id="orchestration">
-        <div class="orchestration-copy reveal"><p class="eyebrow light"><span></span> API ORCHESTRATION</p><h2>Many checks in.<br /><em>One answer out.</em></h2><p>Define the workflow once. KYCProbe collects the required inputs, routes each check, manages asynchronous completion, and consolidates the evidence into one callback response and one report.</p><a class="button button-light" href="https://app.kycprobe.com/forms">Build an orchestrated Form <span>↗</span></a></div>
+        <div class="orchestration-copy reveal"><p class="eyebrow light"><span></span> FORMS &amp; API ORCHESTRATION</p><h2>Make your policy a <em>repeatable workflow.</em></h2><p>A KYCProbe Form combines the verification APIs you select into one reusable workflow. Collect the required inputs once, run each check, manage asynchronous results and receive a consolidated callback and audit PDF. Use the result to support a consistent human review.</p><a class="button button-light" href="https://app.kycprobe.com/forms">Explore Forms <span>↗</span></a></div>
         <div class="pipeline reveal" aria-label="API orchestration sequence">
           <div class="pipeline-source"><small>YOUR SYSTEM</small><strong>One API request</strong><code>POST /forms/vendor-onboarding</code></div><div class="pipeline-arrow">→</div>
           <div class="pipeline-core"><div class="core-head"><span>KYCProbe</span><b>ORCHESTRATOR</b></div><ul><li><span>01</span> Validate inputs <i>done</i></li><li><span>02</span> Route checks <i>done</i></li><li><span>03</span> Reconcile results <i>done</i></li><li><span>04</span> Apply policy <i>done</i></li></ul></div><div class="pipeline-arrow">→</div>
           <div class="pipeline-output"><small>ONE OUTCOME</small><strong>JSON + PDF</strong><span>Callback delivered</span><span>Audit record stored</span></div>
         </div>
-        <div class="orchestration-points reveal"><div><span>01</span><strong>Automate workflows</strong><p>Replace manual hand-offs with controlled routing, callbacks and processing logs.</p></div><div><span>02</span><strong>Stay policy-aligned</strong><p>Choose services and thresholds around your organisation’s risk appetite.</p></div><div><span>03</span><strong>Change without rebuilding</strong><p>Keep a stable customer-facing contract while verification services evolve.</p></div></div>
+        <div class="orchestration-points reveal"><div><span>01</span><strong>Select checks</strong><p>Choose the identity, business and risk APIs your policy calls for.</p></div><div><span>02</span><strong>Collect once</strong><p>Use one Form submission to route the selected checks and handle completion.</p></div><div><span>03</span><strong>Review together</strong><p>Receive one callback and consolidated report with outcomes and evidence.</p></div></div>
       </section>
 
       <section class="section evidence" id="use-cases">
-        <div class="section-kicker reveal"><span>02</span><p>ADVERSE MEDIA</p></div>
+        <div class="section-kicker reveal"><span>03</span><p>ADVERSE MEDIA</p></div>
         <div class="evidence-heading reveal"><h2>Evidence you can read.<br /><em>Not a black-box score.</em></h2><p>Multilingual discovery, entity matching and risk classification are presented with source links, relevance signals and the context a reviewer needs.</p></div>
         <div class="media-showcase">
           <div class="media-card reveal">
@@ -93,7 +107,7 @@
       </section>
 
       <section class="section audit-section">
-        <div class="audit-copy reveal"><p class="eyebrow"><span></span> CERTIFIED & AUDITABLE</p><h2>A report built for the question: <em>“How did you decide?”</em></h2><p>Each generated report can preserve the transaction ID, request time, processing location, checks performed, decision thresholds, source evidence, findings and reviewer guidance.</p><div class="audit-list"><span>Timestamped transaction trail</span><span>Source and evidence references</span><span>Policy thresholds recorded</span><span>Customer-branded PDF output</span></div></div>
+        <div class="audit-copy reveal"><p class="eyebrow"><span></span> REVIEWABLE &amp; AUDITABLE</p><h2>A report built for the question: <em>“How did you decide?”</em></h2><p>Each generated report can preserve the transaction ID, request time, processing location, checks performed, decision thresholds, source evidence, findings and reviewer guidance.</p><div class="audit-list"><span>Timestamped transaction trail</span><span>Source and evidence references</span><span>Policy thresholds recorded</span><span>Customer-branded PDF output</span></div></div>
         <div class="report-preview reveal" aria-label="Illustrative audit report preview"><div class="report-page report-page-back"></div><div class="report-page"><div class="report-head"><img src="/assets/kycprobe-logo-dark.png" alt="KYCProbe" /><span>VERIFICATION REPORT</span></div><p class="report-ref">REPORT / KYC-2026-1048</p><h3>Consolidated due diligence</h3><div class="report-decision"><span>DECISION STATUS</span><strong>REVIEW COMPLETE</strong></div><div class="report-bars"><i style="--w: 92%"></i><i style="--w: 76%"></i><i style="--w: 86%"></i></div><div class="report-fields"><span>Entity identity</span><b>Verified</b><span>AML / sanctions</span><b>Reviewed</b><span>Media signals</span><b>3 findings</b></div><div class="report-seal"><strong>AI7</strong><span>Audit record<br />digitally issued</span></div></div></div>
       </section>
 
@@ -108,18 +122,18 @@
       </section>
 
       <section class="section monitoring" id="monitoring">
-        <div class="monitoring-copy reveal"><div class="section-kicker"><span>03</span><p>CONTINUOUS MONITORING</p></div><h2>A pass today is not a promise tomorrow.</h2><p>Turn a point-in-time verification into an active watch. Re-screen selected subjects, compare new signals with the prior record, and route material changes to the right team.</p></div>
-        <div class="monitor-grid reveal"><div class="monitor-timeline"><span class="timeline-line"></span><article><i></i><small>DAY 00</small><strong>Baseline verified</strong><p>Identity, ownership and risk record established.</p></article><article><i></i><small>DAY 30</small><strong>No material change</strong><p>Monitoring completed. Record retained.</p></article><article class="alert"><i></i><small>DAY 61</small><strong>New media signal</strong><p>Evidence routed for human review.</p></article></div><div class="monitor-side"><span>WATCH CONFIGURATION</span><div><small>Subjects monitored</small><strong>Businesses · individuals · merchants</strong></div><div><small>Signals</small><strong>Sanctions · PEP · media · licence</strong></div><div><small>Delivery</small><strong>Callback · PDF · workflow event</strong></div><b>Monitoring active <i></i></b></div></div>
+        <div class="monitoring-copy reveal"><div class="section-kicker"><span>04</span><p>ONGOING REVIEW</p></div><h2>A check today is a point-in-time result.</h2><p>Use the APIs again when your review schedule or a material change calls for fresh information. Compare the new results with your earlier case record and assess any new signals.</p></div>
+        <div class="monitor-grid reveal"><div class="monitor-timeline"><span class="timeline-line"></span><article><i></i><small>ONBOARDING</small><strong>Establish a baseline</strong><p>Record the identity, business and risk checks selected by your policy.</p></article><article><i></i><small>PERIODIC REVIEW</small><strong>Run fresh checks</strong><p>Re-submit the relevant APIs or Form when your team schedules a review.</p></article><article class="alert"><i></i><small>MATERIAL CHANGE</small><strong>Assess new signals</strong><p>Compare results and send possible matches to a human reviewer.</p></article></div><div class="monitor-side"><span>EXAMPLE REVIEW PLAN</span><div><small>Subjects</small><strong>Businesses · individuals · merchants</strong></div><div><small>Checks to repeat</small><strong>Sanctions · PEP · media · licence</strong></div><div><small>Review record</small><strong>Results · source evidence · case notes</strong></div><b>Your team sets the cadence <i></i></b></div></div>
       </section>
 
       <section class="brand-story"><div class="brand-story-inner reveal"><div><p class="eyebrow light"><span></span> ABOUT THE BRAND</p><h2>KYCProbe is a brand by <a href="https://www.ai7lab.net" target="_blank" rel="noopener">AI7Lab</a>, built in Dubai.</h2></div><div><p>AI7Lab builds and operates agentic AI products for real enterprise workflows. KYCProbe brings that product discipline to modular verification, orchestration and evidence-led compliance operations.</p><div class="brand-links"><a href="https://www.ai7lab.net" target="_blank" rel="noopener">About AI7Lab ↗</a><a href="https://www.ai7lab.net/products" target="_blank" rel="noopener">Products ↗</a><a href="https://www.ai7lab.net/technology" target="_blank" rel="noopener">Technology ↗</a><a href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Contact ↗</a></div></div></div></section>
 
-      <section class="final-cta reveal"><p class="eyebrow"><span></span> START WITH ONE CHECK</p><h2>Build the verification<br />workflow you need.</h2><p>Use one API, orchestrate a complete KYC journey, or connect KYCProbe to the systems your team already operates.</p><div><a class="button" href="https://app.kycprobe.com">Open API Platform <span>↗</span></a><a class="text-link" href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Talk to AI7Lab <span>↗</span></a></div></section>
+      <section class="final-cta reveal"><p class="eyebrow"><span></span> BUILD YOUR REVIEW WORKFLOW</p><h2>Choose your checks.<br />Make the evidence count.</h2><p>Start with one API or combine your due diligence checks in a Form. Keep the results together for the people responsible for review and decisions.</p><div><a class="button" href="https://app.kycprobe.com/forms">Explore Forms <span>↗</span></a><a class="text-link" href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Talk to AI7Lab <span>↗</span></a></div></section>
     </main>
 
     <footer>
       <div class="footer-brand"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /><p>UAE-native verification infrastructure for auditable KYC workflows.</p></div>
-      <div class="footer-links"><div><strong>PLATFORM</strong><a href="#marketplace">Marketplace</a><a href="#orchestration">API orchestration</a><a href="#monitoring">Continuous monitoring</a><a href="https://app.kycprobe.com">API Platform</a></div><div><strong>AI7LAB</strong><a href="https://www.ai7lab.net" target="_blank" rel="noopener">About</a><a href="https://www.ai7lab.net/products" target="_blank" rel="noopener">Products</a><a href="https://www.ai7lab.net/technology" target="_blank" rel="noopener">Technology</a><a href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Contact</a></div><div><strong>LEGAL</strong><a href="/terms">Terms of Use</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a></div></div>
+      <div class="footer-links"><div><strong>PLATFORM</strong><a href="#compliance">Compliance workflows</a><a href="#marketplace">Verification checks</a><a href="#orchestration">Forms &amp; orchestration</a><a href="#monitoring">Ongoing review</a><a href="https://app.kycprobe.com">API Platform</a></div><div><strong>AI7LAB</strong><a href="https://www.ai7lab.net" target="_blank" rel="noopener">About</a><a href="https://www.ai7lab.net/products" target="_blank" rel="noopener">Products</a><a href="https://www.ai7lab.net/technology" target="_blank" rel="noopener">Technology</a><a href="https://www.ai7lab.net/contact" target="_blank" rel="noopener">Contact</a></div><div><strong>LEGAL</strong><a href="/terms">Terms of Use</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a></div></div>
       <div class="footer-bottom"><span>© <span id="year">2026</span> AETHERIX SYSTEMS - FZCO, UAE</span><span>KYCProbe is a brand by AI7Lab</span></div>
     </footer>
   </body>

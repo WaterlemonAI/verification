@@ -217,9 +217,10 @@ test('serves the public KYCProbe marketplace homepage and terms on the new apex 
   const homepage = await getWithHost('/', 'kycprobe.com');
   const html = homepage.body.toString('utf8');
   assert.equal(homepage.status, 200);
-  assert.match(html, /UAE-native KYC marketplace/i);
-  assert.match(html, /API ORCHESTRATION/);
-  assert.match(html, /CONTINUOUS MONITORING/);
+  assert.match(html, /KYC CHECKS FOR RISK-BASED COMPLIANCE/);
+  assert.match(html, /COMPLIANCE WORKFLOWS/);
+  assert.match(html, /FORMS &amp; API ORCHESTRATION/);
+  assert.match(html, /ONGOING REVIEW/);
   assert.match(html, /vendoreye-logo\.png/);
   assert.match(html, /Terms of Use/);
   assert.match(html, /kycprobe-logo-dark\.png/);
