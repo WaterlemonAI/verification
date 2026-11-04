@@ -11,7 +11,7 @@ search with an optional country dropdown.
 ```
 
 The API uses an Azure Table index built from the complete 2026-11-03 Peppol
-Directory export (9,440,027 indexed business cards and 9,335,177 generated
+Directory export (9,440,027 processed business cards and 9,335,177 generated
 name rows). It makes no live request to
 Peppol. A normalized exact name is hashed into one of 256 partitions. Within
 that partition, row keys group matches by country. Supplying `country` narrows
@@ -23,7 +23,8 @@ most 10 matches and indicates truncation.
 
 This is an exact normalized-name lookup. A `not_found` result is not proof that
 the organization is absent from the Peppol network. Directory publication is
-optional, and a name match is not legal identity verification.
+optional, names shorter than three searchable characters are omitted from the
+index, and a name match is not legal identity verification.
 
 The UAE Trade Licence Verification and Trade License OCR Peppol options pass
 `country: AE` explicitly and continue to use the small private UAE index. They
