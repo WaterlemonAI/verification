@@ -217,7 +217,7 @@ test('serves the public KYCProbe marketplace homepage and terms on the new apex 
   const homepage = await getWithHost('/', 'kycprobe.com');
   const html = homepage.body.toString('utf8');
   assert.equal(homepage.status, 200);
-  assert.match(html, /KYC CHECKS FOR RISK-BASED COMPLIANCE/);
+  assert.match(html, /From scattered checks to/);
   assert.match(html, /COMPLIANCE WORKFLOWS/);
   assert.match(html, /FORMS &amp; API ORCHESTRATION/);
   assert.match(html, /ONGOING REVIEW/);
