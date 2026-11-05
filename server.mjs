@@ -1721,9 +1721,14 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
     || url.pathname === '/portal/api/team/members/remove') {
     const { account, session } = await currentPortalSession(req, store);
     if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
-    const customer = await store.getCustomer(account.client_id);
-    if (!customer || customer.status !== 'active') return json(res, 403, { status: 'Error', error: 'This workspace is not active.' });
     const isOrgAdmin = (account.role || 'org_admin') === 'org_admin';
+    let customer = await store.getCustomer(account.client_id);
+    // Older portal accounts predate customer records. Materialize their workspace only when its admin creates a team.
+    if (!customer && isOrgAdmin && /^[a-f0-9]{16}$/.test(account.client_id) && validEmail(account.email)) {
+      customer = { id: account.client_id, name: account.client_name, adminEmail: account.email,
+        status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    }
+    if (!customer || customer.status !== 'active') return json(res, 403, { status: 'Error', error: 'This workspace is not active.' });
     if (req.method === 'GET' && url.pathname === '/portal/api/team') {
       const members = await store.listPortalUsers(account.client_id);
       const invitations = isOrgAdmin ? await store.listTeamInvitations(account.client_id) : [];
