@@ -18,6 +18,34 @@ if (year) year.textContent = new Date().getFullYear();
 const menuButton = document.querySelector(".menu-button");
 const navigation = document.querySelector("#site-navigation");
 
+const exampleSolutions = {
+  banking: { title: 'Banking customer onboarding', checks: ['Identity and business verification', 'Sanctions, PEP and adverse-media screening', 'Payment evidence where relevant'], monitoring: 'Re-screen risk signals on the review cadence and triggers set by your policy.' },
+  crypto: { title: 'Crypto customer onboarding', checks: ['Identity-document and entity checks', 'Sanctions, PEP and watchlist screening', 'Adverse-media review'], monitoring: 'Refresh sanctions, PEP and media signals at the cadence your policy requires.' },
+  finance: { title: 'Financial services onboarding', checks: ['Identity and business records', 'Sanctions and PEP screening', 'Adverse-media and payment context'], monitoring: 'Repeat relevant risk checks throughout the customer relationship.' },
+  loans: { title: 'Loan applicant onboarding', checks: ['Identity-document field review', 'Bank-statement analysis where enabled', 'Sanctions and PEP checks where relevant'], monitoring: 'Review material changes and re-run required checks during the loan relationship.' },
+  supplier: { title: 'Supplier onboarding', checks: ['Trade licence and corporate documents', 'Entity and financial-crime screening', 'Merchant website review'], monitoring: 'Refresh licence and risk signals as the supplier relationship continues.' },
+  student: { title: 'Student onboarding', checks: ['Passport or Emirates ID field review', 'Supporting-document extraction', 'Name screening where required'], monitoring: 'Repeat relevant checks at enrolment milestones set by your policy.' },
+  passenger: { title: 'Passenger onboarding', checks: ['Passport and MRZ field extraction', 'Identity-data review', 'Name screening where required'], monitoring: 'Re-screen relevant information when the journey or travel details change.' },
+  tenant: { title: 'Tenant onboarding', checks: ['Passport or Emirates ID field review', 'Ejari verification', 'Risk screening where applicable'], monitoring: 'Refresh tenancy and identity evidence at renewal or a material change.' },
+  partner: { title: 'Business partner onboarding', checks: ['Trade licence and entity verification', 'Sanctions, PEP and adverse-media screening', 'Merchant or payment context where relevant'], monitoring: 'Re-check business status and risk signals across the partnership.' },
+  employee: { title: 'Employee onboarding', checks: ['Identity-document field review', 'Supporting-document extraction', 'Risk screening where applicable'], monitoring: 'Review relevant records at policy-defined intervals where permitted.' }
+};
+
+const solutionButtons = [...document.querySelectorAll('[data-solution]')];
+const solutionTitle = document.querySelector('#solution-title');
+const solutionChecks = document.querySelector('#solution-checks');
+const solutionMonitoring = document.querySelector('#solution-monitoring');
+for (const button of solutionButtons) button.addEventListener('click', () => {
+  const selected = exampleSolutions[button.dataset.solution];
+  if (!selected) return;
+  for (const item of solutionButtons) item.setAttribute('aria-pressed', String(item === button));
+  solutionTitle.textContent = selected.title;
+  solutionChecks.replaceChildren(...selected.checks.map((check) => {
+    const item = document.createElement('li'); item.textContent = check; return item;
+  }));
+  solutionMonitoring.textContent = selected.monitoring;
+});
+
 menuButton?.addEventListener("click", () => {
   const open = navigation?.classList.toggle("open") || false;
   menuButton.setAttribute("aria-expanded", String(open));
