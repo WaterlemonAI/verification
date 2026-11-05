@@ -14,7 +14,6 @@ const authorisingBodies = [
   'dubai_development_authority',
   'dubai_healthcare_city',
   'dubai_international_financial_centre',
-  'difc',
   'dubai_multi_commodities_centre',
   'dubai_silicon_oasis',
   'international_humanitarian_city',

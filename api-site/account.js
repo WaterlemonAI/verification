@@ -2,6 +2,8 @@
   const byId = (id) => document.getElementById(id);
   let csrf = '';
   let casePolicyVersion = 0;
+  let currentAccount = null;
+  let keysById = new Map();
 
   async function request(path, options = {}) {
     const response = await fetch(path, { ...options, credentials: 'same-origin', headers: {
@@ -21,6 +23,7 @@
 
   async function loadKeys() {
     const { keys } = await request('/portal/api/keys');
+    keysById = new Map(keys.map((key) => [key.id, key]));
     const list = byId('key-list');
     list.replaceChildren();
     if (!keys.length) { list.textContent = 'No keys yet. Create one to start using the APIs.'; return; }
@@ -28,9 +31,9 @@
       const row = document.createElement('div'); row.className = 'account-key-row';
       const info = document.createElement('div');
       const title = document.createElement('strong'); title.textContent = key.label || 'Default key';
-      const details = document.createElement('small'); details.textContent = `•••• ${key.lastFour} · ${key.status} · created ${new Date(key.createdAt).toLocaleDateString()}`;
+      const details = document.createElement('small'); details.textContent = `•••• ${key.lastFour} · ${key.status} · ${key.ownerEmail || 'Workspace key'} · created ${new Date(key.createdAt).toLocaleDateString()}`;
       info.append(title, details); row.append(info);
-      if (key.status === 'active') {
+      if (key.status === 'active' && (currentAccount.role === 'org_admin' || key.ownerEmail === currentAccount.email)) {
         const rotate = document.createElement('button'); rotate.textContent = 'Rotate'; rotate.type = 'button';
         rotate.addEventListener('click', async () => {
           if (!confirm(`Rotate ${key.label || 'this key'}? Its current value will stop working.`)) return;
@@ -50,6 +53,51 @@
       list.append(row);
     }
   }
+
+  async function loadTeam() {
+    const team = await request('/portal/api/team');
+    byId('team-summary').textContent = team.created
+      ? `${team.name} · ${team.domain} · ${team.members.filter((item) => item.status === 'active').length} active member(s)`
+      : `Create a team for ${team.name} to invite colleagues at ${team.domain}. The team uses your existing workspace credit and API access.`;
+    byId('team-create').hidden = team.created || team.role !== 'org_admin';
+    byId('team-invite-form').hidden = !team.created || team.role !== 'org_admin';
+    byId('team-email').placeholder = `colleague@${team.domain}`;
+    const list = byId('team-list'); list.replaceChildren();
+    for (const member of team.members) {
+      const row = document.createElement('div'); row.className = 'account-key-row';
+      const info = document.createElement('div');
+      const name = document.createElement('strong'); name.textContent = member.email;
+      const detail = document.createElement('small'); detail.textContent = `${member.role === 'org_admin' ? 'Organization admin' : 'Member'} · ${member.status}`;
+      info.append(name, detail); row.append(info);
+      if (team.role === 'org_admin' && member.role === 'member' && member.status === 'active') {
+        const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove';
+        remove.addEventListener('click', async () => {
+          if (!confirm(`Remove ${member.email} and revoke their API keys?`)) return;
+          remove.disabled = true;
+          try { await request('/portal/api/team/members/remove', { method: 'POST', body: JSON.stringify({ email: member.email }) });
+            await Promise.all([loadTeam(), loadKeys()]); }
+          catch (error) { byId('team-message').textContent = error.message; remove.disabled = false; }
+        });
+        row.append(remove);
+      }
+      list.append(row);
+    }
+    const pending = byId('team-invitations'); pending.replaceChildren();
+    if (team.role === 'org_admin') for (const invitation of team.invitations) {
+      const row = document.createElement('div'); row.className = 'account-key-row';
+      const text = document.createElement('div');
+      const name = document.createElement('strong'); name.textContent = invitation.email;
+      const detail = document.createElement('small'); detail.textContent = `Invitation pending · expires ${new Date(invitation.expiresAt).toLocaleString()}`;
+      text.append(name, detail); row.append(text); pending.append(row);
+    }
+  }
+
+  byId('team-create').addEventListener('click', async () => {
+    const button = byId('team-create'); button.disabled = true;
+    byId('team-message').textContent = '';
+    try { await request('/portal/api/team', { method: 'POST' }); await loadTeam(); }
+    catch (error) { byId('team-message').textContent = error.message; button.disabled = false; }
+  });
 
   async function loadHealth() {
     byId('health-status').textContent = 'Checking…';
@@ -76,12 +124,13 @@
       for (const log of logs) {
         const row = document.createElement('tr');
         const cost = `${account.currency} ${log.cost}${log.refund_amount && log.refund_amount !== '0.000000' ? ` · refunded ${log.refund_amount}` : ''}`;
-        for (const value of [log.date_time, log.transaction_id, log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', cost]) {
+        const key = keysById.get(log.key_id);
+        for (const value of [log.date_time, log.transaction_id, key?.ownerEmail || key?.label || log.key_id || 'Workspace', log.modules.join(', ') || 'Utility', log.response_code ?? 'Pending', cost]) {
           const cell = document.createElement('td'); cell.textContent = value; row.append(cell);
         }
         body.append(row);
       }
-      if (!logs.length) { const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 5; cell.textContent = 'No API calls logged yet.'; row.append(cell); body.append(row); }
+      if (!logs.length) { const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 6; cell.textContent = 'No API calls logged yet.'; row.append(cell); body.append(row); }
     } catch (error) { byId('usage-status').textContent = error.message; }
   }
 
@@ -111,6 +160,22 @@
           ? `Case Manager is enabled for new checks. Copies expire after ${ttlDays} days (30 days at most for OCR).`
           : 'Case Manager is disabled. Earlier copies are retired and will be purged.';
     } catch (error) { byId('case-settings-message').textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+
+  byId('team-invite-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('button');
+    button.disabled = true;
+    byId('team-message').textContent = '';
+    try {
+      const email = byId('team-email').value.trim();
+      await request('/portal/api/team/invitations', { method: 'POST', body: JSON.stringify({ email }) });
+      byId('team-message').textContent = `Invitation sent to ${email}.`;
+      form.reset();
+      await loadTeam();
+    } catch (error) { byId('team-message').textContent = error.message; }
     finally { button.disabled = false; }
   });
 
@@ -150,9 +215,12 @@
 
   request('/portal/api/auth/session').then(async (session) => {
     csrf = session.csrf_token;
+    currentAccount = session.account;
     byId('account-identity').textContent = `${session.account.client_name} · ${session.account.email}`;
+    if (session.account.role !== 'org_admin') byId('case-settings-section').hidden = true;
     const initial = sessionStorage.getItem('ai7_new_api_key');
     if (initial) { sessionStorage.removeItem('ai7_new_api_key'); showNewKey(initial); }
-    await Promise.all([loadKeys(), loadHealth(), loadUsage(), loadCaseSettings()]);
+    await Promise.all([loadKeys(), loadHealth(), loadTeam(), ...(session.account.role === 'org_admin' ? [loadCaseSettings()] : [])]);
+    await loadUsage();
   }).catch(() => location.replace('/login?next=%2Faccount'));
 })();
