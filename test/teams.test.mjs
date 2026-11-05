@@ -113,3 +113,42 @@ test('same-domain team invitation, member keys, shared credit, and removal remai
   await store.setCustomer({ ...(await store.getCustomer(workspaceId)), status: 'disabled' });
   assert.equal(await store.getClientForKey(adminKey.api_key), null);
 });
+
+test('an existing portal admin can create a team when the legacy workspace has no customer record', async (t) => {
+  const store = new EnvironmentStore();
+  const { client } = await store.createClient('Legacy Workspace');
+  await store.setPortalUser(createPortalAccount('owner@ai7lab.net', 'OwnerPassword!123', { id: client.id, name: client.name }));
+  await store.setPortalSessionKey('legacy-team-session-signing-key');
+  const sent = [];
+  const codes = [];
+  const mailer = { configured: true, sendTeamInvitation: async (message) => sent.push(message),
+    sendLoginCode: async (message) => codes.push(message) };
+  const server = createAppServer({ store, mailer, startWorker: false, deepResearchQueue: null, formsQueue: null });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  const login = await post(base, '/portal/api/auth/login', { email: 'owner@ai7lab.net', password: 'OwnerPassword!123' });
+  assert.equal(login.status, 202);
+  const challenge = (await login.json()).challenge_id;
+  const verified = await post(base, '/portal/api/auth/verify-code',
+    { email: 'owner@ai7lab.net', challenge_id: challenge, code: codes.at(-1).code });
+  assert.equal(verified.status, 200);
+  const cookie = verified.headers.get('set-cookie').split(';')[0];
+  const headers = { cookie, 'x-ai7-csrf': (await verified.json()).csrf_token };
+
+  const before = await fetch(`${base}/portal/api/team`, { headers: { cookie } });
+  assert.equal(before.status, 200);
+  assert.deepEqual((({ created, domain, role }) => ({ created, domain, role }))(await before.json()),
+    { created: false, domain: 'ai7lab.net', role: 'org_admin' });
+  assert.equal(await store.getCustomer(client.id), null);
+
+  assert.equal((await post(base, '/portal/api/team', {}, headers)).status, 200);
+  const customer = await store.getCustomer(client.id);
+  assert.equal(customer.status, 'active');
+  assert.equal(customer.adminEmail, 'owner@ai7lab.net');
+  assert.ok(customer.teamCreatedAt);
+  assert.equal((await post(base, '/portal/api/team/invitations', { email: 'outside@example.net' }, headers)).status, 400);
+  assert.equal((await post(base, '/portal/api/team/invitations', { email: 'sales@ai7lab.net' }, headers)).status, 201);
+  assert.equal(sent.length, 1);
+});

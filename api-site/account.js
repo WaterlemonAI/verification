@@ -220,7 +220,8 @@
     if (session.account.role !== 'org_admin') byId('case-settings-section').hidden = true;
     const initial = sessionStorage.getItem('ai7_new_api_key');
     if (initial) { sessionStorage.removeItem('ai7_new_api_key'); showNewKey(initial); }
-    await Promise.all([loadKeys(), loadHealth(), loadTeam(), ...(session.account.role === 'org_admin' ? [loadCaseSettings()] : [])]);
+    const teamLoad = loadTeam().catch((error) => { byId('team-summary').textContent = error.message; });
+    await Promise.all([loadKeys(), loadHealth(), teamLoad, ...(session.account.role === 'org_admin' ? [loadCaseSettings()] : [])]);
     await loadUsage();
   }).catch(() => location.replace('/login?next=%2Faccount'));
 })();
