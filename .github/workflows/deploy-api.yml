@@ -378,7 +378,7 @@ jobs:
             *) echo 'Flo certificate must belong to the production Container Apps environment.' >&2; exit 1 ;;
           esac
           az resource show --ids "${FLO_CERTIFICATE_RESOURCE_ID}" --query id --output tsv > /dev/null
-          clamav_image="$(rg -o 'ai7uae-clamav@sha256:[a-f0-9]{64}' infrastructure/api.bicep | head -1)"
+          clamav_image="$(grep -oE 'ai7uae-clamav@sha256:[a-f0-9]{64}' infrastructure/api.bicep | head -1)"
           test -n "${clamav_image}"
           az acr repository show --name "${{ vars.ACR_NAME }}" --image "${clamav_image}" --query digest --output tsv > /dev/null
 
