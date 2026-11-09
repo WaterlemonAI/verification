@@ -368,8 +368,9 @@ jobs:
           test -n "${KEY_VAULT_URI}" && test -n "${FLO_CERTIFICATE_RESOURCE_ID}"
           vault_name="${KEY_VAULT_URI#https://}"
           vault_name="${vault_name%%.*}"
+          vault_id="$(az keyvault show --resource-group "${AZURE_RESOURCE_GROUP}" --name "${vault_name}" --query id --output tsv)"
           for secret in flo-data-key-v1 flo-session-hash-key-v1 flo-callback-signing-key-v1 flo-gemini-api-key; do
-            enabled="$(az keyvault secret show --vault-name "${vault_name}" --name "${secret}" --query attributes.enabled --output tsv)"
+            enabled="$(az resource show --ids "${vault_id}/secrets/${secret}" --api-version 2023-07-01 --query properties.attributes.enabled --output tsv)"
             test "${enabled}" = 'True' || test "${enabled}" = 'true'
           done
           case "${FLO_CERTIFICATE_RESOURCE_ID,,}" in
