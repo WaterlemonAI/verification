@@ -501,6 +501,8 @@ jobs:
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
               appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}" \
               floCertificateId="${{ vars.FLO_CERTIFICATE_RESOURCE_ID }}" \
+              floDiagnosticWorkspaceId="${{ vars.FLO_DIAGNOSTIC_WORKSPACE_ID }}" \
+              floDiagnosticApplicationId="${{ vars.FLO_DIAGNOSTIC_APPLICATION_ID }}" \
               enableDeepResearchWorker="${{ github.event_name == 'push' && 'true' || (inputs.enableDeepResearchWorker && 'true' || 'false') }}"
 
       - name: Deploy digest-pinned API revision
@@ -542,6 +544,8 @@ jobs:
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
               appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}" \
               floCertificateId="${{ vars.FLO_CERTIFICATE_RESOURCE_ID }}" \
+              floDiagnosticWorkspaceId="${{ vars.FLO_DIAGNOSTIC_WORKSPACE_ID }}" \
+              floDiagnosticApplicationId="${{ vars.FLO_DIAGNOSTIC_APPLICATION_ID }}" \
               enableDeepResearchWorker="${{ github.event_name == 'push' && 'true' || (inputs.enableDeepResearchWorker && 'true' || 'false') }}" \
             --query properties.outputs \
             --output json > api-deployment-outputs.json

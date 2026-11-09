@@ -71,6 +71,12 @@ param appHost string = 'app.kycprobe.com'
 @description('Supplier Flo hostname for this deployment.')
 param floHost string = 'flo.ai7uae.com'
 
+@description('Exact workspace allowed to run a controlled Flo diagnostic. Blank disables diagnostics.')
+param floDiagnosticWorkspaceId string = ''
+
+@description('Exact application allowed to run a controlled Flo diagnostic. Blank disables diagnostics.')
+param floDiagnosticApplicationId string = ''
+
 @description('Dedicated bank statement storage account name.')
 param bankStatementStorageName string = 'stai7uaebsauaen001'
 
@@ -862,6 +868,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'FLO_PUBLIC_BASE_URL', value: 'https://${floHost}' }
             { name: 'FLO_API_HOST', value: apiHost }
             { name: 'FLO_PORTAL_HOST', value: appHost }
+            { name: 'FLO_DIAGNOSTIC_WORKSPACE_ID', value: enableFlo ? floDiagnosticWorkspaceId : '' }
+            { name: 'FLO_DIAGNOSTIC_APPLICATION_ID', value: enableFlo ? floDiagnosticApplicationId : '' }
             { name: 'EJARI_PLATFORM_ENABLED', value: !parallelDeployment && enableEjari ? '1' : '0' }
           ], parallelDeployment ? [] : [
             { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
