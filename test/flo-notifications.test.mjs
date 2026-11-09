@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryFloStore } from '../lib/flows/store.mjs';
 import { EnvironmentStore } from '../lib/api-store.mjs';
-import { deliverFloEmail, validateFloSmtp, verifyFloSenderDns } from '../lib/flows/notifications.mjs';
+import { deliverFloEmail, reconcileFloNotifications, validateFloSmtp, verifyFloSenderDns } from '../lib/flows/notifications.mjs';
 import { renderFloEmail, validateEmailTemplates } from '../lib/flows/email-templates.mjs';
 
 process.env.FLO_DATA_KEY_HEX = '33'.repeat(32);
@@ -41,4 +41,24 @@ test('delivered email is idempotent and supplier projection does not expose a pe
   await deliverFloEmail(job, deps); await deliverFloEmail(job, deps);
   assert.equal(sent, 1);
   assert.equal((await store.getCase(ws, appId)).events.filter((entry) => entry.type === 'email_delivered').length, 1);
+});
+
+test('notification reconciliation eventually scans beyond the first 200 cases', async () => {
+  const store = new MemoryFloStore(); const workspaceId = 'a'.repeat(16);
+  const rows = Array.from({ length: 201 }, (_, index) => ({
+    application_id: `${String(index).padStart(8, '0')}-1111-4111-8111-111111111111` }));
+  const event = { event_id: '22222222-2222-4222-8222-222222222222', type: 'email_requested',
+    email_type: 'accepted', at: new Date(Date.now() - 120_000).toISOString(), application_revision: 1 };
+  store.cases.set(`${workspaceId}:${rows[200].application_id}`, { workspace_id: workspaceId,
+    application_id: rows[200].application_id, events: [event] });
+  const jobs = [];
+  const first = await reconcileFloNotifications(workspaceId, { floStore: store, caseRows: rows,
+    enqueueEmail: async (job) => jobs.push(job) });
+  assert.equal(first.nextIndex, 200);
+  assert.equal(jobs.length, 0);
+  const second = await reconcileFloNotifications(workspaceId, { floStore: store, caseRows: rows,
+    startIndex: first.nextIndex, enqueueEmail: async (job) => jobs.push(job) });
+  assert.equal(second.nextIndex, 0);
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].application_id, rows[200].application_id);
 });

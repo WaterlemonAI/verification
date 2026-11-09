@@ -708,6 +708,7 @@ async function loadFlo() {
       request('/admin/api/flows'), request('/admin/api/customers')
     ]);
     floTemplates = catalog.templates || [];
+    byId('flo-workflow-manager').hidden = !catalog.workflow_platform_enabled;
     const flow = byId('flo-flow'); flow.replaceChildren();
     for (const entry of floTemplates) {
       const option = document.createElement('option'); option.value = entry.flow_id;
@@ -723,7 +724,7 @@ async function loadFlo() {
       const option = document.createElement('option'); option.value = customer.id;
       option.textContent = `${customer.name} · ${customer.id}`; assignment.append(option);
     }
-    await loadManagedWorkflows();
+    if (catalog.workflow_platform_enabled) await loadManagedWorkflows();
     await loadFloSelection();
   } catch (error) { message.textContent = error.message; }
 }

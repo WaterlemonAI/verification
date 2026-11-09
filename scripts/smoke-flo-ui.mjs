@@ -69,7 +69,7 @@ try {
       let response;
       if (path === '/portal/api/auth/session') response = { account: { client_name: 'Synthetic buyer', email: 'buyer@example.com' }, csrf_token: 'csrf' };
       else if (path === '/portal/api/entitlements') response = { allowed_modules: ['flo'], available_modules: ['flo'] };
-      else if (path === '/portal/api/flo/status') response = { enabled: true };
+      else if (path === '/portal/api/flo/status') response = { enabled: true, workflow_platform_enabled: true };
       else if (path === '/portal/api/flo/flows') response = { flows: [
         { flow_id: 'kys-v1', version: '1.0.0', brand_name: 'Synthetic buyer' },
         { flow_id: 'supplier-onboarding-v1', version: '1.0.0', brand_name: 'Synthetic buyer' }
@@ -267,7 +267,7 @@ try {
       let response = {};
       if (path === '/portal/api/auth/session') response = { account: { client_name: 'Buyer', email: 'buyer@example.com' }, csrf_token: 'token' };
       else if (path === '/portal/api/entitlements') response = { allowed_modules: ['flo'], available_modules: ['flo'] };
-      else if (path === '/portal/api/flo/status') response = { enabled: true };
+      else if (path === '/portal/api/flo/status') response = { enabled: true, workflow_platform_enabled: true };
       else if (path === '/portal/api/flo/workflows') response = { workflows: [{ flow_id: 'flow-example', name: 'Supplier profile',
         lifecycle: 'active', published_version: '1.0.0', owner_workspace_id: null }] };
       else if (path.endsWith('/settings')) response = { settings: { enabled: true, brand_name: 'Buyer' } };
@@ -284,10 +284,16 @@ try {
     const workflowPage = await workflowContext.newPage();
     await workflowPage.goto(`${base}/workflows`);
     await workflowPage.getByRole('heading', { name: 'Workflows', exact: true }).waitFor();
+    await workflowPage.locator('body.portal-ready').waitFor();
     await workflowPage.getByRole('button', { name: /Supplier profile.*flow-example/ }).click();
     await workflowPage.getByRole('button', { name: 'Copy to my workspace' }).waitFor();
-    if (await workflowPage.evaluate(() => document.documentElement.scrollWidth > innerWidth))
-      throw new Error(`Workflows UI overflows at ${viewport.width}px`);
+    const workflowOverflow = await workflowPage.evaluate(() => ({ width: document.documentElement.scrollWidth,
+      viewport: innerWidth, elements: [...document.querySelectorAll('body *')]
+        .filter((element) => element.getBoundingClientRect().right > innerWidth + 1
+          && getComputedStyle(element).visibility !== 'hidden')
+        .slice(0, 8).map((element) => `${element.tagName.toLowerCase()}#${element.id}.${element.className}`) }));
+    if (workflowOverflow.width > workflowOverflow.viewport)
+      throw new Error(`Workflows UI overflows at ${viewport.width}px: ${JSON.stringify(workflowOverflow)}`);
     await workflowContext.close();
     console.log(`Flo Workflows UI passed at ${viewport.width}px`);
   }

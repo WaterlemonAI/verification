@@ -111,7 +111,8 @@
     if (entitlements.allowed_modules.includes('flo')) {
       fetch('/portal/api/flo/status', { credentials: 'same-origin' }).then((response) => response.ok ? response.json() : null)
         .then((state) => { if (state?.enabled) sidebar.querySelector('#portal-flo-link').hidden = false;
-          sidebar.querySelector('#portal-flo-workflows-link').hidden = false; }).catch(() => {});
+          if (state?.enabled && state.workflow_platform_enabled)
+            sidebar.querySelector('#portal-flo-workflows-link').hidden = false; }).catch(() => {});
     }
 
     const header = document.querySelector('header');

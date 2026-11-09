@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  checks: read
+  pull-requests: read
   id-token: write
 
 concurrency:
@@ -76,11 +78,19 @@ jobs:
         shell: bash
         env:
           REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           [[ "${REVIEWED_SHA}" =~ ^[a-f0-9]{40}$ ]]
           test "$(git rev-parse HEAD)" = "${REVIEWED_SHA}"
-          git merge-base --is-ancestor "${REVIEWED_SHA}" origin/main
+          if ! git merge-base --is-ancestor "${REVIEWED_SHA}" origin/main; then
+            prs="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${REVIEWED_SHA}/pulls")"
+            pr_number="$(jq -r --arg sha "${REVIEWED_SHA}" '[.[] | select(.head.sha == $sha and .base.ref == "main" and .state == "open" and .draft == false) | .number][0] // empty' <<< "${prs}")"
+            test -n "${pr_number}"
+            test "$(gh pr view "${pr_number}" --json reviewDecision --jq .reviewDecision)" = 'APPROVED'
+            checks="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${REVIEWED_SHA}/check-runs")"
+            jq -e '[.check_runs[] | select(.name == "test" and .app.slug == "github-actions" and .conclusion == "success")] | length > 0' <<< "${checks}" > /dev/null
+          fi
           test -z "$(git status --porcelain)"
           node scripts/prepare-flo-staging.mjs
 

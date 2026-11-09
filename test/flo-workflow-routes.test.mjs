@@ -19,6 +19,7 @@ const a = 'a'.repeat(16), b = 'b'.repeat(16);
 
 test('admin assignment to private copy, applicant submission, buyer Restart and second report keep the same case ID', async (t) => {
   const store = new MemoryFloStore(); const jobs = new MemoryFloQueue(); const notifications = new MemoryFloQueue();
+  let workflowPlatformEnabled = true;
   const server = createServer(async (req, res) => {
     const handled = await handleFloRequest(req, res, new URL(req.url, 'http://localhost'), {
       host: req.headers.host, floStore: store, platformStore: { getCustomer: async () => ({ id: a }) },
@@ -28,7 +29,8 @@ test('admin assignment to private copy, applicant submission, buyer Restart and 
         if (csrf && request.headers['x-ai7-csrf'] !== 'token') { response.writeHead(403); response.end(); return null; }
         return { account: { client_id: request.headers.cookie.includes('workspace=b') ? b : a,
           role: 'org_admin', email: 'buyer@example.com' } }; },
-      hasEntitlement: async () => true, charge: async () => ({ allowed: true, settle: async () => {} }),
+      hasEntitlement: async () => true, workflowPlatformEnabled,
+      charge: async () => ({ allowed: true, settle: async () => {} }),
       enqueue: (job) => jobs.enqueue(job), enqueueEmail: (job) => notifications.enqueue(job),
       enqueueCallback: (job) => notifications.enqueue(job), scan: async () => {}
     });
@@ -107,4 +109,28 @@ test('admin assignment to private copy, applicant submission, buyer Restart and 
   assert.equal(caseData.application_revision, 2); assert.equal(caseData.revisions.length, 1);
   assert.equal(caseData.revisions[0].draft.business_name, 'Aetherix Systems FZCO');
   assert.equal(caseData.draft.business_name, 'Aetherix Systems FZCO LLC');
+  await store.putAssignment(a, platformId, 'paused');
+  const pausedCatalog = await send('/admin/api/flows');
+  assert.equal(pausedCatalog.body.workflows.find((entry) => entry.flow_id === platformId).active_organisation_count, 0);
+  assert.equal(pausedCatalog.body.workflows.find((entry) => entry.flow_id === copyId).active_organisation_count, 0);
+  assert.deepEqual((await send('/portal/api/flo/flows')).body.flows, []);
+  assert.equal((await send('/portal/api/flo/status')).body.has_active_flow, false);
+  await store.putAssignment(a, platformId, 'active');
+  await store.putConfig(a, { enabled: false, brand_name: 'Buyer' }, copyId);
+  assert.equal((await send('/portal/api/flo/flows')).body.flows.some((flow) => flow.flow_id === copyId), false);
+  assert.equal((await send('/admin/api/flows')).body.workflows
+    .find((entry) => entry.flow_id === copyId).active_organisation_count, 0);
+  await store.putConfig(a, { enabled: true, brand_name: 'Buyer' }, copyId);
+  workflowPlatformEnabled = false;
+  assert.equal((await send('/portal/api/flo/status')).body.workflow_platform_enabled, false);
+  assert.deepEqual((await send('/portal/api/flo/flows')).body.flows, []);
+  assert.equal((await send('/portal/api/flo/workflows')).status, 404);
+  assert.equal((await send('/admin/api/flows', undefined, 'POST', { schema })).status, 404);
+  assert.equal((await send(`/portal/api/flo/flows/${copyId}/links`, undefined, 'POST',
+    { customer_reference: 'PO-1002', supplier_email: 'supplier@example.com' },
+    { 'idempotency-key': 'workflow-route-456' })).status, 404);
+  assert.equal((await send(`/portal/api/flo/cases/${appId}`)).status, 200,
+    'existing cases remain reviewable when workflow creation is switched off');
+  assert.equal((await send('/flo/api/application', 'flo.ai7uae.com', 'GET', undefined, headers2)).status, 200,
+    'the applicant receipt remains readable when workflow creation is switched off');
 });

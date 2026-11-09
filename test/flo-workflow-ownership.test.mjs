@@ -26,6 +26,11 @@ test('platform assignment, private copy, immutable publish, pause and owner isol
   const published = await service.publish(copy.flow_id, workspaceA, copy.draft_revision);
   assert.equal(published.published_version, '1.0.0');
   assert.ok(await service.effective(copy.flow_id, workspaceA));
+  await service.assign(platform.flow_id, workspaceA, 'paused');
+  assert.equal(await service.effective(copy.flow_id, workspaceA), null,
+    'pausing a platform assignment must also stop links from its organisation copies');
+  await service.assign(platform.flow_id, workspaceA, 'active');
+  assert.ok(await service.effective(copy.flow_id, workspaceA));
   await assert.rejects(service.saveDraft(copy.flow_id, workspaceB, schema, published.draft_revision), /workflow_not_found/);
   const changed = structuredClone(schema); changed.name = 'New name';
   const edited = await service.saveDraft(copy.flow_id, workspaceA, changed, published.draft_revision);

@@ -2847,6 +2847,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       : deliverFloCallback(job, { floStore }));
   if (startWorker && floStore && floCallbackQueue && process.env.FLO_ENABLED === 'true') {
     let workspaceOffset = 0;
+    const caseOffsets = new Map();
     const reconcile = async () => {
       const [assignments, workflows] = await Promise.all([floStore.listAssignments(), floStore.listWorkflows()]);
       const workspaces = [...new Set([...assignments.map((item) => item.workspace_id),
@@ -2854,9 +2855,12 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (!workspaces.length) return;
       const batch = Array.from({ length: Math.min(20, workspaces.length) }, (_, index) => workspaces[(workspaceOffset + index) % workspaces.length]);
       workspaceOffset = (workspaceOffset + batch.length) % workspaces.length;
-      for (const id of batch) await reconcileFloNotifications(id, { floStore,
-        enqueueEmail: (job) => floCallbackQueue.enqueue(job),
-        enqueueCallback: (job) => floCallbackQueue.enqueue(job) });
+      for (const id of batch) {
+        const result = await reconcileFloNotifications(id, { floStore,
+          enqueueEmail: (job) => floCallbackQueue.enqueue(job),
+          enqueueCallback: (job) => floCallbackQueue.enqueue(job), startIndex: caseOffsets.get(id) || 0 });
+        caseOffsets.set(id, result.nextIndex);
+      }
     };
     const timer = setInterval(() => { void reconcile().catch(() => console.warn('flo_notification_reconcile_failed')); }, 600_000);
     timer.unref?.();
@@ -2929,6 +2933,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         hasEntitlement: async (workspaceId) => (await usageStore.account(workspaceId)).allowed_modules.includes('flo'),
         hasFloPrice: async (workspaceId) => (await usageStore.account(workspaceId)).rates.flo
           ?.some((tier) => Number(tier.price) > 0) === true,
+        workflowPlatformEnabled: process.env.FLO_WORKFLOW_PLATFORM_ENABLED === 'true',
         enqueue: (job) => floQueue?.enqueue(job),
         enqueueCallback: (job) => floCallbackQueue?.enqueue(job),
         enqueueEmail: (job) => floCallbackQueue?.enqueue(job),
@@ -3207,7 +3212,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         const { account, session } = await currentPortalSession(req, store);
         if (!session) return portalLoginRedirect(res, url.pathname, url.search);
         const usage = await usageStore.account(account.client_id);
-        if (!floStore || !usage.allowed_modules.includes('flo')) return json(res, 404, { error: 'Flo is not enabled.' });
+        if (!floStore || process.env.FLO_WORKFLOW_PLATFORM_ENABLED !== 'true'
+          || !usage.allowed_modules.includes('flo')) return json(res, 404, { error: 'Flo workflows are not enabled.' });
         return serveStatic(res, directory, '/flo-workflows.html');
       }
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');

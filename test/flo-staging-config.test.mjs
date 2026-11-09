@@ -36,6 +36,7 @@ test('staging parameters use separate hosts, storage and digest-pinned images wi
   assert.equal(parameters.parallelDeployment, false);
   assert.equal(parameters.enableDocumentOcr, true);
   assert.equal(parameters.enableFlo, true);
+  assert.equal(parameters.enableFloWorkflowPlatform, true);
   assert.equal(parameters.enableBillingNotifications, false);
   assert.equal(parameters.image.endsWith(`@sha256:${'b'.repeat(64)}`), true);
 });
