@@ -129,11 +129,14 @@
   function renderOverview(panel, item, derived) {
     panel.append(el('p', item.diagnostic ? 'Controlled diagnostic · no supplier submission or approval is implied.'
       : 'Automated analysis supports the buyer review; it does not make the decision.', 'flo-review-note'));
+    const processing = ['submitted', 'processing'].includes(item.status);
     const brief = el('section', null, 'flo-review-section flo-brief'); brief.append(el('p', 'DECISION BRIEF', 'flo-kicker'),
-      el('h3', derived.signals.length ? 'What needs your attention' : 'No review signals recorded'));
+      el('h3', processing ? 'Analysis in progress' : derived.signals.length ? 'What needs your attention' : 'No review signals recorded'));
     const list = el('ul', null, 'flo-signal-list');
     if (derived.signals.length) derived.signals.slice(0, 6).forEach((signal) => list.append(signalCard(signal)));
-    else list.append(el('li', 'This is not an automated clearance. Inspect the source documents and checks.'));
+    else list.append(el('li', processing
+      ? 'The supplier has submitted. Document extraction, verification and report generation are running.'
+      : 'This is not an automated clearance. Inspect the source documents and checks.'));
     if (derived.signals.length > 6) list.append(el('li', `${derived.signals.length - 6} more review signals. See Documents and Checks.`, 'flo-signal-more'));
     brief.append(list); panel.append(brief);
     renderScreening(panel, item);

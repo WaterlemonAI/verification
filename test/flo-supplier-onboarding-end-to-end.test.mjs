@@ -9,8 +9,9 @@ import { createFloReport } from '../lib/flows/report-pdf.mjs';
 
 process.env.FLO_DATA_KEY_HEX = '55'.repeat(32);
 
-test('Supplier Onboarding v1 runs the protected intake, extracted-input checks, report and callback snapshot', async (t) => {
+test('Supplier Onboarding v1 submits once, then runs extraction, checks, report and callback in the worker', async (t) => {
   const floStore = new MemoryFloStore(); const queue = new MemoryFloQueue(); const callbacks = new MemoryFloQueue();
+  let failFirstProcessEnqueue = true;
   const workspace = '1234567890abcdef';
   await floStore.putTemplate({ enabled: true }, 'supplier-onboarding-v1');
   await floStore.putConfig(workspace, { enabled: true, brand_name: 'Buyer', callback_url: 'https://buyer.example/callback' },
@@ -22,7 +23,12 @@ test('Supplier Onboarding v1 runs the protected intake, extracted-input checks, 
       getPortal: async () => ({ account: { client_id: workspace, role: 'org_admin', email: 'buyer@example.com' } }),
       customerKey: async () => ({ id: workspace }), hasEntitlement: async () => true,
       charge: async () => ({ allowed: true, settle: async () => {} }), scan: async () => 'passed',
-      enqueue: (job) => queue.enqueue(job), enqueueCallback: (job) => callbacks.enqueue(job)
+      enqueue: (job) => {
+        if (job.job_type === 'process' && failFirstProcessEnqueue) {
+          failFirstProcessEnqueue = false; throw new Error('queue_unavailable');
+        }
+        return queue.enqueue(job);
+      }, enqueueCallback: (job) => callbacks.enqueue(job)
     });
     if (!handled) { res.writeHead(404); res.end(); }
   });
@@ -59,7 +65,14 @@ test('Supplier Onboarding v1 runs the protected intake, extracted-input checks, 
       content_base64: Buffer.from('%PDF-1.4\nsynthetic').toString('base64') }, headers);
     assert.equal(upload.status, 201, type);
   }
-  assert.equal((await send('/flo/api/review', 'flo.ai7uae.com', 'POST', {}, headers)).status, 202);
+  assert.equal((await send('/flo/api/review', 'flo.ai7uae.com', 'POST', {}, headers)).status, 404);
+  assert.equal((await send('/flo/api/draft', 'flo.ai7uae.com', 'POST',
+    { accuracyDeclaration: false }, headers)).status, 200);
+  const missingDeclaration = await send('/flo/api/submit', 'flo.ai7uae.com', 'POST', {}, headers);
+  assert.equal(missingDeclaration.status, 400);
+  assert.ok(missingDeclaration.json().gaps.includes('accuracyDeclaration'));
+  assert.equal((await send('/flo/api/draft', 'flo.ai7uae.com', 'POST',
+    { accuracyDeclaration: true }, headers)).status, 200);
   const inputs = [];
   const dependencies = {
     floStore, enqueue: (next) => queue.enqueue(next), enqueueCallback: (next) => callbacks.enqueue(next),
@@ -77,16 +90,29 @@ test('Supplier Onboarding v1 runs the protected intake, extracted-input checks, 
     runGeminiReview: async () => ({ status: 'completed', output: { narrative: 'Review required.', issues: [], extraction_gaps: [] } }),
     createReport: createFloReport
   };
+  const temporarilyUnavailable = await send('/flo/api/submit', 'flo.ai7uae.com', 'POST', {}, headers);
+  assert.equal(temporarilyUnavailable.status, 503);
+  assert.equal((await floStore.getCase(workspace, id)).process_enqueue_state, 'failed');
+  const accepted = await send('/flo/api/submit', 'flo.ai7uae.com', 'POST', {}, headers);
+  assert.equal(accepted.status, 202);
+  assert.equal(accepted.json().success_url, undefined);
+  assert.equal(callbacks.jobs.filter((job) => job.job_type === 'callback').length, 1);
+  const submitted = await floStore.getCase(workspace, id);
+  assert.equal(submitted.status, 'submitted');
+  assert.equal(submitted.checks.length, 0);
+  assert.equal(submitted.reports.length, 0);
+  assert.equal((await send('/flo/api/submit', 'flo.ai7uae.com', 'POST', {}, headers)).status, 202);
+  assert.equal((await floStore.getCase(workspace, id)).events.filter((event) => event.type === 'submitted').length, 1);
   await queue.drain((job) => resolveTemplate('supplier-onboarding-v1', '1.0.0').process(job, dependencies));
-  const preview = await send('/flo/api/application', 'flo.ai7uae.com', 'GET', undefined, headers);
-  assert.equal(preview.status, 200);
-  assert.ok(preview.json().application.preview_ready_at);
-  assert.ok(preview.json().application.screening_summary.subjects.some((subject) => subject.name === 'Alice Example'));
-  assert.ok(!preview.bytes.toString().includes('raw_response'));
+  const receipt = await send('/flo/api/application', 'flo.ai7uae.com', 'GET', undefined, headers);
+  assert.equal(receipt.status, 200);
+  assert.equal(receipt.json().application.application_id, id);
+  assert.ok(receipt.json().application.submitted_at);
+  assert.equal(receipt.json().application.draft, undefined);
+  assert.equal(receipt.json().application.documents, undefined);
+  assert.equal(receipt.json().application.screening_summary, undefined);
   const tlv = inputs.find((entry) => entry.serviceId === 'uae-trade-licence');
   assert.deepEqual(tlv.input, { company_name: 'Example LLC', licence_number: 'LIC-1' });
-  assert.equal((await send('/flo/api/submit', 'flo.ai7uae.com', 'POST', {}, headers)).status, 202);
-  await queue.drain((job) => resolveTemplate('supplier-onboarding-v1', '1.0.0').process(job, dependencies));
   const result = await floStore.getCase(workspace, id);
   assert.equal(result.status, 'pending_review');
   assert.equal(result.subjects.length, 2);

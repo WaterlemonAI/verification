@@ -28,6 +28,25 @@ test('supplier projection excludes raw screening, buyer events, callback state a
   assert.equal(customerCase(item).callback_secret, undefined);
 });
 
+test('supplier onboarding returns upload progress before submission and a receipt afterward', () => {
+  const item = {
+    application_id: '11111111-1111-4111-8111-111111111111', flow_id: 'supplier-onboarding-v1',
+    template_version: '1.0.0', status: 'in_progress', draft: { supplierType: 'legal_entity' },
+    documents: [{ document_id: 'doc-1', type: 'tradeLicenceFile', size: 12,
+      extraction_result: { data: { license_number: 'PRIVATE_EXTRACTION' } } }],
+    checks: [{ service_id: 'entity-aml', raw_response: 'PRIVATE_CHECK' }],
+    configuration: { brand_name: 'Buyer', callback_url: 'https://private.example/callback' }
+  };
+  const draft = supplierCase(item);
+  assert.equal(draft.draft.supplierType, 'legal_entity');
+  assert.equal(draft.documents[0].type, 'tradeLicenceFile');
+  assert.ok(!JSON.stringify(draft).includes('PRIVATE_'));
+  const receipt = supplierCase({ ...item, status: 'processing', submitted_at: '2026-11-10T00:00:00Z' });
+  assert.deepEqual(Object.keys(receipt).sort(),
+    ['application_id', 'brand_name', 'flow_id', 'status', 'submitted_at', 'template_version']);
+  assert.equal(receipt.brand_name, 'Buyer');
+});
+
 test('buyer review requirements follow each flow and conditional supplier answers', () => {
   const supplier = buyerCase({ flow_id: 'supplier-onboarding-v1', draft: {
     supplierType: 'legal_entity', authorityBasis: 'power_of_attorney', vatRegistered: 'yes',
