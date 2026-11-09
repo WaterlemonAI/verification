@@ -14,6 +14,13 @@
   }
   function node(tag, text, className) { const element = document.createElement(tag); element.textContent = String(text ?? '—'); if (className) element.className = className; return element; }
   function field(label, value) { const div = document.createElement('div'); div.append(node('strong', label), node('span', value)); return div; }
+  async function filePayload(file) {
+    if (!file || file.size > 6 * 1024 * 1024) throw new Error('Choose a PDF or image under 6 MB.');
+    const mime_type = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
+    return { mime_type, content_base64: btoa(binary) };
+  }
   function showLinkResult(result) {
     const root = $('flo-link-result'); root.replaceChildren(); root.hidden = false;
     root.append(node('strong', result.reused ? 'Application already created' : 'Supplier link created'),
@@ -64,8 +71,67 @@
   }
   async function detail(id) {
     selected = id;
-    const { application: item } = await request(`/portal/api/flo/cases/${id}`);
+    const { application: item, diagnostic_enabled: diagnosticEnabled } = await request(`/portal/api/flo/cases/${id}`);
     const root = $('flo-detail'); root.replaceChildren(node('h2', item.customer_reference), node('p', `Status: ${item.status}`));
+    if (diagnosticEnabled) {
+      root.append(node('h3', 'Controlled pilot diagnostic'),
+        node('p', 'This is not a supplier submission or approval. The formation certificate substitutes for a trade licence; the bank letter is a test sample; company drafts are unexecuted; premises evidence is missing.'));
+      if (item.diagnostic) {
+        root.append(node('p', `Diagnostic: ${item.diagnostic.state}${item.diagnostic.finding ? ` · ${item.diagnostic.finding}` : ''}${item.diagnostic.outcome ? ` · ${item.diagnostic.outcome}` : ''}`));
+        if (item.diagnostic.rationale) root.append(node('p', item.diagnostic.rationale));
+      }
+      if (item.status === 'in_progress' && !['queued', 'running', 'complete'].includes(item.diagnostic?.state)) {
+        const types = [
+          ['identityFile', 'Identity document', 'unverified'],
+          ['moaFile', 'Memorandum draft', 'unexecuted_draft'],
+          ['aoaFile', 'Articles draft', 'unexecuted_draft'],
+          ['bankConfirmationFile', 'Bank test sample', 'test_sample'],
+          ['vatFile', 'Tax certificate', 'unverified']
+        ];
+        const upload = document.createElement('div');
+        for (const [type, label, diagnostic_label] of types) {
+          if (item.documents?.some((doc) => doc.type === type)) continue;
+          const row = document.createElement('div');
+          const file = document.createElement('input'); file.type = 'file'; file.accept = '.pdf,.jpg,.jpeg,.png';
+          file.setAttribute('aria-label', label);
+          const button = node('button', `Upload ${label}`); button.type = 'button';
+          button.addEventListener('click', async () => {
+            button.disabled = true; $('flo-notice').textContent = '';
+            try {
+              const payload = await filePayload(file.files[0]);
+              await request(`/portal/api/flo/cases/${id}/diagnostic/documents`, 'POST',
+                { type, diagnostic_label, ...payload }); await detail(id);
+            } catch (error) { $('flo-notice').textContent = error.message; button.disabled = false; }
+          });
+          row.append(node('span', `${label}: `), file, button); upload.append(row);
+        }
+        root.append(upload);
+        const run = node('button', 'Run controlled diagnostic'); run.type = 'button';
+        run.addEventListener('click', async () => {
+          run.disabled = true;
+          try { await request(`/portal/api/flo/cases/${id}/diagnostic/run`, 'POST', {}); await detail(id); }
+          catch (error) { $('flo-notice').textContent = error.message; run.disabled = false; }
+        }); root.append(run);
+      }
+      if (item.diagnostic?.state === 'complete' && !item.diagnostic.outcome) {
+        const reason = document.createElement('textarea'); reason.placeholder = 'Reason for the controlled diagnostic outcome';
+        root.append(reason);
+        for (const outcome of ['needs_more_evidence', 'checks_failed', 'inconclusive']) {
+          const button = node('button', outcome.replaceAll('_', ' ')); button.type = 'button';
+          button.addEventListener('click', async () => {
+            button.disabled = true;
+            try { await request(`/portal/api/flo/cases/${id}/diagnostic/decision`, 'POST',
+              { outcome, rationale: reason.value }); await detail(id); }
+            catch (error) { $('flo-notice').textContent = error.message; button.disabled = false; }
+          }); root.append(button);
+        }
+      }
+      if (['queued', 'running'].includes(item.diagnostic?.state)) {
+        const refresh = node('button', 'Refresh diagnostic'); refresh.type = 'button';
+        refresh.addEventListener('click', () => detail(id).catch((error) => { $('flo-notice').textContent = error.message; }));
+        root.append(refresh);
+      }
+    }
     const grid = node('div', '', 'flo-detail-grid');
     for (const [label, value] of [['Application ID', item.application_id], ['Created', item.created_at],
       ['Flow', `${item.flow_id} · ${item.template_version}`], ['Supplier', item.supplier_email],
@@ -74,12 +140,12 @@
     root.append(grid, node('h3', 'Documents'));
     const docs = document.createElement('ul');
     for (const doc of item.documents || []) {
-      const li = document.createElement('li'); const link = node('a', `${doc.type.replaceAll('_', ' ')} · ${doc.document_id}`);
+      const li = document.createElement('li'); const link = node('a', `${doc.type.replaceAll('_', ' ')}${doc.diagnostic_label ? ` · ${doc.diagnostic_label}` : ''} · ${doc.document_id}`);
       link.href = `/portal/api/flo/cases/${id}/documents/${doc.document_id}`; li.append(link); docs.append(li);
     }
     root.append(docs, node('h3', 'Checks'));
     const checks = document.createElement('ul');
-    for (const check of item.checks || []) checks.append(node('li', `${check.service_id} · ${check.subject_id} · ${check.transport} · ${check.business_result}`));
+    for (const check of item.checks || []) checks.append(node('li', `${check.service_id} · ${check.subject_id} · ${check.transport} · ${check.business_result} · ${(check.reason_codes || []).join(', ')}`));
     root.append(checks);
     if (item.reports?.length) {
       root.append(node('h3', 'Reports'));
