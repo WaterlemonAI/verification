@@ -27,3 +27,18 @@ test('supplier projection excludes raw screening, buyer events, callback state a
   assert.equal(customerCase(item).checks[0].raw_response.secret, 'PRIVATE_ADVERSE');
   assert.equal(customerCase(item).callback_secret, undefined);
 });
+
+test('buyer review requirements follow each flow and conditional supplier answers', () => {
+  const supplier = buyerCase({ flow_id: 'supplier-onboarding-v1', draft: {
+    supplierType: 'legal_entity', authorityBasis: 'power_of_attorney', vatRegistered: 'yes',
+    registeredAddressSame: 'no', supplyType: 'goods' } });
+  assert.ok(supplier.review_requirements.documents.includes('tradeLicenceFile'));
+  assert.ok(supplier.review_requirements.documents.includes('poaFile'));
+  assert.ok(supplier.review_requirements.documents.includes('vatFile'));
+  assert.ok(supplier.review_requirements.text.includes('operatingAddress'));
+  assert.ok(supplier.review_requirements.text.includes('goodsOrigin'));
+  const classic = buyerCase({ flow_id: 'kys-v1', draft: {} });
+  assert.deepEqual(classic.review_requirements.documents,
+    ['trade_licence', 'formation_document', 'bank_letter']);
+  assert.ok(!classic.review_requirements.documents.includes('tradeLicenceFile'));
+});

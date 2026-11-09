@@ -625,13 +625,20 @@
         }
       ],
       "get": {
-        "summary": "Download retained original document",
+        "summary": "Download or view a retained original document in the authenticated buyer reviewer",
         "parameters": [
           {
             "$ref": "#/components/parameters/applicationId"
           },
           {
             "$ref": "#/components/parameters/documentId"
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "description": "Use inline for the same-origin in-page document reviewer; omitted requests download the original.",
+            "schema": { "type": "string", "enum": ["inline"] }
           }
         ],
         "responses": {

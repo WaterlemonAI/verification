@@ -2,6 +2,8 @@
 
 For the multi-flow upgrade, Supplier Onboarding v1 implementation and remaining release gate, see [Flo import readiness](import-readiness/README.md).
 
+For the buyer review screen, see the [Case Manager field map](case-manager-field-map.md).
+
 For deployment on the existing live KYCProbe app, use [Flo live rollout](live-rollout/README.md). The [Flo staging](staging/README.md) workflow is only for a separate non-production environment.
 
 **Source of truth:** `WaterlemonAI/verification` production base, `origin/main` at `3f5fc64e4791a10c7b7dfe0440b0a18d15f085cf` (inspected 2026-11-09). Rebase and recheck this map if `main` moves. This guide records the baseline and the implementation in this worktree; Flo is not present in the pinned production commit. The local `supplier-portal/` prototype and the separate `WaterlemonAI/kyc` repository are not the deployment base.
