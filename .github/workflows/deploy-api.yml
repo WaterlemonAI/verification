@@ -482,7 +482,7 @@ jobs:
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
               enableFlo="${{ vars.FLO_ENABLED == 'true' && 'true' || 'false' }}" \
-              enableFloWorkflowPlatform="${{ vars.FLO_WORKFLOW_PLATFORM_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableFloWorkflowPlatform="${{ vars.FLO_WORKFLOW_PLATFORM_ENABLED != 'false' && 'true' || 'false' }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
               parallelDeployment="${{ vars.CASE_MANAGER_PARALLEL_QA == 'true' && 'true' || 'false' }}" \
               apiTrafficCutover="${{ vars.CASE_MANAGER_TRAFFIC_CUTOVER == 'true' && 'true' || 'false' }}" \
@@ -526,7 +526,7 @@ jobs:
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
               enableFlo="${{ vars.FLO_ENABLED == 'true' && 'true' || 'false' }}" \
-              enableFloWorkflowPlatform="${{ vars.FLO_WORKFLOW_PLATFORM_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableFloWorkflowPlatform="${{ vars.FLO_WORKFLOW_PLATFORM_ENABLED != 'false' && 'true' || 'false' }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
               parallelDeployment="${{ vars.CASE_MANAGER_PARALLEL_QA == 'true' && 'true' || 'false' }}" \
               apiTrafficCutover="${{ vars.CASE_MANAGER_TRAFFIC_CUTOVER == 'true' && 'true' || 'false' }}" \

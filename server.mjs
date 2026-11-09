@@ -2933,7 +2933,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         hasEntitlement: async (workspaceId) => (await usageStore.account(workspaceId)).allowed_modules.includes('flo'),
         hasFloPrice: async (workspaceId) => (await usageStore.account(workspaceId)).rates.flo
           ?.some((tier) => Number(tier.price) > 0) === true,
-        workflowPlatformEnabled: process.env.FLO_WORKFLOW_PLATFORM_ENABLED === 'true',
+        workflowPlatformEnabled: process.env.FLO_WORKFLOW_PLATFORM_ENABLED !== 'false',
         enqueue: (job) => floQueue?.enqueue(job),
         enqueueCallback: (job) => floCallbackQueue?.enqueue(job),
         enqueueEmail: (job) => floCallbackQueue?.enqueue(job),
@@ -3212,7 +3212,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         const { account, session } = await currentPortalSession(req, store);
         if (!session) return portalLoginRedirect(res, url.pathname, url.search);
         const usage = await usageStore.account(account.client_id);
-        if (!floStore || process.env.FLO_WORKFLOW_PLATFORM_ENABLED !== 'true'
+        if (!floStore || process.env.FLO_WORKFLOW_PLATFORM_ENABLED === 'false'
           || !usage.allowed_modules.includes('flo')) return json(res, 404, { error: 'Flo workflows are not enabled.' });
         return serveStatic(res, directory, '/flo-workflows.html');
       }

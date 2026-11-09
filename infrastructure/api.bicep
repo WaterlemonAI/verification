@@ -95,8 +95,8 @@ param enableCaseManager bool = false
 @description('Enable Flo only after private storage, key, certificate and upload scanner checks pass.')
 param enableFlo bool = false
 
-@description('Enable schema-defined Flo workflow authoring and links only after the workflow platform release gates pass.')
-param enableFloWorkflowPlatform bool = false
+@description('Enable schema-defined Flo workflow authoring and links when Flo is enabled; set false for an emergency pause.')
+param enableFloWorkflowPlatform bool = true
 
 @description('Run billing-notification schedule for this environment. Staging keeps it off.')
 param enableBillingNotifications bool = true
