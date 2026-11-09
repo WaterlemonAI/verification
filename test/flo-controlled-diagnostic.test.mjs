@@ -91,4 +91,9 @@ test('controlled diagnostic is case-scoped, reports missing evidence and cannot 
     { outcome: 'needs_more_evidence', rationale: 'Premises evidence is absent.' })).status, 200);
   assert.equal(callbacks.jobs.length, 2);
   assert.equal((await floStore.getCase(workspace, id)).diagnostic.outcome, 'needs_more_evidence');
+  const retry = await send(`${portal}/diagnostic/retry-callbacks`, 'app.kycprobe.com', 'POST', {});
+  assert.equal(retry.status, 202);
+  assert.equal(JSON.parse(retry.body).queued, 2);
+  assert.equal(callbacks.jobs.length, 4);
+  assert.equal((await send(`${portal}/diagnostic/retry-callbacks`, 'app.kycprobe.com', 'POST', {})).status, 409);
 });

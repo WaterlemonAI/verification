@@ -132,6 +132,17 @@
           }); root.append(button);
         }
       }
+      if (item.diagnostic?.outcome && !item.diagnostic.callback_retry_requested_at
+        && (item.events || []).some((event) => ['diagnostic_review_ready', 'diagnostic_decision'].includes(event.type)
+          && !(item.events || []).some((attempt) => attempt.type === 'callback_delivered' && attempt.source_event_id === event.event_id))) {
+        const retry = node('button', 'Retry undelivered diagnostic callbacks'); retry.type = 'button';
+        retry.addEventListener('click', async () => {
+          retry.disabled = true;
+          try { const result = await request(`/portal/api/flo/cases/${id}/diagnostic/retry-callbacks`, 'POST', {});
+            $('flo-notice').textContent = `${result.queued} callback event(s) queued.`; await detail(id); }
+          catch (error) { $('flo-notice').textContent = error.message; retry.disabled = false; }
+        }); root.append(retry);
+      }
       if (['queued', 'running'].includes(item.diagnostic?.state)) {
         const refresh = node('button', 'Refresh diagnostic'); refresh.type = 'button';
         refresh.addEventListener('click', () => detail(id).catch((error) => { $('flo-notice').textContent = error.message; }));
