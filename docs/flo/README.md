@@ -1,5 +1,9 @@
 # Flo Option 1: developer implementation guide
 
+For the next template builder, organisation-owned Workflows, decision email and application buckets, see the [file-by-file workflow platform implementation plan](workflow-platform/README.md).
+
+This Option 1 guide preserves earlier design and rollout context. The live Supplier Onboarding v1 form now ends after four supplier steps with a receipt; its stale five-stage definition is addressed as a versioned correction in the workflow platform plan.
+
 For the multi-flow upgrade, Supplier Onboarding v1 implementation and remaining release gate, see [Flo import readiness](import-readiness/README.md).
 
 For the buyer review screen, see the [Case Manager field map](case-manager-field-map.md).
