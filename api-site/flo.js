@@ -3,6 +3,9 @@
   let csrfToken = '';
   let selected = '';
   let pendingLink = null;
+  let bucket = ''; let nextCursor = null;
+  const bucketLabels = { '': 'All', open: 'Open', in_progress: 'In progress', processing_review: 'Processing / Review',
+    restarted: 'Restarted', accepted: 'Accepted', rejected: 'Rejected', expired_failed: 'Expired / Failed' };
   async function request(path, method = 'GET', data, extraHeaders = {}) {
     const response = await fetch(path, { method, credentials: 'same-origin',
       headers: { accept: 'application/json', 'content-type': 'application/json',
@@ -178,15 +181,34 @@
     if (['pending_review', 'needs_correction'].includes(item.status)) {
       root.append(node('h3', 'Buyer decision'));
       const rationale = document.createElement('textarea'); rationale.placeholder = 'Reason for the decision'; root.append(rationale);
-      for (const decision of (item.status === 'pending_review' ? ['accepted', 'rejected', 'needs_correction'] : ['rejected', 'needs_correction'])) {
-        const button = node('button', decision === 'accepted' ? 'Accept' : decision === 'rejected' ? 'Reject' : 'Request correction');
+      for (const decision of (item.status === 'pending_review' ? ['accepted', 'rejected', 'restart'] : ['rejected', 'restart', 'needs_correction'])) {
+        const button = node('button', decision === 'accepted' ? 'Accept' : decision === 'rejected' ? 'Reject' : decision === 'restart' ? 'Restart application' : 'Request correction');
         button.addEventListener('click', async () => {
           button.disabled = true;
-          try { const result = await request(`/portal/api/flo/cases/${id}/decision`, 'POST', { decision, rationale: rationale.value });
+          try { if (decision === 'restart' && !rationale.value.trim()) throw new Error('Enter the changes required for Restart.');
+            const result = await request(`/portal/api/flo/cases/${id}/decision`, 'POST',
+              { decision, rationale: rationale.value, ...(decision === 'restart' ? { comments: rationale.value, fields: [], documents: [] } : {}) });
             if (result.supplier_url) $('flo-notice').textContent = `Correction link: ${result.supplier_url}`;
-            await detail(id); }
+            await detail(id); await loadCases(); }
           catch (error) { $('flo-notice').textContent = error.message; button.disabled = false; }
         }); root.append(button);
+      }
+    }
+    const pending = (item.events || []).filter((event) => ['email_requested', 'accepted', 'rejected', 'restart_requested', 'resubmitted', 'submitted'].includes(event.type)
+      && (event.type === 'email_requested' || event.payload)
+      && !(item.events || []).some((other) => (event.type === 'email_requested' ? ['email_delivered', 'email_skipped'].includes(other.type)
+        : other.type === 'callback_delivered')
+        && other.source_event_id === event.event_id));
+    if (pending.length) {
+      root.append(node('h3', 'Pending notifications'));
+      for (const event of pending) {
+        const label = node('p', `${event.type === 'email_requested' ? 'Email' : 'Callback'} · ${event.email_type || event.type} · ${event.at}`);
+        const retry = node('button', 'Retry delivery'); retry.type = 'button';
+        retry.addEventListener('click', async () => { retry.disabled = true;
+          try { await request(`/portal/api/flo/cases/${id}/notifications/${event.event_id}/retry`, 'POST', {});
+            $('flo-notice').textContent = 'Notification retry queued.'; await detail(id); }
+          catch (error) { $('flo-notice').textContent = error.message; retry.disabled = false; } });
+        root.append(label, retry);
       }
     }
     if (root.childNodes.length) {
@@ -197,7 +219,18 @@
   }
   async function loadCases() {
     const flow = $('flo-filter').value;
-    const { cases } = await request(`/portal/api/flo/cases${flow ? `?flow_id=${encodeURIComponent(flow)}` : ''}`);
+    const params = new URLSearchParams(); if (flow) params.set('flow_id', flow);
+    if (bucket) params.set('bucket', bucket);
+    if ($('flo-search').value.trim()) params.set('q', $('flo-search').value.trim());
+    const { cases, counts, next_cursor } = await request(`/portal/api/flo/cases?${params}`);
+    nextCursor = next_cursor; $('flo-more').hidden = !nextCursor;
+    const tabs = $('flo-buckets'); tabs.replaceChildren();
+    for (const [value, label] of Object.entries(bucketLabels)) {
+      const tab = node('button', `${label} ${value ? counts?.[value] || 0 : Object.values(counts || {}).reduce((a, b) => a + b, 0)}`);
+      tab.type = 'button'; tab.role = 'tab'; tab.setAttribute('aria-selected', String(bucket === value));
+      tab.addEventListener('click', () => { bucket = value; loadCases().catch((error) => { $('flo-notice').textContent = error.message; }); });
+      tabs.append(tab);
+    }
     const list = $('flo-list'); list.replaceChildren();
     if (!cases.length) list.append(node('p', 'No Flo applications yet.'));
     for (const item of cases) {
@@ -205,7 +238,7 @@
       button.dataset.caseId = item.application_id;
       button.classList.toggle('active', item.application_id === selected);
       button.append(node('strong', item.customer_reference),
-        node('small', `${item.flow_id} · ${item.template_version} · ${item.status} · ${item.created_at}`));
+        node('small', `${item.flow_id} · revision ${item.application_revision || 1} · ${item.bucket.replaceAll('_', ' ')} · email ${item.link_delivery || 'not attempted'} · ${item.created_at}`));
       button.addEventListener('click', () => detail(item.application_id).catch((error) => { $('flo-notice').textContent = error.message; }));
       list.append(button);
     }
@@ -217,6 +250,19 @@
     }
     return cases;
   }
+  async function loadMore() {
+    if (!nextCursor) return;
+    const params = new URLSearchParams({ cursor: nextCursor });
+    if ($('flo-filter').value) params.set('flow_id', $('flo-filter').value);
+    if (bucket) params.set('bucket', bucket);
+    if ($('flo-search').value.trim()) params.set('q', $('flo-search').value.trim());
+    const result = await request(`/portal/api/flo/cases?${params}`);
+    nextCursor = result.next_cursor; $('flo-more').hidden = !nextCursor;
+    for (const item of result.cases) { const button = node('button', '', 'flo-case'); button.dataset.caseId = item.application_id;
+      button.append(node('strong', item.customer_reference), node('small', `${item.flow_id} · revision ${item.application_revision || 1} · ${item.bucket.replaceAll('_', ' ')} · ${item.created_at}`));
+      button.addEventListener('click', () => detail(item.application_id).catch((error) => { $('flo-notice').textContent = error.message; }));
+      $('flo-list').append(button); }
+  }
   async function start() {
     try {
       const session = await request('/portal/api/auth/session'); csrfToken = session.csrf_token;
@@ -224,6 +270,8 @@
       await loadFlows();
       await loadCases();
       $('flo-filter').addEventListener('change', () => loadCases().catch((error) => { $('flo-notice').textContent = error.message; }));
+      $('flo-search').addEventListener('change', () => loadCases().catch((error) => { $('flo-notice').textContent = error.message; }));
+      $('flo-more').addEventListener('click', () => loadMore().catch((error) => { $('flo-notice').textContent = error.message; }));
     } catch (error) { $('flo-notice').textContent = error.message; }
   }
   start();

@@ -1,6 +1,10 @@
 # Flo workflow platform: file-by-file implementation plan
 
-**Status:** implementation plan only. No runtime or cloud change is made by this document.
+**Status (10 November 2026):** implemented in the Flo worktree for review, not deployed or enabled. This document remains the design and release checklist. The implementation adds the validated JSON schema and approved check catalog; immutable published versions and workspace-owned copies; platform and organisation management screens; a fixed supplier renderer; revision-preserving Restart; per-flow branding, callback and email configuration; and buyer application buckets. Existing code-owned KYS and Supplier Onboarding v1 versions remain supported.
+
+The new routes are described in [`api/flo-openapi.json`](../../../api/flo-openapi.json). The main implementation is in `lib/flows/template-schema.mjs`, `checks-catalog.mjs`, `workflow-service.mjs`, `store.mjs`, `routes.mjs`, `processor.mjs`, `notifications.mjs`, `callback.mjs`, and the fixed `flow-site/renderer/` bundle. The platform screen is in `admin-site/`; organisation workflows and Case Manager are in `api-site/`. The `test/flo-*.test.mjs` suite and `scripts/smoke-flo-ui.mjs` cover the source behavior.
+
+**Release gates:** keep `FLO_ENABLED` off until additive private-storage migration, Key Vault secrets, Flo DNS/TLS, upload scanning, provider access, SMTP sender-domain records, and callback delivery have been checked in the target environment. Run the complete platform-assignment → organisation-copy → publish → link → applicant → buyer Restart → resubmit → decision journey with controlled documents. Provider checks without a documented adapter or available evidence remain explicitly `not_run`; source implementation and mocked tests do not establish a live provider success result.
 
 **Baseline:** `WaterlemonAI/verification` `origin/main` at `428c8f56dc5a5f15da11fc548823c0cf6b873da8` (10 November 2026, Dubai). Recheck the file map against `main` before implementation. This plan supersedes the code-owned-template assumptions in the older [Flo Option 1 guide](../README.md) for *new* workflows. Existing `kys-v1` and `supplier-onboarding-v1` cases must remain readable.
 

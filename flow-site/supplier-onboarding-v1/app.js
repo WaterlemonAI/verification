@@ -312,7 +312,15 @@ async function start() {
       }
     });
     updateConditional();
-    if (application.status !== 'in_progress') {
+    if (application.restart && application.status === 'restarted') {
+      const banner = document.createElement('div'); banner.className = 'form-alert';
+      const heading = document.createElement('strong'); heading.textContent = 'Your buyer requested changes';
+      const message = document.createElement('p'); message.textContent = application.restart.comments;
+      const targets = document.createElement('p');
+      targets.textContent = [...(application.restart.fields || []), ...(application.restart.documents || [])].join(', ');
+      banner.append(heading, message, targets); form.prepend(banner);
+    }
+    if (!['in_progress', 'restarted'].includes(application.status)) {
       if (application.submitted_at || ['submitted', 'processing', 'pending_review', 'needs_correction', 'accepted', 'rejected'].includes(application.status))
         showReceipt(application.application_id);
       else showAlert('This application is no longer available. Contact Your Organisation for a new link.');

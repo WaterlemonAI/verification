@@ -314,6 +314,17 @@
     panel.append(ai);
   }
   function renderActivity(panel, item) {
+    if (item.revisions?.length) {
+      const history = el('section', null, 'flo-review-section');
+      history.append(el('h3', 'Previous application revisions'));
+      for (const revision of item.revisions) {
+        const entry = el('details', null, 'flo-assessment');
+        entry.append(el('summary', `Revision ${revision.application_revision} · submitted ${display(revision.submitted_at)} · ${revision.documents?.length || 0} documents · ${revision.reports?.length || 0} reports`));
+        entry.addEventListener('toggle', () => { if (entry.open && entry.children.length === 1) entry.append(humanValue(revision)); });
+        history.append(entry);
+      }
+      panel.append(history);
+    }
     const routing = el('section', null, 'flo-review-section'); routing.append(el('h3', 'Flow and callback routing'));
     pairs(routing, item.configuration || {}, ['enabled', 'brand_name', 'callback_url', 'success_url', 'failure_url', 'updated_at']);
     panel.append(routing);

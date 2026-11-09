@@ -19,6 +19,12 @@ const files = {
   '/portal-auth.js': ['api-site/portal-auth.js', 'text/javascript'],
   '/assets/kycprobe-logo-white.png': ['api-site/assets/kycprobe-logo-white.png', 'image/png']
 };
+files['/workflows'] = ['api-site/flo-workflows.html', 'text/html'];
+files['/flo-workflows.js'] = ['api-site/flo-workflows.js', 'text/javascript'];
+files['/flo-workflows.css'] = ['api-site/flo-workflows.css', 'text/css'];
+files['/f/generic-token-abcdefghijklmnopqrstuvwxyz0123456789'] = ['flow-site/renderer/index.html', 'text/html'];
+files['/assets/renderer/app.js'] = ['flow-site/renderer/app.js', 'text/javascript'];
+files['/assets/renderer/styles.css'] = ['flow-site/renderer/styles.css', 'text/css'];
 files['/f/supplier-token-abcdefghijklmnopqrstuvwxyz0123456789'] = ['flow-site/supplier-onboarding-v1/index.html', 'text/html'];
 files['/assets/supplier-onboarding-v1/1.0.0/app.js'] = ['flow-site/supplier-onboarding-v1/app.js', 'text/javascript'];
 files['/assets/supplier-onboarding-v1/1.0.0/styles.css'] = ['flow-site/supplier-onboarding-v1/styles.css', 'text/css'];
@@ -74,7 +80,9 @@ try {
         supplier_url: 'https://flo.ai7uae.com/f/synthetic-link-abcdefghijklmnopqrstuvwxyz0123456789',
         reused: false
       };
-      else if (path === '/portal/api/flo/cases') response = { cases: [{ application_id: appId, customer_reference: 'SYNTHETIC',
+      else if (path === '/portal/api/flo/cases') response = { counts: { open: 0, in_progress: 0, processing_review: accepted ? 0 : 1,
+        restarted: 0, accepted: accepted ? 1 : 0, rejected: 0, expired_failed: 0 }, next_cursor: null,
+        cases: [{ application_id: appId, customer_reference: 'SYNTHETIC', bucket: accepted ? 'accepted' : 'processing_review',
         flow_id: 'kys-v1', template_version: '1.0.0', status: accepted ? 'accepted' : 'pending_review',
         created_at: new Date().toISOString() }] };
       else if (path.endsWith('/decision')) { accepted = true; response = { status: 'accepted', application_id: appId }; }
@@ -218,6 +226,70 @@ try {
     if (supplierOverflow) throw new Error(`Supplier Onboarding UI overflows at ${viewport.width}px`);
     await supplierContext.close();
     console.log(`Supplier Onboarding v1 UI passed at ${viewport.width}px`);
+
+    const genericContext = await browser.newContext({ viewport });
+    const workflowSchema = { schema_version: '1.0.0', name: 'Supplier profile', tokens: { primary_color: '#064b79' },
+      stages: [{ id: 'identity', title: 'Business identity', fields: [
+        { id: 'business_name', label: 'Registered business name', type: 'text', required: true }], documents: [], declarations: [] },
+      { id: 'declaration', title: 'Declaration', fields: [], documents: [], declarations: [
+        { id: 'accuracy', label: 'I confirm the information is accurate', required: true }] }] };
+    let genericDraft = {}; let genericDeclarations = {};
+    await genericContext.route('**/flo/api/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      const data = route.request().postDataJSON?.() || {};
+      let response = {};
+      if (path.endsWith('/session')) response = { application_id: appId, csrf_token: 'token' };
+      else if (path.endsWith('/application')) response = { application: { application_id: appId, flow_id: 'flow-example',
+        template_version: '1.0.0', application_revision: 1, status: 'in_progress', presentation: workflowSchema,
+        draft: genericDraft, declarations: genericDeclarations, documents: [] } };
+      else if (path.endsWith('/draft')) { genericDraft = data; response = { draft: data }; }
+      else if (path.endsWith('/declarations')) { genericDeclarations = data; response = { declarations: data }; }
+      else if (path.endsWith('/submit')) response = { application_id: appId, status: 'submitted' };
+      await route.fulfill({ status: path.endsWith('/submit') ? 202 : 200,
+        contentType: 'application/json', body: JSON.stringify(response) });
+    });
+    const genericPage = await genericContext.newPage();
+    await genericPage.goto(`${base}/f/generic-token-abcdefghijklmnopqrstuvwxyz0123456789`);
+    await genericPage.getByRole('heading', { name: 'Supplier profile' }).waitFor();
+    await genericPage.getByLabel(/Registered business name/).fill('Aetherix Systems FZCO');
+    await genericPage.getByRole('button', { name: 'Save and continue' }).click();
+    await genericPage.getByLabel(/I confirm the information is accurate/).check();
+    await genericPage.getByRole('button', { name: 'Submit application' }).click();
+    await genericPage.getByRole('heading', { name: 'Application received' }).waitFor();
+    if (await genericPage.evaluate(() => document.documentElement.scrollWidth > innerWidth))
+      throw new Error(`Generic supplier UI overflows at ${viewport.width}px`);
+    await genericContext.close();
+    console.log(`Generic Flo supplier UI passed at ${viewport.width}px`);
+
+    const workflowContext = await browser.newContext({ viewport });
+    await workflowContext.route('**/portal/api/**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      let response = {};
+      if (path === '/portal/api/auth/session') response = { account: { client_name: 'Buyer', email: 'buyer@example.com' }, csrf_token: 'token' };
+      else if (path === '/portal/api/entitlements') response = { allowed_modules: ['flo'], available_modules: ['flo'] };
+      else if (path === '/portal/api/flo/status') response = { enabled: true };
+      else if (path === '/portal/api/flo/workflows') response = { workflows: [{ flow_id: 'flow-example', name: 'Supplier profile',
+        lifecycle: 'active', published_version: '1.0.0', owner_workspace_id: null }] };
+      else if (path.endsWith('/settings')) response = { settings: { enabled: true, brand_name: 'Buyer' } };
+      else if (path.endsWith('/email-templates')) response = { templates: { receipt: { subject: 'Received', body: 'Thank you' } }, version: 1 };
+      else if (path.endsWith('/smtp')) response = { smtp: { enabled: false, configured: false } };
+      else if (path.endsWith('/copy')) response = { workflow: { flow_id: 'flow-copy', name: 'Supplier profile copy',
+        lifecycle: 'draft', published_version: null, owner_workspace_id: 'a'.repeat(16),
+        source_flow_id: 'flow-example', source_version: '1.0.0', draft_revision: 1, draft: workflowSchema } };
+      else if (path.endsWith('/draft')) response = { workflow: { flow_id: 'flow-copy', name: 'Supplier profile copy',
+        lifecycle: 'draft', published_version: null, owner_workspace_id: 'a'.repeat(16),
+        draft_revision: 1, draft: workflowSchema } };
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(response) });
+    });
+    const workflowPage = await workflowContext.newPage();
+    await workflowPage.goto(`${base}/workflows`);
+    await workflowPage.getByRole('heading', { name: 'Workflows', exact: true }).waitFor();
+    await workflowPage.getByRole('button', { name: /Supplier profile.*flow-example/ }).click();
+    await workflowPage.getByRole('button', { name: 'Copy to my workspace' }).waitFor();
+    if (await workflowPage.evaluate(() => document.documentElement.scrollWidth > innerWidth))
+      throw new Error(`Workflows UI overflows at ${viewport.width}px`);
+    await workflowContext.close();
+    console.log(`Flo Workflows UI passed at ${viewport.width}px`);
   }
 } finally {
   await browser.close();

@@ -12,7 +12,7 @@
   document.addEventListener('click', confirmExternalLink, true);
   document.addEventListener('auxclick', confirmExternalLink, true);
 
-  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/cases', '/flo']);
+  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/cases', '/flo', '/flo-workflows']);
   const normalizedPath = location.pathname.length > 1 ? location.pathname.replace(/\/$/, '') : '/';
   const documentApis = [
     ['uae-trade-license-ocr', 'UAE Trade License OCR'],
@@ -36,6 +36,7 @@
     '/account': ['Workspace', 'Account settings'],
     '/cases': ['Workspace', 'Case Manager'],
     '/flo': ['Flo', 'Flo Case Manager'],
+    '/flo-workflows': ['Flo', 'Workflows'],
     ...Object.fromEntries(documentApis.map(([id, name]) => [`/document-extraction/${id}`, ['Document Extraction', name]]))
   };
 
@@ -88,6 +89,7 @@
         <a href="/account" data-path="/account"><span>09</span> Account settings</a>
         <a href="/cases" data-path="/cases" id="portal-case-link" hidden><span>10</span> Case Manager</a>
         <a href="/flo" data-path="/flo" id="portal-flo-link" hidden><span>11</span> Flo Case Manager</a>
+        <a href="/flo-workflows" data-path="/flo-workflows" id="portal-flo-workflows-link" hidden><span>12</span> Workflows</a>
       </div>
       <div class="portal-account">
         <span>WORKSPACE</span>
@@ -108,7 +110,8 @@
       .then((settings) => { if (settings?.available) sidebar.querySelector('#portal-case-link').hidden = false; }).catch(() => {});
     if (entitlements.allowed_modules.includes('flo')) {
       fetch('/portal/api/flo/status', { credentials: 'same-origin' }).then((response) => response.ok ? response.json() : null)
-        .then((state) => { if (state?.enabled) sidebar.querySelector('#portal-flo-link').hidden = false; }).catch(() => {});
+        .then((state) => { if (state?.enabled) sidebar.querySelector('#portal-flo-link').hidden = false;
+          sidebar.querySelector('#portal-flo-workflows-link').hidden = false; }).catch(() => {});
     }
 
     const header = document.querySelector('header');
