@@ -59,8 +59,10 @@ test('controlled diagnostic is case-scoped, reports missing evidence and cannot 
   assert.equal((await send(`${portal}/diagnostic/run`, 'app.kycprobe.com', 'POST', {}, { cookie: 'member' })).status, 403);
   assert.equal((await send(`${portal}/diagnostic/documents`, 'app.kycprobe.com', 'POST',
     { type: 'bankConfirmationFile', diagnostic_label: 'test_sample', ...pdf })).status, 201);
-  assert.equal((await send(`${portal}/diagnostic/run`, 'app.kycprobe.com', 'POST', {})).status, 202);
-  assert.equal((await send(`${portal}/diagnostic/run`, 'app.kycprobe.com', 'POST', {})).status, 409);
+  const inferred_draft = { supplierType: 'legal_entity', identityType: 'passport', tradingName: 'Example FZCO' };
+  assert.equal((await send(`${portal}/diagnostic/run`, 'app.kycprobe.com', 'POST',
+    { inferred_draft })).status, 202);
+  assert.equal((await send(`${portal}/diagnostic/run`, 'app.kycprobe.com', 'POST', { inferred_draft })).status, 409);
   assert.equal(queue.jobs[0].job_type, 'diagnostic');
   await queue.drain((job) => processFloApplication(job, {
     floStore, enqueue: (next) => queue.enqueue(next), enqueueCallback: (next) => callbacks.enqueue(next),
@@ -72,6 +74,8 @@ test('controlled diagnostic is case-scoped, reports missing evidence and cannot 
   assert.equal(item.status, 'in_progress');
   assert.equal(item.submitted_at, null);
   assert.equal(item.diagnostic.state, 'complete');
+  assert.equal(item.draft.identityType, 'passport');
+  assert.equal(item.draft.supplierType, 'legal_entity');
   assert.equal(item.documents[0].diagnostic_label, 'test_sample');
   assert.equal(item.checks.find((check) => check.service_id === 'ejari-verification').transport, 'not_run');
   const report = await send(`${portal}/report.json`, 'app.kycprobe.com');

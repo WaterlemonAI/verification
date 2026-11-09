@@ -106,10 +106,16 @@
           row.append(node('span', `${label}: `), file, button); upload.append(row);
         }
         root.append(upload);
+        root.append(node('p', 'Buyer-inferred context for this diagnostic, based on the supplied COF and passport. These fields are not supplier attestations.'));
+        const name = document.createElement('input'); name.type = 'text'; name.maxLength = 200;
+        name.value = item.draft?.tradingName || 'AETHERIX SYSTEMS - FZCO'; name.setAttribute('aria-label', 'Buyer-inferred entity name');
+        root.append(name);
         const run = node('button', 'Run controlled diagnostic'); run.type = 'button';
         run.addEventListener('click', async () => {
           run.disabled = true;
-          try { await request(`/portal/api/flo/cases/${id}/diagnostic/run`, 'POST', {}); await detail(id); }
+          try { await request(`/portal/api/flo/cases/${id}/diagnostic/run`, 'POST',
+            { inferred_draft: { supplierType: 'legal_entity', identityType: 'passport', tradingName: name.value.trim() } });
+            await detail(id); }
           catch (error) { $('flo-notice').textContent = error.message; run.disabled = false; }
         }); root.append(run);
       }
