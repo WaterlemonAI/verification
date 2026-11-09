@@ -22,7 +22,7 @@
   }
   function showLinkResult(result) {
     const root = $('flo-link-result'); root.replaceChildren(); root.hidden = false;
-    root.append(node('strong', result.reused ? 'Application already created' : 'Supplier link created'),
+    root.append(node('strong', result.reused ? 'Application already created' : 'Onboarding link created'),
       node('p', `Application ID: ${result.application_id}`));
     if (result.supplier_url) {
       const link = node('a', result.supplier_url); link.href = result.supplier_url;
@@ -33,17 +33,20 @@
         catch { copy.textContent = 'Select and copy the link above'; }
       });
       root.append(copy, node('p', 'The link is shown once. Email delivery is not confirmed here.'));
-    } else root.append(node('p', 'The one-time link cannot be displayed again after a replay. Check the supplier email.'));
+    } else root.append(node('p', 'The one-time link cannot be displayed again after a replay. Check the recipient email.'));
   }
   async function loadFlows() {
     const { flows } = await request('/portal/api/flo/flows');
     const selector = $('flo-link-flow'); selector.replaceChildren();
+    if (flows?.length > 1) {
+      const prompt = node('option', 'Choose a flow'); prompt.value = ''; prompt.disabled = true;
+      selector.append(prompt);
+    }
     for (const flow of flows || []) {
       const option = node('option', `${flow.flow_id} · ${flow.version}`); option.value = flow.flow_id;
       selector.append(option);
     }
-    if ([...(flows || [])].some((flow) => flow.flow_id === 'supplier-onboarding-v1'))
-      selector.value = 'supplier-onboarding-v1';
+    if (flows?.length > 1) selector.value = '';
     $('flo-link-form').hidden = !flows?.length;
     $('flo-link-unavailable').hidden = Boolean(flows?.length);
   }

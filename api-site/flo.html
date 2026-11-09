@@ -3,16 +3,16 @@
 <script src="/portal-auth.js" defer></script><script src="/flo-review.js" defer></script><script src="/flo.js" defer></script></head><body>
 <div class="utility-bar"><span>KYCProbe Verification Platform</span></div>
 <header><a class="brand" href="https://kycprobe.com"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab"></a></header>
-<main class="flo-main"><section class="flo-hero"><p class="eyebrow">FLO CASE MANAGER</p><h1>Supplier onboarding cases</h1>
-<p>Review applications, source documents and reports. Flo cases remain available without an automatic expiry.</p></section>
+<main class="flo-main"><section class="flo-hero"><p class="eyebrow">FLO CASE MANAGER</p><h1>Onboarding Applications</h1>
+<p>Review onboarding applications, source documents and reports across your enabled flows. Flo cases remain available without an automatic expiry.</p></section>
 <p id="flo-notice" role="status"></p>
 <section class="flo-create" aria-labelledby="flo-create-title">
-  <div><p class="eyebrow">NEW APPLICATION</p><h2 id="flo-create-title">Create a supplier onboarding link</h2>
-    <p>Select an enabled flow. Flo creates a case immediately and attempts to email the one-time link to the supplier.</p></div>
+  <div><p class="eyebrow">NEW APPLICATION</p><h2 id="flo-create-title">Create an onboarding link</h2>
+    <p>Select an enabled flow. Flo creates a case immediately and attempts to email the one-time link to the recipient.</p></div>
   <form id="flo-link-form" hidden>
     <label>Flow<select name="flow_id" id="flo-link-flow" required></select></label>
     <label>Customer reference<input name="customer_reference" maxlength="128" required placeholder="e.g. PO-2026-001"></label>
-    <label>Supplier email<input name="supplier_email" type="email" maxlength="254" required placeholder="supplier@example.com"></label>
+    <label>Recipient email<input name="supplier_email" type="email" maxlength="254" required placeholder="recipient@example.com"></label>
     <button type="submit" id="flo-link-submit">Create link</button>
   </form>
   <p id="flo-link-unavailable" role="status" hidden>No published Flo flow is enabled for this workspace.</p>
