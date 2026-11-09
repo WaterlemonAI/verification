@@ -62,6 +62,15 @@ param acrLoginServer string
 @description('URI of the dedicated API Key Vault.')
 param keyVaultUri string
 
+@description('Public API hostname for this deployment.')
+param apiHost string = 'api.ai7uae.com'
+
+@description('Buyer portal hostname for this deployment.')
+param appHost string = 'app.kycprobe.com'
+
+@description('Supplier Flo hostname for this deployment.')
+param floHost string = 'flo.ai7uae.com'
+
 @description('Dedicated bank statement storage account name.')
 param bankStatementStorageName string = 'stai7uaebsauaen001'
 
@@ -76,6 +85,12 @@ param caseManagerStorageName string = 'stai7uaecasesuaen001'
 
 @description('Enable Case Manager only after storage, key, policy, and QA gates are reviewed.')
 param enableCaseManager bool = false
+
+@description('Enable Flo only after private storage, key, certificate and upload scanner checks pass.')
+param enableFlo bool = false
+
+@description('Run billing-notification schedule for this environment. Staging keeps it off.')
+param enableBillingNotifications bool = true
 
 @description('Keep purge, reconciliation and alerts running for existing cases when API capture is disabled.')
 param maintainCaseManagerData bool = false
@@ -107,11 +122,14 @@ param caseManagerPurgeJobName string = 'caj-ai7uae-case-manager-purge'
 @description('Case Manager reconciliation job name. Never run two scheduled consumers against the same queue.')
 param caseManagerReconcileJobName string = 'caj-ai7uae-case-manager-reconcile'
 
-@description('Resource ID of the managed certificate for api.ai7uae.com. Leave blank until DNS validation is complete.')
+@description('Resource ID of the managed certificate for apiHost. Leave blank until DNS validation is complete.')
 param apiCertificateId string = ''
 
-@description('Resource ID of the managed certificate for app.kycprobe.com.')
+@description('Resource ID of the managed certificate for appHost.')
 param appCertificateId string = ''
+
+@description('Resource ID of the managed certificate for floHost.')
+param floCertificateId string = ''
 
 @description('Name of the API Container App.')
 param containerAppName string = 'ca-ai7uae-api'
@@ -121,6 +139,27 @@ param logAnalyticsWorkspaceName string = 'log-ai7uae-web-uaen-001'
 
 @description('Operations mailbox for API availability alerts.')
 param apiAlertEmail string = 'notify@kycprobe.com'
+
+@description('Name of the merchant screenshot worker managed identity.')
+param merchantScreenshotWorkerIdentityName string = 'id-ai7uae-merchant-screenshot-uaen-001'
+
+@description('Prefix for this environment’s alert and action group resource names.')
+param alertResourcePrefix string = 'ai7uae'
+
+@description('Existing API name monitored before traffic cutover. Set to the staging API name in staging.')
+param preCutoverApiName string = 'ca-ai7uae-api'
+
+@description('Short name of the API alert action group.')
+param alertGroupShortName string = 'AI7UAEAPI'
+
+@description('Billing notifications job name.')
+param billingNotificationsJobName string = 'caj-ai7uae-billing-notifications'
+
+@description('Manual Peppol ingest job name.')
+param peppolIngestJobName string = 'caj-ai7uae-peppol-ingest'
+
+@description('SMTP account for this environment.')
+param platformSmtpUser string = 'notify@kycprobe.com'
 
 @description('Name of the isolated merchant screenshot worker Container App.')
 param merchantScreenshotWorkerName string = 'ca-ai7uae-merchant-screenshot'
@@ -170,27 +209,34 @@ resource formsDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/q
 var bankStatementClamavImage = '${acrLoginServer}/ai7uae-clamav@sha256:6ba4e78b29853b2fc7e3c111389596e2cad5ec4ed5f0fd2cb663d29ab6b0e6a3'
 var caseManagerRuntimeEnabled = (!parallelDeployment && enableCaseManager) || (parallelDeployment && parallelCaseManagerQa)
 var caseManagerMaintenanceEnabled = (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) || (parallelDeployment && parallelCaseManagerQa)
-var monitoredApiId = apiTrafficCutover ? api.id : resourceId('Microsoft.App/containerApps', 'ca-ai7uae-api')
-var monitoredApiName = apiTrafficCutover ? containerAppName : 'ca-ai7uae-api'
+var monitoredApiId = apiTrafficCutover ? api.id : resourceId('Microsoft.App/containerApps', preCutoverApiName)
+var monitoredApiName = apiTrafficCutover ? containerAppName : preCutoverApiName
 var customDomains = parallelDeployment ? [] : concat(
   empty(apiCertificateId) ? [] : [
     {
-      name: 'api.ai7uae.com'
+      name: apiHost
       bindingType: 'SniEnabled'
       certificateId: apiCertificateId
     }
   ],
   empty(appCertificateId) ? [] : [
     {
-      name: 'app.kycprobe.com'
+      name: appHost
       bindingType: 'SniEnabled'
       certificateId: appCertificateId
+    }
+  ],
+  empty(floCertificateId) ? [] : [
+    {
+      name: floHost
+      bindingType: 'SniEnabled'
+      certificateId: floCertificateId
     }
   ]
 )
 
 resource merchantScreenshotWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
-  name: 'id-ai7uae-merchant-screenshot-uaen-001'
+  name: merchantScreenshotWorkerIdentityName
 }
 
 resource bankStatementWorkerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
@@ -325,7 +371,7 @@ resource bankStatementWorker 'Microsoft.App/containerApps@2025-07-01' = if (!par
             { name: 'BSA_CLAMD_PORT', value: '3310' }
             { name: 'BSA_CLAMD_STARTUP_TIMEOUT_SECONDS', value: '180' }
             { name: 'BSA_WORKER_VISIBILITY_SECONDS', value: '900' }
-            { name: 'BSA_PUBLIC_API_ORIGIN', value: 'https://api.ai7uae.com' }
+            { name: 'BSA_PUBLIC_API_ORIGIN', value: 'https://${apiHost}' }
             { name: 'BSA_CALLBACK_TIMEOUT_SECONDS', value: '20' }
             { name: 'BSA_CALLBACK_MAX_ATTEMPTS', value: '8' }
           ]
@@ -495,8 +541,8 @@ resource caseManagerPurgeJob 'Microsoft.App/jobs@2024-03-01' = if (caseManagerMa
   }
 }
 
-resource billingNotificationsJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment) {
-  name: 'caj-ai7uae-billing-notifications'
+resource billingNotificationsJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && enableBillingNotifications) {
+  name: billingNotificationsJobName
   location: location
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
   properties: {
@@ -524,7 +570,7 @@ resource billingNotificationsJob 'Microsoft.App/jobs@2024-03-01' = if (!parallel
             { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
             { name: 'PLATFORM_SMTP_HOST', value: 'smtpout.secureserver.net' }
             { name: 'PLATFORM_SMTP_PORT', value: '465' }
-            { name: 'PLATFORM_SMTP_USER', value: 'notify@kycprobe.com' }
+            { name: 'PLATFORM_SMTP_USER', value: platformSmtpUser }
             { name: 'PLATFORM_SMTP_PASSWORD', secretRef: 'platform-smtp-password' }
           ]
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
@@ -535,7 +581,7 @@ resource billingNotificationsJob 'Microsoft.App/jobs@2024-03-01' = if (!parallel
 }
 
 resource peppolIngestJob 'Microsoft.App/jobs@2024-03-01' = if (!parallelDeployment && !empty(peppolIngestImage)) {
-  name: 'caj-ai7uae-peppol-ingest'
+  name: peppolIngestJobName
   location: location
   identity: { type: 'UserAssigned', userAssignedIdentities: { '${runtimeIdentityResourceId}': {} } }
   properties: {
@@ -610,7 +656,7 @@ resource caseManagerReconcileJob 'Microsoft.App/jobs@2024-03-01' = if (caseManag
             { name: 'DOCUMENT_OCR_STORAGE_BLOB_URL', value: 'https://${documentOcrStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'DOCUMENT_OCR_DATA_KEY_HEX', secretRef: 'ocr-data-key' }
             { name: 'DOCUMENT_OCR_DOWNLOAD_SIGNING_KEY_HEX', secretRef: 'ocr-download-key' }
-            { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
+            { name: 'API_PUBLIC_BASE_URL', value: 'https://${apiHost}' }
           ] : [], !parallelDeployment && enableEjari ? [
             { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-data-key-v1' }
@@ -742,6 +788,11 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'ocr-download-key', keyVaultUrl: '${keyVaultUri}secrets/document-ocr-download-key', identity: runtimeIdentityResourceId }
       ] : [], caseManagerRuntimeEnabled ? [
         { name: 'case-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/case-manager-data-key-v1', identity: runtimeIdentityResourceId }
+      ] : [], enableFlo ? [
+        { name: 'flo-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/flo-data-key-v1', identity: runtimeIdentityResourceId }
+        { name: 'flo-session-hash-key-v1', keyVaultUrl: '${keyVaultUri}secrets/flo-session-hash-key-v1', identity: runtimeIdentityResourceId }
+        { name: 'flo-callback-signing-key-v1', keyVaultUrl: '${keyVaultUri}secrets/flo-callback-signing-key-v1', identity: runtimeIdentityResourceId }
+        { name: 'flo-gemini-api-key', keyVaultUrl: '${keyVaultUri}secrets/flo-gemini-api-key', identity: runtimeIdentityResourceId }
       ] : [], !parallelDeployment && enableEjari ? [
         { name: 'ejari-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: runtimeIdentityResourceId }
       ] : [])
@@ -766,12 +817,12 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       ]
     }
     template: {
-      containers: [
+      containers: concat([
         {
           name: 'api'
           image: image
           env: concat([
-            { name: 'API_HOSTS', value: 'api.ai7uae.com,app.kycprobe.com' }
+            { name: 'API_HOSTS', value: '${apiHost},${appHost}' }
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
             { name: 'ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED', value: enableAdverseMediaSearchPlusGpt ? '1' : '0' }
@@ -785,11 +836,11 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ADVERSE_MEDIA_REPORT_TABLE', value: 'AdverseMediaReports' }
             { name: 'ADVERSE_MEDIA_JSON_BLOB_URL', value: 'https://${adverseJsonStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'AZURE_REGION_DISPLAY', value: 'Microsoft Azure UAE North' }
-            { name: 'API_PUBLIC_BASE_URL', value: 'https://api.ai7uae.com' }
-            { name: 'APP_PUBLIC_BASE_URL', value: 'https://app.kycprobe.com' }
+            { name: 'API_PUBLIC_BASE_URL', value: 'https://${apiHost}' }
+            { name: 'APP_PUBLIC_BASE_URL', value: 'https://${appHost}' }
             { name: 'PLATFORM_SMTP_HOST', value: 'smtpout.secureserver.net' }
             { name: 'PLATFORM_SMTP_PORT', value: '465' }
-            { name: 'PLATFORM_SMTP_USER', value: 'notify@kycprobe.com' }
+            { name: 'PLATFORM_SMTP_USER', value: platformSmtpUser }
             { name: 'PLATFORM_SMTP_PASSWORD', secretRef: 'platform-smtp-password' }
             { name: 'MERCHANT_SCREENSHOT_WORKER_URL', value: 'https://${merchantScreenshotWorker.properties.configuration.ingress.fqdn}' }
             { name: 'BSA_PRODUCTION_ENABLED', value: parallelDeployment ? '0' : '1' }
@@ -806,6 +857,11 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DOCUMENT_OCR_TAED_MOA_ENABLED', value: !parallelDeployment && enableDocumentOcr && enableTaedMoa ? 'true' : 'false' }
             { name: 'DOCUMENT_OCR_TAED_TRADE_LICENSE_ENABLED', value: !parallelDeployment && enableDocumentOcr && enableTaedTradeLicense ? 'true' : 'false' }
             { name: 'CASE_MANAGER_ENABLED', value: caseManagerRuntimeEnabled ? 'true' : 'false' }
+            { name: 'FLO_ENABLED', value: enableFlo ? 'true' : 'false' }
+            { name: 'FLO_HOST', value: floHost }
+            { name: 'FLO_PUBLIC_BASE_URL', value: 'https://${floHost}' }
+            { name: 'FLO_API_HOST', value: apiHost }
+            { name: 'FLO_PORTAL_HOST', value: appHost }
             { name: 'EJARI_PLATFORM_ENABLED', value: !parallelDeployment && enableEjari ? '1' : '0' }
           ], parallelDeployment ? [] : [
             { name: 'ADVERSE_MEDIA_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${deepResearchQueueName}' }
@@ -822,6 +878,19 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'CASE_MANAGER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}' }
             { name: 'CASE_MANAGER_DATA_KEY_V1_HEX', secretRef: 'case-data-key-v1' }
             { name: 'CASE_MANAGER_ACTIVE_KEY_VERSION', value: '1' }
+          ] : [], enableFlo ? [
+            { name: 'FLO_BLOB_URL', value: 'https://${caseManagerStorageName}.blob.${environment().suffixes.storage}' }
+            { name: 'FLO_TABLE_URL', value: 'https://${caseManagerStorageName}.table.${environment().suffixes.storage}' }
+            { name: 'FLO_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}/flo-jobs' }
+            { name: 'FLO_CALLBACK_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}/flo-callbacks' }
+            { name: 'FLO_DEAD_LETTER_QUEUE_URL', value: 'https://${caseManagerStorageName}.queue.${environment().suffixes.storage}/flo-dead-letter' }
+            { name: 'FLO_DATA_KEY_V1_HEX', secretRef: 'flo-data-key-v1' }
+            { name: 'FLO_ACTIVE_KEY_VERSION', value: '1' }
+            { name: 'FLO_SESSION_HASH_KEY_HEX', secretRef: 'flo-session-hash-key-v1' }
+            { name: 'FLO_CALLBACK_SIGNING_KEY_HEX', secretRef: 'flo-callback-signing-key-v1' }
+            { name: 'FLO_GEMINI_API_KEY', secretRef: 'flo-gemini-api-key' }
+            { name: 'FLO_GEMINI_MODEL', value: 'gemini-3.5-flash-lite' }
+            { name: 'FLO_CLAMD_HOST', value: '127.0.0.1' }
           ] : [], !parallelDeployment && enableEjari ? [
             { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-data-key-v1' }
@@ -853,7 +922,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             }
           ]
         }
-      ]
+      ], enableFlo ? [
+        { name: 'clamav', image: bankStatementClamavImage, resources: { cpu: json('2.0'), memory: '4Gi' } }
+      ] : [])
       scale: {
         minReplicas: 1
         maxReplicas: 8
@@ -873,11 +944,11 @@ resource apiLogWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' e
 }
 
 resource apiAlerts 'Microsoft.Insights/actionGroups@2023-01-01' = if (!parallelDeployment) {
-  name: 'ag-ai7uae-api-uaen-001'
+  name: 'ag-${alertResourcePrefix}-api-uaen-001'
   location: 'global'
   properties: {
     enabled: true
-    groupShortName: 'AI7UAEAPI'
+    groupShortName: alertGroupShortName
     emailReceivers: [
       {
         name: 'KYCProbe operations'
@@ -889,7 +960,7 @@ resource apiAlerts 'Microsoft.Insights/actionGroups@2023-01-01' = if (!parallelD
 }
 
 resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = if (!parallelDeployment) {
-  name: 'alert-ai7uae-api-sustained-5xx'
+  name: 'alert-${alertResourcePrefix}-api-sustained-5xx'
   location: 'global'
   properties: {
     description: 'Five or more API HTTP 5xx responses in five minutes.'
@@ -925,7 +996,7 @@ resource apiFiveHundreds 'Microsoft.Insights/metricAlerts@2018-03-01' = if (!par
 }
 
 resource adverseSourceFailures 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = if (!parallelDeployment) {
-  name: 'alert-ai7uae-adverse-source-failures'
+  name: 'alert-${alertResourcePrefix}-adverse-source-failures'
   location: location
   kind: 'LogAlert'
   properties: {
@@ -959,7 +1030,7 @@ var loginCodeAlertSignals = [
 ]
 
 resource loginCodeAlerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert in loginCodeAlertSignals: if (!parallelDeployment) {
-  name: 'alert-ai7uae-login-code-${alert.name}'
+  name: 'alert-${alertResourcePrefix}-login-code-${alert.name}'
   location: location
   kind: 'LogAlert'
   properties: {
@@ -1008,7 +1079,7 @@ var caseManagerAlertSignals = [
 ]
 
 resource caseManagerAlerts 'Microsoft.Insights/scheduledQueryRules@2023-12-01' = [for alert in caseManagerAlertSignals: if (!parallelDeployment && (enableCaseManager || maintainCaseManagerData)) {
-  name: 'alert-ai7uae-case-manager-${alert.name}'
+  name: 'alert-${alertResourcePrefix}-case-manager-${alert.name}'
   location: location
   kind: 'LogAlert'
   properties: {

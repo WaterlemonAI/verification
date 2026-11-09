@@ -1,0 +1,1565 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "KYCProbe Flo API",
+    "version": "1.1.0",
+    "description": "Code-owned, version-pinned Flo templates. Flo requires module assignment, published flow and workspace enablement. Cases and report versions are retained without automatic expiry in the separate Flo Case Manager."
+  },
+  "servers": [
+    {
+      "url": "https://api.ai7uae.com"
+    }
+  ],
+  "security": [
+    {
+      "customerKey": []
+    }
+  ],
+  "paths": {
+    "/flows/applications/{applicationId}": {
+      "get": {
+        "summary": "Read the complete structured Flo application",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Application, checks and report references",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Submitted or processing"
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "404": {
+            "description": "Not found in this workspace"
+          }
+        }
+      }
+    },
+    "/flows/applications/{applicationId}/report": {
+      "get": {
+        "summary": "Download the latest report PDF",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF report",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Report still processing"
+          },
+          "404": {
+            "description": "Not found in this workspace"
+          }
+        }
+      }
+    },
+    "/flo/api/session": {
+      "servers": [
+        {
+          "url": "https://flo.ai7uae.com"
+        }
+      ],
+      "security": [],
+      "post": {
+        "summary": "Redeem a single-use supplier link for a host-only cookie and CSRF token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session, CSRF token, draft and documents; sets __Host-flo_session"
+          },
+          "410": {
+            "description": "Expired or already redeemed"
+          }
+        }
+      }
+    },
+    "/flo/api/application": {
+      "servers": [
+        {
+          "url": "https://flo.ai7uae.com"
+        }
+      ],
+      "security": [
+        {
+          "supplierSession": []
+        }
+      ],
+      "get": {
+        "summary": "Read the current supplier application",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/floApplicationHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Supplier-safe application projection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierApplicationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session expired"
+          }
+        }
+      }
+    },
+    "/flo/api/draft": {
+      "servers": [
+        {
+          "url": "https://flo.ai7uae.com"
+        }
+      ],
+      "security": [
+        {
+          "supplierSession": []
+        }
+      ],
+      "post": {
+        "summary": "Save supplier business and stakeholder fields",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/floApplicationHeader"
+          },
+          {
+            "$ref": "#/components/parameters/floCsrf"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/KysDraft"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SupplierDraft"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated draft"
+          },
+          "403": {
+            "description": "CSRF failure"
+          }
+        }
+      }
+    },
+    "/flo/api/documents": {
+      "servers": [
+        {
+          "url": "https://flo.ai7uae.com"
+        }
+      ],
+      "security": [
+        {
+          "supplierSession": []
+        }
+      ],
+      "post": {
+        "summary": "Scan and retain one PDF, PNG or JPEG document, maximum 6 MiB",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/floApplicationHeader"
+          },
+          {
+            "$ref": "#/components/parameters/floCsrf"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentUpload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document metadata"
+          },
+          "413": {
+            "description": "File or case too large"
+          },
+          "503": {
+            "description": "Malware scanning unavailable"
+          }
+        }
+      }
+    },
+    "/flo/api/review": {
+      "servers": [
+        {
+          "url": "https://flo.ai7uae.com"
+        }
+      ],
+      "security": [
+        {
+          "supplierSession": []
+        }
+      ],
+      "post": {
+        "summary": "Queue extracted evidence preview",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/floApplicationHeader"
+          },
+          {
+            "$ref": "#/components/parameters/floCsrf"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Preview processing"
+          },
+          "400": {
+            "description": "Required information missing"
+          }
+        }
+      }
+    },
+    "/flo/api/submit": {
+      "servers": [
+        {
+          "url": "https://flo.ai7uae.com"
+        }
+      ],
+      "security": [
+        {
+          "supplierSession": []
+        }
+      ],
+      "post": {
+        "summary": "Submit after reviewing extracted evidence",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/floApplicationHeader"
+          },
+          {
+            "$ref": "#/components/parameters/floCsrf"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Submitted and processing"
+          },
+          "409": {
+            "description": "Preview not ready or case not editable"
+          }
+        }
+      }
+    },
+    "/portal/api/flo/flows": {
+      "servers": [{ "url": "https://app.kycprobe.com" }],
+      "security": [{ "portalSession": [] }],
+      "get": {
+        "summary": "List Flo templates published and enabled for the buyer workspace",
+        "responses": {
+          "200": { "description": "Flow IDs, versions and brand names available for link creation" },
+          "403": { "description": "Organization administrator required" }
+        }
+      }
+    },
+    "/portal/api/flo/flows/{flowId}/links": {
+      "servers": [{ "url": "https://app.kycprobe.com" }],
+      "security": [{ "portalSession": [] }],
+      "post": {
+        "summary": "Create a one-time supplier link from the Flo buyer UI",
+        "description": "Uses the signed-in organization administrator's workspace, the same Flo usage metering and flow-scoped idempotency as the customer API. The browser does not receive a customer API key. The supplier URL is returned only on first creation; email delivery is attempted but not guaranteed.",
+        "parameters": [
+          { "$ref": "#/components/parameters/flowId" },
+          { "$ref": "#/components/parameters/portalCsrf" },
+          { "name": "Idempotency-Key", "in": "header", "required": true,
+            "schema": { "type": "string", "minLength": 8, "maxLength": 128 } }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": {
+          "schema": { "$ref": "#/components/schemas/LinkRequest" }
+        } } },
+        "responses": {
+          "201": { "description": "Case and supplier link created", "content": { "application/json": {
+            "schema": { "$ref": "#/components/schemas/LinkResponse" }
+          } } },
+          "200": { "description": "Idempotency replay; case returned without supplier URL", "content": { "application/json": {
+            "schema": { "$ref": "#/components/schemas/LinkResponse" }
+          } } },
+          "400": { "description": "Invalid request" },
+          "402": { "description": "Insufficient credit" },
+          "403": { "description": "Flow unavailable or organization administrator required" },
+          "409": { "description": "Idempotency conflict" }
+        }
+      }
+    },
+    "/portal/api/flo/cases": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "portalSession": []
+        }
+      ],
+      "get": {
+        "summary": "List perpetual Flo cases in the buyer workspace, optionally filtered by flow",
+        "responses": {
+          "200": {
+            "description": "Case summaries without a 45-day limit"
+          },
+          "403": {
+            "description": "Organization administrator required"
+          }
+        },
+        "parameters": [
+          {
+            "name": "flow_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kys-v1",
+                "supplier-onboarding-v1"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/portal/api/flo/cases/{applicationId}": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "portalSession": []
+        }
+      ],
+      "get": {
+        "summary": "Read complete buyer case",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete case with evidence references"
+          },
+          "404": {
+            "description": "Not found in workspace"
+          }
+        }
+      }
+    },
+    "/portal/api/flo/cases/{applicationId}/decision": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "portalSession": []
+        }
+      ],
+      "post": {
+        "summary": "Accept, reject or request correction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          },
+          {
+            "$ref": "#/components/parameters/portalCsrf"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "New status and optional correction URL"
+          },
+          "409": {
+            "description": "Invalid transition"
+          }
+        }
+      }
+    },
+    "/portal/api/flo/cases/{applicationId}/report": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "portalSession": []
+        }
+      ],
+      "get": {
+        "summary": "Download latest PDF report",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF"
+          },
+          "202": {
+            "description": "Report pending"
+          }
+        }
+      }
+    },
+    "/portal/api/flo/cases/{applicationId}/report.html": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "portalSession": []
+        }
+      ],
+      "get": {
+        "summary": "View latest escaped HTML report",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "HTML"
+          }
+        }
+      }
+    },
+    "/portal/api/flo/cases/{applicationId}/report.json": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "portalSession": []
+        }
+      ],
+      "get": {
+        "summary": "Download latest report model",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON"
+          }
+        }
+      }
+    },
+    "/portal/api/flo/cases/{applicationId}/reports/{version}": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "portalSession": []
+        }
+      ],
+      "get": {
+        "summary": "Download a retained PDF report version",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          },
+          {
+            "$ref": "#/components/parameters/reportVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PDF"
+          },
+          "404": {
+            "description": "Version not found"
+          }
+        }
+      }
+    },
+    "/portal/api/flo/cases/{applicationId}/reports/{version}.html": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "portalSession": []
+        }
+      ],
+      "get": {
+        "summary": "View a retained HTML report version",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          },
+          {
+            "$ref": "#/components/parameters/reportVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "HTML"
+          }
+        }
+      }
+    },
+    "/portal/api/flo/cases/{applicationId}/reports/{version}.json": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "portalSession": []
+        }
+      ],
+      "get": {
+        "summary": "Download a retained JSON report version",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          },
+          {
+            "$ref": "#/components/parameters/reportVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON"
+          }
+        }
+      }
+    },
+    "/portal/api/flo/cases/{applicationId}/documents/{documentId}": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "portalSession": []
+        }
+      ],
+      "get": {
+        "summary": "Download retained original document",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/applicationId"
+          },
+          {
+            "$ref": "#/components/parameters/documentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original scanned document"
+          },
+          "404": {
+            "description": "Not found in workspace"
+          }
+        }
+      }
+    },
+    "/admin/api/flows/{flowId}": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "adminSession": []
+        }
+      ],
+      "get": {
+        "summary": "Read a reviewed flow definition and published state",
+        "responses": {
+          "200": {
+            "description": "Template and definition"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/flowId"
+          }
+        ]
+      },
+      "put": {
+        "summary": "Publish or disable a code-shipped flow version",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/flowId"
+          },
+          {
+            "$ref": "#/components/parameters/adminCsrf"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnableRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Published template metadata"
+          },
+          "403": {
+            "description": "Administrator or CSRF check failed"
+          }
+        }
+      }
+    },
+    "/admin/api/flows": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "adminSession": []
+        }
+      ],
+      "get": {
+        "summary": "List reviewed flow packages with published state, version and definition hash",
+        "responses": {
+          "200": {
+            "description": "Flow catalogue"
+          }
+        }
+      }
+    },
+    "/admin/api/customers/{workspaceId}/flo/{flowId}": {
+      "servers": [
+        {
+          "url": "https://app.kycprobe.com"
+        }
+      ],
+      "security": [
+        {
+          "adminSession": []
+        }
+      ],
+      "get": {
+        "summary": "Read workspace configuration for one flow",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/workspaceId"
+          },
+          {
+            "$ref": "#/components/parameters/flowId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workspace configuration"
+          },
+          "404": {
+            "description": "Customer not found"
+          }
+        }
+      },
+      "put": {
+        "summary": "Enable or configure one flow for a workspace; callback signing secret is returned on save",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/workspaceId"
+          },
+          {
+            "$ref": "#/components/parameters/flowId"
+          },
+          {
+            "$ref": "#/components/parameters/adminCsrf"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FloConfiguration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved configuration and callback signing secret"
+          },
+          "400": {
+            "description": "Invalid URL or branding"
+          }
+        }
+      }
+    },
+    "/flows/{flowId}/links": {
+      "post": {
+        "summary": "Create a retained Flo case and one-time supplier link",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/flowId"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "New case and link",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkResponse"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Idempotency replay; same case, supplier URL omitted because only its hash is retained"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Invalid API key"
+          },
+          "402": {
+            "description": "Insufficient credit"
+          },
+          "403": {
+            "description": "Flo not explicitly assigned"
+          },
+          "409": {
+            "description": "Idempotency key conflict"
+          },
+          "503": {
+            "description": "Storage or billing unavailable"
+          }
+        },
+        "description": "Requires Flo module assignment, published and enabled flow, and workspace flow enablement. Idempotency is scoped by workspace ID, flow ID and key; a replay is not billed and returns no supplier URL. Unknown or disabled flows are rejected before billing. Each case pins the exact flow version, definition hash and effective workspace configuration."
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "customerKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Customer server-side KYCProbe API key"
+      },
+      "adminSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "ai7_admin_session"
+      },
+      "portalSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "ai7_portal_session"
+      },
+      "supplierSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-flo_session"
+      }
+    },
+    "parameters": {
+      "applicationId": {
+        "name": "applicationId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "workspaceId": {
+        "name": "workspaceId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{16}$"
+        }
+      },
+      "documentId": {
+        "name": "documentId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "reportVersion": {
+        "name": "version",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "floApplicationHeader": {
+        "name": "x-flo-application-id",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "floCsrf": {
+        "name": "x-flo-csrf",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "portalCsrf": {
+        "name": "x-ai7-csrf",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "adminCsrf": {
+        "name": "x-ai7-csrf",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "flowId": {
+        "name": "flowId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "kys-v1",
+            "supplier-onboarding-v1"
+          ]
+        },
+        "description": "Reviewed flow package ID. The published version and definition hash are pinned on case creation."
+      }
+    },
+    "schemas": {
+      "EnableRequest": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FloConfiguration": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "brand_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "callback_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "success_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "failure_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          }
+        }
+      },
+      "DocumentUpload": {
+        "type": "object",
+        "required": [
+          "type",
+          "mime_type",
+          "content_base64"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "mime_type": {
+            "type": "string",
+            "enum": [
+              "application/pdf",
+              "image/png",
+              "image/jpeg"
+            ]
+          },
+          "content_base64": {
+            "type": "string",
+            "contentEncoding": "base64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Decision": {
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "rejected",
+              "needs_correction"
+            ]
+          },
+          "rationale": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
+      },
+      "LinkRequest": {
+        "type": "object",
+        "required": [
+          "customer_reference",
+          "supplier_email"
+        ],
+        "properties": {
+          "customer_reference": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "supplier_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "prefill": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "LinkResponse": {
+        "type": "object",
+        "required": [
+          "application_id",
+          "status",
+          "status_url",
+          "expires_at",
+          "reused"
+        ],
+        "properties": {
+          "application_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "flow_id": {
+            "type": "string"
+          },
+          "template_version": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApplicationStatus"
+          },
+          "supplier_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "status_url": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reused": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ApplicationStatus": {
+        "type": "string",
+        "enum": [
+          "link_issued",
+          "in_progress",
+          "submitted",
+          "processing",
+          "needs_correction",
+          "pending_review",
+          "accepted",
+          "rejected",
+          "failed",
+          "link_expired"
+        ]
+      },
+      "ApplicationResponse": {
+        "type": "object",
+        "required": [
+          "application"
+        ],
+        "properties": {
+          "application": {
+            "type": "object",
+            "required": [
+              "application_id",
+              "workspace_id",
+              "status",
+              "documents",
+              "checks",
+              "reports",
+              "events"
+            ],
+            "properties": {
+              "application_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "workspace_id": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ApplicationStatus"
+              },
+              "documents": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "reports": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "flow_id": {
+                "type": "string"
+              },
+              "template_version": {
+                "type": "string"
+              },
+              "definition_hash": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "CallbackEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "event_type",
+          "created_at",
+          "data"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "data": {
+            "type": "object"
+          }
+        },
+        "description": "HMAC-SHA256 over x-flo-timestamp + dot + exact JSON bytes, sent in x-flo-signature. Stable event IDs across retries. Data includes flow ID/version/hash, structured checks, Gemini review, report summary and incomplete-check reason codes. Full documents and versioned reports are retrieved through authenticated workspace-scoped APIs."
+      },
+      "KysDraft": {
+        "type": "object",
+        "properties": {
+          "business_name": {
+            "type": "string"
+          },
+          "licence_number": {
+            "type": "string"
+          },
+          "company_type": {
+            "type": "string"
+          },
+          "activities": {
+            "type": "string"
+          },
+          "registered_address": {
+            "type": "string"
+          },
+          "operating_address": {
+            "type": "string"
+          },
+          "iban": {
+            "type": "string"
+          },
+          "website_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "stakeholders": {
+            "type": "array",
+            "maxItems": 25,
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "ownership_percentage": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              }
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "SupplierDraft": {
+        "type": "object",
+        "description": "Supplier Onboarding v1 conditional five-step draft. Server rules validate required answers and uploaded document types before preview/submit.",
+        "properties": {
+          "supplierType": {
+            "type": "string",
+            "enum": [
+              "legal_entity",
+              "natural_person"
+            ]
+          },
+          "tradingName": {
+            "type": "string"
+          },
+          "representativeEmail": {
+            "type": "string",
+            "format": "email"
+          },
+          "identityType": {
+            "type": "string",
+            "enum": [
+              "emirates_id",
+              "passport"
+            ]
+          },
+          "authorityBasis": {
+            "type": "string",
+            "enum": [
+              "director",
+              "power_of_attorney",
+              "board_resolution",
+              "employee_authorisation"
+            ]
+          },
+          "ownershipComplete": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ]
+          },
+          "owners": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "properties": {
+                "fullName": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "share": {
+                  "type": "string"
+                },
+                "nationality": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "locationEvidenceType": {
+            "type": "string",
+            "enum": [
+              "ejari",
+              "tenancy",
+              "ownership",
+              "utility",
+              "other"
+            ]
+          },
+          "vatRegistered": {
+            "type": "string",
+            "enum": [
+              "yes",
+              "no"
+            ]
+          },
+          "supplyType": {
+            "type": "string",
+            "enum": [
+              "goods",
+              "services",
+              "both"
+            ]
+          },
+          "accuracyDeclaration": {
+            "type": "boolean"
+          },
+          "screeningConsent": {
+            "type": "boolean"
+          },
+          "controlledTest": {
+            "type": "boolean"
+          },
+          "formerNames": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "representativePhone": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "representativeTitle": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "meetingAvailability": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "operatingAddress": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "siteActivities": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "fulfilmentLocations": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "addressChangeExplanation": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "keyPersonExplanation": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "vatReason": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "thirdPartyDetail": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "cashDetail": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "recommendationNote": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "staffCount": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "supplyDescription": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "capacityDetail": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "goodsOrigin": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "goodsRightsDetail": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "intermediaryDetail": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "priceExplanation": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "addressChanges": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "keyPersonChanges": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "registeredAddressSame": {
+            "type": "string"
+          },
+          "thirdPartyPayments": {
+            "type": "string"
+          },
+          "cashPayment": {
+            "type": "string"
+          },
+          "unusualCapacity": {
+            "type": "string"
+          },
+          "intermediary": {
+            "type": "string"
+          },
+          "goodsRights": {
+            "type": "string"
+          },
+          "website": {
+            "type": "string",
+            "format": "uri"
+          },
+          "testDeclaration": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SupplierApplicationResponse": {
+        "type": "object",
+        "required": [
+          "application"
+        ],
+        "properties": {
+          "application": {
+            "type": "object",
+            "required": [
+              "application_id",
+              "flow_id",
+              "template_version",
+              "status",
+              "draft",
+              "documents",
+              "preview_issues",
+              "screening_summary"
+            ],
+            "properties": {
+              "application_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "flow_id": {
+                "type": "string"
+              },
+              "template_version": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/components/schemas/ApplicationStatus"
+              },
+              "draft": {
+                "type": "object"
+              },
+              "documents": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "description": "Uploaded document metadata and allowlisted extraction display fields"
+                }
+              },
+              "comparisons": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "preview_issues": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "screening_summary": {
+                "type": "object",
+                "description": "Safe status only; no raw AML or adverse media results"
+              },
+              "preview_ready_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "description": "Excludes raw checks, provider responses, audit/events, buyer decisions, callback state, session and link secrets."
+      }
+    }
+  }
+}

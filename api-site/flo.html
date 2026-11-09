@@ -1,0 +1,22 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KYCProbe — Flo Case Manager</title><link rel="stylesheet" href="/api.css"><link rel="stylesheet" href="/flo.css">
+<script src="/portal-auth.js" defer></script><script src="/flo.js" defer></script></head><body>
+<div class="utility-bar"><span>KYCProbe Verification Platform</span></div>
+<header><a class="brand" href="https://kycprobe.com"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab"></a></header>
+<main class="flo-main"><section class="flo-hero"><p class="eyebrow">FLO CASE MANAGER</p><h1>Supplier onboarding cases</h1>
+<p>Review applications, source documents and reports. Flo cases remain available without an automatic expiry.</p></section>
+<p id="flo-notice" role="status"></p>
+<section class="flo-create" aria-labelledby="flo-create-title">
+  <div><p class="eyebrow">NEW APPLICATION</p><h2 id="flo-create-title">Create a supplier onboarding link</h2>
+    <p>Select an enabled flow. Flo creates a case immediately and attempts to email the one-time link to the supplier.</p></div>
+  <form id="flo-link-form" hidden>
+    <label>Flow<select name="flow_id" id="flo-link-flow" required></select></label>
+    <label>Customer reference<input name="customer_reference" maxlength="128" required placeholder="e.g. PO-2026-001"></label>
+    <label>Supplier email<input name="supplier_email" type="email" maxlength="254" required placeholder="supplier@example.com"></label>
+    <button type="submit" id="flo-link-submit">Create link</button>
+  </form>
+  <p id="flo-link-unavailable" role="status" hidden>No published Flo flow is enabled for this workspace.</p>
+  <div id="flo-link-result" class="flo-link-result" role="status" hidden></div>
+</section>
+<div class="flo-grid"><section aria-label="Applications"><h2>Applications</h2><label>Flow<select id="flo-filter"><option value="">All flows</option></select></label><div id="flo-list"></div></section>
+<section id="flo-detail" aria-label="Case detail"><p>Select an application to inspect it.</p></section></div></main></body></html>

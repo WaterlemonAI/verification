@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Supplier onboarding · Flo</title><link rel="stylesheet" href="/styles.css"></head>
+<body><main><header><span class="brand">Flo</span><span>Supplier onboarding</span></header>
+<section id="loading" role="status">Opening your secure onboarding link…</section>
+<section id="error" hidden role="alert"></section>
+<section id="journey" hidden>
+  <h1>Business onboarding</h1><p>Complete your business details, then upload the supporting documents.</p>
+  <form id="details"><label>Business name <input name="business_name" required maxlength="200"></label>
+    <label>Trade licence number <input name="licence_number" required maxlength="100"></label>
+    <label>Company type <input name="company_type" required maxlength="100"></label>
+    <label>Business activities <input name="activities" required maxlength="1000"></label>
+    <label>Registered address <input name="registered_address" required maxlength="1000"></label>
+    <label>Operating address <input name="operating_address" maxlength="1000"></label>
+    <label>IBAN <input name="iban" maxlength="100"></label>
+    <label>Business website (optional) <input name="website_url" type="url" maxlength="1000" placeholder="https://example.com"></label>
+    <button type="submit">Save details</button></form>
+  <h2>Stakeholders</h2><p>Add each shareholder or signing authority.</p>
+  <div id="stakeholders"></div><button id="add-stakeholder" type="button">Add stakeholder</button>
+  <h2>Documents</h2><p>PDF, PNG or JPEG. Each file is saved separately.</p>
+  <form id="upload"><label>Document type <select name="type">
+    <option value="trade_licence">Trade licence (required)</option><option value="formation_document">MOA / formation document (required)</option>
+    <option value="bank_letter">Bank letter (required)</option><option value="tax_certificate">Tax certificate</option>
+    <option value="ejari">Ejari</option><option value="utility_bill">Utility bill</option>
+    <option value="board_resolution">Board resolution</option><option value="power_of_attorney">Power of attorney</option>
+    <option value="identity_document">Identity document</option></select></label>
+    <label>File <input name="file" type="file" accept="application/pdf,image/png,image/jpeg" required></label>
+    <button type="submit">Upload document</button></form><ul id="document-list"></ul>
+  <p id="message" role="status"></p><button id="review" type="button">Review extracted values</button>
+  <section id="evidence-review" hidden><h2>Review and confirm</h2><p>Check the extracted fields below. Correct your declared details above if needed, then save them before submitting.</p>
+    <div id="extracted-fields"></div><button id="submit" type="button">Confirm and submit for buyer review</button></section>
+</section><section id="complete" hidden><h1>Submission received</h1><p>Your information is being reviewed. You may close this page.</p></section>
+</main><script src="/app.js" defer></script></body></html>

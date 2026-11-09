@@ -31,3 +31,15 @@ resource apiValidation 'Microsoft.Network/dnsZones/TXT@2018-05-01' = {
     TXTRecords: [ { value: [ apiVerificationId ] } ]
   }
 }
+
+resource floCname 'Microsoft.Network/dnsZones/CNAME@2018-05-01' = {
+  parent: zone
+  name: 'flo'
+  properties: { TTL: 300, CNAMERecord: { cname: apiGeneratedFqdn } }
+}
+
+resource floValidation 'Microsoft.Network/dnsZones/TXT@2018-05-01' = {
+  parent: zone
+  name: 'asuid.flo'
+  properties: { TTL: 300, TXTRecords: [ { value: [ apiVerificationId ] } ] }
+}

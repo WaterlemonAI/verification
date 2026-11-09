@@ -102,11 +102,13 @@ function setView(name) {
   byId('peppol-view').hidden = name !== 'peppol';
   byId('clients-view').hidden = name !== 'clients';
   byId('forms-view').hidden = name !== 'forms';
+  byId('flo-view').hidden = name !== 'flo';
   byId('analysis-view').hidden = name !== 'analysis';
-  byId('page-title').textContent = name === 'clients' ? 'Customer keys' : name === 'forms' ? 'Forms'
+  byId('page-title').textContent = name === 'clients' ? 'Customer keys' : name === 'forms' ? 'Forms' : name === 'flo' ? 'Flo'
     : name === 'analysis' ? 'Analysis' : name === 'peppol' ? 'Peppol check' : 'Integrations';
   if (name === 'clients') loadClients();
   else if (name === 'forms') loadForms();
+  else if (name === 'flo') loadFlo();
   else if (name === 'analysis') loadBsaAvailability();
   else if (name === 'peppol') loadPeppolCountries();
   else if (name === 'integrations') loadIntegrations();
@@ -614,6 +616,70 @@ async function loadClients() {
     });
   });
 }
+
+let floTemplates = [];
+async function loadFlo() {
+  const message = byId('flo-message'); message.textContent = '';
+  try {
+    const [catalog, customers] = await Promise.all([
+      request('/admin/api/flows'), request('/admin/api/customers')
+    ]);
+    floTemplates = catalog.templates || [];
+    const flow = byId('flo-flow'); flow.replaceChildren();
+    for (const entry of floTemplates) {
+      const option = document.createElement('option'); option.value = entry.flow_id;
+      option.textContent = `${entry.flow_id} · ${entry.version}`; flow.append(option);
+    }
+    const selector = byId('flo-workspace'); selector.replaceChildren();
+    for (const customer of customers.customers) {
+      const option = document.createElement('option'); option.value = customer.id;
+      option.textContent = `${customer.name} · ${customer.id}`; selector.append(option);
+    }
+    await loadFloSelection();
+  } catch (error) { message.textContent = error.message; }
+}
+
+async function loadFloSelection() {
+  const selected = floTemplates.find((entry) => entry.flow_id === byId('flo-flow').value);
+  byId('flo-template-enabled').checked = selected?.published?.enabled === true;
+  byId('flo-version').textContent = selected ? `Version ${selected.version} · definition ${selected.definition_hash.slice(0, 12)}` : '';
+  if (byId('flo-workspace').value) await loadFloWorkspace(byId('flo-workspace').value);
+}
+
+async function loadFloWorkspace(id) {
+  const result = await request(`/admin/api/customers/${id}/flo/${byId('flo-flow').value}`);
+  const config = result.configuration || {};
+  const form = byId('flo-config-form');
+  for (const key of ['brand_name', 'success_url', 'failure_url', 'callback_url'])
+    form.elements[key].value = config[key] || '';
+  form.elements.enabled.checked = config.enabled === true;
+}
+
+byId('flo-workspace').addEventListener('change', (event) => loadFloWorkspace(event.target.value).catch((error) => {
+  byId('flo-message').textContent = error.message;
+}));
+byId('flo-flow').addEventListener('change', () => loadFloSelection().catch((error) => {
+  byId('flo-message').textContent = error.message;
+}));
+byId('flo-template-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try { await request(`/admin/api/flows/${byId('flo-flow').value}`, { method: 'PUT',
+    body: JSON.stringify({ enabled: byId('flo-template-enabled').checked }) });
+    byId('flo-message').textContent = 'Template state saved.';
+  } catch (error) { byId('flo-message').textContent = error.message; }
+});
+byId('flo-config-form').addEventListener('submit', async (event) => {
+  event.preventDefault(); const form = event.currentTarget;
+  try {
+    const value = Object.fromEntries(new FormData(form));
+    value.enabled = form.elements.enabled.checked;
+    const workspaceId = value.workspace_id; delete value.workspace_id;
+    const saved = await request(`/admin/api/customers/${workspaceId}/flo/${byId('flo-flow').value}`, { method: 'PUT', body: JSON.stringify(value) });
+    byId('flo-message').textContent = saved.callback_signing_secret
+      ? `Workspace Flo settings saved. Copy this callback signing secret now: ${saved.callback_signing_secret}`
+      : 'Workspace Flo settings saved.';
+  } catch (error) { byId('flo-message').textContent = error.message; }
+});
 
 byId('login-form').addEventListener('submit', async (event) => {
   event.preventDefault();
