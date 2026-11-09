@@ -53,7 +53,8 @@ test('buyer and customer JSON expose AI7EDD branding while retaining source evid
     gemini_review: { status: 'failed', model_id: 'gemini-3.5-flash-lite',
       validation_errors: ['flo_gemini_http_error'], output: { narrative: 'Gemini review incomplete' } },
     events: [{ type: 'review_ready', payload: { gemini_review: { status: 'not_run',
-      reason_codes: ['gemini_unconfigured'] } } }] };
+      reason_codes: ['gemini_unconfigured'] }, diagnostic: { rationale: 'Gemini extraction failed' } } }],
+    diagnostic: { rationale: 'Gemini extraction failed' } };
   for (const visible of [buyerCase(item), customerCase(item)]) {
     assert.equal(visible.gemini_review, undefined);
     assert.equal(visible.ai7edd_review.model_id, 'AI7EDD');
@@ -61,6 +62,8 @@ test('buyer and customer JSON expose AI7EDD branding while retaining source evid
     assert.equal(visible.documents[0].extraction_result.model_id, 'AI7EDD');
     assert.deepEqual(visible.documents[0].extraction_result.reason_codes, ['ai7edd_unconfigured']);
     assert.equal(visible.events[0].payload.ai7edd_review.status, 'not_run');
+    assert.equal(visible.events[0].payload.diagnostic.rationale, 'AI7EDD extraction failed');
+    assert.equal(visible.diagnostic.rationale, 'AI7EDD extraction failed');
     assert.doesNotMatch(JSON.stringify(visible.ai7edd_review), /gemini/i);
     assert.equal(visible.checks[0].raw_response.company, 'Gemini Trading LLC');
     assert.equal(visible.checks[0].raw_response.model_id, 'AI7EDD');
