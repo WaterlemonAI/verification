@@ -80,6 +80,14 @@ test('synthetic supplier to buyer lifecycle retains documents, report and callba
   assert.equal(item.documents.length, 3);
   assert.equal(item.reports.length, 1);
   assert.equal(item.comparisons.find((comparison) => comparison.rule === 'licence_formation_name').outcome, 'match');
+  const documentPath = `/portal/api/flo/cases/${applicationId}/documents/${item.documents[0].document_id}`;
+  const inlineDocument = await send(`${documentPath}?view=inline`, 'app.kycprobe.com');
+  assert.equal(inlineDocument.status, 200);
+  assert.match(inlineDocument.headers['content-disposition'], /^inline;/);
+  assert.equal(inlineDocument.headers['x-frame-options'], 'SAMEORIGIN');
+  assert.equal(inlineDocument.bytes.subarray(0, 4).toString(), '%PDF');
+  const downloadedDocument = await send(documentPath, 'app.kycprobe.com');
+  assert.match(downloadedDocument.headers['content-disposition'], /^attachment;/);
   const report = await send(`/portal/api/flo/cases/${applicationId}/report`, 'app.kycprobe.com');
   assert.equal(report.status, 200); assert.equal(report.bytes.subarray(0, 4).toString(), '%PDF');
   const correction = await send(`/portal/api/flo/cases/${applicationId}/decision`, 'app.kycprobe.com', 'POST',

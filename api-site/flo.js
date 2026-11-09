@@ -13,7 +13,6 @@
     return value;
   }
   function node(tag, text, className) { const element = document.createElement(tag); element.textContent = String(text ?? '—'); if (className) element.className = className; return element; }
-  function field(label, value) { const div = document.createElement('div'); div.append(node('strong', label), node('span', value)); return div; }
   async function filePayload(file) {
     if (!file || file.size > 6 * 1024 * 1024) throw new Error('Choose a PDF or image under 6 MB.');
     const mime_type = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
@@ -72,7 +71,17 @@
   async function detail(id) {
     selected = id;
     const { application: item, diagnostic_enabled: diagnosticEnabled } = await request(`/portal/api/flo/cases/${id}`);
-    const root = $('flo-detail'); root.replaceChildren(node('h2', item.customer_reference), node('p', `Status: ${item.status}`));
+    for (const button of document.querySelectorAll('#flo-list .flo-case')) {
+      button.classList.toggle('active', button.dataset.caseId === id);
+      if (button.dataset.caseId === id)
+        button.querySelector('small').textContent = `${item.flow_id} · ${item.template_version} · ${item.status} · ${item.created_at}`;
+    }
+    const shell = $('flo-detail');
+    shell.replaceChildren(node('p', 'APPLICATION REVIEW', 'flo-kicker'),
+      node('h2', item.customer_reference), node('p', `Status: ${item.status.replaceAll('_', ' ')} · ${item.flow_id}`));
+    const overview = window.FloReview.render(shell, item);
+    const root = document.createElement('section'); root.className = 'flo-review-section flo-case-actions';
+    overview.append(root);
     if (diagnosticEnabled) {
       root.append(node('h3', 'Controlled pilot diagnostic'),
         node('p', 'This is not a supplier submission or approval. The formation certificate substitutes for a trade licence; the bank letter is a test sample; company drafts are unexecuted; premises evidence is missing.'));
@@ -149,32 +158,6 @@
         root.append(refresh);
       }
     }
-    const grid = node('div', '', 'flo-detail-grid');
-    for (const [label, value] of [['Application ID', item.application_id], ['Created', item.created_at],
-      ['Flow', `${item.flow_id} · ${item.template_version}`], ['Supplier', item.supplier_email],
-      ['Business', item.draft?.business_name || item.draft?.tradingName],
-      ['Licence', item.draft?.licence_number || item.documents?.find((doc) => doc.type === 'tradeLicenceFile')?.extraction_result?.data?.license_number]]) grid.append(field(label, value));
-    root.append(grid, node('h3', 'Documents'));
-    const docs = document.createElement('ul');
-    for (const doc of item.documents || []) {
-      const li = document.createElement('li'); const link = node('a', `${doc.type.replaceAll('_', ' ')}${doc.diagnostic_label ? ` · ${doc.diagnostic_label}` : ''} · ${doc.document_id}`);
-      link.href = `/portal/api/flo/cases/${id}/documents/${doc.document_id}`; li.append(link); docs.append(li);
-    }
-    root.append(docs, node('h3', 'Checks'));
-    const checks = document.createElement('ul');
-    for (const check of item.checks || []) checks.append(node('li', `${check.service_id} · ${check.subject_id} · ${check.transport} · ${check.business_result} · ${(check.reason_codes || []).join(', ')}`));
-    root.append(checks);
-    if (item.reports?.length) {
-      root.append(node('h3', 'Reports'));
-      for (const report of item.reports) {
-        const row = node('p', `Version ${report.version} · ${report.generated_at} `);
-        for (const [label, suffix] of [['Download PDF', ''], ['View HTML', '.html'], ['Download JSON', '.json']]) {
-          const link = node('a', label); link.href = `/portal/api/flo/cases/${id}/reports/${report.version}${suffix}`;
-          link.style.marginRight = '1rem'; row.append(link);
-        }
-        root.append(row);
-      }
-    }
     if (['pending_review', 'needs_correction'].includes(item.status)) {
       root.append(node('h3', 'Buyer decision'));
       const rationale = document.createElement('textarea'); rationale.placeholder = 'Reason for the decision'; root.append(rationale);
@@ -189,10 +172,11 @@
         }); root.append(button);
       }
     }
-    root.append(node('h3', 'Audit history'));
-    const events = document.createElement('ul');
-    for (const event of item.events || []) events.append(node('li', `${event.at} · ${event.type} · ${event.actor}`));
-    root.append(events);
+    if (root.childNodes.length) {
+      root.prepend(node('p', 'CASE ACTIONS', 'flo-kicker'));
+      overview.insertBefore(root, overview.querySelector('.flo-overview-grid'));
+    }
+    else root.remove();
   }
   async function loadCases() {
     const flow = $('flo-filter').value;
@@ -201,6 +185,8 @@
     if (!cases.length) list.append(node('p', 'No Flo applications yet.'));
     for (const item of cases) {
       const button = node('button', '', 'flo-case');
+      button.dataset.caseId = item.application_id;
+      button.classList.toggle('active', item.application_id === selected);
       button.append(node('strong', item.customer_reference),
         node('small', `${item.flow_id} · ${item.template_version} · ${item.status} · ${item.created_at}`));
       button.addEventListener('click', () => detail(item.application_id).catch((error) => { $('flo-notice').textContent = error.message; }));
