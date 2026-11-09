@@ -149,7 +149,7 @@ try {
     console.log(`Flo supplier and buyer UI passed at ${viewport.width}px`);
 
     const supplierContext = await browser.newContext({ viewport });
-    const supplierDocuments = []; let supplierDraft = {}; let supplierPreview = false; let supplierSubmitted = false;
+    const supplierDocuments = []; let supplierDraft = {}; let supplierSubmitted = false; let supplierReviewRequests = 0;
     await supplierContext.route('**/flo/api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
       const data = route.request().postDataJSON?.() || {};
@@ -158,17 +158,14 @@ try {
       else if (path.endsWith('/application')) response = { application: {
         application_id: appId, flow_id: 'supplier-onboarding-v1', template_version: '1.0.0',
         brand_name: 'Synthetic Buyer', status: supplierSubmitted ? 'submitted' : 'in_progress',
-        draft: supplierDraft, documents: supplierDocuments,
-        preview_ready_at: supplierPreview ? new Date().toISOString() : null,
-        comparisons: supplierPreview ? [{ rule: 'licence_bank_owner_name', outcome: 'match' }] : [],
-        screening_summary: { enabled: true, subjects: [{ name: 'Synthetic Buyer LLC', type: 'business',
-          roles: ['supplier'], aml: 'review', adverseMedia: 'review' }] }, preview_issues: [] } };
-      else if (path.endsWith('/draft')) { supplierDraft = data; supplierPreview = false; response = { draft: data }; }
+        ...(supplierSubmitted ? { submitted_at: new Date().toISOString() }
+          : { draft: supplierDraft, documents: supplierDocuments }) } };
+      else if (path.endsWith('/draft')) { supplierDraft = data; response = { draft: data }; }
       else if (path.endsWith('/documents')) {
         const document = { document_id: `supplier-doc-${supplierDocuments.length + 1}`, type: data.type,
           size: 20, extraction_state: 'completed', extraction_result: { data: { company_name_english: 'Synthetic Buyer LLC' } } };
-        supplierDocuments.push(document); supplierPreview = false; response = { document };
-      } else if (path.endsWith('/review')) { supplierPreview = true; response = { status: 'review_processing' }; }
+        supplierDocuments.push(document); response = { document };
+      } else if (path.endsWith('/review')) { supplierReviewRequests += 1; response = { error: 'Unexpected review request' }; }
       else if (path.endsWith('/submit')) { supplierSubmitted = true; response = { status: 'submitted', application_id: appId }; }
       else response = { error: 'Unexpected route' };
       await route.fulfill({ status: path.endsWith('/review') || path.endsWith('/submit') ? 202 : 200,
@@ -177,9 +174,14 @@ try {
     const supplierPage = await supplierContext.newPage();
     await supplierPage.goto(`${base}/f/supplier-token-abcdefghijklmnopqrstuvwxyz0123456789`);
     await supplierPage.locator('#supplierType').waitFor({ state: 'visible' });
+    if (/gemini/i.test(await supplierPage.locator('body').innerText())) throw new Error('Supplier page exposes provider branding.');
+    if (await supplierPage.locator('.form-step').count() !== 4) throw new Error('Supplier journey must have four form steps.');
     if (screenshotDir) await supplierPage.screenshot({ path: join(screenshotDir, `flo-supplier-onboarding-${viewport.width}.png`), fullPage: true });
     await supplierPage.locator('#supplierType').selectOption('legal_entity');
     await supplierPage.locator('#tradeLicenceFile').setInputFiles({ name: 'trade.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\nsynthetic') });
+    await supplierPage.locator('#next-button').click();
+    await supplierPage.locator('#back-button').click();
+    await supplierPage.locator('#tradeLicenceFile').locator('..').getByText('Uploaded. Choose another file if you need to add a newer copy.').waitFor();
     await supplierPage.locator('#next-button').click();
     await supplierPage.locator('#representativeEmail').fill('rep@example.com');
     await supplierPage.locator('#representativePhone').fill('+971555550000');
@@ -208,10 +210,10 @@ try {
     await supplierPage.locator('#intermediary').selectOption('no');
     await supplierPage.locator('#accuracyDeclaration').check();
     await supplierPage.locator('#screeningConsent').check();
-    await supplierPage.locator('#next-button').click();
-    await supplierPage.locator('#verification-grid .verification-card').first().waitFor({ timeout: 12000 });
     await supplierPage.locator('#submit-button').click();
-    await supplierPage.getByText('Your information was submitted').waitFor();
+    await supplierPage.getByRole('heading', { name: 'Thank you — your application was submitted' }).waitFor();
+    if (supplierReviewRequests !== 0) throw new Error('Supplier UI requested verification before submission.');
+    if (screenshotDir) await supplierPage.screenshot({ path: join(screenshotDir, `flo-supplier-thank-you-${viewport.width}.png`), fullPage: true });
     const supplierOverflow = await supplierPage.evaluate(() => document.documentElement.scrollWidth > innerWidth);
     if (supplierOverflow) throw new Error(`Supplier Onboarding UI overflows at ${viewport.width}px`);
     await supplierContext.close();

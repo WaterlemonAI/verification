@@ -1,4 +1,4 @@
-const config = { maxFileMB: 6, enhancedDueDiligence: true, controlledTestEnabled: false };
+const config = { maxFileMB: 6, enhancedDueDiligence: true };
 const form = document.getElementById("supplier-form");
 const panels = [...document.querySelectorAll(".form-step")];
 const steps = [...document.querySelectorAll(".step-list li")];
@@ -6,16 +6,19 @@ const alertBox = document.getElementById("form-alert");
 const nextButton = document.getElementById("next-button");
 const backButton = document.getElementById("back-button");
 const submitButton = document.getElementById("submit-button");
-const reviewStatus = document.getElementById("review-status");
-const reviewModal = document.getElementById("review-modal");
 let currentStep = 0;
 let ownerIndex = 1;
-let reviewResult = null;
-let reviewing = false;
-let modalTargetStep = 0;
 let applicationId = sessionStorage.getItem('flo_application_id') || '';
 let csrfToken = sessionStorage.getItem('flo_csrf') || '';
 const uploadedTypes = new Set();
+
+function gapLabel(name) {
+  if (name === 'owners') return 'Current owners and controllers';
+  if (name === 'controlledTest') return 'Sample-only applications cannot be submitted';
+  const input = form.elements.namedItem(name);
+  return input?.labels?.[0]?.textContent?.replace('*', '').trim()
+    || name.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('_', ' ');
+}
 
 async function floApi(path, method = 'GET', value) {
   const response = await fetch(`/flo/api/${path}`, { method, credentials: 'same-origin',
@@ -24,7 +27,9 @@ async function floApi(path, method = 'GET', value) {
     ...(value === undefined ? {} : { body: JSON.stringify(value) }) });
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(result.gaps ? `Missing: ${result.gaps.join(', ')}` : result.error || `Request failed (${response.status}).`);
+    const error = new Error(result.gaps?.length
+      ? `Please complete: ${result.gaps.map(gapLabel).join(', ')}.`
+      : result.error || `Request failed (${response.status}).`);
     error.failureUrl = result.failure_url;
     throw error;
   }
@@ -33,21 +38,30 @@ async function floApi(path, method = 'GET', value) {
 
 document.getElementById("buyer-name").textContent = config.buyerName || "Your Organisation";
 document.getElementById("enhanced-fields").hidden = !config.enhancedDueDiligence;
-const controlledTestEnabled = config.controlledTestEnabled === true && ["127.0.0.1", "localhost"].includes(window.location.hostname);
-document.getElementById("controlled-test-option").hidden = !controlledTestEnabled;
 
 function value(id) { return document.getElementById(id)?.value?.trim() || ""; }
 function isVisible(element) { return !element.closest("[hidden]"); }
 function isApplicable(element) { return !element.closest("[hidden]:not(.form-step)"); }
+function personaliseBuyerCopy(buyerName) {
+  for (const container of [document.querySelector('.sidebar'), form]) {
+    const text = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    while (text.nextNode()) text.currentNode.nodeValue = text.currentNode.nodeValue.replaceAll('Your Organisation', buyerName);
+  }
+}
+function markUploaded(type) {
+  const input = form.elements.namedItem(type);
+  if (!input || input.type !== 'file') return;
+  let status = input.parentElement.querySelector('.upload-status');
+  if (!status) {
+    status = document.createElement('span');
+    status.className = 'upload-status';
+    status.setAttribute('role', 'status');
+    input.insertAdjacentElement('afterend', status);
+  }
+  status.textContent = 'Uploaded. Choose another file if you need to add a newer copy.';
+}
 
 function updateConditional() {
-  const testMode = controlledTestEnabled && document.getElementById("controlledTest").checked;
-  document.getElementById("accuracy-declaration-row").hidden = testMode;
-  document.getElementById("screening-consent-row").hidden = testMode;
-  document.getElementById("test-declaration-row").hidden = !testMode;
-  document.getElementById("accuracyDeclaration").required = !testMode;
-  document.getElementById("screeningConsent").required = !testMode;
-  document.getElementById("testDeclaration").required = testMode;
   const type = value("supplierType");
   const conditions = {
     legal_entity: type === "legal_entity",
@@ -123,180 +137,6 @@ function validatePanel(index) {
   return true;
 }
 
-function renderSummary() {
-  const items = [
-    ["Supplier type", value("supplierType") === "natural_person" ? "Individual / sole supplier" : "Legal entity"],
-    ["Trade licence", uploadedTypes.has('tradeLicenceFile') ? 'Saved' : document.getElementById("tradeLicenceFile")?.files[0]?.name || "Not applicable"],
-    ["Identity document", uploadedTypes.has('identityFile') ? 'Saved' : document.getElementById("identityFile")?.files[0]?.name || "—"],
-    ["Location evidence", uploadedTypes.has('locationEvidenceFile') ? 'Saved' : document.getElementById("locationEvidenceFile")?.files[0]?.name || "—"],
-    ["VAT status", document.getElementById("controlledTest").checked ? "Test answer · confirm with supplier" : value("vatRegistered") === "yes" ? "Registered · certificate provided" : "Not registered"],
-    ["Bank confirmation", uploadedTypes.has('bankConfirmationFile') ? 'Saved' : document.getElementById("bankConfirmationFile")?.files[0]?.name || "—"],
-    ["Proposed supply", value("supplyType") || "—"]
-  ];
-  const container = document.getElementById("review-summary");
-  container.replaceChildren();
-  for (const [label, content] of items) {
-    const card = document.createElement("div");
-    card.className = "review-card";
-    const title = document.createElement("span");
-    title.textContent = label;
-    const detail = document.createElement("strong");
-    detail.textContent = content || "—";
-    card.append(title, detail);
-    container.append(card);
-  }
-}
-
-function showReviewModal(title, messages, targetStep = 0) {
-  modalTargetStep = targetStep;
-  document.getElementById("review-modal-title").textContent = title;
-  const body = document.getElementById("review-modal-body");
-  body.replaceChildren();
-  const list = document.createElement("ul");
-  for (const message of messages) {
-    const item = document.createElement("li");
-    item.textContent = message;
-    list.append(item);
-  }
-  body.append(list);
-  reviewModal.hidden = false;
-  document.getElementById("correct-review-modal").focus();
-}
-
-function closeReviewModal() {
-  reviewModal.hidden = true;
-  document.getElementById("retry-verification").focus();
-}
-
-function renderScreening(screening) {
-  const grid = document.getElementById("screening-grid");
-  const scope = document.getElementById("screening-scope");
-  grid.replaceChildren();
-  if (!screening?.subjects?.length) {
-    scope.textContent = "No supplier or stakeholder names were available for screening. Buyer review is required.";
-    return;
-  }
-  scope.textContent = screening.enabled
-    ? "AML checks: PEP, sanctions and watchlists. A separate AML dataset is not connected. Potential matches and incomplete checks require buyer review."
-    : "Automated screening was not run. Buyer review is required.";
-  const label = { clear: "No potential match returned", review: "Buyer review needed",
-    unavailable: "Unavailable", not_run: "Not run" };
-  for (const subject of screening.subjects) {
-    const card = document.createElement("article");
-    card.className = "screening-card";
-    const name = document.createElement("strong");
-    name.textContent = subject.name;
-    const role = document.createElement("small");
-    role.textContent = (subject.roles || []).join(" · ") || (subject.type === "business" ? "Business" : "Person");
-    card.append(name, role);
-    for (const [title, status] of [["AML: PEP, sanctions, watchlists", subject.aml], ["Adverse media", subject.adverseMedia]]) {
-      const row = document.createElement("div");
-      row.className = "screening-check";
-      row.dataset.state = status || "unavailable";
-      const check = document.createElement("span");
-      check.textContent = title;
-      const outcome = document.createElement("b");
-      outcome.textContent = label[status] || label.unavailable;
-      row.append(check, outcome);
-      card.append(row);
-    }
-    grid.append(card);
-  }
-}
-
-function renderVerification(result) {
-  renderScreening(result.screening);
-  const grid = document.getElementById("verification-grid");
-  grid.replaceChildren();
-  for (const field of result.fields || []) {
-    const card = document.createElement("div");
-    card.className = `verification-card status-${field.status || "unknown"}`;
-    const label = document.createElement("span");
-    label.className = "verification-label";
-    label.textContent = field.label || field.key || "Verification detail";
-    const valueText = document.createElement("strong");
-    valueText.textContent = field.value == null || field.value === "" ? "Not returned" : String(field.value);
-    const source = document.createElement("small");
-    source.textContent = `${field.source || "Source unavailable"} · ${field.status || "unknown"}`.replaceAll("_", " ");
-    card.append(label, valueText, source);
-    grid.append(card);
-  }
-  if (!grid.childElementCount) {
-    const empty = document.createElement("p");
-    empty.className = "verification-empty";
-    empty.textContent = "No verified fields are available yet.";
-    grid.append(empty);
-  }
-  const manager = document.getElementById("manager-review");
-  manager.replaceChildren();
-  const heading = document.createElement("strong");
-  heading.textContent = result.manager?.status === "completed" ? "Gemini application manager review" : "Application manager review unavailable";
-  const copy = document.createElement("p");
-  copy.textContent = result.manager?.summary || "The review could not be completed. Please try again or contact the supplier team.";
-  manager.append(heading, copy);
-  if (result.manager?.status === "completed") {
-    const progress = document.createElement("p");
-    progress.textContent = `${result.manager.reviewedFieldCount || 0} of ${result.manager.fieldCount || 0} returned fields received a Gemini review; ${result.manager.uncertainFieldCount || 0} were marked uncertain.`;
-    manager.append(progress);
-  }
-  const issues = result.issues || [];
-  if (issues.length) {
-    const list = document.createElement("ul");
-    for (const issue of issues) {
-      const item = document.createElement("li");
-      item.textContent = issue.message;
-      list.append(item);
-    }
-    manager.append(list);
-  }
-  reviewStatus.textContent = result.decision === "ready" ? "Verification complete. Review the extracted values before submitting." :
-    result.decision === "manual_review" ? "Verification complete with items for Your Organisation to review." :
-    result.decision === "needs_correction" ? "Verification found information that needs correction." :
-    "Verification could not be completed.";
-  if (result.controlledTest) reviewStatus.textContent = `Controlled test — no supplier attestation or submission. ${reviewStatus.textContent}`;
-  reviewStatus.dataset.state = result.decision || "unavailable";
-  document.getElementById("download-review").disabled = !result.applicationSummary;
-  submitButton.disabled = document.getElementById("controlledTest").checked || !["ready", "manual_review"].includes(result.decision);
-  if (issues.length) showReviewModal("Information needs attention", issues.map(issue => issue.message), issues.find(issue => issue.severity === "error")?.step ?? issues[0]?.step ?? 0);
-}
-
-async function runVerification() {
-  if (reviewing) return;
-  reviewing = true;
-  reviewResult = null;
-  document.getElementById("download-review").disabled = true;
-  submitButton.disabled = true;
-  document.getElementById("retry-verification").disabled = true;
-  reviewStatus.textContent = "Extracting documents and checking the information. This can take a few minutes…";
-  reviewStatus.dataset.state = "processing";
-  document.getElementById("verification-grid").replaceChildren();
-  document.getElementById("screening-grid").replaceChildren();
-  document.getElementById("screening-scope").textContent = "Document and verification checks are running…";
-  document.getElementById("manager-review").replaceChildren();
-  try {
-    await saveProgress();
-    await floApi('review', 'POST', {});
-    for (let attempt = 0; attempt < 120; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 5000));
-      const { application } = await floApi('application');
-      if (application.preview_ready_at) {
-        reviewResult = supplierReview(application);
-        renderVerification(reviewResult);
-        return;
-      }
-    }
-    reviewStatus.textContent = 'Verification is still running. You can return to this page later.';
-  } catch (error) {
-    reviewStatus.textContent = "Verification unavailable. Your information has not been submitted.";
-    reviewStatus.dataset.state = "unavailable";
-    document.getElementById("screening-scope").textContent = "Screening could not be completed.";
-    showReviewModal("Verification could not run", [error.message || "Please try again later."]);
-  } finally {
-    reviewing = false;
-    document.getElementById("retry-verification").disabled = false;
-  }
-}
-
 function showStep(index, scrollToForm = true) {
   currentStep = index;
   clearErrors();
@@ -307,8 +147,6 @@ function showStep(index, scrollToForm = true) {
   backButton.hidden = index === 0;
   nextButton.hidden = index === panels.length - 1;
   submitButton.hidden = index !== panels.length - 1;
-  nextButton.innerHTML = index === panels.length - 2 ? 'Review extracted information <span aria-hidden="true">→</span>' : 'Continue <span aria-hidden="true">→</span>';
-  if (index === panels.length - 1) renderSummary();
   updateConditional();
   if (scrollToForm) document.querySelector(".content-area").scrollIntoView({ block: "start", behavior: "smooth" });
   if (scrollToForm) panels[index].querySelector("h2")?.focus({ preventScroll: true });
@@ -320,35 +158,17 @@ form.addEventListener("input", event => {
     event.target.closest(".field, .check-row")?.querySelector(".field-error")?.remove();
   }
   updateConditional();
-  if (currentStep < panels.length - 1) reviewResult = null;
 });
-form.addEventListener("change", () => { updateConditional(); if (currentStep < panels.length - 1) reviewResult = null; });
+form.addEventListener("change", updateConditional);
 nextButton.addEventListener("click", async () => {
   if (!validatePanel(currentStep)) return;
   nextButton.disabled = true;
   try { await saveProgress(currentStep); }
   catch (error) { showAlert(error.message); nextButton.disabled = false; return; }
   nextButton.disabled = false;
-  const enteringReview = currentStep === panels.length - 2;
   showStep(currentStep + 1);
-  if (enteringReview) await runVerification();
 });
 backButton.addEventListener("click", () => showStep(currentStep - 1));
-document.getElementById("retry-verification").addEventListener("click", runVerification);
-document.getElementById("download-review").addEventListener("click", () => {
-  if (!reviewResult) return;
-  const file = new Blob([JSON.stringify(reviewResult, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(file);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `supplier-onboarding-review-${applicationId}.json`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-});
-document.getElementById("close-review-modal").addEventListener("click", closeReviewModal);
-document.getElementById("correct-review-modal").addEventListener("click", () => { closeReviewModal(); showStep(modalTargetStep); });
-reviewModal.addEventListener("click", event => { if (event.target.classList.contains("review-modal-backdrop")) closeReviewModal(); });
-document.addEventListener("keydown", event => { if (event.key === "Escape" && !reviewModal.hidden) closeReviewModal(); });
 document.getElementById("add-owner").addEventListener("click", () => {
   const index = ownerIndex++;
   const row = document.createElement("div");
@@ -397,61 +217,59 @@ async function saveProgress(panelIndex = null) {
     const mime_type = file.type || (/\.pdf$/i.test(file.name) ? 'application/pdf'
       : /\.png$/i.test(file.name) ? 'image/png' : 'image/jpeg');
     await floApi('documents', 'POST', { type: input.name, mime_type, content_base64 });
-    uploadedTypes.add(input.name); input.value = '';
+    uploadedTypes.add(input.name); input.value = ''; markUploaded(input.name);
   }
 }
 
-function supplierReview(application) {
-  const fields = [];
-  for (const doc of application.documents || []) {
-    for (const [key, value] of Object.entries(doc.extraction_result?.data || {}))
-      fields.push({ key: `${doc.type}.${key}`, label: key.replaceAll('_', ' '),
-        value: typeof value === 'object' ? JSON.stringify(value) : value,
-        source: doc.type, status: 'extracted' });
-  }
-  for (const comparison of application.comparisons || []) fields.push({
-    key: comparison.rule, label: comparison.rule.replaceAll('_', ' '), value: comparison.outcome,
-    source: 'Cross-document comparison', status: comparison.outcome === 'match' ? 'verified' : 'review_required'
-  });
-  const issues = application.preview_issues || [];
-  const decision = issues.some(issue => issue.severity === 'error') ? 'needs_correction' : 'manual_review';
-  return { fields, issues, decision, applicationSummary: application,
-    screening: application.screening_summary || { enabled: false, subjects: [] },
-    manager: { status: 'not_run', summary: 'Buyer review follows secure submission. Correct any document issues shown here first.' } };
+function showReceipt(reference) {
+  form.replaceChildren();
+  const section = document.createElement('section');
+  section.className = 'confirmation';
+  section.setAttribute('role', 'status');
+  const icon = document.createElement('span');
+  icon.className = 'confirmation-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = '✓';
+  const heading = document.createElement('h2');
+  heading.textContent = 'Thank you — your application was submitted';
+  const copy = document.createElement('p');
+  const buyerName = document.getElementById('buyer-name').textContent || 'Your Organisation';
+  copy.textContent = `${buyerName} will review your information and documents and contact you if they need clarification or more evidence.`;
+  const label = document.createElement('span');
+  label.className = 'confirmation-label';
+  label.textContent = 'Your reference';
+  const identifier = document.createElement('strong');
+  identifier.className = 'confirmation-reference';
+  identifier.textContent = reference || applicationId;
+  const note = document.createElement('p');
+  note.className = 'confirmation-note';
+  note.textContent = 'You can close this page. Submission does not mean the application has been approved.';
+  section.append(icon, heading, copy, label, identifier, note);
+  form.append(section);
+  document.querySelector('.sidebar-intro h1').textContent = 'Thank you for submitting.';
+  document.querySelector('.sidebar-intro p').textContent = `${buyerName} will take it from here and contact you if they need anything else.`;
+  document.querySelector('.progress-block').hidden = true;
+  document.querySelector('.step-list').hidden = true;
+  document.getElementById('draft-state').textContent = 'Submitted';
+  document.getElementById('draft-state').classList.add('submitted');
+  section.scrollIntoView({ block: 'start' });
+  heading.setAttribute('tabindex', '-1');
+  heading.focus({ preventScroll: true });
 }
 
-form.addEventListener("submit", async event => {
+form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (!validatePanel(currentStep)) return;
-  if (document.getElementById("controlledTest").checked) {
-    showReviewModal("Controlled test only", ["This test review cannot be submitted as a supplier application."]);
-    return;
-  }
-  if (!reviewResult || !["ready", "manual_review"].includes(reviewResult.decision)) {
-    showReviewModal("Verification is required", ["Run verification and resolve any required corrections before submitting."]);
-    return;
-  }
+  if (currentStep !== panels.length - 1 || !validatePanel(currentStep)) return;
   submitButton.disabled = true;
-  submitButton.textContent = "Submitting…";
+  submitButton.textContent = 'Submitting…';
   try {
+    await saveProgress(currentStep);
     const result = await floApi('submit', 'POST', {});
-    form.replaceChildren();
-    const confirmation = document.createElement("div");
-    confirmation.className = "field-card confirmation";
-    const heading = document.createElement("h2");
-    heading.textContent = "Your information was submitted";
-    const copy = document.createElement("p");
-    copy.textContent = `Reference: ${result.application_id}. Your Organisation may contact you if more information is needed.`;
-    confirmation.append(heading, copy);
-    form.append(confirmation);
-    const state = document.getElementById("draft-state");
-    state.textContent = "Submitted";
-    state.classList.add("submitted");
-    if (result.success_url) setTimeout(() => location.assign(result.success_url), 2000);
+    showReceipt(result.application_id);
   } catch (error) {
-    showAlert(error.message || "We could not submit this form. Please try again.");
+    showAlert(error.message || 'We could not submit your application. Please try again.');
     submitButton.disabled = false;
-    submitButton.innerHTML = 'Submit securely <span aria-hidden="true">→</span>';
+    submitButton.innerHTML = 'Submit Application <span aria-hidden="true">→</span>';
   }
 });
 
@@ -470,14 +288,20 @@ async function start() {
     }
     if (!applicationId) throw new Error('Open the supplier link provided by your buyer.');
     const { application } = await floApi('application');
-    document.getElementById('buyer-name').textContent = application.brand_name || 'Your Organisation';
+    const buyerName = application.brand_name || 'Your Organisation';
+    document.getElementById('buyer-name').textContent = buyerName;
+    personaliseBuyerCopy(buyerName);
+    document.querySelector('.content-kicker').textContent = `${buyerName} supplier information`;
+    document.title = `Supplier onboarding · ${buyerName}`;
     for (const [field, content] of Object.entries(application.draft || {})) {
       const input = form.elements.namedItem(field);
       if (!input || field === 'owners') continue;
       if (input.type === 'checkbox') input.checked = content === true;
       else if (typeof content === 'string') input.value = content;
     }
-    for (const document of application.documents || []) uploadedTypes.add(document.type);
+    for (const document of application.documents || []) {
+      uploadedTypes.add(document.type); markUploaded(document.type);
+    }
     const owners = application.draft?.owners || [];
     owners.forEach((owner, index) => {
       if (index) document.getElementById('add-owner').click();
@@ -489,11 +313,11 @@ async function start() {
     });
     updateConditional();
     if (application.status !== 'in_progress') {
-      form.replaceChildren(); const message = document.createElement('h2');
-      message.textContent = `Application ${application.status.replaceAll('_', ' ')}`; form.append(message);
+      if (application.submitted_at || ['submitted', 'processing', 'pending_review', 'needs_correction', 'accepted', 'rejected'].includes(application.status))
+        showReceipt(application.application_id);
+      else showAlert('This application is no longer available. Contact Your Organisation for a new link.');
       return;
     }
-    if (application.preview_ready_at) { showStep(4, false); reviewResult = supplierReview(application); renderVerification(reviewResult); }
   } catch (error) {
     if (error.failureUrl) { location.assign(error.failureUrl); return; }
     showAlert(error.message);
