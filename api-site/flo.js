@@ -85,6 +85,20 @@
     const overview = window.FloReview.render(shell, item);
     const root = document.createElement('section'); root.className = 'flo-review-section flo-case-actions';
     overview.append(root);
+    if (item.reports?.length && !item.reports.some((report) => report.branding === 'AI7EDD')) {
+      root.append(node('h3', 'Updated report version'),
+        node('p', 'Create a new AI7EDD report from the recorded case evidence. Earlier report versions remain available.'));
+      const reissue = node('button', 'Create AI7EDD report version'); reissue.type = 'button';
+      reissue.addEventListener('click', async () => {
+        reissue.disabled = true; $('flo-notice').textContent = '';
+        try {
+          const result = await request(`/portal/api/flo/cases/${id}/reports`, 'POST', {});
+          $('flo-notice').textContent = `Report version ${result.version} is ready.`;
+          await detail(id);
+        } catch (error) { $('flo-notice').textContent = error.message; reissue.disabled = false; }
+      });
+      root.append(reissue);
+    }
     if (diagnosticEnabled) {
       root.append(node('h3', 'Controlled pilot diagnostic'),
         node('p', 'This is not a supplier submission or approval. The formation certificate substitutes for a trade licence; the bank letter is a test sample; company drafts are unexecuted; premises evidence is missing.'));

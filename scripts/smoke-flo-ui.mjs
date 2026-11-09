@@ -79,10 +79,21 @@ try {
         created_at: new Date().toISOString() }] };
       else if (path.endsWith('/decision')) { accepted = true; response = { status: 'accepted', application_id: appId }; }
       else if (path === `/portal/api/flo/cases/${appId}`) response = { application: {
-        application_id: appId, customer_reference: 'SYNTHETIC', supplier_email: 'supplier@example.com',
+        application_id: appId, customer_reference: 'SYNTHETIC', flow_id: 'kys-v1', template_version: '1.0.0',
+        supplier_email: 'supplier@example.com',
         status: accepted ? 'accepted' : 'pending_review', created_at: new Date().toISOString(),
-        draft: { business_name: 'Synthetic Trading LLC', licence_number: 'LIC-1' },
-        documents: [{ document_id: 'doc-1', type: 'trade_licence' }], checks: [],
+        review_requirements: { text: ['business_name', 'licence_number'],
+          documents: ['trade_licence', 'formation_document', 'bank_letter'] },
+        draft: { business_name: 'Synthetic Trading LLC', licence_number: 'LIC-1',
+          stakeholders: [{ name: 'Synthetic Owner', role: 'director' }] },
+        documents: [{ document_id: 'doc-1', type: 'trade_licence' }],
+        subjects: [{ subject_id: appId, name: 'Synthetic Trading LLC', type: 'business' }],
+        checks: [{ service_id: 'entity-aml', subject_id: appId, transport: 'completed', coverage: 'complete',
+          business_result: 'requires_review', reason_codes: [],
+          raw_response: { matches: [{ name: 'Synthetic Match', status: 'potential' }] } },
+        { service_id: 'entity-adverse-media', subject_id: appId, transport: 'not_run', coverage: 'unavailable',
+          business_result: 'could_not_complete', reason_codes: ['input_missing'] }],
+        ai7edd_review: { status: 'not_run', reason_codes: ['ai7edd_unconfigured'] },
         reports: [{ version: 1 }], events: [{ at: new Date().toISOString(), type: 'review_ready', actor: 'flo_worker' }] } };
       else response = { error: 'Unexpected route' };
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(response) });
@@ -117,6 +128,16 @@ try {
     await page.getByText('22222222-2222-4222-8222-222222222222').waitFor();
     if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `flo-buyer-link-${viewport.width}.png`), fullPage: true });
     await page.getByRole('button', { name: /SYNTHETIC/ }).click();
+    await page.getByText('AML', { exact: true }).waitFor();
+    if (screenshotDir) await page.locator('#flo-panel-overview').screenshot({
+      path: join(screenshotDir, `flo-buyer-review-${viewport.width}.png`) });
+    await page.locator('.flo-screening-group').first().locator('summary').first().click();
+    await page.locator('.flo-screening-evidence').first().locator('summary').click();
+    await page.getByText('Synthetic Match').waitFor();
+    await page.getByText('Complete application JSON').click();
+    const completeJson = await page.locator('.flo-full-json pre').textContent();
+    if (!completeJson.includes('ai7edd_review') || completeJson.includes('gemini_review'))
+      throw new Error('Full application JSON does not use the AI7EDD review field.');
     await page.getByRole('button', { name: 'Accept' }).click();
     await page.getByText('Status: accepted').waitFor();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);

@@ -2910,6 +2910,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         hasEntitlement: async (workspaceId) => (await usageStore.account(workspaceId)).allowed_modules.includes('flo'),
         enqueue: (job) => floQueue?.enqueue(job),
         enqueueCallback: (job) => floCallbackQueue?.enqueue(job),
+        createReport: createFloReport,
         sendLink: (message) => mailer.sendFloLink?.(message),
         sendConfirmation: (message) => mailer.sendFloConfirmation?.(message),
         charge: async (request, workspaceId, flowId, channel = 'api') => {

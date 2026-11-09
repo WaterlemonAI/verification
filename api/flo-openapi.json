@@ -526,6 +526,20 @@
         }
       }
     },
+    "/portal/api/flo/cases/{applicationId}/reports": {
+      "servers": [{ "url": "https://app.kycprobe.com" }],
+      "security": [{ "portalSession": [] }],
+      "post": {
+        "summary": "Create an AI7EDD-branded report version from a retained legacy report",
+        "description": "Organization administrator and CSRF token required. Idempotent after a branded version exists. Earlier report versions remain available without modification.",
+        "parameters": [{ "$ref": "#/components/parameters/applicationId" }],
+        "responses": {
+          "201": { "description": "New branded report version created" },
+          "200": { "description": "Existing branded version reused" },
+          "409": { "description": "No existing report to reissue" }
+        }
+      }
+    },
     "/portal/api/flo/cases/{applicationId}/reports/{version}": {
       "servers": [
         {
@@ -1224,7 +1238,7 @@
             "type": "object"
           }
         },
-        "description": "HMAC-SHA256 over x-flo-timestamp + dot + exact JSON bytes, sent in x-flo-signature. Stable event IDs across retries. Data includes flow ID/version/hash, structured checks, Gemini review, report summary and incomplete-check reason codes. Full documents and versioned reports are retrieved through authenticated workspace-scoped APIs."
+        "description": "HMAC-SHA256 over x-flo-timestamp + dot + exact JSON bytes, sent in x-flo-signature. Stable event IDs and payloads across retries. Newly created payloads use schema_version 2.0.0 and include flow ID/version/hash, structured checks, AI7EDD review, report summary and incomplete-check reason codes. Historical 1.0.0 events retain their original bytes. Full documents and versioned reports are retrieved through authenticated workspace-scoped APIs."
       },
       "KysDraft": {
         "type": "object",

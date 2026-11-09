@@ -99,6 +99,6 @@ test('Supplier Onboarding v1 runs the protected intake, extracted-input checks, 
   assert.ok(report.json().sections.some((section) => section.title === 'Required and provided documents'));
   const callback = result.events.find((event) => event.type === 'review_ready');
   assert.equal(callback.payload.flow_id, 'supplier-onboarding-v1');
-  assert.equal(callback.payload.gemini_review.status, 'completed');
+  assert.equal(callback.payload.ai7edd_review.status, 'completed');
   assert.ok(callback.payload.checks.some((check) => check.service_id === 'stakeholder-adverse-media'));
 });

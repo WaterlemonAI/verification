@@ -21,7 +21,11 @@ test('callback signs exact stable event, records attempts and skips delivered re
   const workspace = '1234567890abcdef';
   const { case: item } = await store.createCase(workspace, { customer_reference: 'REF', supplier_email: 'a@example.com', prefill: {} },
     'idem-12345678', 'a'.repeat(64), { callback_url: 'https://buyer.example/callback' });
+  item.gemini_review = { status: 'not_run', reason_codes: ['gemini_unconfigured'] };
   const event = callbackEvent(item, 'submitted', 'supplier');
+  assert.equal(event.payload.schema_version, '2.0.0');
+  assert.equal(event.payload.ai7edd_review.status, 'not_run');
+  assert.equal(event.payload.gemini_review, undefined);
   await store.updateCase(workspace, item.application_id, (current) => { current.events.push(event); return current; });
   let sent = 0;
   const post = async (_url, address, _family, headers, payload) => {
@@ -40,6 +44,25 @@ test('callback signs exact stable event, records attempts and skips delivered re
   const saved = await store.getCase(workspace, item.application_id);
   assert.equal(saved.events.filter((row) => row.type === 'callback_attempt').length, 1);
   assert.equal(saved.events.filter((row) => row.type === 'callback_delivered').length, 1);
+});
+
+test('retry preserves the original callback payload version', async () => {
+  const store = new MemoryFloStore(); const workspace = '1234567890abcdef';
+  const { case: item } = await store.createCase(workspace,
+    { customer_reference: 'OLD', supplier_email: 'a@example.com', prefill: {} },
+    'old-12345678', 'c'.repeat(64), { callback_url: 'https://buyer.example/callback' });
+  const event = callbackEvent(item, 'submitted', 'supplier');
+  event.payload.schema_version = '1.0.0';
+  event.payload.gemini_review = { status: 'not_run' }; delete event.payload.ai7edd_review;
+  await store.updateCase(workspace, item.application_id, (current) => { current.events.push(event); return current; });
+  let delivered;
+  await deliverFloCallback({ workspace_id: workspace, application_id: item.application_id, event_id: event.event_id },
+    { floStore: store, resolve: async () => [{ address: '8.8.8.8', family: 4 }],
+      post: async (_url, _address, _family, _headers, payload) => {
+        delivered = JSON.parse(payload).data; return { ok: true, status: 200 };
+      } });
+  assert.equal(delivered.schema_version, '1.0.0');
+  assert.deepEqual(delivered.gemini_review, { status: 'not_run' });
 });
 
 test('callback rejects private resolved addresses before sending', async () => {
