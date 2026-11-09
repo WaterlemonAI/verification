@@ -618,6 +618,89 @@ async function loadClients() {
 }
 
 let floTemplates = [];
+let managedWorkflows = [];
+let selectedWorkflow = null;
+const newWorkflowSchema = { schema_version: '1.0.0', name: 'New supplier workflow',
+  stages: [{ id: 'business', title: 'Business details', description: 'Provide your organisation details.',
+    fields: [{ id: 'business_name', label: 'Registered business name', type: 'text', required: true },
+      { id: 'licence_number', label: 'Trade licence number', type: 'text', required: true }],
+    documents: [{ id: 'trade_licence', label: 'Trade licence', required: true }], declarations: [] }],
+  checks: ['uae-trade-licence', 'entity-aml', 'entity-adverse-media'],
+  report_sections: ['Business identity', 'Verification and screening'], tokens: { primary_color: '#064b79' } };
+async function loadManagedWorkflows() {
+  const catalog = await request('/admin/api/flows'); managedWorkflows = catalog.workflows || [];
+  const list = byId('flo-workflow-list'); list.replaceChildren();
+  for (const item of managedWorkflows) {
+    const row = document.createElement('button'); row.type = 'button'; row.className = 'flo-workflow-row';
+    const title = document.createElement('strong'); title.textContent = item.name;
+    const meta = document.createElement('small'); meta.textContent = `${item.flow_id} · ${item.lifecycle} · ${item.published_version || 'draft'} · ${item.active_organisation_count || 0} active orgs`;
+    row.append(title, meta); row.addEventListener('click', () => selectManagedWorkflow(item.flow_id).catch((error) => {
+      byId('flo-message').textContent = error.message; })); list.append(row);
+  }
+}
+async function selectManagedWorkflow(flowId) {
+  selectedWorkflow = (await request(`/admin/api/flows/${flowId}/draft`)).workflow;
+  byId('flo-workflow-title').textContent = selectedWorkflow.name;
+  byId('flo-workflow-meta').textContent = `ID ${flowId} · ${selectedWorkflow.lifecycle} · ${selectedWorkflow.published_version || 'draft'} · revision ${selectedWorkflow.draft_revision}`;
+  byId('flo-workflow-code').value = JSON.stringify(selectedWorkflow.draft, null, 2);
+  byId('flo-assignment').hidden = false;
+  const assignments = (await request(`/admin/api/flows/${flowId}/assignments`)).assignments || [];
+  const list = byId('flo-assignment-list'); list.replaceChildren();
+  for (const entry of assignments) { const row = document.createElement('p');
+    row.textContent = `${entry.workspace_id}: ${entry.state}`; list.append(row); }
+}
+byId('flo-workflow-new').addEventListener('click', () => {
+  selectedWorkflow = null; byId('flo-workflow-title').textContent = 'New workflow';
+  byId('flo-workflow-code').value = JSON.stringify(newWorkflowSchema, null, 2);
+  byId('flo-workflow-meta').textContent = 'A new immutable flow ID will be created.';
+  byId('flo-assignment').hidden = true;
+});
+byId('flo-workflow-preview-button').addEventListener('click', () => {
+  try { const schema = JSON.parse(byId('flo-workflow-code').value);
+    byId('flo-workflow-preview').textContent = `${schema.name}: ${(schema.stages || []).map((stage) => `${stage.title} (${stage.fields?.length || 0} fields, ${stage.documents?.length || 0} documents)`).join(' → ')}`;
+  } catch (error) { byId('flo-workflow-preview').textContent = error.message; }
+});
+byId('flo-workflow-save').addEventListener('click', async () => {
+  try { const schema = JSON.parse(byId('flo-workflow-code').value);
+    if (!selectedWorkflow) {
+      const result = await request('/admin/api/flows', { method: 'POST', body: JSON.stringify({ name: schema.name, schema }) });
+      selectedWorkflow = result.workflow;
+    } else {
+      const result = await request(`/admin/api/flows/${selectedWorkflow.flow_id}/draft`, { method: 'PATCH',
+        body: JSON.stringify({ schema, expected_revision: selectedWorkflow.draft_revision }) });
+      selectedWorkflow = result.workflow;
+    }
+    await loadManagedWorkflows(); await selectManagedWorkflow(selectedWorkflow.flow_id);
+    byId('flo-message').textContent = 'Draft saved.';
+  } catch (error) { byId('flo-message').textContent = error.message; }
+});
+byId('flo-workflow-publish').addEventListener('click', async () => {
+  try { if (!selectedWorkflow) throw new Error('Save the draft first.');
+    if (!window.confirm('Publish a new immutable version?')) return;
+    const result = await request(`/admin/api/flows/${selectedWorkflow.flow_id}/publish`, { method: 'POST',
+      body: JSON.stringify({ expected_revision: selectedWorkflow.draft_revision }) });
+    await loadManagedWorkflows(); await selectManagedWorkflow(result.workflow.flow_id);
+    byId('flo-message').textContent = `Published ${result.workflow.published_version}.`;
+  } catch (error) { byId('flo-message').textContent = error.message; }
+});
+for (const [id, state] of [['flo-workflow-pause', 'paused'], ['flo-workflow-archive', 'archived']])
+  byId(id).addEventListener('click', async () => {
+    try { if (!selectedWorkflow) throw new Error('Select a workflow.');
+      const result = await request(`/admin/api/flows/${selectedWorkflow.flow_id}/lifecycle`, { method: 'POST',
+        body: JSON.stringify({ state, expected_revision: selectedWorkflow.draft_revision }) });
+      await loadManagedWorkflows(); await selectManagedWorkflow(result.workflow.flow_id);
+      byId('flo-message').textContent = `Workflow ${state}.`;
+    } catch (error) { byId('flo-message').textContent = error.message; }
+  });
+for (const [id, state] of [['flo-assignment-activate', 'active'], ['flo-assignment-pause', 'paused']])
+  byId(id).addEventListener('click', async () => {
+    try { if (!selectedWorkflow) throw new Error('Select a workflow.');
+      await request(`/admin/api/flows/${selectedWorkflow.flow_id}/assignments`, { method: 'PUT',
+        body: JSON.stringify({ workspace_id: byId('flo-assignment-workspace').value, state }) });
+      await loadManagedWorkflows(); await selectManagedWorkflow(selectedWorkflow.flow_id);
+      byId('flo-message').textContent = `Assignment ${state}.`;
+    } catch (error) { byId('flo-message').textContent = error.message; }
+  });
 async function loadFlo() {
   const message = byId('flo-message'); message.textContent = '';
   try {
@@ -625,6 +708,7 @@ async function loadFlo() {
       request('/admin/api/flows'), request('/admin/api/customers')
     ]);
     floTemplates = catalog.templates || [];
+    byId('flo-workflow-manager').hidden = !catalog.workflow_platform_enabled;
     const flow = byId('flo-flow'); flow.replaceChildren();
     for (const entry of floTemplates) {
       const option = document.createElement('option'); option.value = entry.flow_id;
@@ -635,6 +719,12 @@ async function loadFlo() {
       const option = document.createElement('option'); option.value = customer.id;
       option.textContent = `${customer.name} · ${customer.id}`; selector.append(option);
     }
+    const assignment = byId('flo-assignment-workspace'); assignment.replaceChildren();
+    for (const customer of customers.customers) {
+      const option = document.createElement('option'); option.value = customer.id;
+      option.textContent = `${customer.name} · ${customer.id}`; assignment.append(option);
+    }
+    if (catalog.workflow_platform_enabled) await loadManagedWorkflows();
     await loadFloSelection();
   } catch (error) { message.textContent = error.message; }
 }

@@ -48,7 +48,12 @@ async function start() {
   if (!applicationId) { fail('Open the supplier link supplied to you.'); return; }
   try {
     const { application } = await api('application');
-    if (application.status !== 'in_progress') { show('complete'); return; }
+    if (!['in_progress', 'restarted'].includes(application.status)) { show('complete'); return; }
+    if (application.restart) {
+      const banner = document.createElement('p'); banner.className = 'notice';
+      banner.textContent = `Your buyer requested changes: ${application.restart.comments} ${[...(application.restart.fields || []), ...(application.restart.documents || [])].join(', ')}`;
+      $('journey').prepend(banner);
+    }
     for (const [key, value] of Object.entries(application.draft || {})) {
       const input = $('details').elements.namedItem(key); if (input && typeof value === 'string') input.value = value;
     }

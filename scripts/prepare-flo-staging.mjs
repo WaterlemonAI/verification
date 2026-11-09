@@ -100,7 +100,8 @@ export function buildFloStagingParameters(env, { imageRequired = true } = {}) {
   }
   return {
     ...params,
-    enableFlo: true, enableDocumentOcr: true, enableDocumentOcrWorker: true, enableEjari: true,
+    enableFlo: true, enableFloWorkflowPlatform: true,
+    enableDocumentOcr: true, enableDocumentOcrWorker: true, enableEjari: true,
     enableTaedMoa: true, enableTaedTradeLicense: true,
     enableCaseManager: false, maintainCaseManagerData: false,
     enableDeepResearchWorker: false, enableAdverseMediaSearchPlusGpt: false,

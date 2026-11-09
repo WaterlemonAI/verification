@@ -95,6 +95,9 @@ param enableCaseManager bool = false
 @description('Enable Flo only after private storage, key, certificate and upload scanner checks pass.')
 param enableFlo bool = false
 
+@description('Enable schema-defined Flo workflow authoring and links when Flo is enabled; set false for an emergency pause.')
+param enableFloWorkflowPlatform bool = true
+
 @description('Run billing-notification schedule for this environment. Staging keeps it off.')
 param enableBillingNotifications bool = true
 
@@ -864,6 +867,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DOCUMENT_OCR_TAED_TRADE_LICENSE_ENABLED', value: !parallelDeployment && enableDocumentOcr && enableTaedTradeLicense ? 'true' : 'false' }
             { name: 'CASE_MANAGER_ENABLED', value: caseManagerRuntimeEnabled ? 'true' : 'false' }
             { name: 'FLO_ENABLED', value: enableFlo ? 'true' : 'false' }
+            { name: 'FLO_WORKFLOW_PLATFORM_ENABLED', value: enableFlo && enableFloWorkflowPlatform ? 'true' : 'false' }
             { name: 'FLO_HOST', value: floHost }
             { name: 'FLO_PUBLIC_BASE_URL', value: 'https://${floHost}' }
             { name: 'FLO_API_HOST', value: apiHost }

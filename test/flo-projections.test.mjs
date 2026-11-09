@@ -43,8 +43,27 @@ test('supplier onboarding returns upload progress before submission and a receip
   assert.ok(!JSON.stringify(draft).includes('PRIVATE_'));
   const receipt = supplierCase({ ...item, status: 'processing', submitted_at: '2026-11-10T00:00:00Z' });
   assert.deepEqual(Object.keys(receipt).sort(),
-    ['application_id', 'brand_name', 'flow_id', 'status', 'submitted_at', 'template_version']);
+    ['application_id', 'application_revision', 'brand_name', 'flow_id', 'status', 'submitted_at', 'template_version']);
   assert.equal(receipt.brand_name, 'Buyer');
+});
+
+test('schema workflow supplier view contains only presentation and restart instructions', () => {
+  const item = { application_id: '11111111-1111-4111-8111-111111111111', flow_id: 'flow-example',
+    template_version: '1.0.0', definition_hash: 'hash', application_revision: 2, status: 'restarted',
+    draft: { business_name: 'Example LLC' }, declarations: {}, documents: [],
+    workflow_schema: { schema_version: '1.0.0', name: 'Supplier profile', stages: [], checks: ['entity-aml'], tokens: {} },
+    configuration: { brand_name: 'Buyer', logo_asset_id: '22222222-2222-4222-8222-222222222222',
+      callback_url: 'https://private.example/callback', smtp: { user: 'private@example.com' } },
+    restart: { comments: 'Correct the name', fields: ['business_name'], documents: [] },
+    notification_links: { secret: 'PRIVATE_LINK' }, checks: [{ raw_response: 'PRIVATE_CHECK' }],
+    events: [{ payload: 'PRIVATE_EVENT' }] };
+  const visible = supplierCase(item);
+  assert.equal(visible.application_revision, 2);
+  assert.equal(visible.restart.comments, 'Correct the name');
+  assert.equal(visible.presentation.checks, undefined);
+  assert.match(visible.logo_asset_url, /^\/flo\/assets\//);
+  for (const forbidden of ['PRIVATE_LINK', 'PRIVATE_CHECK', 'PRIVATE_EVENT', 'private.example'])
+    assert.ok(!JSON.stringify(visible).includes(forbidden));
 });
 
 test('buyer review requirements follow each flow and conditional supplier answers', () => {

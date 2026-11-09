@@ -193,8 +193,16 @@
 
         <section id="flo-view" hidden>
           <div class="panel flo-panel">
-            <div class="panel-head"><div><p class="eyebrow">CODE-OWNED FLOWS</p><h2>Flo templates and customer assignment</h2></div></div>
-            <p class="notice">Only reviewed, code-shipped templates can be published. Flo cases have separate, perpetual retention. Enable the Flo module in a customer's Usage & rates settings as well as here.</p>
+            <div class="panel-head"><div><p class="eyebrow">FLO</p><h2>Template Manager</h2></div></div>
+            <p class="notice">Create and publish validated JSON workflows. Existing code-owned flows remain available while their pinned cases are retained. Enable the Flo module in a customer's Usage & rates settings.</p>
+            <div class="flo-manager" id="flo-workflow-manager" hidden><div><h3>Stored workflows</h3><div id="flo-workflow-list"></div><button type="button" id="flo-workflow-new">New workflow</button></div>
+            <div><h3 id="flo-workflow-title">Workflow editor</h3><p id="flo-workflow-meta"></p>
+              <label>Validated JSON schema<textarea id="flo-workflow-code" spellcheck="false" rows="18"></textarea></label>
+              <div id="flo-workflow-preview" class="flo-workflow-preview" aria-live="polite"></div>
+              <div class="flo-manager-actions"><button type="button" id="flo-workflow-preview-button">Preview</button><button type="button" id="flo-workflow-save">Save draft</button><button type="button" id="flo-workflow-publish">Publish version</button><button type="button" id="flo-workflow-pause">Pause</button><button type="button" id="flo-workflow-archive">Archive</button></div>
+              <div id="flo-assignment" hidden><h3>Assign to workspace</h3><label>Workspace<select id="flo-assignment-workspace"></select></label>
+                <button type="button" id="flo-assignment-activate">Assign active</button><button type="button" id="flo-assignment-pause">Pause assignment</button><div id="flo-assignment-list"></div></div>
+            </div></div><hr><h3>Legacy flow settings</h3>
             <label>Template<select id="flo-flow"></select></label><p id="flo-version"></p>
             <form id="flo-template-form"><label class="check"><input id="flo-template-enabled" type="checkbox"> Publish selected template</label>
               <button type="submit">Save template state</button></form>

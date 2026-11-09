@@ -73,6 +73,37 @@ test('Azure creation repairs an abandoned idempotency marker without losing its 
   assert.equal(recovered.reused, false);
   assert.equal(recovered.case.application_id, applicationId);
   assert.equal((await store.findLink(linkHash)).applicationId, applicationId);
-  assert.equal(rows.get(key(workspace, `case-${applicationId}`)).customerReference, undefined);
+  assert.equal(rows.get(key(workspace, `case-${applicationId}`)).customerReference, 'REF');
   assert.equal((await store.createCase(workspace, input, idempotencyKey, sha256('other-link'), {})).reused, true);
+});
+
+test('Azure workflow draft and published version are encrypted, pinned and optimistic', async () => {
+  const rows = new Map(); const blobs = new Map();
+  const missing = () => Object.assign(new Error('missing'), { statusCode: 404 });
+  const key = (partition, row) => `${partition}:${row}`;
+  const table = {
+    async getEntity(partition, row) { const value = rows.get(key(partition, row)); if (!value) throw missing(); return { ...value }; },
+    async createEntity(value) { const id = key(value.partitionKey, value.rowKey); if (rows.has(id)) throw Object.assign(new Error('conflict'), { statusCode: 409 });
+      rows.set(id, { ...value, etag: randomUUID() }); },
+    async updateEntity(value, _mode, options) { const id = key(value.partitionKey, value.rowKey); const prior = rows.get(id);
+      if (!prior || prior.etag !== options.etag) throw Object.assign(new Error('conflict'), { statusCode: 412 });
+      rows.set(id, { ...value, etag: randomUUID() }); }
+  };
+  const container = { getBlockBlobClient: (path) => ({
+    async uploadData(bytes, options) { if (options?.conditions?.ifNoneMatch && blobs.has(path))
+      throw Object.assign(new Error('conflict'), { statusCode: 412 });
+      blobs.set(path, Buffer.from(bytes)); },
+    async download() { const bytes = blobs.get(path); if (!bytes) throw missing();
+      return { readableStreamBody: [bytes] }; }
+  }) };
+  const store = new AzureFloStore({ table, container });
+  const schema = { schema_version: '1.0.0', name: 'Identity', stages: [], checks: [] };
+  const created = await store.saveWorkflow({ flow_id: 'flow-123', name: 'Identity', owner_workspace_id: null,
+    lifecycle: 'draft', schema_version: '1.0.0', draft: schema });
+  assert.equal(created.draft_revision, 1);
+  assert.equal((await store.getWorkflow('flow-123')).draft.name, 'Identity');
+  assert.ok(!blobs.get('workflows/flow-123/drafts/1.json.enc').includes(Buffer.from('Identity')));
+  await store.putWorkflowVersion('flow-123', '1.0.0', schema);
+  assert.equal((await store.getWorkflowVersion('flow-123', '1.0.0')).name, 'Identity');
+  await assert.rejects(store.saveWorkflow({ ...created, name: 'Stale' }, 0), /workflow_conflict/);
 });

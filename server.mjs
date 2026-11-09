@@ -50,10 +50,11 @@ import { createEjariStore } from './lib/ejari-store.mjs';
 import { createFloStore } from './lib/flows/store.mjs';
 import { handleFloRequest } from './lib/flows/routes.mjs';
 import { createFloQueue, createFloCallbackQueue, startFloWorker } from './lib/flows/queue.mjs';
-import { resolveTemplate } from './lib/flows/registry.mjs';
+import { resolveTemplate, resolveCaseTemplate } from './lib/flows/registry.mjs';
 import { cookieValue as floCookieValue, hashSecret as floHashSecret } from './lib/flows/session.mjs';
 import { createFloReport } from './lib/flows/report-pdf.mjs';
 import { deliverFloCallback } from './lib/flows/callback.mjs';
+import { deliverFloEmail, reconcileFloNotifications } from './lib/flows/notifications.mjs';
 import { reviewWithGemini, extractBankLetter, extractSupplierSupplement } from './lib/flows/gemini.mjs';
 import { documentOcrArtifactUrl, documentOcrSignedAccess } from './lib/document-ocr-artifact-url.mjs';
 
@@ -2011,7 +2012,7 @@ function portalPagePath(pathname) {
 
 function protectedPortalPath(pathname) {
   const page = portalPagePath(pathname);
-  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/cases', '/flo'].includes(page)
+  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/cases', '/flo', '/flo-workflows'].includes(page)
     || /^\/forms\/[a-z0-9-]+$/.test(page)
     || /^\/document-extraction\/[a-z0-9-]+$/.test(page);
 }
@@ -2798,7 +2799,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     startFloWorker(floQueue, async (job) => {
       const floCase = await floStore.getCase(job.workspace_id, job.application_id);
       if (!floCase) return;
-      const template = resolveTemplate(floCase.flow_id, floCase.template_version);
+      const template = await resolveCaseTemplate(floCase, floStore);
       if (!template || floCase.definition_hash && floCase.definition_hash !== template.definition_hash) {
         await floStore.updateCase(job.workspace_id, job.application_id, (item) => {
           item.processing_failure = 'unsupported_flow_version';
@@ -2841,7 +2842,29 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     });
   }
   if (startWorker && floStore && floCallbackQueue && process.env.FLO_ENABLED === 'true')
-    startFloWorker(floCallbackQueue, (job) => deliverFloCallback(job, { floStore }));
+    startFloWorker(floCallbackQueue, (job) => job.job_type === 'email'
+      ? deliverFloEmail(job, { floStore, platformStore: store, mailer })
+      : deliverFloCallback(job, { floStore }));
+  if (startWorker && floStore && floCallbackQueue && process.env.FLO_ENABLED === 'true') {
+    let workspaceOffset = 0;
+    const caseOffsets = new Map();
+    const reconcile = async () => {
+      const [assignments, workflows] = await Promise.all([floStore.listAssignments(), floStore.listWorkflows()]);
+      const workspaces = [...new Set([...assignments.map((item) => item.workspace_id),
+        ...workflows.map((item) => item.owner_workspace_id).filter(Boolean)])];
+      if (!workspaces.length) return;
+      const batch = Array.from({ length: Math.min(20, workspaces.length) }, (_, index) => workspaces[(workspaceOffset + index) % workspaces.length]);
+      workspaceOffset = (workspaceOffset + batch.length) % workspaces.length;
+      for (const id of batch) {
+        const result = await reconcileFloNotifications(id, { floStore,
+          enqueueEmail: (job) => floCallbackQueue.enqueue(job),
+          enqueueCallback: (job) => floCallbackQueue.enqueue(job), startIndex: caseOffsets.get(id) || 0 });
+        caseOffsets.set(id, result.nextIndex);
+      }
+    };
+    const timer = setInterval(() => { void reconcile().catch(() => console.warn('flo_notification_reconcile_failed')); }, 600_000);
+    timer.unref?.();
+  }
   if (startWorker && deepResearchQueue && process.env.ADVERSE_MEDIA_WORKER_ENABLED !== 'false') {
     startDeepResearchWorker({
       queue: deepResearchQueue,
@@ -2908,8 +2931,13 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         host, floStore, platformStore: store,
         customerKey: (request) => store.getClientForKey(bearerToken(request)),
         hasEntitlement: async (workspaceId) => (await usageStore.account(workspaceId)).allowed_modules.includes('flo'),
+        hasFloPrice: async (workspaceId) => (await usageStore.account(workspaceId)).rates.flo
+          ?.some((tier) => Number(tier.price) > 0) === true,
+        workflowPlatformEnabled: process.env.FLO_WORKFLOW_PLATFORM_ENABLED !== 'false',
         enqueue: (job) => floQueue?.enqueue(job),
         enqueueCallback: (job) => floCallbackQueue?.enqueue(job),
+        enqueueEmail: (job) => floCallbackQueue?.enqueue(job),
+        mailer,
         createReport: createFloReport,
         sendLink: (message) => mailer.sendFloLink?.(message),
         sendConfirmation: (message) => mailer.sendFloConfirmation?.(message),
@@ -2951,7 +2979,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
             }
           }
           if (supplierCase && (token || url.pathname === '/flo')) {
-            const template = resolveTemplate(supplierCase.flow_id, supplierCase.template_version);
+            const template = await resolveCaseTemplate(supplierCase, floStore);
             if (!template || supplierCase.definition_hash && supplierCase.definition_hash !== template.definition_hash)
               return json(res, 409, { error: 'Flow version unavailable.' });
             const directory = template.supplierBundle === 'kys-v1' ? join(root, 'flow-site')
@@ -2960,6 +2988,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           }
           if (['/app.js', '/styles.css'].includes(url.pathname))
             return serveStatic(res, join(root, 'flow-site'), url.pathname);
+          if (['/assets/renderer/app.js', '/assets/renderer/styles.css'].includes(url.pathname))
+            return serveStatic(res, join(root, 'flow-site', 'renderer'), url.pathname.replace('/assets/renderer', ''));
           const asset = /^\/assets\/([a-z][a-z0-9-]{2,63})\/(\d+\.\d+\.\d+)\/(app\.js|styles\.css)$/.exec(url.pathname);
           if (asset) {
             const template = resolveTemplate(asset[1], asset[2]);
@@ -3177,6 +3207,14 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         if (!floStore || !usage.allowed_modules.includes('flo'))
           return json(res, 404, { error: 'Flo is not enabled.' });
         return serveStatic(res, directory, '/flo.html');
+      }
+      if (directory.endsWith('api-site') && (url.pathname === '/flo-workflows' || url.pathname === '/flo-workflows/')) {
+        const { account, session } = await currentPortalSession(req, store);
+        if (!session) return portalLoginRedirect(res, url.pathname, url.search);
+        const usage = await usageStore.account(account.client_id);
+        if (!floStore || process.env.FLO_WORKFLOW_PLATFORM_ENABLED === 'false'
+          || !usage.allowed_modules.includes('flo')) return json(res, 404, { error: 'Flo workflows are not enabled.' });
+        return serveStatic(res, directory, '/flo-workflows.html');
       }
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
