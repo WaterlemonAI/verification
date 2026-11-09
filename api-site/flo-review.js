@@ -81,10 +81,12 @@
     if (check.transport !== 'completed') return 'Unavailable';
     if (check.raw_response?.flagged === true || check.raw_response?.alert === true)
       return 'Potential flag';
-    if (Array.isArray(check.raw_response?.matches) && check.raw_response.matches.length)
-      return `${check.raw_response.matches.length} potential matches`;
+    const candidates = check.raw_response?.matches || check.raw_response?.data?.matches
+      || check.raw_response?.data?.profiles;
+    if (Array.isArray(candidates) && candidates.length)
+      return `${candidates.length} potential ${candidates.length === 1 ? 'match' : 'matches'}`;
     if (check.coverage !== 'complete') return 'Incomplete';
-    return 'Review result';
+    return check.business_result === 'requires_review' ? 'Needs review' : 'Review result';
   }
   function renderScreening(panel, item) {
     const card = el('section', null, 'flo-review-section flo-screening');
@@ -94,12 +96,15 @@
     for (const [title, suffix] of [['AML', '-aml'], ['Adverse media', '-adverse-media']]) {
       const checks = (item.checks || []).filter((check) => check.service_id?.endsWith(suffix));
       const states = checks.map(screeningState);
-      const summaryState = !checks.length ? 'Not run' : states.some((state) => /potential/i.test(state)) ? 'Potential flag'
-        : states.some((state) => ['Not run', 'Unavailable', 'Incomplete'].includes(state)) ? 'Incomplete' : 'Review results';
+      const incompleteCoverage = checks.some((check) => check.coverage === 'partial');
+      const summaryState = !checks.length || checks.every((check) => check.transport === 'not_run') ? 'Not run'
+        : states.some((state) => /potential/i.test(state)) ? 'Potential flag'
+        : states.some((state) => ['Not run', 'Unavailable', 'Incomplete'].includes(state)) ? 'Incomplete'
+          : states.some((state) => state === 'Needs review') ? 'Needs review' : 'Review results';
       const group = el('details', null, 'flo-screening-group');
       const heading = el('summary'); heading.append(el('strong', title),
         el('span', summaryState, `flo-screening-status ${/potential/i.test(summaryState) ? 'flo-flag' : summaryState === 'Incomplete' || summaryState === 'Not run' ? 'flo-unavailable' : 'flo-review'}`),
-        el('small', `${checks.length} ${checks.length === 1 ? 'check' : 'checks'} · expand details`));
+        el('small', `${checks.length} ${checks.length === 1 ? 'check' : 'checks'}${incompleteCoverage ? ' · incomplete coverage' : ''} · expand details`));
       group.append(heading);
       if (!checks.length) group.append(el('p', 'No screening check has run.', 'flo-empty'));
       for (const check of checks) {

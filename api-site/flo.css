@@ -119,6 +119,9 @@
 #flo-detail .flo-data-list li{margin:.15rem 0;overflow-wrap:anywhere}
 #flo-detail .flo-nested-facts{font-size:.8rem;grid-template-columns:minmax(90px,35%) minmax(0,1fr)}
 #flo-detail .flo-nested-facts dt,#flo-detail .flo-nested-facts dd{padding:.35rem .3rem}
+#flo-detail .flo-screening-evidence .flo-nested-facts{grid-template-columns:minmax(0,1fr)}
+#flo-detail .flo-screening-evidence .flo-nested-facts dt{padding-bottom:.1rem}
+#flo-detail .flo-screening-evidence .flo-nested-facts dd{padding-top:.1rem;overflow-wrap:anywhere}
 .flo-full-json{margin:1rem 0 0;background:#fff;border:1px solid #dce2e9;border-radius:10px;padding:1rem}
 .flo-full-json>summary{cursor:pointer;font-weight:750;color:#31475f}
 #flo-detail .flo-full-json pre{font-size:.75rem;max-height:620px;margin:1rem 0 0}

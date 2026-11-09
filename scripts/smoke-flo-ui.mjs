@@ -88,9 +88,9 @@ try {
           stakeholders: [{ name: 'Synthetic Owner', role: 'director' }] },
         documents: [{ document_id: 'doc-1', type: 'trade_licence' }],
         subjects: [{ subject_id: appId, name: 'Synthetic Trading LLC', type: 'business' }],
-        checks: [{ service_id: 'entity-aml', subject_id: appId, transport: 'completed', coverage: 'complete',
+        checks: [{ service_id: 'entity-aml', subject_id: appId, transport: 'completed', coverage: 'partial',
           business_result: 'requires_review', reason_codes: [],
-          raw_response: { matches: [{ name: 'Synthetic Match', status: 'potential' }] } },
+          raw_response: { data: { profiles: [{ basic_details: { entity_name: 'Synthetic Match' } }] } } },
         { service_id: 'entity-adverse-media', subject_id: appId, transport: 'not_run', coverage: 'unavailable',
           business_result: 'could_not_complete', reason_codes: ['input_missing'] }],
         ai7edd_review: { status: 'not_run', reason_codes: ['ai7edd_unconfigured'] },
@@ -129,6 +129,9 @@ try {
     if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `flo-buyer-link-${viewport.width}.png`), fullPage: true });
     await page.getByRole('button', { name: /SYNTHETIC/ }).click();
     await page.getByText('AML', { exact: true }).waitFor();
+    await page.locator('.flo-screening-group').first().getByText('Potential flag').waitFor();
+    await page.locator('.flo-screening-group').first().getByText(/incomplete coverage/).waitFor();
+    await page.locator('.flo-screening-group').nth(1).locator('.flo-screening-status').getByText('Not run').waitFor();
     if (screenshotDir) await page.locator('#flo-panel-overview').screenshot({
       path: join(screenshotDir, `flo-buyer-review-${viewport.width}.png`) });
     await page.locator('.flo-screening-group').first().locator('summary').first().click();
