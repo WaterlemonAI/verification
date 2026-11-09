@@ -23,6 +23,9 @@ test('supplier report retains typed sections, incomplete coverage and full per-s
   };
   const report = await createFloReport(item);
   assert.equal(report.model.flow_id, 'supplier-onboarding-v1');
+  assert.ok(report.model.sections.some((section) => section.title === 'AI7EDD evidence review'
+    && section.lines.some((line) => line.includes('ai7edd_unconfigured'))));
+  assert.doesNotMatch(report.html, /gemini/i);
   assert.ok(report.model.sections.some((section) => section.title === 'Organisation, UBOs and signing authority'
     && section.lines.some((line) => line.includes('Alice Example'))));
   assert.ok(report.model.sections.some((section) => section.title === 'Incomplete or unavailable checks'

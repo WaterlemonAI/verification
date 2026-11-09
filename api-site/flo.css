@@ -95,3 +95,31 @@
 .flo-empty{color:#78869a;font-size:.84rem}
 @media(max-width:1100px){.flo-overview-grid,.flo-profile-grid{grid-template-columns:1fr}}
 @media(max-width:750px){.flo-required-grid{grid-template-columns:1fr}#flo-detail .flo-tab-panel{padding:.85rem}#flo-detail .flo-tabs button{padding:.65rem .75rem}}
+
+/* Screening review and readable nested data */
+.flo-screening-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+.flo-screening-group{min-width:0;border:1px solid #dce2e9;border-radius:9px;background:#f9fbfd;overflow:hidden}
+.flo-screening-group>summary{display:grid;grid-template-columns:1fr auto;gap:.3rem .7rem;align-items:center;cursor:pointer;padding:1rem;list-style:none}
+.flo-screening-group>summary::-webkit-details-marker{display:none}
+.flo-screening-group>summary strong{font-size:.98rem}
+.flo-screening-group>summary small{grid-column:1/-1;color:#657184}
+.flo-screening-status{border-radius:100px;padding:.3rem .65rem;font-size:.7rem;font-weight:750;white-space:nowrap}
+.flo-screening-status.flo-flag{color:#a71f36;background:#ffe8eb}
+.flo-screening-status.flo-unavailable{color:#8c540b;background:#fff1dc}
+.flo-screening-status.flo-review{color:#235383;background:#e8f2fc}
+.flo-screening-group[open]>summary{border-bottom:1px solid #e3e8ef}
+.flo-screening-result{padding:1rem;border-bottom:1px solid #e3e8ef;overflow-wrap:anywhere}
+.flo-screening-result:last-child{border-bottom:0}
+.flo-screening-result>strong{font-size:.86rem}
+.flo-screening-result-state{display:inline-block;margin-left:.5rem;font-size:.75rem;color:#57677e}
+.flo-screening-evidence{margin-top:.8rem;padding:.6rem .75rem;border:1px solid #dce2e9;border-radius:6px;background:#fff}
+.flo-screening-evidence>summary{cursor:pointer;font-weight:700;font-size:.8rem;color:#245583}
+.flo-screening-evidence[open]>summary{margin-bottom:.7rem}
+.flo-data-list{display:grid;gap:.4rem;padding-left:1.2rem!important;margin:.15rem 0!important}
+#flo-detail .flo-data-list li{margin:.15rem 0;overflow-wrap:anywhere}
+#flo-detail .flo-nested-facts{font-size:.8rem;grid-template-columns:minmax(90px,35%) minmax(0,1fr)}
+#flo-detail .flo-nested-facts dt,#flo-detail .flo-nested-facts dd{padding:.35rem .3rem}
+.flo-full-json{margin:1rem 0 0;background:#fff;border:1px solid #dce2e9;border-radius:10px;padding:1rem}
+.flo-full-json>summary{cursor:pointer;font-weight:750;color:#31475f}
+#flo-detail .flo-full-json pre{font-size:.75rem;max-height:620px;margin:1rem 0 0}
+@media(max-width:750px){.flo-screening-grid{grid-template-columns:1fr}}

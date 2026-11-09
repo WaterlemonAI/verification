@@ -24,7 +24,8 @@ test('controlled diagnostic is case-scoped, reports missing evidence and cannot 
         role: req.headers.cookie === 'member' ? 'member' : 'org_admin', email: 'buyer@example.com' } }),
       customerKey: async () => ({ id: workspace }), hasEntitlement: async () => true,
       charge: async () => ({ allowed: true, settle: async () => {} }), scan: async () => 'passed',
-      enqueue: (job) => queue.enqueue(job), enqueueCallback: (job) => callbacks.enqueue(job)
+      enqueue: (job) => queue.enqueue(job), enqueueCallback: (job) => callbacks.enqueue(job),
+      createReport: createFloReport
     });
     if (!handled) { res.writeHead(404); res.end(); }
   });
@@ -91,6 +92,19 @@ test('controlled diagnostic is case-scoped, reports missing evidence and cannot 
     { outcome: 'needs_more_evidence', rationale: 'Premises evidence is absent.' })).status, 200);
   assert.equal(callbacks.jobs.length, 2);
   assert.equal((await floStore.getCase(workspace, id)).diagnostic.outcome, 'needs_more_evidence');
+  await floStore.updateCase(workspace, id, (current) => {
+    delete current.reports[0].branding; // A report generated before the presentation rebrand.
+    return current;
+  });
+  const original = await send(`${portal}/reports/1.json`, 'app.kycprobe.com');
+  assert.equal((await send(`${portal}/reports`, 'app.kycprobe.com', 'POST', {}, { cookie: 'member' })).status, 403);
+  const reissued = await send(`${portal}/reports`, 'app.kycprobe.com', 'POST', {});
+  assert.equal(reissued.status, 201);
+  assert.equal(JSON.parse(reissued.body).version, 2);
+  assert.equal((await send(`${portal}/reports`, 'app.kycprobe.com', 'POST', {})).status, 200);
+  assert.equal((await send(`${portal}/reports/1.json`, 'app.kycprobe.com')).body, original.body);
+  assert.match((await send(`${portal}/reports/2.json`, 'app.kycprobe.com')).body, /AI7EDD/);
+  assert.equal((await floStore.getCase(workspace, id)).reports.length, 2);
   const retry = await send(`${portal}/diagnostic/retry-callbacks`, 'app.kycprobe.com', 'POST', {});
   assert.equal(retry.status, 202);
   assert.equal(JSON.parse(retry.body).queued, 2);
