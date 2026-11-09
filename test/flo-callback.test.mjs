@@ -2,9 +2,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { MemoryFloStore } from '../lib/flows/store.mjs';
-import { callbackEvent, callbackSigningSecret, deliverFloCallback } from '../lib/flows/callback.mjs';
+import { callbackEvent, callbackSigningSecret, deliverFloCallback, pinnedLookup } from '../lib/flows/callback.mjs';
 
 process.env.FLO_CALLBACK_SIGNING_KEY_HEX = '44'.repeat(32);
+
+test('pinned callback lookup supports Node single-address and all-address requests', async () => {
+  const lookup = pinnedLookup('178.63.67.106', 4);
+  const single = await new Promise((resolve, reject) => lookup('webhook.site', { all: false },
+    (error, address, family) => error ? reject(error) : resolve({ address, family })));
+  assert.deepEqual(single, { address: '178.63.67.106', family: 4 });
+  const all = await new Promise((resolve, reject) => lookup('webhook.site', { all: true },
+    (error, addresses) => error ? reject(error) : resolve(addresses)));
+  assert.deepEqual(all, [{ address: '178.63.67.106', family: 4 }]);
+});
 
 test('callback signs exact stable event, records attempts and skips delivered replay', async () => {
   const store = new MemoryFloStore();
