@@ -6,6 +6,8 @@ on:
     paths:
       - api-site/**
       - admin-site/**
+      - flow-site/**
+      - docs/flo/**
       - api/**
       - lib/**
       - scripts/**
@@ -19,6 +21,8 @@ on:
       - ejari-verifier/**
       - merchant-screenshot-worker.mjs
       - infrastructure/api.bicep
+      - infrastructure/api-flo-platform.bicep
+      - infrastructure/api-dns.bicep
       - infrastructure/merchant-screenshot-platform.bicep
       - infrastructure/api-bank-statement-platform.bicep
       - infrastructure/api-document-ocr-platform.bicep
@@ -282,6 +286,8 @@ jobs:
       - name: Validate API Bicep
         run: |
           az bicep build --file infrastructure/api.bicep
+          az bicep build --file infrastructure/api-flo-platform.bicep
+          az bicep build --file infrastructure/api-dns.bicep
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
           az bicep build --file infrastructure/api-case-manager-platform.bicep
           az bicep build --file infrastructure/api-case-manager-network.bicep
@@ -389,6 +395,7 @@ jobs:
               enableAdverseMediaSearchPlusGpt="${{ vars.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
+              enableFlo="${{ vars.FLO_ENABLED == 'true' && 'true' || 'false' }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
               parallelDeployment="${{ vars.CASE_MANAGER_PARALLEL_QA == 'true' && 'true' || 'false' }}" \
               apiTrafficCutover="${{ vars.CASE_MANAGER_TRAFFIC_CUTOVER == 'true' && 'true' || 'false' }}" \
@@ -406,6 +413,7 @@ jobs:
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
               appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}" \
+              floCertificateId="${{ vars.FLO_CERTIFICATE_RESOURCE_ID }}" \
               enableDeepResearchWorker="${{ github.event_name == 'push' && 'true' || (inputs.enableDeepResearchWorker && 'true' || 'false') }}"
 
       - name: Deploy digest-pinned API revision
@@ -427,6 +435,7 @@ jobs:
               enableAdverseMediaSearchPlusGpt="${{ vars.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED == 'true' && 'true' || 'false' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
+              enableFlo="${{ vars.FLO_ENABLED == 'true' && 'true' || 'false' }}" \
               maintainCaseManagerData="${{ steps.case_manager_state.outputs.maintenance }}" \
               parallelDeployment="${{ vars.CASE_MANAGER_PARALLEL_QA == 'true' && 'true' || 'false' }}" \
               apiTrafficCutover="${{ vars.CASE_MANAGER_TRAFFIC_CUTOVER == 'true' && 'true' || 'false' }}" \
@@ -444,6 +453,7 @@ jobs:
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
               appCertificateId="${{ vars.KYCPROBE_APP_CERTIFICATE_RESOURCE_ID }}" \
+              floCertificateId="${{ vars.FLO_CERTIFICATE_RESOURCE_ID }}" \
               enableDeepResearchWorker="${{ github.event_name == 'push' && 'true' || (inputs.enableDeepResearchWorker && 'true' || 'false') }}" \
             --query properties.outputs \
             --output json > api-deployment-outputs.json

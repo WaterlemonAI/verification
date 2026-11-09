@@ -67,7 +67,8 @@ test('pre-cutover deployments keep live API alerts on the old app', () => {
   const api = readFileSync(new URL('../infrastructure/api.bicep', import.meta.url), 'utf8');
   assert.equal((workflow.match(/apiTrafficCutover="\$\{\{ vars\.CASE_MANAGER_TRAFFIC_CUTOVER == 'true'/g) || []).length, 2);
   assert.match(api, /param apiTrafficCutover bool = false/);
-  assert.match(api, /var monitoredApiId = apiTrafficCutover \? api\.id : resourceId\('Microsoft\.App\/containerApps', 'ca-ai7uae-api'\)/);
+  assert.match(api, /param preCutoverApiName string = 'ca-ai7uae-api'/);
+  assert.match(api, /var monitoredApiId = apiTrafficCutover \? api\.id : resourceId\('Microsoft\.App\/containerApps', preCutoverApiName\)/);
   assert.match(api, /scopes: \[ monitoredApiId \]/);
   assert.match(api, /ContainerAppName_s == "\$\{monitoredApiName\}"/);
 });

@@ -5,6 +5,8 @@ on:
     paths:
       - api-site/**
       - admin-site/**
+      - flow-site/**
+      - docs/flo/**
       - api/**
       - ejari-verifier/**
       - lib/**
@@ -20,6 +22,8 @@ on:
       - package.json
       - package-lock.json
       - infrastructure/api.bicep
+      - infrastructure/api-flo-platform.bicep
+      - infrastructure/api-dns.bicep
       - infrastructure/api-billing-notifications-bootstrap.bicep
       - infrastructure/api-document-ocr-platform.bicep
       - infrastructure/api-ejari-platform.bicep
@@ -31,6 +35,7 @@ on:
       - infrastructure/api-case-manager-cutover-certificates.bicep
       - infrastructure/api-case-manager-release-reader.bicep
       - .github/workflows/deploy-api.yml
+      - .github/workflows/deploy-flo-staging.yml
       - .github/workflows/api-pr-checks.yml
 
 permissions:
@@ -47,7 +52,7 @@ jobs:
         run: |
           node --check server.mjs
           find lib test scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check
-          find api-site admin-site \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
+          find api-site admin-site flow-site \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n1 node --check
       - name: Run API contract and queue tests
         run: npm test
       - uses: actions/setup-python@v5
@@ -64,9 +69,12 @@ jobs:
           node scripts/smoke-case-manager-ui.mjs
           node scripts/smoke-login-otp-ui.mjs
           node scripts/smoke-ejari-ui.mjs
+          node scripts/smoke-flo-ui.mjs
       - name: Validate document OCR Bicep
         run: |
           az bicep build --file infrastructure/api.bicep
+          az bicep build --file infrastructure/api-flo-platform.bicep
+          az bicep build --file infrastructure/api-dns.bicep
           az bicep build --file infrastructure/api-billing-notifications-bootstrap.bicep
           az bicep build --file infrastructure/api-document-ocr-platform.bicep
           az bicep build --file infrastructure/api-document-ocr-purge-bootstrap.bicep

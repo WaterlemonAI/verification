@@ -11,7 +11,9 @@ COPY scripts/ ./scripts/
 COPY site/ ./site/
 COPY api-site/ ./api-site/
 COPY admin-site/ ./admin-site/
+COPY flow-site/ ./flow-site/
 COPY api/openapi.json ./api/openapi.json
+COPY api/flo-openapi.json ./api/flo-openapi.json
 COPY api/document-ocr-openapi.json ./api/document-ocr-openapi.json
 COPY api/ejari-openapi.json ./api/ejari-openapi.json
 COPY bank-statement-analysis/openapi.local.json ./bank-statement-analysis/openapi.local.json

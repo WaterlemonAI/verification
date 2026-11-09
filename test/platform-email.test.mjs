@@ -33,6 +33,35 @@ test('GoDaddy SMTP transport uses TLS, fixed sender and reply address', async ()
   assert.ok(message.attachments[0].content.length > 1000);
 });
 
+test('Flo email accepts only the configured staging supplier origin', async () => {
+  const messages = [];
+  const mailer = createPlatformMailer({ password: 'test-only', floPublicBaseUrl: 'https://flo-staging.ai7uae.com',
+    transportFactory: () => ({ sendMail: async (message) => messages.push(message) }) });
+  const token = 'a'.repeat(48);
+  const stagingUrl = `https://flo-staging.ai7uae.com/f/${token}`;
+  await mailer.sendFloLink({ to: 'supplier@example.com', url: stagingUrl, brandName: 'Test Buyer' });
+  assert.match(messages[0].text, /flo-staging\.ai7uae\.com/);
+  assert.match(messages[0].html, /flo-staging\.ai7uae\.com/);
+  await assert.rejects(() => mailer.sendFloLink({ to: 'supplier@example.com',
+    url: `https://flo.ai7uae.com/f/${token}` }), /platform_email_invalid_flo_url/);
+  await assert.rejects(() => mailer.sendFloLink({ to: 'supplier@example.com',
+    url: `https://flo-staging.ai7uae.com.evil.example/f/${token}` }), /platform_email_invalid_flo_url/);
+  assert.equal(messages.length, 1);
+});
+
+test('staging buyer invitations use the configured portal origin', async () => {
+  const messages = [];
+  const mailer = createPlatformMailer({ password: 'test-only', appPublicBaseUrl: 'https://app-staging.kycprobe.com',
+    transportFactory: () => ({ sendMail: async (message) => messages.push(message) }) });
+  await mailer.sendInvitation({ to: 'buyer@example.com',
+    url: 'https://app-staging.kycprobe.com/login#invite=synthetic', customerName: 'Test Buyer', hours: 24 });
+  assert.match(messages[0].html, /app-staging\.kycprobe\.com\/login/);
+  assert.doesNotMatch(messages[0].html, /href="https:\/\/app\.kycprobe\.com\/login/);
+  await assert.rejects(() => mailer.sendInvitation({ to: 'buyer@example.com',
+    url: 'https://app.kycprobe.com/login#invite=synthetic', customerName: 'Test Buyer', hours: 24 }),
+  /platform_email_invalid_action_url/);
+});
+
 test('customer email designs include inline logo, usable actions, safe copy and customer links', async () => {
   const messages = [];
   const mailer = createPlatformMailer({ password: 'test-only', transportFactory: () => ({

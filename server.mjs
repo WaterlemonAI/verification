@@ -47,6 +47,14 @@ import { caseOutcome } from './lib/case-manager-outcomes.mjs';
 import { createLoginOtpStore, LOGIN_OTP_SECONDS, loginOtpHash, newLoginOtp } from './lib/login-otp.mjs';
 import { createCaseManagerStore } from './lib/case-manager-store.mjs';
 import { createEjariStore } from './lib/ejari-store.mjs';
+import { createFloStore } from './lib/flows/store.mjs';
+import { handleFloRequest } from './lib/flows/routes.mjs';
+import { createFloQueue, createFloCallbackQueue, startFloWorker } from './lib/flows/queue.mjs';
+import { resolveTemplate } from './lib/flows/registry.mjs';
+import { cookieValue as floCookieValue, hashSecret as floHashSecret } from './lib/flows/session.mjs';
+import { createFloReport } from './lib/flows/report-pdf.mjs';
+import { deliverFloCallback } from './lib/flows/callback.mjs';
+import { reviewWithGemini, extractBankLetter, extractSupplierSupplement } from './lib/flows/gemini.mjs';
 import { documentOcrArtifactUrl, documentOcrSignedAccess } from './lib/document-ocr-artifact-url.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -95,7 +103,8 @@ function json(res, status, body, extraHeaders = {}) {
 }
 
 function securityHeaders(res) {
-  res.setHeader('content-security-policy', "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; connect-src 'self' https://api.ai7uae.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+  const apiOrigin = new URL(process.env.API_PUBLIC_BASE_URL || 'https://api.ai7uae.com').origin;
+  res.setHeader('content-security-policy', `default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; connect-src 'self' ${apiOrigin}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`);
   res.setHeader('referrer-policy', 'no-referrer');
   res.setHeader('x-content-type-options', 'nosniff');
   res.setHeader('x-frame-options', 'DENY');
@@ -106,6 +115,7 @@ function securityHeaders(res) {
 function moduleCatalog(integrations) {
   return [
     ...integrations.map((item) => ({ id: item.id, name: item.name, available: item.enabled !== false })),
+    { id: 'flo', name: 'Flo onboarding', available: process.env.FLO_ENABLED === 'true' },
     { id: 'bank-statement-analysis', name: 'Bank Statement Analysis', available: bsaEnabled() },
     { id: 'entity-search-report', name: 'Entity Search PDF report', available: true },
     { id: 'forms', name: 'Forms orchestration', available: true }
@@ -2001,7 +2011,7 @@ function portalPagePath(pathname) {
 
 function protectedPortalPath(pathname) {
   const page = portalPagePath(pathname);
-  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/cases'].includes(page)
+  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/cases', '/flo'].includes(page)
     || /^\/forms\/[a-z0-9-]+$/.test(page)
     || /^\/document-extraction\/[a-z0-9-]+$/.test(page);
 }
@@ -2433,7 +2443,7 @@ async function handleEjari(req, res, url, store, ejariStore, usageStore) {
       if (!record.result) return json(res, 202, { jobId: match[1], status: record.job.status });
       return json(res, 200, { ...record.result,
         certificateUrl: record.result.certificateAvailable
-          ? `https://app.kycprobe.com/portal/api/ejari/jobs/${match[1]}/certificate.pdf` : null });
+          ? `${process.env.APP_PUBLIC_BASE_URL || 'https://app.kycprobe.com'}/portal/api/ejari/jobs/${match[1]}/certificate.pdf` : null });
     }
     const job = await ejariStore.getJob(match[1], workspaceId);
     return job ? json(res, 200, { jobId: job.id, status: job.status, receivedAt: job.receivedAt,
@@ -2776,11 +2786,62 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   ejariStore = createEjariStore(),
   usageStore = createCustomerUsageStore(),
   caseStore = createCaseManagerStore(),
+  floStore = createFloStore(),
+  floQueue = createFloQueue(),
+  floCallbackQueue = createFloCallbackQueue(),
   merchantScreener = configuredMerchantScreener, requestCapacity = createRequestCapacity(),
   startWorker = process.env.NODE_ENV !== 'test' } = {}) {
   const loginThrottle = createLoginThrottle();
   const portalLoginThrottle = createLoginThrottle();
   const resetThrottle = createLoginThrottle();
+  if (startWorker && floStore && floQueue && process.env.FLO_ENABLED === 'true') {
+    startFloWorker(floQueue, async (job) => {
+      const floCase = await floStore.getCase(job.workspace_id, job.application_id);
+      if (!floCase) return;
+      const template = resolveTemplate(floCase.flow_id, floCase.template_version);
+      if (!template || floCase.definition_hash && floCase.definition_hash !== template.definition_hash) {
+        await floStore.updateCase(job.workspace_id, job.application_id, (item) => {
+          item.processing_failure = 'unsupported_flow_version';
+          if (['submitted', 'processing'].includes(item.status)) item.status = 'failed';
+          item.events.push({ event_id: randomUUID(), type: 'processing_failed', at: new Date().toISOString(),
+            actor: 'flo_worker', reason_code: 'unsupported_flow_version' });
+          return item;
+        });
+        return;
+      }
+      return template.process(job, { floStore,
+      documentOcrStore: process.env.DOCUMENT_OCR_PRODUCTION_ENABLED === '1'
+        && /^[a-f0-9]{64}$/i.test(process.env.DOCUMENT_OCR_DATA_KEY_HEX || '') ? documentOcrStore : null,
+      ejariStore: process.env.EJARI_PLATFORM_ENABLED === '1' ? ejariStore : null,
+      enqueue: (next) => floQueue.enqueue(next), createReport: createFloReport,
+      extractBank: (bytes, mimeType) => extractBankLetter(bytes, mimeType, { fetchImpl }),
+      extractSupplement: (bytes, mimeType, type) => extractSupplierSupplement(bytes, mimeType, type, { fetchImpl }),
+      runGeminiReview: (item) => reviewWithGemini(item, { fetchImpl }),
+      enqueueCallback: (event) => floCallbackQueue?.enqueue(event),
+      callProvider: async (serviceId, input) => {
+        if (serviceId.endsWith('-adverse-media')) {
+          const apiKey = await store.getMasterKey('adverse-media');
+          if (!apiKey) throw new Error('flo_adverse_media_unavailable');
+          const request = validateAdverseMediaRequest({ ...input, deep_research: false, callback_url: '' });
+          const aiApiKey = await store.getMasterKey('adverse-media-ai');
+          const result = await screenAdverseMedia({ request, apiKey, aiApiKey, fetchImpl,
+            costGuard: createScreeningCostGuard(fetchImpl) });
+          return { httpStatus: 200, response: presentAdverseMediaResponse(result) };
+        }
+        if (serviceId === 'merchant-screening') {
+          const validation = validateMerchantScreeningRequest(input);
+          if (validation.error) throw new Error('flo_merchant_input_invalid');
+          return { httpStatus: 200, response: await merchantScreener(validation.value) };
+        }
+        const integrationId = serviceId.endsWith('-aml') ? 'entity-search' : serviceId;
+        const integration = await store.getIntegrationById(integrationId);
+        if (!integration?.enabled || !integration.upstreamUrl) throw new Error('flo_provider_unavailable');
+        return executeProviderFormService(integration, input, store, fetchImpl, { submissionId: job.application_id });
+      } });
+    });
+  }
+  if (startWorker && floStore && floCallbackQueue && process.env.FLO_ENABLED === 'true')
+    startFloWorker(floCallbackQueue, (job) => deliverFloCallback(job, { floStore }));
   if (startWorker && deepResearchQueue && process.env.ADVERSE_MEDIA_WORKER_ENABLED !== 'false') {
     startDeepResearchWorker({
       queue: deepResearchQueue,
@@ -2842,6 +2903,72 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
     if (transactionId) res.setHeader('x-ai7-transaction-id', transactionId);
 
     try {
+      const floHost = process.env.FLO_HOST || 'flo.ai7uae.com';
+      const floDependencies = {
+        host, floStore, platformStore: store,
+        customerKey: (request) => store.getClientForKey(bearerToken(request)),
+        hasEntitlement: async (workspaceId) => (await usageStore.account(workspaceId)).allowed_modules.includes('flo'),
+        enqueue: (job) => floQueue?.enqueue(job),
+        enqueueCallback: (job) => floCallbackQueue?.enqueue(job),
+        sendLink: (message) => mailer.sendFloLink?.(message),
+        sendConfirmation: (message) => mailer.sendFloConfirmation?.(message),
+        charge: async (request, workspaceId, flowId, channel = 'api') => {
+          const managed = Boolean((await store.getCustomer?.(workspaceId))?.usagePolicyVersion);
+          const account = await usageStore.account(workspaceId, managed);
+          if (!account.allowed_modules.includes('flo')) return { allowed: false, statusCode: 403, reason: 'Flo is not assigned to this workspace.' };
+          const admitted = await usageStore.admit(workspaceId, { transactionId: randomUUID(),
+            keyId: (await store.getClientForKey(bearerToken(request)))?.key_id || '', moduleIds: ['flo'],
+            method: 'POST', path: channel === 'portal'
+              ? `/portal/api/flo/flows/${flowId}/links` : `/flows/${flowId}/links` }, managed);
+          return { ...admitted, settle: (status) => usageStore.complete(workspaceId, admitted.logKey, status,
+            status === 409 ? 'idempotency_replay' : `http_${status}`) };
+        },
+        getAdmin: (request, response, csrf) => requireAdmin(request, response, store, { csrf }),
+        getPortal: async (request, response, csrf) => {
+          const access = await currentPortalSession(request, store);
+          if (!access.session) { json(response, 401, { error: 'Sign in to continue.' }); return null; }
+          if (csrf && (!sameOrigin(request) || request.headers['x-ai7-csrf'] !== access.session.csrf)) {
+            json(response, 403, { error: 'Security token invalid.' }); return null;
+          }
+          return access;
+        }
+      };
+      if (host === floHost) {
+        if (await handleFloRequest(req, res, url, floDependencies)) return;
+        if (process.env.FLO_ENABLED === 'true' && req.method === 'GET') {
+          const token = /^\/f\/([A-Za-z0-9_-]{40,100})$/.exec(url.pathname)?.[1];
+          let supplierCase = null;
+          if (token) {
+            const reference = await floStore.findLink(floHashSecret(token));
+            if (reference) supplierCase = await floStore.getCase(reference.workspaceId, reference.applicationId);
+          } else if (url.pathname === '/flo') {
+            const [workspaceId, applicationId] = floCookieValue(req).split('.');
+            if (/^[a-f0-9]{16}$/.test(workspaceId || '') && /^[0-9a-f-]{36}$/i.test(applicationId || '')) {
+              const current = await floStore.getCase(workspaceId, applicationId);
+              if (current?.session_hash === floHashSecret(floCookieValue(req))
+                && Date.parse(current.session_expires_at) > Date.now()) supplierCase = current;
+            }
+          }
+          if (supplierCase && (token || url.pathname === '/flo')) {
+            const template = resolveTemplate(supplierCase.flow_id, supplierCase.template_version);
+            if (!template || supplierCase.definition_hash && supplierCase.definition_hash !== template.definition_hash)
+              return json(res, 409, { error: 'Flow version unavailable.' });
+            const directory = template.supplierBundle === 'kys-v1' ? join(root, 'flow-site')
+              : join(root, 'flow-site', template.supplierBundle);
+            return serveStatic(res, directory, '/index.html');
+          }
+          if (['/app.js', '/styles.css'].includes(url.pathname))
+            return serveStatic(res, join(root, 'flow-site'), url.pathname);
+          const asset = /^\/assets\/([a-z][a-z0-9-]{2,63})\/(\d+\.\d+\.\d+)\/(app\.js|styles\.css)$/.exec(url.pathname);
+          if (asset) {
+            const template = resolveTemplate(asset[1], asset[2]);
+            if (template && template.supplierBundle !== 'kys-v1')
+              return serveStatic(res, join(root, 'flow-site', template.supplierBundle), `/${asset[3]}`);
+          }
+        }
+        return json(res, 404, { error: 'Route not found.' });
+      }
+      if (await handleFloRequest(req, res, url, floDependencies)) return;
       if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, caseStore, transactionId))) return;
       if (req.ai7CapacityLane) {
         const queuedAt = Date.now();
@@ -2986,6 +3113,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
         return res.end(spec);
       }
+      if (url.pathname === '/flo/openapi.json') {
+        const spec = readFileSync(join(root, 'api', 'flo-openapi.json'));
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
+        return res.end(spec);
+      }
       if (url.pathname === '/document-extraction/openapi.json') {
         const spec = readFileSync(join(root, 'api', 'document-ocr-openapi.json'));
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
@@ -3036,6 +3168,14 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (directory.endsWith('api-site') && (url.pathname === '/cases' || url.pathname === '/cases/')) {
         if (process.env.CASE_MANAGER_ENABLED !== 'true') return json(res, 404, { status: 'Error', error: 'Page was not found.' });
         return serveStatic(res, directory, '/cases.html');
+      }
+      if (directory.endsWith('api-site') && (url.pathname === '/flo' || url.pathname === '/flo/')) {
+        const { account, session } = await currentPortalSession(req, store);
+        if (!session) return portalLoginRedirect(res, url.pathname, url.search);
+        const usage = await usageStore.account(account.client_id);
+        if (!floStore || !usage.allowed_modules.includes('flo'))
+          return json(res, 404, { error: 'Flo is not enabled.' });
+        return serveStatic(res, directory, '/flo.html');
       }
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');

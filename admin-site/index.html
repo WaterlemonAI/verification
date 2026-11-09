@@ -101,6 +101,7 @@
           <button class="active" data-view="integrations"><i>⌁</i> Integrations</button>
           <button data-view="peppol"><i>◎</i> Peppol check</button>
           <button data-view="forms"><i>▦</i> Forms</button>
+          <button data-view="flo"><i>◈</i> Flo</button>
           <button data-view="analysis" id="analysis-nav"><i>▤</i> Analysis</button>
           <button data-view="clients"><i>◇</i> Customer keys</button>
         </nav>
@@ -187,6 +188,25 @@
             <div class="panel-head"><div><p class="eyebrow">ORCHESTRATION REGISTRY</p><h2>Multi-API Forms</h2></div><button class="refresh" data-refresh="forms">Refresh</button></div>
             <div class="empty" id="form-empty">No Forms have been configured.</div>
             <div class="form-list" id="form-list"></div>
+          </div>
+        </section>
+
+        <section id="flo-view" hidden>
+          <div class="panel flo-panel">
+            <div class="panel-head"><div><p class="eyebrow">CODE-OWNED FLOWS</p><h2>Flo templates and customer assignment</h2></div></div>
+            <p class="notice">Only reviewed, code-shipped templates can be published. Flo cases have separate, perpetual retention. Enable the Flo module in a customer's Usage & rates settings as well as here.</p>
+            <label>Template<select id="flo-flow"></select></label><p id="flo-version"></p>
+            <form id="flo-template-form"><label class="check"><input id="flo-template-enabled" type="checkbox"> Publish selected template</label>
+              <button type="submit">Save template state</button></form>
+            <form id="flo-config-form">
+              <label>Customer workspace<select name="workspace_id" id="flo-workspace" required></select></label>
+              <label class="check"><input name="enabled" type="checkbox"> Enable Flo for this workspace</label>
+              <label>Brand name<input name="brand_name" maxlength="100"></label>
+              <label>Success URL<input name="success_url" type="url" placeholder="https://customer.example/success"></label>
+              <label>Failure URL<input name="failure_url" type="url" placeholder="https://customer.example/failure"></label>
+              <label>Callback URL<input name="callback_url" type="url" placeholder="https://customer.example/webhook"></label>
+              <button type="submit">Save workspace Flo settings</button>
+            </form><p id="flo-message" role="status"></p>
           </div>
         </section>
 
