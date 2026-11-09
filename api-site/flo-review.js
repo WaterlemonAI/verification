@@ -14,7 +14,8 @@
     const grid = el('dl', null, 'flo-facts');
     for (const key of keys) {
       if (source?.[key] == null || source[key] === '' || Array.isArray(source[key]) && !source[key].length) continue;
-      const dt = el('dt', nice(key)); const dd = el('dd', display(source?.[key]));
+      const dt = el('dt', key === 'supplier_email' ? 'Recipient Email' : nice(key));
+      const dd = el('dd', display(source?.[key]));
       grid.append(dt, dd);
     }
     if (grid.children.length) parent.append(grid);
@@ -74,7 +75,7 @@
     brief.append(list); panel.append(brief);
 
     const workspace = el('div', null, 'flo-overview-grid');
-    const identity = el('section', null, 'flo-review-section'); identity.append(el('p', 'SUPPLIER', 'flo-kicker'),
+    const identity = el('section', null, 'flo-review-section'); identity.append(el('p', 'APPLICANT', 'flo-kicker'),
       el('h3', item.draft?.tradingName || item.draft?.business_name || 'Name not supplied'));
     pairs(identity, { type: item.draft?.supplierType || item.draft?.company_type,
       email: item.supplier_email, representative: item.draft?.representativeEmail,

@@ -13,6 +13,7 @@ const files = {
   '/styles.css': ['flow-site/styles.css', 'text/css'],
   '/buyer': ['api-site/flo.html', 'text/html'],
   '/flo.js': ['api-site/flo.js', 'text/javascript'],
+  '/flo-review.js': ['api-site/flo-review.js', 'text/javascript'],
   '/flo.css': ['api-site/flo.css', 'text/css'],
   '/api.css': ['api-site/api.css', 'text/css'],
   '/portal-auth.js': ['api-site/portal-auth.js', 'text/javascript'],
@@ -105,11 +106,14 @@ try {
     await page.getByRole('button', { name: 'Confirm and submit for buyer review' }).click();
     await page.locator('#complete').waitFor({ state: 'visible' });
     await page.goto(`${base}/buyer`);
+    await page.getByRole('heading', { name: 'Onboarding Applications' }).waitFor();
+    if (await page.locator('#flo-link-flow').inputValue() !== '')
+      throw new Error('The buyer must choose a flow when multiple flows are enabled.');
     await page.locator('#flo-link-flow').selectOption('supplier-onboarding-v1');
     await page.locator('[name="customer_reference"]').fill('NEW-SUPPLIER');
     await page.locator('[name="supplier_email"]').fill('new@example.com');
     await page.getByRole('button', { name: 'Create link' }).click();
-    await page.getByText('Supplier link created').waitFor();
+    await page.getByText('Onboarding link created').waitFor();
     await page.getByText('22222222-2222-4222-8222-222222222222').waitFor();
     if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `flo-buyer-link-${viewport.width}.png`), fullPage: true });
     await page.getByRole('button', { name: /SYNTHETIC/ }).click();
