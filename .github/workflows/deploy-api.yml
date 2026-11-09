@@ -47,6 +47,10 @@ on:
         description: Provision the private Ejari storage, worker identity and access roles; API stays off until EJARI_PLATFORM_ENABLED is true
         type: boolean
         default: false
+      provisionFloPlatform:
+        description: Provision Flo child container, table and queues in the existing private storage account; runtime remains controlled by FLO_ENABLED
+        type: boolean
+        default: false
 
 # DOCUMENT_OCR_ENABLED is an environment variable set only after all eight
 # sample-based accuracy gates and the dedicated Gemini credential are ready.
@@ -296,6 +300,87 @@ jobs:
           az bicep build --file infrastructure/api-case-manager-release-reader.bicep
           az bicep build --file infrastructure/api-ejari-platform.bicep
 
+      - name: Verify production Flo private storage path
+        if: (github.event_name == 'workflow_dispatch' && inputs.provisionFloPlatform) || vars.FLO_ENABLED == 'true'
+        shell: bash
+        env:
+          FLO_STORAGE_ACCOUNT_NAME: ${{ vars.FLO_STORAGE_ACCOUNT_NAME || 'stai7uaecasesuaen001' }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          RUNTIME_IDENTITY_RESOURCE_ID: ${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}
+        run: |
+          set -euo pipefail
+          storage="$(az storage account show --resource-group "${AZURE_RESOURCE_GROUP}" --name "${FLO_STORAGE_ACCOUNT_NAME}" \
+            --query '{id:id,publicNetworkAccess:publicNetworkAccess,allowSharedKeyAccess:allowSharedKeyAccess,allowBlobPublicAccess:allowBlobPublicAccess}' --output json)"
+          jq -e '.publicNetworkAccess == "Disabled" and .allowSharedKeyAccess == false and .allowBlobPublicAccess == false' <<< "${storage}" > /dev/null
+          storage_id="$(jq -r .id <<< "${storage}")"
+          node scripts/verify-flo-private-storage.mjs "${storage_id}"
+          runtime_principal="$(az identity show --ids "${RUNTIME_IDENTITY_RESOURCE_ID}" --query principalId --output tsv)"
+          az role assignment list --assignee-object-id "${runtime_principal}" --scope "${storage_id}" --include-inherited --output json \
+            | jq -e '[.[].roleDefinitionName] as $roles | all("Storage Blob Data Contributor", "Storage Table Data Contributor", "Storage Queue Data Contributor"; . as $role | $roles | index($role) != null)' > /dev/null
+
+      - name: Preview Flo child storage resources
+        if: github.event_name == 'workflow_dispatch' && inputs.provisionFloPlatform
+        run: |
+          az deployment group what-if \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "ai7uae-flo-platform-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/api-flo-platform.bicep \
+            --parameters storageAccountName="${{ vars.FLO_STORAGE_ACCOUNT_NAME || 'stai7uaecasesuaen001' }}"
+
+      - name: Provision Flo child storage resources
+        if: github.event_name == 'workflow_dispatch' && inputs.provisionFloPlatform
+        run: |
+          az deployment group create \
+            --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+            --name "ai7uae-flo-platform-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/api-flo-platform.bicep \
+            --parameters storageAccountName="${{ vars.FLO_STORAGE_ACCOUNT_NAME || 'stai7uaecasesuaen001' }}"
+
+      - name: Verify Flo production enablement prerequisites
+        if: vars.FLO_ENABLED == 'true'
+        shell: bash
+        env:
+          FLO_STORAGE_ACCOUNT_NAME: ${{ vars.FLO_STORAGE_ACCOUNT_NAME || 'stai7uaecasesuaen001' }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          KEY_VAULT_URI: ${{ vars.KEY_VAULT_URI }}
+          FLO_CERTIFICATE_RESOURCE_ID: ${{ vars.FLO_CERTIFICATE_RESOURCE_ID }}
+          CONTAINERAPPS_ENVIRONMENT_ID: ${{ vars.CONTAINERAPPS_ENVIRONMENT_ID }}
+          CASE_MANAGER_PRIVATE_ENVIRONMENT_ID: ${{ vars.CASE_MANAGER_PRIVATE_ENVIRONMENT_ID }}
+          CASE_MANAGER_PRIVATE_ENDPOINT_SUBNET_ID: ${{ vars.CASE_MANAGER_PRIVATE_ENDPOINT_SUBNET_ID }}
+          CASE_MANAGER_PARALLEL_QA: ${{ vars.CASE_MANAGER_PARALLEL_QA }}
+          RUNTIME_IDENTITY_RESOURCE_ID: ${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}
+        run: |
+          set -euo pipefail
+          test "${CASE_MANAGER_PARALLEL_QA}" != 'true'
+          test -n "${CASE_MANAGER_PRIVATE_ENVIRONMENT_ID}"
+          test "${CONTAINERAPPS_ENVIRONMENT_ID,,}" = "${CASE_MANAGER_PRIVATE_ENVIRONMENT_ID,,}"
+          test "${FLO_STORAGE_ACCOUNT_NAME}" = 'stai7uaecasesuaen001'
+          node scripts/verify-case-manager-private-release.mjs > /dev/null
+          storage_id="$(az storage account show --resource-group "${AZURE_RESOURCE_GROUP}" --name "${FLO_STORAGE_ACCOUNT_NAME}" --query id --output tsv)"
+          for child in \
+            blobServices/default/containers/flo-evidence \
+            tableServices/default/tables/FloCases \
+            queueServices/default/queues/flo-jobs \
+            queueServices/default/queues/flo-callbacks \
+            queueServices/default/queues/flo-dead-letter; do
+            az resource show --ids "${storage_id}/${child}" --api-version 2023-05-01 --query id --output tsv > /dev/null
+          done
+          test -n "${KEY_VAULT_URI}" && test -n "${FLO_CERTIFICATE_RESOURCE_ID}"
+          vault_name="${KEY_VAULT_URI#https://}"
+          vault_name="${vault_name%%.*}"
+          for secret in flo-data-key-v1 flo-session-hash-key-v1 flo-callback-signing-key-v1 flo-gemini-api-key; do
+            enabled="$(az keyvault secret show --vault-name "${vault_name}" --name "${secret}" --query attributes.enabled --output tsv)"
+            test "${enabled}" = 'True' || test "${enabled}" = 'true'
+          done
+          case "${FLO_CERTIFICATE_RESOURCE_ID,,}" in
+            "${CONTAINERAPPS_ENVIRONMENT_ID,,}"/managedcertificates/*) ;;
+            *) echo 'Flo certificate must belong to the production Container Apps environment.' >&2; exit 1 ;;
+          esac
+          az resource show --ids "${FLO_CERTIFICATE_RESOURCE_ID}" --query id --output tsv > /dev/null
+          clamav_image="$(rg -o 'ai7uae-clamav@sha256:[a-f0-9]{64}' infrastructure/api.bicep | head -1)"
+          test -n "${clamav_image}"
+          az acr repository show --name "${{ vars.ACR_NAME }}" --image "${clamav_image}" --query digest --output tsv > /dev/null
+
       - name: Provision private Ejari platform
         if: github.event_name == 'workflow_dispatch' && inputs.provisionEjariPlatform
         shell: bash
@@ -409,6 +494,7 @@ jobs:
               caseManagerReconcileJobName="${{ vars.CASE_MANAGER_RECONCILE_JOB_NAME || 'caj-ai7uae-case-manager-reconcile' }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
+              caseManagerStorageName="${{ vars.FLO_STORAGE_ACCOUNT_NAME || 'stai7uaecasesuaen001' }}" \
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \
@@ -449,6 +535,7 @@ jobs:
               caseManagerReconcileJobName="${{ vars.CASE_MANAGER_RECONCILE_JOB_NAME || 'caj-ai7uae-case-manager-reconcile' }}" \
               runtimeIdentityResourceId="${{ vars.RUNTIME_IDENTITY_RESOURCE_ID }}" \
               runtimeIdentityClientId="${{ vars.RUNTIME_IDENTITY_CLIENT_ID }}" \
+              caseManagerStorageName="${{ vars.FLO_STORAGE_ACCOUNT_NAME || 'stai7uaecasesuaen001' }}" \
               acrLoginServer="${{ vars.ACR_LOGIN_SERVER }}" \
               keyVaultUri="${{ vars.KEY_VAULT_URI }}" \
               apiCertificateId="${{ vars.API_CERTIFICATE_RESOURCE_ID }}" \

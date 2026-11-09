@@ -1,5 +1,7 @@
 # Flo staging deployment and runbook
 
+This workflow is only for a separate non-production environment. For the existing live KYCProbe app, use [Flo live rollout](../live-rollout/README.md) and the production API workflow.
+
 The staging workflow deploys a **reviewed commit** to a separate resource group and Container Apps environment. It never invokes the production deployment workflow. `parallelDeployment` is false so staging has OCR workers and custom domains; the names, storage accounts, identities, vault, certificates and API/buyer/Flo hosts must all be staging resources. The workflow enables the Flo runtime, but does not publish a template or assign a workspace.
 
 ## Before dispatch

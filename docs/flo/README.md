@@ -2,7 +2,7 @@
 
 For the multi-flow upgrade, Supplier Onboarding v1 implementation and remaining release gate, see [Flo import readiness](import-readiness/README.md).
 
-For the isolated non-production deployment and controlled provider run, see [Flo staging](staging/README.md).
+For deployment on the existing live KYCProbe app, use [Flo live rollout](live-rollout/README.md). The [Flo staging](staging/README.md) workflow is only for a separate non-production environment.
 
 **Source of truth:** `WaterlemonAI/verification` production base, `origin/main` at `3f5fc64e4791a10c7b7dfe0440b0a18d15f085cf` (inspected 2026-11-09). Rebase and recheck this map if `main` moves. This guide records the baseline and the implementation in this worktree; Flo is not present in the pinned production commit. The local `supplier-portal/` prototype and the separate `WaterlemonAI/kyc` repository are not the deployment base.
 
@@ -12,7 +12,7 @@ The worktree now contains a code-owned registry for `kys-v1` and `supplier-onboa
 
 The signed-in Flo buyer page can create a link for a published flow enabled in its workspace. An organization administrator selects `supplier-onboarding-v1`, enters a customer reference and supplier email, and receives the case ID and one-time supplier URL. This portal action uses the same Flo billing, idempotency and email attempt as `POST /flows/{flowId}/links`, with portal session and CSRF protection instead of a browser-held customer API key. An idempotency replay returns the existing case ID without the one-time URL.
 
-`FLO_ENABLED` remains **false** by default. Before enabling it for live data, provision `infrastructure/api-flo-platform.bicep` in the existing private storage account; verify private networking and managed-identity Blob/Table/Queue access; create distinct Key Vault secrets for `flo-data-key-v1`, `flo-session-hash-key-v1`, `flo-callback-signing-key-v1` and `flo-gemini-api-key`; configure the Flo DNS records and certificate; verify ClamAV and the existing OCR/Ejari/provider adapters in the target environment; set the Flo module price and assign selected workspaces. The deployment workflow accepts `FLO_ENABLED` and `FLO_CERTIFICATE_RESOURCE_ID` but does not provision those prerequisites automatically.
+`FLO_ENABLED` remains **false** by default. Before enabling it for live data, provision `infrastructure/api-flo-platform.bicep` in the existing private storage account; verify private networking and managed-identity Blob/Table/Queue access; create distinct Key Vault secrets for `flo-data-key-v1`, `flo-session-hash-key-v1`, `flo-callback-signing-key-v1` and `flo-gemini-api-key`; configure the Flo DNS records and certificate; verify ClamAV and the existing OCR/Ejari/provider adapters in the target environment; set the Flo module price and assign selected workspaces. The production deployment workflow now offers a manual `provisionFloPlatform` dispatch to preview and create the Flo child resources while Flo stays off. Its `FLO_ENABLED` path checks the private-storage proof, child resources, secrets, certificate and ClamAV image before deploying the enabled API.
 
 The Ejari check runs when the existing Ejari platform is configured and the supplier provides a PDF. VAT, board-resolution and bank-letter authenticity checks remain `not_run` until documented adapters exist; a bank-letter extraction and IBAN match do not attest authenticity. Live provider, private-network, DNS/TLS, email and callback delivery gates still require a staged environment run. The repository tests use synthetic evidence and stubbed providers.
 
