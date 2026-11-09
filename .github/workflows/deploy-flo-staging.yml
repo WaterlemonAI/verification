@@ -125,8 +125,7 @@ jobs:
           done
           for account in "${STAGING_OCR_STORAGE_NAME}" "${STAGING_FLO_STORAGE_NAME}"; do
             storage_id="$(az storage account show --resource-group "${STAGING_RESOURCE_GROUP}" --name "${account}" --query id --output tsv)"
-            az network private-endpoint-connection list --id "${storage_id}" --output json \
-              | jq -e '[.[] | select(.properties.privateLinkServiceConnectionState.status == "Approved")] | length >= 3' > /dev/null
+            node scripts/verify-flo-private-storage.mjs "${storage_id}"
           done
           flo_storage_id="$(az storage account show --resource-group "${STAGING_RESOURCE_GROUP}" --name "${STAGING_FLO_STORAGE_NAME}" --query id --output tsv)"
           runtime_principal="$(az identity show --ids "${STAGING_RUNTIME_IDENTITY_RESOURCE_ID}" --query principalId --output tsv)"
