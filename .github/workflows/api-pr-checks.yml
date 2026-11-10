@@ -70,6 +70,7 @@ jobs:
           node scripts/smoke-login-otp-ui.mjs
           node scripts/smoke-ejari-ui.mjs
           node scripts/smoke-flo-ui.mjs
+          node scripts/smoke-flo-builder-ui.mjs
       - name: Validate document OCR Bicep
         run: |
           az bicep build --file infrastructure/api.bicep

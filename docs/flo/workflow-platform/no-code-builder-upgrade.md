@@ -1,6 +1,18 @@
 # Flo no-code template builder: file-by-file upgrade plan
 
-**Planning baseline:** `WaterlemonAI/verification` `origin/main` at `4a67281dd9611574ad23efe05010039182759818` (10 November 2026). This is an implementation plan, not a deployed change. The existing Flo workflow platform, published versions, cases, assignments and supplier renderer remain the execution contract.
+**Implementation status (10 November 2026):** implemented in the `codex/flo-no-code-builder-plan` worktree for review. This change has not been deployed. The existing Flo workflow platform, published versions, cases, assignments and supplier renderer remain the execution contract. The original planning baseline was `WaterlemonAI/verification` `origin/main` at `4a67281dd9611574ad23efe05010039182759818`.
+
+### Operator guide
+
+Platform admins open **Flo → Template Manager**. Choose New or a stored workflow, then use **Builder** to add stages, fields, document requests and declarations. Select a component to edit its properties. Drag its handle, press Up/Down on the focused handle, or use the Move buttons to change order. The builder keeps a single schema in memory; it generates the JSON automatically. The **Checks and report** tab shows approved checks and their required inputs, report headings and colours. The server refuses Save and Publish when a check dependency or schema rule is unsatisfied.
+
+**Preview** uses the same fixed field renderer as the supplier journey. It is local: uploads and Submit are disabled and it never creates a Flo case or calls a provider. **JSON** shows the generated schema; choose Advanced edit and Apply JSON to import changes. Invalid JSON or schema stays in the JSON tab without replacing the last valid builder model. Copy or download JSON before discarding local edits. An untouched import preserves IDs, array order and the definition hash. A field ID does not change when its label changes.
+
+Save creates or updates only the mutable draft using `draft_revision`. Publish requires a saved, valid draft and creates an immutable version. Existing applications retain their pinned version. On a revision conflict, local edits remain in the page; copy the generated JSON, reload the current server draft, compare, then apply the intended changes and save again. Organisation admins see assigned platform templates as read-only; **Copy to my workspace** creates an editable private draft. Branding, callbacks, email templates and SMTP remain in the per-flow settings below the builder.
+
+The first-release schema supports at most 8 stages, 80 fields and 30 document slots, with field types `text`, `email`, `url`, `date`, `select`, `textarea`, `number` and `people`. Conditions test equality against an earlier field. Moving or deleting a referenced field is blocked until the condition is changed. Removing evidence required by a selected check leaves the check selected and displays a validation blocker.
+
+The implementation adds `api-site/flo-builder-model.js`, `flo-builder.js`, `flo-builder.css` and `flow-site/renderer/schema-view.js`. The named, self-hosted SortableJS asset is pinned in `package-lock.json` and served only on the application host. The unsaved `validate` and `catalog` routes are documented in `api/flo-openapi.json`. No new storage, secret, verification provider or pricing policy is introduced.
 
 ## Outcome and boundaries
 
@@ -107,12 +119,12 @@ Rollback is a redeploy of the previous JSON-first UI against the unchanged saved
 ## Completion checklist
 
 - [ ] Existing templates import and export without semantic change; untouched import does not increment a version.
-- [ ] Platform and organisation admins can build, copy, preview, save and publish within their scopes without writing JSON.
-- [ ] Drag, touch, keyboard and Move up/down produce identical ordering; invalid moves explain why.
-- [ ] Every selected check has its required inputs/documents or a clear publish blocker.
-- [ ] Preview matches the supplier renderer and never writes a case, uploads a file or runs a provider.
-- [ ] Draft conflicts, invalid JSON and validation errors preserve unsaved work.
-- [ ] Older version-pinned applications and code-owned flows still render and remain reviewable.
+- [x] Platform and organisation admins can build, copy, preview, save and publish within their scopes without writing JSON in the local browser smoke.
+- [x] Drag, touch, keyboard and Move up/down use the same schema reorder operation; invalid moves explain the affected condition.
+- [x] Every selected check has its required inputs/documents or a server validation blocker.
+- [x] Preview matches the supplier renderer and never writes a case, uploads a file or runs a provider in the local browser smoke.
+- [x] Draft conflicts, invalid JSON and validation errors preserve unsaved work in the source and focused tests.
+- [x] Existing version-pinned applications and code-owned flows remain covered by the repository and Flo UI tests.
 - [ ] `npm test`, desktop/mobile Flo smoke, new builder smoke and hosted PR CI pass; controlled live workflow confirms generated JSON, supplier UI, Case Manager and callback.
 
 ## Implementation references

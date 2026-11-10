@@ -1,3 +1,4 @@
+import { renderSchemaProgress, renderSchemaStage } from './schema-view.js';
 const state = { applicationId: sessionStorage.getItem('flo_application_id') || '',
   csrf: sessionStorage.getItem('flo_csrf') || '', application: null, step: 0 };
 const $ = (id) => document.getElementById(id);
@@ -11,9 +12,6 @@ async function api(route, method = 'GET', data) {
   if (!response.ok) throw new Error(result.gaps?.length ? `Complete: ${result.gaps.join(', ')}` : result.error || 'Request failed');
   return result;
 }
-function label(caption, control) { const wrapper = document.createElement('label'); wrapper.className = 'field';
-  const title = document.createElement('span'); title.textContent = caption; wrapper.append(title, control); return wrapper; }
-function visible(rule) { return !rule || state.application.draft?.[rule.field] === rule.equals; }
 function render() {
   const app = state.application; const schema = app.presentation;
   $('title').textContent = schema.name; document.title = schema.name;
@@ -29,41 +27,11 @@ function render() {
   }
   if (/^#[0-9a-fA-F]{6}$/.test(schema.tokens?.primary_color || ''))
     document.documentElement.style.setProperty('--brand', schema.tokens.primary_color);
-  $('steps').replaceChildren();
-  schema.stages.forEach((stage, index) => { const marker = document.createElement('span'); marker.textContent = `${index + 1}. ${stage.title}`;
-    if (index === state.step) marker.className = 'current'; $('steps').append(marker); });
-  const stage = schema.stages[state.step]; const fieldset = document.createElement('fieldset');
-  const legend = document.createElement('legend'); legend.textContent = stage.title; fieldset.append(legend);
-  if (stage.description) { const p = document.createElement('p'); p.className = 'description'; p.textContent = stage.description; fieldset.append(p); }
-  for (const field of stage.fields.filter((entry) => visible(entry.show_if))) {
-    const control = field.type === 'select' ? document.createElement('select') : ['textarea', 'people'].includes(field.type) ? document.createElement('textarea') : document.createElement('input');
-    if (control.tagName === 'INPUT') control.type = field.type;
-    control.name = field.id; control.required = field.required; control.maxLength = field.max_length || 2000;
-    if (field.type === 'select') { const empty = document.createElement('option'); empty.value = ''; empty.textContent = 'Choose one'; control.append(empty);
-      for (const value of field.options) { const option = document.createElement('option'); option.value = value; option.textContent = value; control.append(option); } }
-    control.value = field.type === 'people' ? (app.draft?.[field.id] || []).map((person) =>
-      `${person.name} | ${person.role} | ${person.ownership_percentage ?? ''}`).join('\n') : app.draft?.[field.id] || '';
-    control.dataset.fieldType = field.type;
-    control.addEventListener('input', () => { if (field.type !== 'people') app.draft[field.id] = control.value; });
-    if (schema.stages.some((entry) => [...entry.fields, ...entry.documents].some((child) => child.show_if?.field === field.id)))
-      control.addEventListener('change', render);
-    const wrapper = label(`${field.label}${field.required ? ' *' : ''}`, control);
-    if (field.type === 'people') { const help = document.createElement('small'); help.textContent = 'One person per line: Name | Role | Ownership %'; wrapper.append(help); }
-    fieldset.append(wrapper);
-  }
-  for (const doc of stage.documents.filter((entry) => visible(entry.show_if))) {
-    const control = document.createElement('input'); control.type = 'file'; control.accept = '.pdf,.png,.jpg,.jpeg'; control.name = doc.id;
-    const existing = app.documents?.find((entry) => entry.type === doc.id);
-    const wrapper = label(`${doc.label}${doc.required ? ' *' : ''}`, control);
-    if (existing) { const status = document.createElement('small'); status.textContent = `Uploaded · ${existing.uploaded_at || 'saved'}`; wrapper.append(status); }
-    fieldset.append(wrapper);
-  }
-  for (const declaration of stage.declarations) {
-    const control = document.createElement('input'); control.type = 'checkbox'; control.name = declaration.id;
-    control.checked = app.declarations?.[declaration.id] === true;
-    const wrapper = label(declaration.label, control); wrapper.classList.add('check'); fieldset.append(wrapper);
-  }
-  $('form').replaceChildren(fieldset);
+  renderSchemaProgress($('steps'), schema, state.step);
+  renderSchemaStage($('form'), { schema, stageIndex: state.step, draft: app.draft,
+    documents: app.documents, declarations: app.declarations, onFieldChange: (id, value, dependent) => {
+      if (dependent) { app.draft[id] = value; render(); }
+    } });
   $('back').hidden = state.step === 0; $('next').hidden = state.step === schema.stages.length - 1;
   $('submit').hidden = state.step !== schema.stages.length - 1;
   if (app.restart) { const banner = document.createElement('section'); banner.className = 'restart';
@@ -79,6 +47,8 @@ async function saveStep() {
     if (!input.checkValidity()) { input.reportValidity(); throw new Error(`Check ${input.name}`); }
     draft[input.name] = input.dataset.fieldType === 'people' ? input.value.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
       const [name, role, ownership] = line.split('|').map((part) => part.trim());
+      if (ownership && (!Number.isFinite(Number(ownership)) || Number(ownership) < 0 || Number(ownership) > 100))
+        throw new Error('Ownership percentage must be between 0 and 100.');
       return { name, role, ownership_percentage: ownership ? Number(ownership) : null };
     }) : input.value.trim();
   }

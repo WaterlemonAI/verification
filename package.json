@@ -21,6 +21,7 @@
     "playwright-core": "^1.56.1",
     "regenerator-runtime": "^0.14.1",
     "sharp": "^0.35.5",
+    "sortablejs": "1.15.7",
     "unzipper": "^0.12.5"
   }
 }

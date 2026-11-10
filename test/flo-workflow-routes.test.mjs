@@ -48,12 +48,32 @@ test('admin assignment to private copy, applicant submission, buyer Restart and 
           body: bytes.length && String(response.headers['content-type']).includes('application/json') ? JSON.parse(bytes.toString()) : bytes }); });
     }); request.on('error', reject); request.end(raw);
   });
+  const beforeValidation = await store.listWorkflows();
+  assert.equal((await send('/admin/api/flows/catalog')).body.checks.some((entry) => entry.id === 'entity-aml'), true);
+  const validPreview = await send('/admin/api/flows/validate', undefined, 'POST', { schema });
+  assert.equal(validPreview.status, 200); assert.equal(validPreview.body.valid, true);
+  assert.equal(validPreview.body.presentation.name, schema.name);
+  const invalidPreview = await send('/admin/api/flows/validate', undefined, 'POST',
+    { schema: { ...schema, checks: ['unknown-check'] } });
+  assert.equal(invalidPreview.body.valid, false);
+  assert.deepEqual(invalidPreview.body.issues[0], { path: 'unknown-check', code: 'unknown_check',
+    message: 'This check is not in the approved catalog.' });
+  assert.equal((await send('/admin/api/flows/validate', undefined, 'POST', { schema },
+    { 'x-ai7-csrf': 'wrong' })).status, 403);
+  assert.deepEqual(await store.listWorkflows(), beforeValidation, 'unsaved validation cannot persist a workflow');
   const created = await send('/admin/api/flows', undefined, 'POST', { schema });
   assert.equal(created.status, 201); const platformId = created.body.workflow.flow_id;
   assert.equal((await send(`/admin/api/flows/${platformId}/publish`, undefined, 'POST',
     { expected_revision: 1 })).status, 200);
   assert.equal((await send(`/admin/api/flows/${platformId}/assignments`, undefined, 'PUT',
     { workspace_id: a, state: 'active' })).status, 200);
+  assert.equal((await send('/portal/api/flo/workflows/validate', undefined, 'POST', { schema },
+    { cookie: 'workspace=b' })).body.valid, true);
+  assert.equal((await send('/portal/api/flo/workflows/validate', undefined, 'POST', { schema },
+    { 'x-ai7-csrf': 'wrong' })).status, 403);
+  assert.equal((await send(`/portal/api/flo/workflows/${platformId}/definition`, undefined, 'GET', undefined,
+    { cookie: 'workspace=b' })).status, 404);
+  assert.equal((await send(`/portal/api/flo/workflows/${platformId}/definition`)).body.schema.name, schema.name);
   assert.equal((await send(`/portal/api/flo/workflows/${platformId}/copy`, undefined, 'POST', {},
     { cookie: 'workspace=b' })).status, 404);
   const copied = await send(`/portal/api/flo/workflows/${platformId}/copy`, undefined, 'POST', {});

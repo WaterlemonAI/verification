@@ -2988,7 +2988,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           }
           if (['/app.js', '/styles.css'].includes(url.pathname))
             return serveStatic(res, join(root, 'flow-site'), url.pathname);
-          if (['/assets/renderer/app.js', '/assets/renderer/styles.css'].includes(url.pathname))
+          if (['/assets/renderer/app.js', '/assets/renderer/styles.css', '/assets/renderer/schema-view.js'].includes(url.pathname))
             return serveStatic(res, join(root, 'flow-site', 'renderer'), url.pathname.replace('/assets/renderer', ''));
           const asset = /^\/assets\/([a-z][a-z0-9-]{2,63})\/(\d+\.\d+\.\d+)\/(app\.js|styles\.css)$/.exec(url.pathname);
           if (asset) {
@@ -3111,6 +3111,18 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           cost_guardrail_usd: adverseMediaConfig.costGuardrailUsd
         }, { 'cache-control': 'public, max-age=3600' });
       }
+      if (req.method === 'GET' && ['app.kycprobe.com', 'localhost', '127.0.0.1'].includes(host)) {
+        if (url.pathname === '/flo-sortable.min.js')
+          return serveStatic(res, join(root, 'node_modules', 'sortablejs'), '/Sortable.min.js');
+        if (url.pathname === '/flo-schema-view.js')
+          return serveStatic(res, join(root, 'flow-site', 'renderer'), '/schema-view.js');
+        if (url.pathname === '/flo-builder.js' || url.pathname === '/flo-builder-model.js'
+          || url.pathname === '/flo-builder.css')
+          return serveStatic(res, join(root, 'api-site'), url.pathname);
+      }
+      if (url.pathname.startsWith('/node_modules/')) return json(res, 404, { error: 'Page was not found.' });
+      if (['/flo-sortable.min.js', '/flo-schema-view.js', '/flo-builder.js', '/flo-builder-model.js', '/flo-builder.css']
+        .includes(url.pathname)) return json(res, 404, { error: 'Page was not found.' });
       if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle,
         mailer, otpStore, usageStore, caseStore, reportStore, documentOcrStore, ejariStore);
       if (url.pathname.startsWith('/admin/api/')) return handleAdminApi(req, res, url, store, loginThrottle, resetThrottle, mailer, otpStore, usageStore,

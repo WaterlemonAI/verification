@@ -1,6 +1,6 @@
 # Flo Option 1: developer implementation guide
 
-The validated workflow platform, organisation-owned Workflows, applicant email, Restart and application buckets are implemented in this worktree. See the [workflow platform design and release checklist](workflow-platform/README.md). The source remains off by default and has not been deployed.
+The workflow platform supports organisation-owned Workflows, applicant email, Restart and application buckets. The visual [no-code builder upgrade](workflow-platform/no-code-builder-upgrade.md) is implemented in this worktree for review and has not been deployed. See the [workflow platform design and release checklist](workflow-platform/README.md).
 
 This Option 1 guide preserves earlier design and rollout context. The live Supplier Onboarding v1 form now ends after four supplier steps with a receipt; its stale five-stage definition is addressed as a versioned correction in the workflow platform plan.
 

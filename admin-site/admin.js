@@ -620,6 +620,8 @@ async function loadClients() {
 let floTemplates = [];
 let managedWorkflows = [];
 let selectedWorkflow = null;
+let floBuilder = null;
+let floCatalog = [];
 const newWorkflowSchema = { schema_version: '1.0.0', name: 'New supplier workflow',
   stages: [{ id: 'business', title: 'Business details', description: 'Provide your organisation details.',
     fields: [{ id: 'business_name', label: 'Registered business name', type: 'text', required: true },
@@ -627,10 +629,20 @@ const newWorkflowSchema = { schema_version: '1.0.0', name: 'New supplier workflo
     documents: [{ id: 'trade_licence', label: 'Trade licence', required: true }], declarations: [] }],
   checks: ['uae-trade-licence', 'entity-aml', 'entity-adverse-media'],
   report_sections: ['Business identity', 'Verification and screening'], tokens: { primary_color: '#064b79' } };
+async function mountAdminBuilder(schema) {
+  floBuilder?.destroy();
+  const { mountFloBuilder } = await import('/flo-builder.js');
+  floBuilder = mountFloBuilder(byId('flo-builder-root'), { schema, checks: floCatalog,
+    validate: async (value) => request('/admin/api/flows/validate', { method: 'POST', body: JSON.stringify({ schema: value }) }) });
+}
 async function loadManagedWorkflows() {
-  const catalog = await request('/admin/api/flows'); managedWorkflows = catalog.workflows || [];
+  const [catalog, checkCatalog] = await Promise.all([request('/admin/api/flows'), request('/admin/api/flows/catalog')]);
+  managedWorkflows = catalog.workflows || []; floCatalog = checkCatalog.checks || [];
   const list = byId('flo-workflow-list'); list.replaceChildren();
-  for (const item of managedWorkflows) {
+  const search = byId('flo-workflow-search').value.toLowerCase();
+  const state = byId('flo-workflow-filter').value;
+  for (const item of managedWorkflows.filter((entry) => (!state || entry.lifecycle === state)
+    && (!search || `${entry.name} ${entry.flow_id}`.toLowerCase().includes(search)))) {
     const row = document.createElement('button'); row.type = 'button'; row.className = 'flo-workflow-row';
     const title = document.createElement('strong'); title.textContent = item.name;
     const meta = document.createElement('small'); meta.textContent = `${item.flow_id} · ${item.lifecycle} · ${item.published_version || 'draft'} · ${item.active_organisation_count || 0} active orgs`;
@@ -638,30 +650,36 @@ async function loadManagedWorkflows() {
       byId('flo-message').textContent = error.message; })); list.append(row);
   }
 }
-async function selectManagedWorkflow(flowId) {
+byId('flo-workflow-search').addEventListener('input', () => loadManagedWorkflows().catch((error) => { byId('flo-message').textContent = error.message; }));
+byId('flo-workflow-filter').addEventListener('change', () => loadManagedWorkflows().catch((error) => { byId('flo-message').textContent = error.message; }));
+async function selectManagedWorkflow(flowId, force = false) {
+  if (!force && floBuilder?.dirty && !window.confirm('Discard unsaved workflow edits?')) return;
   selectedWorkflow = (await request(`/admin/api/flows/${flowId}/draft`)).workflow;
   byId('flo-workflow-title').textContent = selectedWorkflow.name;
   byId('flo-workflow-meta').textContent = `ID ${flowId} · ${selectedWorkflow.lifecycle} · ${selectedWorkflow.published_version || 'draft'} · revision ${selectedWorkflow.draft_revision}`;
-  byId('flo-workflow-code').value = JSON.stringify(selectedWorkflow.draft, null, 2);
+  await mountAdminBuilder(selectedWorkflow.draft);
   byId('flo-assignment').hidden = false;
   const assignments = (await request(`/admin/api/flows/${flowId}/assignments`)).assignments || [];
   const list = byId('flo-assignment-list'); list.replaceChildren();
   for (const entry of assignments) { const row = document.createElement('p');
     row.textContent = `${entry.workspace_id}: ${entry.state}`; list.append(row); }
 }
-byId('flo-workflow-new').addEventListener('click', () => {
-  selectedWorkflow = null; byId('flo-workflow-title').textContent = 'New workflow';
-  byId('flo-workflow-code').value = JSON.stringify(newWorkflowSchema, null, 2);
-  byId('flo-workflow-meta').textContent = 'A new immutable flow ID will be created.';
-  byId('flo-assignment').hidden = true;
+byId('flo-workflow-new').addEventListener('click', async () => {
+  try {
+    if (floBuilder?.dirty && !window.confirm('Discard unsaved workflow edits?')) return;
+    selectedWorkflow = null; byId('flo-workflow-title').textContent = 'New workflow';
+    byId('flo-workflow-meta').textContent = 'A new immutable flow ID will be created.';
+    byId('flo-assignment').hidden = true; await mountAdminBuilder(newWorkflowSchema);
+  } catch (error) { byId('flo-message').textContent = error.message; }
 });
-byId('flo-workflow-preview-button').addEventListener('click', () => {
-  try { const schema = JSON.parse(byId('flo-workflow-code').value);
-    byId('flo-workflow-preview').textContent = `${schema.name}: ${(schema.stages || []).map((stage) => `${stage.title} (${stage.fields?.length || 0} fields, ${stage.documents?.length || 0} documents)`).join(' → ')}`;
-  } catch (error) { byId('flo-workflow-preview').textContent = error.message; }
+byId('flo-workflow-preview-button').addEventListener('click', async () => {
+  try { if (!floBuilder) throw new Error('Select or create a workflow.'); await floBuilder.showPreview(); }
+  catch (error) { byId('flo-message').textContent = error.message; }
 });
 byId('flo-workflow-save').addEventListener('click', async () => {
-  try { const schema = JSON.parse(byId('flo-workflow-code').value);
+  try { if (!floBuilder) throw new Error('Select or create a workflow.');
+    if (!await floBuilder.validate()) return;
+    const schema = floBuilder.getSchema();
     if (!selectedWorkflow) {
       const result = await request('/admin/api/flows', { method: 'POST', body: JSON.stringify({ name: schema.name, schema }) });
       selectedWorkflow = result.workflow;
@@ -670,25 +688,37 @@ byId('flo-workflow-save').addEventListener('click', async () => {
         body: JSON.stringify({ schema, expected_revision: selectedWorkflow.draft_revision }) });
       selectedWorkflow = result.workflow;
     }
-    await loadManagedWorkflows(); await selectManagedWorkflow(selectedWorkflow.flow_id);
+    floBuilder.markSaved(); await loadManagedWorkflows(); await selectManagedWorkflow(selectedWorkflow.flow_id, true);
     byId('flo-message').textContent = 'Draft saved.';
-  } catch (error) { byId('flo-message').textContent = error.message; }
+  } catch (error) { byId('flo-message').textContent = error.message.includes('conflict')
+    ? 'Draft changed elsewhere. Your edits remain on screen. Copy JSON, then reload and compare before saving.' : error.message; }
 });
 byId('flo-workflow-publish').addEventListener('click', async () => {
-  try { if (!selectedWorkflow) throw new Error('Save the draft first.');
-    if (!window.confirm('Publish a new immutable version?')) return;
+  try { if (!selectedWorkflow || !floBuilder) throw new Error('Save the draft first.');
+    if (floBuilder.dirty) throw new Error('Save your latest changes before publishing.');
+    if (!await floBuilder.validate()) return;
+    if (!window.confirm(`Publish a new immutable version? ${floBuilder.summary()}`)) return;
     const result = await request(`/admin/api/flows/${selectedWorkflow.flow_id}/publish`, { method: 'POST',
       body: JSON.stringify({ expected_revision: selectedWorkflow.draft_revision }) });
-    await loadManagedWorkflows(); await selectManagedWorkflow(result.workflow.flow_id);
+    await loadManagedWorkflows(); await selectManagedWorkflow(result.workflow.flow_id, true);
     byId('flo-message').textContent = `Published ${result.workflow.published_version}.`;
+  } catch (error) { byId('flo-message').textContent = error.message; }
+});
+byId('flo-workflow-copy').addEventListener('click', async () => {
+  try { if (!selectedWorkflow) throw new Error('Select a published workflow to copy.');
+    if (floBuilder?.dirty && !window.confirm('Discard unsaved workflow edits?')) return;
+    const result = await request(`/admin/api/flows/${selectedWorkflow.flow_id}/copy`, { method: 'POST', body: '{}' });
+    await loadManagedWorkflows(); await selectManagedWorkflow(result.workflow.flow_id, true);
+    byId('flo-message').textContent = 'A new platform draft was created from the published version.';
   } catch (error) { byId('flo-message').textContent = error.message; }
 });
 for (const [id, state] of [['flo-workflow-pause', 'paused'], ['flo-workflow-archive', 'archived']])
   byId(id).addEventListener('click', async () => {
     try { if (!selectedWorkflow) throw new Error('Select a workflow.');
+      if (floBuilder?.dirty) throw new Error('Save or discard your edits first.');
       const result = await request(`/admin/api/flows/${selectedWorkflow.flow_id}/lifecycle`, { method: 'POST',
         body: JSON.stringify({ state, expected_revision: selectedWorkflow.draft_revision }) });
-      await loadManagedWorkflows(); await selectManagedWorkflow(result.workflow.flow_id);
+      await loadManagedWorkflows(); await selectManagedWorkflow(result.workflow.flow_id, true);
       byId('flo-message').textContent = `Workflow ${state}.`;
     } catch (error) { byId('flo-message').textContent = error.message; }
   });
@@ -697,7 +727,7 @@ for (const [id, state] of [['flo-assignment-activate', 'active'], ['flo-assignme
     try { if (!selectedWorkflow) throw new Error('Select a workflow.');
       await request(`/admin/api/flows/${selectedWorkflow.flow_id}/assignments`, { method: 'PUT',
         body: JSON.stringify({ workspace_id: byId('flo-assignment-workspace').value, state }) });
-      await loadManagedWorkflows(); await selectManagedWorkflow(selectedWorkflow.flow_id);
+      await loadManagedWorkflows(); await selectManagedWorkflow(selectedWorkflow.flow_id, true);
       byId('flo-message').textContent = `Assignment ${state}.`;
     } catch (error) { byId('flo-message').textContent = error.message; }
   });
