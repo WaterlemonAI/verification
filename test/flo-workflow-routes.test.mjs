@@ -96,10 +96,22 @@ test('admin assignment to private copy, applicant submission, buyer Restart and 
   assert.equal(restarted.body.status, 'restarted');
   const oldLink = await send('/flo/api/session', 'flo.ai7uae.com', 'POST', { token });
   assert.equal(oldLink.status, 410);
+  assert.equal((await send(`/portal/api/flo/cases/${appId}/reissue-link`, undefined, 'POST', {},
+    { cookie: 'workspace=b' })).status, 404);
+  const reissued = await send(`/portal/api/flo/cases/${appId}/reissue-link`, undefined, 'POST', {});
+  assert.equal(reissued.status, 200);
+  assert.equal(reissued.body.application_id, appId);
+  assert.equal(reissued.body.application_revision, 2);
+  assert.notEqual(reissued.body.supplier_url, restarted.body.supplier_url);
+  assert.equal(reissued.body.email_status, 'queued');
+  assert.equal((await store.listCases(a)).length, 1, 'reissue does not create or charge another application');
+  assert.equal((await send('/flo/api/session', 'flo.ai7uae.com', 'POST',
+    { token: restarted.body.supplier_url.split('/').at(-1) })).status, 410);
   const second = await send('/flo/api/session', 'flo.ai7uae.com', 'POST',
-    { token: restarted.body.supplier_url.split('/').at(-1) });
+    { token: reissued.body.supplier_url.split('/').at(-1) });
   assert.equal(second.body.status, 'restarted'); assert.equal(second.body.application_revision, 2);
   assert.equal(second.body.restart.comments, 'Update the registered business name');
+  assert.equal((await send(`/portal/api/flo/cases/${appId}/reissue-link`, undefined, 'POST', {})).status, 409);
   const secondCookie = second.headers['set-cookie'][0].split(';')[0];
   const headers2 = { cookie: secondCookie, 'x-flo-application-id': appId, 'x-flo-csrf': second.body.csrf_token,
     origin: 'https://flo.ai7uae.com' };

@@ -23,9 +23,9 @@
     let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
     return { mime_type, content_base64: btoa(binary) };
   }
-  function showLinkResult(result) {
+  function showLinkResult(result, title = 'Onboarding link created') {
     const root = $('flo-link-result'); root.replaceChildren(); root.hidden = false;
-    root.append(node('strong', result.reused ? 'Application already created' : 'Onboarding link created'),
+    root.append(node('strong', result.reused ? 'Application already created' : title),
       node('p', `Application ID: ${result.application_id}`));
     if (result.supplier_url) {
       const link = node('a', result.supplier_url); link.href = result.supplier_url;
@@ -193,6 +193,19 @@
           catch (error) { $('flo-notice').textContent = error.message; button.disabled = false; }
         }); root.append(button);
       }
+    }
+    if (item.workflow_schema && item.status === 'restarted' && !item.link_redeemed_at) {
+      root.append(node('h3', 'Correction link'),
+        node('p', 'If the applicant did not receive the Restart email, issue a new one-time link. The previous link will stop working.'));
+      const reissue = node('button', 'Reissue correction link'); reissue.type = 'button';
+      reissue.addEventListener('click', async () => {
+        reissue.disabled = true; $('flo-notice').textContent = '';
+        try {
+          const result = await request(`/portal/api/flo/cases/${id}/reissue-link`, 'POST', {});
+          showLinkResult(result, 'Correction link reissued');
+          await detail(id); await loadCases();
+        } catch (error) { $('flo-notice').textContent = error.message; reissue.disabled = false; }
+      }); root.append(reissue);
     }
     const pending = (item.events || []).filter((event) => ['email_requested', 'accepted', 'rejected', 'restart_requested', 'resubmitted', 'submitted'].includes(event.type)
       && (event.type === 'email_requested' || event.payload)
