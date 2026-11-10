@@ -85,7 +85,8 @@ test('buyer and customer JSON expose AI7EDD branding while retaining source evid
   const item = { flow_id: 'kys-v1', draft: { business_name: 'Gemini Trading LLC' },
     documents: [{ type: 'bank_letter', extraction_result: { status: 'failed',
       model_id: 'gemini-3.5-flash-lite', reason_codes: ['gemini_unconfigured'],
-      data: { business_name: 'Gemini Trading LLC' } } }],
+      data: { business_name: 'Gemini Trading LLC' },
+      processing: { ai_model: 'gemini-3.5-flash-lite', provider_calls: { azure: 1, gemini: 1 } } } }],
     checks: [{ service_id: 'entity-adverse-media', raw_response: { company: 'Gemini Trading LLC',
       model_id: 'gemini-3.5-flash-lite', provider_calls: { gemini: 1 } } }],
     gemini_review: { status: 'failed', model_id: 'gemini-3.5-flash-lite',
@@ -99,6 +100,9 @@ test('buyer and customer JSON expose AI7EDD branding while retaining source evid
     assert.deepEqual(visible.ai7edd_review.validation_errors, ['flo_ai7edd_http_error']);
     assert.equal(visible.documents[0].extraction_result.model_id, 'AI7EDD');
     assert.deepEqual(visible.documents[0].extraction_result.reason_codes, ['ai7edd_unconfigured']);
+    assert.equal(visible.documents[0].extraction_result.processing.ai_model, 'AI7EDD');
+    assert.deepEqual(visible.documents[0].extraction_result.processing.provider_calls,
+      { azure: 1, ai7edd: 1 });
     assert.equal(visible.events[0].payload.ai7edd_review.status, 'not_run');
     assert.equal(visible.events[0].payload.diagnostic.rationale, 'AI7EDD extraction failed');
     assert.equal(visible.diagnostic.rationale, 'AI7EDD extraction failed');

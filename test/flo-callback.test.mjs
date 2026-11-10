@@ -97,3 +97,18 @@ test('callback document and report URLs use the staging buyer origin', async () 
     else process.env.APP_PUBLIC_BASE_URL = previous;
   }
 });
+
+test('callback hides underlying AI model metadata in OCR processing', async () => {
+  const store = new MemoryFloStore();
+  const { case: item } = await store.createCase('1234567890abcdef',
+    { customer_reference: 'BRAND', supplier_email: 'a@example.com', prefill: {} },
+    'brand-12345678', 'd'.repeat(64), {});
+  item.documents.push({ document_id: 'doc-1', type: 'trade_licence',
+    extraction_result: { processing: { ai_model: 'gemini-3.5-flash-lite',
+      provider_calls: { azure: 1, gemini: 1 } } } });
+  const payload = callbackEvent(item, 'review_ready', 'flo_worker').payload;
+  assert.equal(payload.documents[0].extraction_result.processing.ai_model, 'AI7EDD');
+  assert.deepEqual(payload.documents[0].extraction_result.processing.provider_calls,
+    { azure: 1, ai7edd: 1 });
+  assert.doesNotMatch(JSON.stringify(payload), /gemini/i);
+});
