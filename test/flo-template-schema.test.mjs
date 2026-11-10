@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateWorkflowSchema, schemaDraft, schemaSubmissionGaps, schemaHash } from '../lib/flows/template-schema.mjs';
+import { validateWorkflowSchema, diagnoseWorkflowSchema, schemaDraft, schemaSubmissionGaps, schemaHash } from '../lib/flows/template-schema.mjs';
+import { visibleCheckCatalog } from '../lib/flows/checks-catalog.mjs';
 
 const schema = () => ({ schema_version: '1.0.0', name: 'Supplier details', stages: [
   { id: 'identity', title: 'Identity', fields: [
@@ -41,4 +42,31 @@ test('workflow URL fields reject private and non-HTTPS destinations', () => {
     assert.throws(() => schemaDraft(good, { website_url: value }), /invalid_draft:website_url/);
   }
   assert.equal(schemaDraft(good, { website_url: 'https://example.com' }).website_url, 'https://example.com');
+});
+
+test('builder diagnostics have bounded paths and catalog metadata exposes only approved checks', () => {
+  const valid = diagnoseWorkflowSchema(schema());
+  assert.equal(valid.valid, true); assert.equal(schemaHash(valid.schema), schemaHash(schema()));
+  const missing = schema(); missing.stages[0].documents = [];
+  assert.deepEqual(diagnoseWorkflowSchema(missing).issues, [{ path: 'checks.uae-trade-licence.evidence',
+    code: 'invalid_schema', message: 'Review this workflow property and the supported schema limits.' }]);
+  const catalog = visibleCheckCatalog(['entity-aml']);
+  assert.equal(catalog.length, 1); assert.equal(catalog[0].id, 'entity-aml');
+  assert.deepEqual(catalog[0].required_fields, ['business_name']);
+  assert.equal(Object.hasOwn(catalog[0], 'adapter'), false);
+});
+
+test('builder contract enforces stage, field and document slot bounds', () => {
+  const tooManyStages = schema();
+  tooManyStages.stages = Array.from({ length: 9 }, (_, index) => ({ id: `stage_${index}`,
+    title: `Stage ${index}`, fields: [], documents: [], declarations: [] }));
+  assert.equal(diagnoseWorkflowSchema(tooManyStages).issues[0].path, 'root');
+  const tooManyFields = schema();
+  tooManyFields.stages[0].fields.push(...Array.from({ length: 78 }, (_, index) => ({
+    id: `extra_field_${index}`, label: `Extra field ${index}`, type: 'text', required: false })));
+  assert.equal(diagnoseWorkflowSchema(tooManyFields).issues[0].path, 'limits');
+  const tooManyDocs = schema();
+  tooManyDocs.stages[0].documents.push(...Array.from({ length: 30 }, (_, index) => ({
+    id: `extra_doc_${index}`, label: `Extra document ${index}`, required: false })));
+  assert.equal(diagnoseWorkflowSchema(tooManyDocs).issues[0].path, 'limits');
 });

@@ -1,5 +1,7 @@
 # Flo workflow platform: file-by-file implementation plan
 
+The [no-code builder guide and release checklist](no-code-builder-upgrade.md) covers the visual editor, generated JSON, shared supplier preview and QA gates. Its source is implemented for review in this branch; it has not been deployed.
+
 **Status (10 November 2026):** the new workflow platform is implemented in the Flo worktree for review, not deployed or enabled. The existing code-owned Flo service is live. This document remains the design and release checklist. The implementation adds the validated JSON schema and approved check catalog; immutable published versions and workspace-owned copies; platform and organisation management screens; a fixed supplier renderer; revision-preserving Restart; per-flow branding, callback and email configuration; and buyer application buckets. Existing code-owned KYS and Supplier Onboarding v1 versions remain supported.
 
 The new routes are described in [`api/flo-openapi.json`](../../../api/flo-openapi.json). The main implementation is in `lib/flows/template-schema.mjs`, `checks-catalog.mjs`, `workflow-service.mjs`, `store.mjs`, `routes.mjs`, `processor.mjs`, `notifications.mjs`, `callback.mjs`, and the fixed `flow-site/renderer/` bundle. The platform screen is in `admin-site/`; organisation workflows and Case Manager are in `api-site/`. The `test/flo-*.test.mjs` suite and `scripts/smoke-flo-ui.mjs` cover the source behavior.
@@ -10,7 +12,7 @@ The new routes are described in [`api/flo-openapi.json`](../../../api/flo-openap
 
 ## Product decisions and invariants
 
-- Platform admins edit a **validated JSON workflow schema** in a code view with a live preview. Neither platform nor organisation admins upload executable HTML or JavaScript. The schema can describe stages, conditional fields, document slots, declarations, approved checks, report sections and presentation tokens.
+- Platform and organisation admins edit a **validated JSON workflow schema** through the visual Builder, supplier-matched Preview and optional advanced JSON tab. Neither role uploads executable HTML or JavaScript. The schema can describe stages, conditional fields, document slots, declarations, approved checks, report sections and presentation tokens.
 - Platform admins select checks from an approved, versioned catalog. An organisation admin may copy an assigned workflow, edit its schema and publish the copy directly for its own organisation. A copy receives a new globally unique `flow_id`, an immutable owner workspace, and `source_flow_id` lineage. It cannot be enabled for another organisation by its owner.
 - A mutable draft is never used for a live application. Every publish creates an immutable version and definition hash; an application pins both at creation. Editing an active workflow creates a new draft and version. Old versions, original documents, reports and case events remain accessible without automatic Flo expiry.
 - Global template and local workflow lifecycle states are `draft`, `active`, `paused`, `archived`. Pause stops **new links** while existing applications and buyer decisions continue. Archive removes the workflow from creation lists but leaves its cases, reports and audit history accessible. A platform pause overrides a local active state.

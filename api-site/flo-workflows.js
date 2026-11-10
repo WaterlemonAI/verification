@@ -1,5 +1,5 @@
 (() => {
-  const $ = (id) => document.getElementById(id); let csrf = ''; let selected = null;
+  const $ = (id) => document.getElementById(id); let csrf = ''; let selected = null; let builder = null;
   const node = (tag, value) => { const item = document.createElement(tag); item.textContent = value; return item; };
   async function call(path, method = 'GET', data) { const response = await fetch(path, { method, credentials: 'same-origin',
     headers: { 'content-type': 'application/json', ...(method === 'GET' ? {} : { 'x-ai7-csrf': csrf }) },
@@ -12,32 +12,60 @@
       button.append(node('strong', entry.name), node('small', `${entry.flow_id} · ${entry.lifecycle} · ${entry.published_version || 'unpublished'}`));
       button.addEventListener('click', () => show(entry).catch((error) => message(error.message))); container.append(button); }
     return workflows; }
-  async function show(entry) { selected = entry; message(''); const area = $('detail'); area.replaceChildren(node('h2', entry.name),
+  async function show(entry, force = false) { if (!force && builder?.dirty && !window.confirm('Discard unsaved workflow edits?')) return;
+    builder?.destroy(); builder = null; selected = entry; message(''); const area = $('detail'); area.replaceChildren(node('h2', entry.name),
     node('p', `ID ${entry.flow_id} · ${entry.lifecycle} · ${entry.published_version || 'draft'}`));
     if (entry.source_flow_id) area.append(node('p', `Copied from ${entry.source_flow_id} @ ${entry.source_version}`));
     const actions = node('div', ''); actions.className = 'workflow-actions'; area.append(actions);
     const button = (title, action) => { const item = node('button', title); item.type = 'button'; item.addEventListener('click', async () => {
       item.disabled = true; try { await action(); } catch (error) { message(error.message); } finally { item.disabled = false; } }); actions.append(item); };
-    button('Copy to my workspace', async () => { const result = await call(`/portal/api/flo/workflows/${entry.flow_id}/copy`, 'POST', {});
-      await list(); await show(result.workflow); message('Private copy created. Edit and publish it when ready.'); });
+    button('Copy to my workspace', async () => { if (builder?.dirty && !window.confirm('Discard unsaved workflow edits?')) return;
+      const result = await call(`/portal/api/flo/workflows/${entry.flow_id}/copy`, 'POST', {});
+      await list(); await show(result.workflow, true); message('Private copy created. Edit and publish it when ready.'); });
+    const { mountFloBuilder } = await import('/flo-builder.js');
+    const catalog = (await call('/portal/api/flo/workflows/catalog')).checks || [];
+    const editorRoot = node('div', ''); area.append(editorRoot);
     if (entry.owner_workspace_id) {
       const { workflow } = await call(`/portal/api/flo/workflows/${entry.flow_id}/draft`); selected = workflow;
-      area.append(node('h3', 'Validated JSON schema'));
-      const editor = document.createElement('textarea'); editor.className = 'workflow-code'; editor.setAttribute('aria-label', 'Workflow JSON schema');
-      editor.value = JSON.stringify(workflow.draft, null, 2); area.append(editor);
-      const preview = node('div', 'Select Preview to inspect the stages.'); preview.className = 'workflow-preview'; area.append(preview);
-      button('Preview', () => { const schema = JSON.parse(editor.value); preview.replaceChildren(node('strong', schema.name));
-        for (const stage of schema.stages || []) preview.append(node('p', `${stage.title}: ${(stage.fields || []).length} fields, ${(stage.documents || []).length} documents`)); });
-      button('Save draft', async () => { const result = await call(`/portal/api/flo/workflows/${entry.flow_id}/draft`, 'PATCH',
-        { schema: JSON.parse(editor.value), expected_revision: selected.draft_revision }); selected = result.workflow;
-        message(`Draft saved, revision ${selected.draft_revision}.`); });
-      button('Publish version', async () => { if (!window.confirm('Publish this draft as a new immutable version?')) return;
-        const result = await call(`/portal/api/flo/workflows/${entry.flow_id}/publish`, 'POST', { expected_revision: selected.draft_revision });
-        await list(); await show(result.workflow); message(`Published ${result.workflow.published_version}.`); });
+      builder = mountFloBuilder(editorRoot, { schema: workflow.draft, checks: catalog,
+        validate: (schema) => call('/portal/api/flo/workflows/validate', 'POST', { schema }) });
+      let savePending = false;
+      button('Save draft', async () => {
+        if (savePending) return;
+        savePending = true;
+        try { const editor = builder; const target = selected; const schema = editor.getSchema();
+          if (!await editor.validate()) return;
+          if (editor !== builder || target !== selected || JSON.stringify(editor.getSchema()) !== JSON.stringify(schema))
+            throw new Error('Workflow changed during validation. Review your edits and save again.');
+          const result = await call(`/portal/api/flo/workflows/${entry.flow_id}/draft`, 'PATCH',
+            { schema, expected_revision: target.draft_revision });
+          if (editor === builder && target === selected) {
+            selected = result.workflow; editor.markSaved(schema);
+            message(editor.dirty ? 'Draft saved. Newer edits remain unsaved.' : `Draft saved, revision ${selected.draft_revision}.`);
+          }
+        } catch (error) { message(error.message.includes('conflict')
+          ? 'Draft changed elsewhere. Your edits remain here. Copy JSON, then reload and compare.' : error.message); }
+        finally { savePending = false; }
+      });
+      button('Publish version', async () => {
+        if (savePending) throw new Error('Wait for the draft save to complete.');
+        if (builder.dirty) throw new Error('Save the latest changes before publishing.');
+        if (!await builder.validate()) return;
+        if (!window.confirm(`Publish a new immutable version? ${builder.summary()}`)) return;
+        const result = await call(`/portal/api/flo/workflows/${entry.flow_id}/publish`, 'POST',
+          { expected_revision: selected.draft_revision });
+        await list(); await show(result.workflow, true); message(`Published ${result.workflow.published_version}.`);
+      });
       for (const state of ['active', 'paused', 'archived']) button(state === 'active' ? 'Start' : state === 'paused' ? 'Pause' : 'Archive', async () => {
+        if (builder.dirty) throw new Error('Save or discard your edits first.');
         if (state === 'archived' && !window.confirm('Archive this workflow? Existing cases remain accessible.')) return;
         const result = await call(`/portal/api/flo/workflows/${entry.flow_id}/lifecycle`, 'POST',
-          { state, expected_revision: selected.draft_revision }); await list(); await show(result.workflow); message(`Workflow ${state}.`); });
+          { state, expected_revision: selected.draft_revision }); await list(); await show(result.workflow, true); message(`Workflow ${state}.`); });
+    } else if (entry.published_version) {
+      const { schema } = await call(`/portal/api/flo/workflows/${entry.flow_id}/definition`);
+      area.append(node('p', 'Assigned platform template. Copy it to edit and publish for your organisation.'));
+      builder = mountFloBuilder(editorRoot, { schema, checks: catalog, readOnly: true,
+        validate: async () => ({ valid: true, issues: [] }) });
     }
     const { settings } = await call(`/portal/api/flo/workflows/${entry.flow_id}/settings`);
     const form = document.createElement('form'); form.className = 'workflow-settings'; area.append(node('h3', 'Branding and callback'), form);

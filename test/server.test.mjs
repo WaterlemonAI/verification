@@ -253,6 +253,17 @@ test('routes app.kycprobe.com to the portal and admin while preserving the API h
   assert.match(api.body.toString('utf8'), /api\.ai7uae\.com/);
 });
 
+test('serves only the pinned Flo builder assets from the application host', async () => {
+  for (const path of ['/flo-sortable.min.js', '/flo-builder.js', '/flo-builder-model.js', '/flo-schema-view.js', '/flo-builder.css']) {
+    const response = await getWithHost(path, 'app.kycprobe.com');
+    assert.equal(response.status, 200, path);
+    assert.match(response.headers['content-type'], /javascript|css/);
+    assert.ok(response.body.length > 0);
+    assert.equal((await getWithHost(path, 'api.ai7uae.com')).status, 404);
+  }
+  assert.equal((await getWithHost('/node_modules/sortablejs/Sortable.min.js', 'app.kycprobe.com')).status, 404);
+});
+
 test('serves a complete live tester and response-field reference', async () => {
   const html = await (await fetch(`${appUrl}/`)).text();
   const spec = await (await fetch(`${appUrl}/openapi.json`)).json();

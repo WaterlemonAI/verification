@@ -10,6 +10,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/admin/admin.css?v=12" />
+    <link rel="stylesheet" href="/flo-builder.css?v=1" />
+    <script src="/flo-sortable.min.js" defer></script>
     <script src="/admin/admin.js?v=18" defer></script>
 
   </head>
@@ -194,12 +196,11 @@
         <section id="flo-view" hidden>
           <div class="panel flo-panel">
             <div class="panel-head"><div><p class="eyebrow">FLO</p><h2>Template Manager</h2></div></div>
-            <p class="notice">Create and publish validated JSON workflows. Existing code-owned flows remain available while their pinned cases are retained. Enable the Flo module in a customer's Usage & rates settings.</p>
-            <div class="flo-manager" id="flo-workflow-manager" hidden><div><h3>Stored workflows</h3><div id="flo-workflow-list"></div><button type="button" id="flo-workflow-new">New workflow</button></div>
+            <p class="notice">Build and publish validated workflows. Existing published versions and cases retain their pinned schemas. Enable the Flo module in a customer's Usage & rates settings.</p>
+            <div class="flo-manager" id="flo-workflow-manager" hidden><div><h3>Stored workflows</h3><label>Search<input id="flo-workflow-search" type="search" placeholder="Name or ID"></label><label>State<select id="flo-workflow-filter"><option value="">All</option><option value="draft">Draft</option><option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option></select></label><div id="flo-workflow-list"></div><button type="button" id="flo-workflow-new">New workflow</button></div>
             <div><h3 id="flo-workflow-title">Workflow editor</h3><p id="flo-workflow-meta"></p>
-              <label>Validated JSON schema<textarea id="flo-workflow-code" spellcheck="false" rows="18"></textarea></label>
-              <div id="flo-workflow-preview" class="flo-workflow-preview" aria-live="polite"></div>
-              <div class="flo-manager-actions"><button type="button" id="flo-workflow-preview-button">Preview</button><button type="button" id="flo-workflow-save">Save draft</button><button type="button" id="flo-workflow-publish">Publish version</button><button type="button" id="flo-workflow-pause">Pause</button><button type="button" id="flo-workflow-archive">Archive</button></div>
+              <div id="flo-builder-root"></div>
+              <div class="flo-manager-actions"><button type="button" id="flo-workflow-preview-button">Preview</button><button type="button" id="flo-workflow-save">Save draft</button><button type="button" id="flo-workflow-publish">Publish version</button><button type="button" id="flo-workflow-copy">Copy</button><button type="button" id="flo-workflow-pause">Pause</button><button type="button" id="flo-workflow-archive">Archive</button></div>
               <div id="flo-assignment" hidden><h3>Assign to workspace</h3><label>Workspace<select id="flo-assignment-workspace"></select></label>
                 <button type="button" id="flo-assignment-activate">Assign active</button><button type="button" id="flo-assignment-pause">Pause assignment</button><div id="flo-assignment-list"></div></div>
             </div></div><hr><h3>Legacy flow settings</h3>

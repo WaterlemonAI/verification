@@ -22,8 +22,14 @@ const files = {
 files['/workflows'] = ['api-site/flo-workflows.html', 'text/html'];
 files['/flo-workflows.js'] = ['api-site/flo-workflows.js', 'text/javascript'];
 files['/flo-workflows.css'] = ['api-site/flo-workflows.css', 'text/css'];
+files['/flo-builder.css'] = ['api-site/flo-builder.css', 'text/css'];
+files['/flo-builder.js'] = ['api-site/flo-builder.js', 'text/javascript'];
+files['/flo-builder-model.js'] = ['api-site/flo-builder-model.js', 'text/javascript'];
+files['/flo-schema-view.js'] = ['flow-site/renderer/schema-view.js', 'text/javascript'];
+files['/flo-sortable.min.js'] = ['node_modules/sortablejs/Sortable.min.js', 'text/javascript'];
 files['/f/generic-token-abcdefghijklmnopqrstuvwxyz0123456789'] = ['flow-site/renderer/index.html', 'text/html'];
 files['/assets/renderer/app.js'] = ['flow-site/renderer/app.js', 'text/javascript'];
+files['/assets/renderer/schema-view.js'] = ['flow-site/renderer/schema-view.js', 'text/javascript'];
 files['/assets/renderer/styles.css'] = ['flow-site/renderer/styles.css', 'text/css'];
 files['/f/supplier-token-abcdefghijklmnopqrstuvwxyz0123456789'] = ['flow-site/supplier-onboarding-v1/index.html', 'text/html'];
 files['/assets/supplier-onboarding-v1/1.0.0/app.js'] = ['flow-site/supplier-onboarding-v1/app.js', 'text/javascript'];
@@ -270,6 +276,10 @@ try {
       else if (path === '/portal/api/flo/status') response = { enabled: true, workflow_platform_enabled: true };
       else if (path === '/portal/api/flo/workflows') response = { workflows: [{ flow_id: 'flow-example', name: 'Supplier profile',
         lifecycle: 'active', published_version: '1.0.0', owner_workspace_id: null }] };
+      else if (path === '/portal/api/flo/workflows/catalog') response = { checks: [{ id: 'entity-aml',
+        label: 'Business AML', description: 'Screen business', required_fields: ['business_name'], required_documents: [] }] };
+      else if (path.endsWith('/definition')) response = { schema: workflowSchema, version: '1.0.0' };
+      else if (path === '/portal/api/flo/workflows/validate') response = { valid: true, presentation: workflowSchema, issues: [] };
       else if (path.endsWith('/settings')) response = { settings: { enabled: true, brand_name: 'Buyer' } };
       else if (path.endsWith('/email-templates')) response = { templates: { receipt: { subject: 'Received', body: 'Thank you' } }, version: 1 };
       else if (path.endsWith('/smtp')) response = { smtp: { enabled: false, configured: false } };
