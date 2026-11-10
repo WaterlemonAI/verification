@@ -638,7 +638,8 @@ async function mountAdminBuilder(schema) {
 }
 async function loadManagedWorkflows() {
   const [catalog, checkCatalog] = await Promise.all([request('/admin/api/flows'), request('/admin/api/flows/catalog')]);
-  managedWorkflows = catalog.workflows || []; floCatalog = checkCatalog.checks || [];
+  managedWorkflows = (catalog.workflows || []).filter((entry) => !entry.owner_workspace_id);
+  floCatalog = checkCatalog.checks || [];
   const list = byId('flo-workflow-list'); list.replaceChildren();
   const search = byId('flo-workflow-search').value.toLowerCase();
   const state = byId('flo-workflow-filter').value;

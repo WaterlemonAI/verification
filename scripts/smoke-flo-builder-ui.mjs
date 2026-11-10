@@ -65,6 +65,8 @@ try {
       else if (path === '/admin/api/flows/validate') { response = diagnoseWorkflowSchema(data.schema); validationCalls++; }
       else if (path === '/admin/api/flows' && method === 'GET') response = { templates: [], workflow_platform_enabled: true,
         workflows: adminPublished ? [{ flow_id: 'flow-platform', name: platformSchema.name, lifecycle: 'active',
+          published_version: '1.0.0', active_organisation_count: 1 },
+        { flow_id: 'flow-owned', name: 'Private organisation copy', lifecycle: 'active', owner_workspace_id: 'a'.repeat(16),
           published_version: '1.0.0', active_organisation_count: 1 }] : [] };
       else if (path === '/admin/api/flows' && method === 'POST') { platformSchema = data.schema; response = { workflow: {
         flow_id: 'flow-platform', name: data.schema.name, draft: platformSchema, lifecycle: 'draft', draft_revision: adminRevision,
@@ -213,6 +215,8 @@ try {
       throw new Error('Delayed platform Save discarded JSON typed in flight.');
     await admin.getByRole('button', { name: 'Cancel JSON edits' }).click();
     await admin.locator('#flo-workflow-publish').click(); await admin.getByText('Published 1.0.0.').waitFor();
+    if (await admin.locator('#flo-workflow-list').getByRole('button', { name: /flow-owned/ }).count())
+      throw new Error('Organisation-owned workflow appeared as an editable platform template.');
     const org = await context.newPage(); pages.push(org); org.on('pageerror', (error) => errors.push(`org: ${error.message}`));
     org.on('dialog', (dialog) => dialog.accept()); await org.goto(`${base}/workflows`);
     await org.locator('body.portal-ready').waitFor();
