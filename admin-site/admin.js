@@ -621,6 +621,7 @@ let floTemplates = [];
 let managedWorkflows = [];
 let selectedWorkflow = null;
 let floBuilder = null;
+let floSavePending = false;
 let floCatalog = [];
 const newWorkflowSchema = { schema_version: '1.0.0', name: 'New supplier workflow',
   stages: [{ id: 'business', title: 'Business details', description: 'Provide your organisation details.',
@@ -677,24 +678,36 @@ byId('flo-workflow-preview-button').addEventListener('click', async () => {
   catch (error) { byId('flo-message').textContent = error.message; }
 });
 byId('flo-workflow-save').addEventListener('click', async () => {
+  if (floSavePending) return;
+  floSavePending = true;
   try { if (!floBuilder) throw new Error('Select or create a workflow.');
-    if (!await floBuilder.validate()) return;
-    const schema = floBuilder.getSchema();
-    if (!selectedWorkflow) {
-      const result = await request('/admin/api/flows', { method: 'POST', body: JSON.stringify({ name: schema.name, schema }) });
-      selectedWorkflow = result.workflow;
+    const editor = floBuilder; const target = selectedWorkflow; const schema = editor.getSchema();
+    if (!await editor.validate()) return;
+    if (editor !== floBuilder || target !== selectedWorkflow || JSON.stringify(editor.getSchema()) !== JSON.stringify(schema))
+      throw new Error('Workflow changed during validation. Review your edits and save again.');
+    let result;
+    if (!target) {
+      result = await request('/admin/api/flows', { method: 'POST', body: JSON.stringify({ name: schema.name, schema }) });
     } else {
-      const result = await request(`/admin/api/flows/${selectedWorkflow.flow_id}/draft`, { method: 'PATCH',
-        body: JSON.stringify({ schema, expected_revision: selectedWorkflow.draft_revision }) });
-      selectedWorkflow = result.workflow;
+      result = await request(`/admin/api/flows/${target.flow_id}/draft`, { method: 'PATCH',
+        body: JSON.stringify({ schema, expected_revision: target.draft_revision }) });
     }
-    floBuilder.markSaved(); await loadManagedWorkflows(); await selectManagedWorkflow(selectedWorkflow.flow_id, true);
-    byId('flo-message').textContent = 'Draft saved.';
+    if (editor === floBuilder && target === selectedWorkflow) {
+      selectedWorkflow = result.workflow; editor.markSaved(schema);
+      byId('flo-workflow-title').textContent = selectedWorkflow.name;
+      byId('flo-workflow-meta').textContent = `ID ${selectedWorkflow.flow_id} · ${selectedWorkflow.lifecycle} · ${selectedWorkflow.published_version || 'draft'} · revision ${selectedWorkflow.draft_revision}`;
+      byId('flo-assignment').hidden = false;
+      if (!target) byId('flo-assignment-list').replaceChildren();
+      byId('flo-message').textContent = editor.dirty ? 'Draft saved. Newer edits remain unsaved.' : 'Draft saved.';
+    }
+    await loadManagedWorkflows();
   } catch (error) { byId('flo-message').textContent = error.message.includes('conflict')
     ? 'Draft changed elsewhere. Your edits remain on screen. Copy JSON, then reload and compare before saving.' : error.message; }
+  finally { floSavePending = false; }
 });
 byId('flo-workflow-publish').addEventListener('click', async () => {
   try { if (!selectedWorkflow || !floBuilder) throw new Error('Save the draft first.');
+    if (floSavePending) throw new Error('Wait for the draft save to complete.');
     if (floBuilder.dirty) throw new Error('Save your latest changes before publishing.');
     if (!await floBuilder.validate()) return;
     if (!window.confirm(`Publish a new immutable version? ${floBuilder.summary()}`)) return;

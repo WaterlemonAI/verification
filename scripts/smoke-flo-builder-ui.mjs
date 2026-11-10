@@ -53,6 +53,7 @@ try {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     const context = await browser.newContext({ viewport, hasTouch: viewport.width === 390 }); const errors = [];
     const pages = [];
+    let adminSaveGate = null, orgSaveGate = null;
     await context.route('**/admin/api/**', async (route) => {
       const path = new URL(route.request().url()).pathname; const method = route.request().method();
       const data = route.request().postDataJSON?.() || {}; let response = {};
@@ -71,7 +72,8 @@ try {
       else if (path.endsWith('/draft') && method === 'GET') response = { workflow: { flow_id: 'flow-platform',
         name: platformSchema.name, draft: platformSchema, lifecycle: adminPublished ? 'active' : 'draft',
         draft_revision: adminRevision, published_version: adminPublished ? '1.0.0' : null } };
-      else if (path.endsWith('/draft') && method === 'PATCH') { platformSchema = data.schema; adminRevision++;
+      else if (path.endsWith('/draft') && method === 'PATCH') { if (adminSaveGate) { const gate = adminSaveGate;
+        adminSaveGate = null; gate.arrived(); await gate.release; } platformSchema = data.schema; adminRevision++;
         response = { workflow: { flow_id: 'flow-platform', name: platformSchema.name, draft: platformSchema,
           lifecycle: 'draft', draft_revision: adminRevision } }; }
       else if (path.endsWith('/publish')) { adminPublished = true; response = { workflow: { flow_id: 'flow-platform',
@@ -100,7 +102,8 @@ try {
       else if (path.endsWith('/draft') && method === 'GET') response = { workflow: { flow_id: 'flow-owned',
         name: ownedSchema.name, draft: ownedSchema, lifecycle: orgPublished ? 'active' : 'draft',
         published_version: orgPublished ? '1.0.0' : null, owner_workspace_id: 'a'.repeat(16), draft_revision: orgRevision } };
-      else if (path.endsWith('/draft') && method === 'PATCH') { ownedSchema = data.schema; orgRevision++;
+      else if (path.endsWith('/draft') && method === 'PATCH') { if (orgSaveGate) { const gate = orgSaveGate;
+        orgSaveGate = null; gate.arrived(); await gate.release; } ownedSchema = data.schema; orgRevision++;
         response = { workflow: { flow_id: 'flow-owned', name: ownedSchema.name, draft: ownedSchema,
           owner_workspace_id: 'a'.repeat(16), draft_revision: orgRevision } }; }
       else if (path.endsWith('/publish')) { orgPublished = true; response = { workflow: { flow_id: 'flow-owned',
@@ -194,6 +197,21 @@ try {
     let previewLabels = await admin.locator('.flo-preview .field>span').allTextContents();
     await admin.locator('#flo-workflow-save').click(); await admin.getByText('Draft saved.', { exact: true }).waitFor();
     if (JSON.stringify(platformSchema).includes('undefined')) throw new Error('Invalid saved schema');
+    await admin.locator('#flo-builder-root .flo-builder-tabs').getByRole('button', { name: 'Builder' }).click();
+    await admin.locator('#flo-builder-root .flo-palette').getByRole('button', { name: '+ Field' }).click();
+    let adminSaveArrived, releaseAdminSave;
+    const adminSaveArrivedPromise = new Promise((resolve) => { adminSaveArrived = resolve; });
+    const adminSaveRelease = new Promise((resolve) => { releaseAdminSave = resolve; });
+    adminSaveGate = { arrived: adminSaveArrived, release: adminSaveRelease };
+    await admin.locator('#flo-workflow-save').click(); await adminSaveArrivedPromise;
+    await admin.locator('#flo-builder-root .flo-builder-tabs').getByRole('button', { name: 'JSON' }).click();
+    await admin.getByRole('button', { name: 'Advanced edit' }).click();
+    await admin.locator('.flo-json-panel textarea').fill('{"unfinished":');
+    releaseAdminSave(); await admin.getByText('Draft saved. Newer edits remain unsaved.').waitFor();
+    if (await admin.locator('.flo-json-panel textarea').inputValue() !== '{"unfinished":'
+      || !(await admin.locator('.flo-builder-status').textContent()).includes('Unapplied JSON edits'))
+      throw new Error('Delayed platform Save discarded JSON typed in flight.');
+    await admin.getByRole('button', { name: 'Cancel JSON edits' }).click();
     await admin.locator('#flo-workflow-publish').click(); await admin.getByText('Published 1.0.0.').waitFor();
     const org = await context.newPage(); pages.push(org); org.on('pageerror', (error) => errors.push(`org: ${error.message}`));
     org.on('dialog', (dialog) => dialog.accept()); await org.goto(`${base}/workflows`);
@@ -204,7 +222,19 @@ try {
     await org.getByRole('button', { name: 'Copy to my workspace' }).click();
     await org.getByRole('button', { name: 'Builder', exact: true }).waitFor();
     await org.locator('.flo-builder .flo-palette').getByRole('button', { name: '+ Document' }).click();
-    await org.getByRole('button', { name: 'Save draft' }).click(); await org.getByText(/Draft saved, revision/).waitFor();
+    let orgSaveArrived, releaseOrgSave;
+    const orgSaveArrivedPromise = new Promise((resolve) => { orgSaveArrived = resolve; });
+    const orgSaveRelease = new Promise((resolve) => { releaseOrgSave = resolve; });
+    orgSaveGate = { arrived: orgSaveArrived, release: orgSaveRelease };
+    await org.getByRole('button', { name: 'Save draft' }).click(); await orgSaveArrivedPromise;
+    await org.locator('.flo-builder-tabs').getByRole('button', { name: 'JSON' }).click();
+    await org.getByRole('button', { name: 'Advanced edit' }).click();
+    await org.locator('.flo-json-panel textarea').fill('{"unfinished":');
+    releaseOrgSave(); await org.getByText('Draft saved. Newer edits remain unsaved.').waitFor();
+    if (await org.locator('.flo-json-panel textarea').inputValue() !== '{"unfinished":'
+      || !(await org.locator('.flo-builder-status').textContent()).includes('Unapplied JSON edits'))
+      throw new Error('Delayed organisation Save discarded JSON typed in flight.');
+    await org.getByRole('button', { name: 'Cancel JSON edits' }).click();
     await org.getByRole('button', { name: 'Publish version' }).click(); await org.getByText('Published 1.0.0.').waitFor();
     await org.locator('.flo-builder-tabs').getByRole('button', { name: 'Preview' }).click();
     await org.locator('.flo-preview .field').first().waitFor();

@@ -29,15 +29,26 @@
       const { workflow } = await call(`/portal/api/flo/workflows/${entry.flow_id}/draft`); selected = workflow;
       builder = mountFloBuilder(editorRoot, { schema: workflow.draft, checks: catalog,
         validate: (schema) => call('/portal/api/flo/workflows/validate', 'POST', { schema }) });
+      let savePending = false;
       button('Save draft', async () => {
-        if (!await builder.validate()) return;
-        try { const result = await call(`/portal/api/flo/workflows/${entry.flow_id}/draft`, 'PATCH',
-          { schema: builder.getSchema(), expected_revision: selected.draft_revision });
-          selected = result.workflow; builder.markSaved(); message(`Draft saved, revision ${selected.draft_revision}.`);
+        if (savePending) return;
+        savePending = true;
+        try { const editor = builder; const target = selected; const schema = editor.getSchema();
+          if (!await editor.validate()) return;
+          if (editor !== builder || target !== selected || JSON.stringify(editor.getSchema()) !== JSON.stringify(schema))
+            throw new Error('Workflow changed during validation. Review your edits and save again.');
+          const result = await call(`/portal/api/flo/workflows/${entry.flow_id}/draft`, 'PATCH',
+            { schema, expected_revision: target.draft_revision });
+          if (editor === builder && target === selected) {
+            selected = result.workflow; editor.markSaved(schema);
+            message(editor.dirty ? 'Draft saved. Newer edits remain unsaved.' : `Draft saved, revision ${selected.draft_revision}.`);
+          }
         } catch (error) { message(error.message.includes('conflict')
           ? 'Draft changed elsewhere. Your edits remain here. Copy JSON, then reload and compare.' : error.message); }
+        finally { savePending = false; }
       });
       button('Publish version', async () => {
+        if (savePending) throw new Error('Wait for the draft save to complete.');
         if (builder.dirty) throw new Error('Save the latest changes before publishing.');
         if (!await builder.validate()) return;
         if (!window.confirm(`Publish a new immutable version? ${builder.summary()}`)) return;

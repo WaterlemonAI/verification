@@ -68,7 +68,7 @@ export class FloBuilderModel {
   get value() { return clone(this.schema); }
   get json() { return JSON.stringify(this.schema); }
   get dirty() { return this.json !== this.baseline; }
-  markSaved() { this.baseline = this.json; this.onchange(this.value); }
+  markSaved(schema = this.schema) { this.baseline = JSON.stringify(schema); this.onchange(this.value); }
   replace(schema) {
     if (!schema || typeof schema !== 'object' || !Array.isArray(schema.stages)) throw new Error('Invalid workflow JSON.');
     const problem = dependencyProblem(schema); if (problem) throw new Error(problem);

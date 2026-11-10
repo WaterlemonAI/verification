@@ -273,7 +273,7 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
   return {
     getSchema() { if (pendingJson) throw new Error('Apply or cancel advanced JSON edits first.'); return model.value; },
     get dirty() { return model.dirty || pendingJson; },
-    markSaved() { model.markSaved(); render(); },
+    markSaved(schema) { model.markSaved(schema); updateStatus(); },
     async validate() { this.getSchema(); return validateCurrent(); },
     async showPreview() { this.getSchema(); if (!await validateCurrent()) return; tab = 'preview'; render(); },
     summary() { return stageSummary(model.value); },

@@ -37,6 +37,19 @@ test('builder IDs survive renames; copy, order, undo and redo use one schema mod
   assert.deepEqual(validateWorkflowSchema(model.value), model.value);
 });
 
+test('completed Save marks only the submitted snapshot while newer edits stay dirty', () => {
+  const model = new FloBuilderModel(schema());
+  model.update('business_name', { label: 'Name at Save' });
+  const submitted = model.value;
+  model.update('business_name', { label: 'Name typed during Save' });
+  model.markSaved(submitted);
+  assert.equal(model.value.stages[0].fields[0].label, 'Name typed during Save');
+  assert.equal(model.dirty, true);
+  model.undo();
+  assert.equal(model.json, JSON.stringify(submitted));
+  assert.equal(model.dirty, false);
+});
+
 test('dependent conditions reject unsafe moves and deletes', () => {
   const model = new FloBuilderModel(schema());
   assert.throws(() => model.move('entity_type', 2), /depends on entity_type/);
