@@ -189,6 +189,8 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
   }
   function drawPreview() {
     const schema = model.value; const shell = el('section', '', `flo-preview flo-preview-${width}`);
+    if (/^#[0-9a-fA-F]{6}$/.test(schema.tokens?.primary_color || ''))
+      shell.style.setProperty('--brand', schema.tokens.primary_color);
     const bar = el('div', '', 'flo-preview-bar'); bar.append(el('strong', 'Preview · no data is submitted'));
     bar.append(button('Desktop', () => { width = 'desktop'; render(); }), button('Mobile', () => { width = 'mobile'; render(); }));
     const title = el('h2', schema.name); const progress = el('nav'); progress.setAttribute('aria-label', 'Preview progress');
@@ -200,7 +202,9 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
     const back = button('Back', () => { previewStage--; render(); }); back.disabled = previewStage === 0;
     const next = button('Next', () => { previewStage++; render(); }); next.disabled = previewStage === schema.stages.length - 1;
     controls.append(back, next, el('span', 'Upload and Submit are disabled in preview.'));
-    shell.append(bar, title, progress, form, controls); content.replaceChildren(shell);
+    shell.append(bar, el('p', 'FLO · SECURE ONBOARDING', 'flo-preview-eyebrow'), title,
+      el('p', 'Your buyer requested this information for supplier onboarding.'), progress, form, controls);
+    content.replaceChildren(shell);
   }
   function drawJson() {
     const panel = el('section', '', 'flo-json-panel'); panel.append(el('p', 'Generated JSON is read-only until you choose Advanced edit.'));

@@ -155,6 +155,8 @@ try {
     await admin.locator('#flo-builder-root [data-flo-id="entity_type"]').getByRole('button', { name: 'Move Entity type down' }).click();
     await admin.locator('#flo-builder-root .flo-builder-tabs').getByRole('button', { name: 'Preview' }).click();
     await admin.locator('.flo-preview form').waitFor();
+    if (await admin.locator('.flo-preview').evaluate((node) => node.style.getPropertyValue('--brand')) !== '#064b79')
+      throw new Error('Preview did not use the workflow theme colour.');
     if (await admin.locator('.flo-preview input[type=file]:not([disabled])').count()) throw new Error('Preview can upload.');
     let previewLabels = await admin.locator('.flo-preview .field>span').allTextContents();
     await admin.locator('#flo-workflow-save').click(); await admin.getByText('Draft saved.', { exact: true }).waitFor();
