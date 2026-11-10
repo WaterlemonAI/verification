@@ -1,5 +1,7 @@
 # Flo workflow platform: file-by-file implementation plan
 
+The [no-code template builder upgrade plan](no-code-builder-upgrade.md) maps the visual editor, automatic JSON generation, shared supplier preview, file changes and QA gates for the next Flo authoring upgrade.
+
 **Status (10 November 2026):** the new workflow platform is implemented in the Flo worktree for review, not deployed or enabled. The existing code-owned Flo service is live. This document remains the design and release checklist. The implementation adds the validated JSON schema and approved check catalog; immutable published versions and workspace-owned copies; platform and organisation management screens; a fixed supplier renderer; revision-preserving Restart; per-flow branding, callback and email configuration; and buyer application buckets. Existing code-owned KYS and Supplier Onboarding v1 versions remain supported.
 
 The new routes are described in [`api/flo-openapi.json`](../../../api/flo-openapi.json). The main implementation is in `lib/flows/template-schema.mjs`, `checks-catalog.mjs`, `workflow-service.mjs`, `store.mjs`, `routes.mjs`, `processor.mjs`, `notifications.mjs`, `callback.mjs`, and the fixed `flow-site/renderer/` bundle. The platform screen is in `admin-site/`; organisation workflows and Case Manager are in `api-site/`. The `test/flo-*.test.mjs` suite and `scripts/smoke-flo-ui.mjs` cover the source behavior.
