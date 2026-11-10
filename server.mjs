@@ -2012,7 +2012,7 @@ function portalPagePath(pathname) {
 
 function protectedPortalPath(pathname) {
   const page = portalPagePath(pathname);
-  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/cases', '/flo', '/flo-workflows'].includes(page)
+  return ['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/usage', '/api-keys', '/cases', '/flo', '/flo-workflows'].includes(page)
     || /^\/forms\/[a-z0-9-]+$/.test(page)
     || /^\/document-extraction\/[a-z0-9-]+$/.test(page);
 }
@@ -2930,7 +2930,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       const floDependencies = {
         host, floStore, platformStore: store,
         customerKey: (request) => store.getClientForKey(bearerToken(request)),
-        hasEntitlement: async (workspaceId) => (await usageStore.account(workspaceId)).allowed_modules.includes('flo'),
+        hasEntitlement: async (workspaceId) => { const { allowed_modules } = await usageStore.account(workspaceId);
+          return allowed_modules.includes('*') || allowed_modules.includes('flo'); },
         hasFloPrice: async (workspaceId) => (await usageStore.account(workspaceId)).rates.flo
           ?.some((tier) => Number(tier.price) > 0) === true,
         workflowPlatformEnabled: process.env.FLO_WORKFLOW_PLATFORM_ENABLED !== 'false',
@@ -2944,7 +2945,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         charge: async (request, workspaceId, flowId, channel = 'api') => {
           const managed = Boolean((await store.getCustomer?.(workspaceId))?.usagePolicyVersion);
           const account = await usageStore.account(workspaceId, managed);
-          if (!account.allowed_modules.includes('flo')) return { allowed: false, statusCode: 403, reason: 'Flo is not assigned to this workspace.' };
+          if (!account.allowed_modules.includes('*') && !account.allowed_modules.includes('flo'))
+            return { allowed: false, statusCode: 403, reason: 'Flo is not assigned to this workspace.' };
           const admitted = await usageStore.admit(workspaceId, { transactionId: randomUUID(),
             keyId: (await store.getClientForKey(bearerToken(request)))?.key_id || '', moduleIds: ['flo'],
             method: 'POST', path: channel === 'portal'
@@ -3149,7 +3151,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           && form.services.every((service) => availableIntegrations.has(service.service_id))
           && (!session || ['forms', ...form.services.map((item) => item.service_id)].every((id) => allowed.includes('*') || allowed.includes(id))))
           .map((form) => publicFormDefinition(form, integrations));
-        return json(res, 200, { forms }, { 'cache-control': 'public, max-age=60' });
+        return json(res, 200, { forms }, { 'cache-control': session ? 'private, no-store' : 'public, max-age=60' });
       }
       if (url.pathname === '/openapi.json') {
         const spec = readFileSync(join(root, 'api', 'openapi.json'));
@@ -3207,7 +3209,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return json(res, 404, { status: 'Error', error: 'Page was not found.' });
       }
       if (directory.endsWith('api-site') && (url.pathname === '/iban' || url.pathname === '/iban/')) return serveStatic(res, directory, '/iban.html');
-      if (directory.endsWith('api-site') && (url.pathname === '/account' || url.pathname === '/account/')) return serveStatic(res, directory, '/account.html');
+      if (directory.endsWith('api-site') && ['/account', '/usage', '/api-keys'].includes(portalPagePath(url.pathname)))
+        return serveStatic(res, directory, '/account.html');
       if (directory.endsWith('api-site') && (url.pathname === '/cases' || url.pathname === '/cases/')) {
         if (process.env.CASE_MANAGER_ENABLED !== 'true') return json(res, 404, { status: 'Error', error: 'Page was not found.' });
         return serveStatic(res, directory, '/cases.html');
@@ -3216,7 +3219,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         const { account, session } = await currentPortalSession(req, store);
         if (!session) return portalLoginRedirect(res, url.pathname, url.search);
         const usage = await usageStore.account(account.client_id);
-        if (!floStore || !usage.allowed_modules.includes('flo'))
+        if (!floStore || account.role !== 'org_admin'
+          || !(usage.allowed_modules.includes('*') || usage.allowed_modules.includes('flo')))
           return json(res, 404, { error: 'Flo is not enabled.' });
         return serveStatic(res, directory, '/flo.html');
       }
@@ -3224,8 +3228,9 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         const { account, session } = await currentPortalSession(req, store);
         if (!session) return portalLoginRedirect(res, url.pathname, url.search);
         const usage = await usageStore.account(account.client_id);
-        if (!floStore || process.env.FLO_WORKFLOW_PLATFORM_ENABLED === 'false'
-          || !usage.allowed_modules.includes('flo')) return json(res, 404, { error: 'Flo workflows are not enabled.' });
+        if (!floStore || account.role !== 'org_admin' || process.env.FLO_WORKFLOW_PLATFORM_ENABLED === 'false'
+          || !(usage.allowed_modules.includes('*') || usage.allowed_modules.includes('flo')))
+          return json(res, 404, { error: 'Flo workflows are not enabled.' });
         return serveStatic(res, directory, '/flo-workflows.html');
       }
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');

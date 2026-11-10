@@ -1,6 +1,6 @@
 # Implementation file map: customer workspace navigation
 
-This is the developer handoff for the [UI and navigation plan](README.md). It is based on production `main` at `bef5557377d505ccbc6339276cf62432e853dfc7`. **Release 1 requires 16 existing files and one new browser smoke file.** No new HTML page, API data endpoint, database migration, infrastructure file, or theme asset is required. Keep the current palette, type, logo, and component style.
+This is the developer handoff for the [UI and navigation plan](README.md). It is based on production `main` at `bef5557377d505ccbc6339276cf62432e853dfc7`. **Release 1 requires 17 existing source, test, and CI files and one new browser smoke file.** The additional test fixture below must explicitly remove Flo entitlement now that `*` grants access. No new HTML page, API data endpoint, database migration, infrastructure file, or theme asset is required. Keep the current palette, type, logo, and component style.
 
 ## Release 1: required files
 
@@ -37,6 +37,7 @@ This is the developer handoff for the [UI and navigation plan](README.md). It is
 | `test/portal-auth.test.mjs` | Cover auth and protected serving of `/account`, `/usage`, `/api-keys`; retain `/account` compatibility. Add a production-server Flo wildcard case for menu/page authorization and ensure disallowed workspaces remain rejected. | Page routes return the expected HTML only with a session; no cross-workspace permission regression. |
 | `test/forms.test.mjs` | Check that a signed-in, workspace-filtered `/forms.json` response is private/no-store and contains only eligible forms; leave the public schema contract unchanged. | No shared-cacheable personalized catalog. |
 | `test/flo-portal-link.test.mjs` | Exercise Flo link creation for a workspace entitled through `*` as well as explicit `flo`, and a denied workspace; keep idempotency and charged-call assertions. Use the same entitlement predicate as production rather than a constant-true stub for this case. | Menu/page/link entitlement rules agree. |
+| `test/flo-routes.test.mjs` | Explicitly configure the initial buyer as unassigned before testing a denied Flo link. The usage store's default `*` entitlement is now a valid Flo grant, so the old implicit fixture no longer represents denial. | The host isolation and one-time redemption suite still passes with a genuinely unassigned workspace. |
 | `scripts/smoke-login-otp-ui.mjs` | Add a new-route `next` journey and a first-time key journey that lands on `/api-keys`; verify one-time display, then reload and confirm the secret is absent. Keep the existing admin sign-in check. | No redirect loss or repeat key reveal. |
 | `.github/workflows/api-pr-checks.yml` | Invoke the new browser smoke script after the existing Chromium install and alongside current Flo, Case Manager, and login smoke checks. Keep existing test and Bicep gates. | Pull requests run the navigation smoke automatically. |
 

@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#071412" />
-    <meta name="description" content="AI7 UAE Forms - one signed workflow across multiple verification APIs." />
-    <title>AI7 UAE API - Forms</title>
+    <meta name="description" content="KYCProbe Forms orchestrate multiple verification APIs in one request." />
+    <title>KYCProbe — Forms</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
@@ -14,17 +14,18 @@
     <script src="/forms.js?v=2" defer></script>
   </head>
   <body>
-    <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · Dubai ↗</a></div>
+    <div class="utility-bar"><span>KYCProbe Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · Dubai ↗</a></div>
+    <a class="portal-skip-link" href="#main-content">Skip to main content</a>
     <header>
       <a class="brand" href="https://kycprobe.com" aria-label="KYCProbe home"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a>
       <span class="status"><i></i> API available</span>
     </header>
 
-    <main>
+    <main id="main-content" tabindex="-1">
       <section class="hero forms-hero">
         <p class="eyebrow">MULTI-API ORCHESTRATION</p>
         <h1 id="form-title">One input.<br /><em>One verified result.</em></h1>
-        <p id="form-description">Submit customer data once, run multiple AI7 verification APIs, receive one signed callback, and retain one consolidated audit PDF.</p>
+        <p id="form-description">Submit customer data once, run multiple KYCProbe verification APIs, receive one signed callback, and retain one consolidated audit PDF. Forms are API orchestration, separate from Flo applicant onboarding.</p>
         <div class="meta" id="endpoint-meta" hidden><span>POST</span><code id="endpoint"></code><button class="copy" id="copy-endpoint">Copy endpoint</button></div>
         <figure class="hero-infographic" role="img" aria-label="Customer input to configured checks to signed result and audit PDF">
           <figcaption>HOW THIS API HELPS</figcaption>
@@ -41,6 +42,7 @@
           <p class="label">AVAILABLE FORMS</p>
           <h2>Configured verification workflows</h2>
           <p>Select a Form to review its fields and submit a live request.</p>
+          <p id="forms-status" role="status"></p><button id="forms-retry" type="button" hidden>Retry loading Forms</button>
           <div class="forms-grid" id="forms-list"></div>
         </div>
 
@@ -80,6 +82,6 @@
         </div>
       </section>
     </main>
-    <footer><div><strong>AI7 UAE Verification API</strong><span>AETHERIX SYSTEMS - FZCO, UAE</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">AI7lab</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
+    <footer><div><strong>KYCProbe Verification Platform</strong><span>An AI7Lab brand</span></div><div><a href="https://www.ai7lab.net" target="_blank" rel="noopener">AI7Lab</a><a href="mailto:contact@ai7lab.net">contact@ai7lab.net</a><a href="https://kycprobe.com">kycprobe.com</a></div></footer>
   </body>
 </html>

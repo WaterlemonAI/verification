@@ -2,11 +2,12 @@
 <title>KYCProbe — Flo Case Manager</title><link rel="stylesheet" href="/api.css"><link rel="stylesheet" href="/flo.css">
 <script src="/portal-auth.js" defer></script><script src="/flo-review.js" defer></script><script src="/flo.js" defer></script></head><body>
 <div class="utility-bar"><span>KYCProbe Verification Platform</span></div>
+<a class="portal-skip-link" href="#main-content">Skip to main content</a>
 <header><a class="brand" href="https://kycprobe.com"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab"></a></header>
-<main class="flo-main"><section class="flo-hero"><p class="eyebrow">FLO CASE MANAGER</p><h1>Onboarding Applications</h1>
+<main class="flo-main" id="main-content" tabindex="-1"><section class="flo-hero"><p class="eyebrow">FLO / APPLICATIONS AND REPORTS</p><h1>Onboarding Applications</h1>
 <p>Review onboarding applications, source documents and reports across your enabled flows. Flo cases remain available without an automatic expiry.</p></section>
 <p id="flo-notice" role="status"></p>
-<section class="flo-create" aria-labelledby="flo-create-title">
+<section class="flo-create" id="new-application" aria-labelledby="flo-create-title">
   <div><p class="eyebrow">NEW APPLICATION</p><h2 id="flo-create-title">Create an onboarding link</h2>
     <p>Select an enabled flow. Flo creates a case immediately and attempts to email the one-time link to the recipient.</p></div>
   <form id="flo-link-form" hidden>

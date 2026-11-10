@@ -10,6 +10,7 @@ const { EnvironmentStore } = await import('../lib/api-store.mjs');
 const { MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } = await import('../lib/customer-usage.mjs');
 const { MemoryAdverseMediaReportStore } = await import('../lib/adverse-media-report-store.mjs');
 const { resolveFormServiceInput, validateFormDefinition } = await import('../lib/forms.mjs');
+const { createPortalAccount, createPortalSession } = await import('../lib/portal-auth.mjs');
 const { formsCallbackHeaders, startFormsWorker } = await import('../lib/forms-queue.mjs');
 const { CapacityError } = await import('../lib/request-capacity.mjs');
 
@@ -102,6 +103,28 @@ test('admin creates a versioned Form and public schema hides mappings', async ()
   assert.match(portal, /x-ai7-signature/);
   const script = await (await fetch(`${baseUrl}/forms.js`, { headers: { host: 'api.ai7uae.com' } })).text();
   assert.match(script, /forms\/\$\{formDefinition\.id\}\/submissions/);
+});
+
+test('signed-in Forms catalog is workspace filtered and not shared-cacheable', async () => {
+  const key = 'forms-catalog-session-key';
+  await store.setPortalSessionKey(key);
+  for (const [id, modules, expected] of [
+    ['1111111111111111', ['forms', 'company-search'], 1],
+    ['2222222222222222', ['forms'], 0]
+  ]) {
+    const account = createPortalAccount(id + '@example.test', 'PortalPass!234', { id, name: 'Catalog workspace' });
+    await store.setPortalUser(account);
+    await store.setCustomer({ id, name: 'Catalog workspace', status: 'active', usagePolicyVersion: 1 });
+    await usageStore.configure(id, validateUsagePolicy({ mode: 'postpay', currency: 'USD',
+      allowed_modules: modules, rates: {} }, new Set(['forms', 'company-search'])), true);
+    const response = await fetch(baseUrl + '/forms.json', {
+      headers: { cookie: 'ai7_portal_session=' + createPortalSession(account, key).token } });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal((await response.json()).forms.length, expected);
+  }
+  const publicCatalog = await fetch(baseUrl + '/forms.json');
+  assert.equal(publicCatalog.headers.get('cache-control'), 'public, max-age=60');
 });
 
 test('one customer credential queues one signed multi-API submission', async () => {

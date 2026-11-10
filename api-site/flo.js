@@ -4,6 +4,8 @@
   let selected = '';
   let pendingLink = null;
   let bucket = ''; let nextCursor = null;
+  const flowNames = new Map([['supplier-onboarding-v1', 'Supplier Onboarding v1'], ['kys-v1', 'Know Your Supplier v1']]);
+  const flowLabel = (id) => flowNames.get(id) || id.replace(/^flow-/, 'Workflow ').replaceAll('-', ' ');
   const bucketLabels = { '': 'All', open: 'Open', in_progress: 'In progress', processing_review: 'Processing / Review',
     restarted: 'Restarted', accepted: 'Accepted', rejected: 'Rejected', expired_failed: 'Expired / Failed' };
   async function request(path, method = 'GET', data, extraHeaders = {}) {
@@ -46,7 +48,8 @@
       selector.append(prompt);
     }
     for (const flow of flows || []) {
-      const option = node('option', `${flow.flow_id} · ${flow.version}`); option.value = flow.flow_id;
+      if (flow.flow_id.startsWith('flow-') && flow.brand_name) flowNames.set(flow.flow_id, flow.brand_name);
+      const option = node('option', `${flowLabel(flow.flow_id)} · ${flow.flow_id} · ${flow.version}`); option.value = flow.flow_id;
       selector.append(option);
     }
     if (flows?.length > 1) selector.value = '';
@@ -259,7 +262,7 @@
     const known = new Set([...filter.options].map((option) => option.value));
     for (const flowId of [...new Set(cases.map((item) => item.flow_id))]) {
       if (known.has(flowId)) continue;
-      const option = node('option', flowId); option.value = flowId; filter.append(option);
+      const option = node('option', `${flowLabel(flowId)} · ${flowId}`); option.value = flowId; filter.append(option);
     }
     return cases;
   }

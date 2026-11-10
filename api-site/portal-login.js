@@ -40,14 +40,18 @@
   const resetForm = document.getElementById('reset-form');
   const title = document.getElementById('auth-title');
   const intro = document.getElementById('auth-intro');
-  const allowedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/forms', '/account', '/cases']);
+  const allowedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening',
+    '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/usage', '/api-keys',
+    '/cases', '/flo', '/flo-workflows']);
 
   function destination() {
     const value = new URLSearchParams(location.search).get('next') || '/';
     try {
       const parsed = new URL(value, location.origin);
       const path = parsed.pathname.length > 1 ? parsed.pathname.replace(/\/$/, '') : '/';
-      return parsed.origin === location.origin && allowedPaths.has(path) ? `${parsed.pathname}${parsed.search}${parsed.hash}` : '/';
+      const detail = /^\/forms\/[a-z0-9-]+$/.test(path) || /^\/document-extraction\/[a-z0-9-]+$/.test(path);
+      return parsed.origin === location.origin && (allowedPaths.has(path) || detail)
+        ? `${parsed.pathname}${parsed.search}${parsed.hash}` : '/';
     } catch { return '/'; }
   }
 
@@ -134,7 +138,7 @@
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'The code could not be verified.');
       if (result.api_key) sessionStorage.setItem('ai7_new_api_key', result.api_key);
-      location.replace(result.api_key ? '/account' : destination());
+      location.replace(result.api_key ? '/api-keys' : destination());
     } catch (failure) { error.textContent = failure.message; button.disabled = false; }
   });
   inviteForm.addEventListener('submit', async (event) => {

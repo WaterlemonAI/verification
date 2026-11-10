@@ -4,6 +4,7 @@ import { EnvironmentStore } from '../lib/api-store.mjs';
 import { createInvitation } from '../lib/customer-invitation.mjs';
 import { MemoryCustomerUsageStore, validateUsagePolicy } from '../lib/customer-usage.mjs';
 import { MemoryCaseManagerStore } from '../lib/case-manager-store.mjs';
+import { MemoryFloStore } from '../lib/flows/store.mjs';
 import { recoverCaseRetirements } from '../lib/case-manager-retirement.mjs';
 
 process.env.NODE_ENV = 'test';
@@ -17,13 +18,14 @@ test('one-time customer invitation creates a portal account and initial workspac
   const store = new EnvironmentStore();
   const usageStore = new MemoryCustomerUsageStore();
   const caseStore = new MemoryCaseManagerStore();
+  const floStore = new MemoryFloStore();
   const codes = [];
   const mailer = { configured: true, sendLoginCode: async (value) => { codes.push(value); } };
   const customerId = 'abcdef0123456789';
   const invitation = createInvitation(customerId);
   await store.setCustomer({ id: customerId, name: 'Regulated Institution', adminEmail: 'user@example.com', status: 'pending', usagePolicyVersion: 1,
     invitationHash: invitation.tokenHash, invitationExpiresAt: invitation.expiresAt });
-  const server = createAppServer({ store, usageStore, caseStore, mailer,
+  const server = createAppServer({ store, usageStore, caseStore, floStore, mailer,
     startWorker: false, deepResearchQueue: null, formsQueue: null });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
@@ -34,6 +36,11 @@ test('one-time customer invitation creates a portal account and initial workspac
   });
   assert.equal(protectedPage.status, 302);
   assert.equal(protectedPage.headers.get('location'), '/login?next=%2Fadverse-media');
+  for (const route of ['/account', '/usage', '/api-keys']) {
+    const denied = await fetch(baseUrl + route, { redirect: 'manual', headers: { accept: 'text/html' } });
+    assert.equal(denied.status, 302);
+    assert.equal(denied.headers.get('location'), '/login?next=' + encodeURIComponent(route));
+  }
 
   const protectedForm = await fetch(`${baseUrl}/forms/public-onboarding`, { redirect: 'manual', headers: { accept: 'text/html' } });
   assert.equal(protectedForm.status, 302);
@@ -115,6 +122,11 @@ test('one-time customer invitation creates a portal account and initial workspac
   const accountPage = await fetch(`${baseUrl}/account`, { headers: { accept: 'text/html', cookie } });
   assert.equal(accountPage.status, 200);
   assert.match(await accountPage.text(), /Your API keys/);
+  for (const route of ['/usage', '/api-keys']) {
+    const view = await fetch(baseUrl + route, { headers: { accept: 'text/html', cookie } });
+    assert.equal(view.status, 200);
+    assert.match(await view.text(), /data-account-view/);
+  }
 
   const loginPage = await fetch(`${baseUrl}/login`);
   const loginHtml = await loginPage.text();
@@ -234,6 +246,31 @@ test('one-time customer invitation creates a portal account and initial workspac
     headers: { ...keyHeaders, 'idempotency-key': 'limit-key-request-overflow' }, body: JSON.stringify({ label: 'Should be denied' }) });
   assert.equal(atLimit.status, 409);
   assert.equal((await store.listClients()).filter((item) => item.workspaceId === customerId && item.status === 'active').length, 20);
+
+  const previousFloEnabled = process.env.FLO_ENABLED;
+  process.env.FLO_ENABLED = 'true';
+  t.after(() => {
+    if (previousFloEnabled === undefined) delete process.env.FLO_ENABLED;
+    else process.env.FLO_ENABLED = previousFloEnabled;
+  });
+  for (const modules of [['flo'], ['*']]) {
+    await usageStore.configure(customerId, { mode: 'postpay', currency: 'USD',
+      allowedModules: modules, rates: {} });
+    const permitted = await fetch(`${baseUrl}/portal/api/entitlements`, { headers: { cookie: loginCookie } });
+    const access = await permitted.json();
+    assert.equal(access.allowed_modules.includes('flo') || access.allowed_modules.includes('*'), true);
+    assert.equal(access.available_modules.includes('flo'), true);
+    for (const route of ['/flo', '/flo-workflows']) {
+      const response = await fetch(baseUrl + route, { headers: { cookie: loginCookie, accept: 'text/html' } });
+      assert.equal(response.status, 200, `${route} should serve for ${modules.join(',')}`);
+    }
+  }
+  await usageStore.configure(customerId, { mode: 'postpay', currency: 'USD',
+    allowedModules: [], rates: {} });
+  for (const route of ['/flo', '/flo-workflows']) {
+    const response = await fetch(baseUrl + route, { headers: { cookie: loginCookie, accept: 'text/html' } });
+    assert.equal(response.status, 404, `${route} must reject an unassigned workspace`);
+  }
 
   const forbiddenLogout = await fetch(`${baseUrl}/portal/api/auth/logout`, { method: 'POST', headers: { cookie: loginCookie } });
   assert.equal(forbiddenLogout.status, 403);

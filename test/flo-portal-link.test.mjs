@@ -32,7 +32,8 @@ test('buyer UI creates a metered Supplier Onboarding v1 link without an API key'
           role: request.headers.cookie.includes('session=member') ? 'member' : 'org_admin',
           email: 'buyer@example.com' } };
       },
-      hasEntitlement: async () => true,
+      hasEntitlement: async (id) => { const { allowed_modules } = await usage.account(id);
+        return allowed_modules.includes('*') || allowed_modules.includes('flo'); },
       workflowPlatformEnabled: false,
       charge: async (_request, owner, flowId, channel) => {
         assert.equal(channel, 'portal');
@@ -83,4 +84,13 @@ test('buyer UI creates a metered Supplier Onboarding v1 link without an API key'
   assert.equal(sent.length, 1);
   assert.equal([...usage.rows.values()].filter((row) => row.state === 'completed').length, 1);
   assert.equal([...usage.rows.values()].filter((row) => row.state === 'refunded').length, 1);
+  await usage.configure(workspace, { mode: 'postpay', currency: 'USD', allowedModules: ['*'], rates: {} });
+  assert.equal((await send('/portal/api/flo/flows')).status, 200);
+  const wildcard = await send(path, 'POST', { ...input, customer_reference: 'TEST-WILDCARD' },
+    { ...headers, 'idempotency-key': 'portal-link-wildcard-12345' });
+  assert.equal(wildcard.status, 201);
+  await usage.configure(workspace, { mode: 'postpay', currency: 'USD', allowedModules: [], rates: {} });
+  assert.equal((await send('/portal/api/flo/flows')).status, 404);
+  assert.equal((await send(path, 'POST', { ...input, customer_reference: 'TEST-DENIED' },
+    { ...headers, 'idempotency-key': 'portal-link-denied-12345' })).status, 404);
 });

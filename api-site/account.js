@@ -4,6 +4,13 @@
   let casePolicyVersion = 0;
   let currentAccount = null;
   let keysById = new Map();
+  const view = location.pathname.replace(/\/$/, '') === '/usage' ? 'usage'
+    : location.pathname.replace(/\/$/, '') === '/api-keys' ? 'api-keys' : 'account';
+  const viewCopy = {
+    account: ['KYCProbe — Account Settings', 'WORKSPACE', 'Account settings', 'Manage your workspace, team, case-copy policy and service health.'],
+    usage: ['KYCProbe — Usage & Billing', 'USAGE', 'Usage & Billing', 'Review balance, current rates and your latest 100 API transactions.'],
+    'api-keys': ['KYCProbe — API Keys', 'CREDENTIALS', 'API keys', 'Create and manage keys for APIs enabled in this workspace.']
+  };
 
   async function request(path, options = {}) {
     const response = await fetch(path, { ...options, credentials: 'same-origin', headers: {
@@ -120,6 +127,17 @@
     try {
       const { account, logs } = await request('/portal/api/usage');
       byId('usage-status').textContent = `${account.mode === 'postpay' ? 'Postpay · unlimited usage' : `Prepaid balance ${account.currency} ${account.balance}`} · ${account.charged_calls} charged calls · total cost ${account.currency} ${account.spent}`;
+      const rateCard = byId('usage-rate-card'); rateCard.replaceChildren();
+      const heading = document.createElement('h2'); heading.textContent = 'Current rate card'; rateCard.append(heading);
+      const rates = Object.entries(account.rates || {});
+      if (!rates.length) { const empty = document.createElement('p'); empty.textContent = 'No module rates are configured.'; rateCard.append(empty); }
+      for (const [module, tiers] of rates) {
+        const row = document.createElement('div'); row.className = 'account-rate-row';
+        const name = document.createElement('strong'); name.textContent = module.replaceAll('-', ' ');
+        const price = document.createElement('span'); price.textContent = tiers.map((tier) =>
+          `${account.currency} ${tier.price}${tier.up_to == null ? ' per call' : ` through ${tier.up_to} calls`}`).join(' · ');
+        row.append(name, price); rateCard.append(row);
+      }
       const body = byId('usage-rows'); body.replaceChildren();
       for (const log of logs) {
         const row = document.createElement('tr');
@@ -216,12 +234,25 @@
   request('/portal/api/auth/session').then(async (session) => {
     csrf = session.csrf_token;
     currentAccount = session.account;
+    const [title, eyebrow, heading, intro] = viewCopy[view];
+    document.title = title;
+    byId('account-page-eyebrow').textContent = eyebrow;
+    byId('account-page-title').textContent = heading;
+    byId('account-page-intro').textContent = intro;
     byId('account-identity').textContent = `${session.account.client_name} · ${session.account.email}`;
-    if (session.account.role !== 'org_admin') byId('case-settings-section').hidden = true;
     const initial = sessionStorage.getItem('ai7_new_api_key');
-    if (initial) { sessionStorage.removeItem('ai7_new_api_key'); showNewKey(initial); }
-    const teamLoad = loadTeam().catch((error) => { byId('team-summary').textContent = error.message; });
-    await Promise.all([loadKeys(), loadHealth(), teamLoad, ...(session.account.role === 'org_admin' ? [loadCaseSettings()] : [])]);
-    await loadUsage();
-  }).catch(() => location.replace('/login?next=%2Faccount'));
+    if (initial && view !== 'api-keys') { location.replace('/api-keys'); return; }
+    for (const section of document.querySelectorAll('[data-account-view]')) section.hidden = section.dataset.accountView !== view;
+    if (view === 'api-keys') {
+      if (initial) { sessionStorage.removeItem('ai7_new_api_key'); showNewKey(initial); }
+      await loadKeys();
+    } else if (view === 'usage') {
+      try { const { keys } = await request('/portal/api/keys'); keysById = new Map(keys.map((key) => [key.id, key])); }
+      catch { keysById = new Map(); }
+      await loadUsage();
+    } else {
+      const teamLoad = loadTeam().catch((error) => { byId('team-summary').textContent = error.message; });
+      await Promise.all([loadHealth(), teamLoad, ...(session.account.role === 'org_admin' ? [loadCaseSettings()] : [])]);
+    }
+  }).catch(() => location.replace(`/login?next=${encodeURIComponent(location.pathname + location.search)}`));
 })();

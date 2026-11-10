@@ -62,12 +62,15 @@ function inputFor(field) {
 
 async function loadIndex() {
   const response = await fetch('/forms.json');
+  if (!response.ok) throw new Error('Forms could not be loaded. Try again.');
   const { forms } = await response.json();
   const list = byId('forms-list');
+  list.replaceChildren(); byId('forms-retry').hidden = true;
   if (!forms.length) {
-    list.textContent = 'No public Forms are available yet.';
+    byId('forms-status').textContent = 'No Forms are enabled for this workspace.';
     return;
   }
+  byId('forms-status').textContent = `${forms.length} Form${forms.length === 1 ? '' : 's'} available.`;
   forms.forEach((form) => {
     const link = document.createElement('a');
     link.className = 'form-card';
@@ -95,6 +98,14 @@ async function loadForm() {
   byId('form-title').innerHTML = '';
   byId('form-title').append(document.createTextNode(formDefinition.name));
   byId('form-description').textContent = formDefinition.description || 'Consolidated verification workflow.';
+  document.title = `KYCProbe — ${formDefinition.name}`;
+  const syncNavigation = () => {
+    const context = document.querySelector('.portal-context strong');
+    if (context) context.textContent = formDefinition.name;
+    const current = document.querySelector('.portal-sidebar a[aria-current="page"]');
+    if (current?.dataset.path === `/forms/${formDefinition.id}`) current.textContent = formDefinition.name;
+  };
+  syncNavigation(); document.addEventListener('portal:navigation-ready', syncNavigation, { once: true });
   const apiOrigin = ['localhost', '127.0.0.1'].includes(location.hostname) ? location.origin : 'https://api.ai7uae.com';
   const endpoint = `${apiOrigin}/forms/${formDefinition.id}/submissions`;
   byId('endpoint').textContent = endpoint;
@@ -198,7 +209,10 @@ byId('copy-response').addEventListener('click', async () => {
   setTimeout(() => { byId('copy-response').textContent = 'Copy JSON'; }, 1200);
 });
 
+byId('forms-retry').addEventListener('click', () => loadIndex().catch((error) => {
+  byId('forms-status').textContent = error.message; byId('forms-retry').hidden = false;
+}));
 (formId ? loadForm() : loadIndex()).catch((error) => {
-  byId('forms-index').innerHTML = `<p class="form-error"></p>`;
-  byId('forms-index').querySelector('p').textContent = error.message;
+  byId('forms-status').textContent = error.message;
+  if (!formId) byId('forms-retry').hidden = false;
 });
