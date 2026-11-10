@@ -39,6 +39,9 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
   function updateStatus() { const dirty = model.dirty || pendingJson;
     status.textContent = `${stageSummary(model.value)} · ${pendingJson ? 'Unapplied JSON edits' : dirty ? 'Unsaved changes' : 'Saved draft'}`;
     status.dataset.dirty = String(dirty); }
+  function updateHistoryActions() {
+    for (const action of toolbar.querySelectorAll('[data-history-action]')) action.disabled = pendingJson;
+  }
   function issueTarget(path) {
     const parts = path.split('.'); if (parts[0] !== 'stages') return null;
     const stage = model.value.stages[Number(parts[1])]; if (!stage) return null;
@@ -243,7 +246,7 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
       const link = el('a'); link.href = URL.createObjectURL(blob); link.download = 'flo-workflow.json'; link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 1000); }));
     if (!readOnly) jsonEditor.addEventListener('input', () => { pendingJson = jsonEditor.value !== JSON.stringify(model.value, null, 2);
-      updateStatus(); report(pendingJson ? 'Apply JSON before leaving this tab or saving.' : 'JSON matches the builder.'); });
+      updateStatus(); updateHistoryActions(); report(pendingJson ? 'Apply JSON before leaving this tab or saving.' : 'JSON matches the builder.'); });
     content.replaceChildren(panel);
   }
   function render() {
@@ -255,8 +258,11 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
         if (name === 'preview' && !readOnly && !await validateCurrent()) return;
         tab = name; render(); }); item.setAttribute('aria-selected', String(tab === name)); tabs.append(item);
     }
-    toolbar.replaceChildren(...(readOnly ? [] : [button('Undo', () => { if (model.undo()) render(); }),
-      button('Redo', () => { if (model.redo()) render(); })]));
+    const historyButtons = readOnly ? [] : [['Undo', () => model.undo()], ['Redo', () => model.redo()]].map(([label, action]) => {
+      const control = button(label, () => { if (pendingJson) return; if (action()) render(); });
+      control.dataset.historyAction = label.toLowerCase(); return control;
+    });
+    toolbar.replaceChildren(...historyButtons); updateHistoryActions();
     if (tab === 'builder') drawCanvas(); else if (tab === 'checks') drawChecks();
     else if (tab === 'preview') drawPreview(); else drawJson();
   }

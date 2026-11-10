@@ -122,8 +122,18 @@ try {
     await admin.locator('#app-view').waitFor({ state: 'visible' });
     await admin.locator('[data-view="flo"]').click(); await admin.locator('#flo-workflow-manager').waitFor({ state: 'visible' });
     await admin.locator('#flo-workflow-new').click(); await admin.locator('.flo-builder').waitFor();
+    await admin.locator('#flo-builder-root .flo-palette').getByRole('button', { name: '+ Field' }).click();
     await admin.locator('#flo-builder-root .flo-builder-tabs').getByRole('button', { name: 'JSON' }).click();
     await admin.getByRole('button', { name: 'Advanced edit' }).click();
+    await admin.locator('.flo-json-panel textarea').fill('{"unfinished":');
+    if (!await admin.getByRole('button', { name: 'Undo', exact: true }).isDisabled()
+      || !await admin.getByRole('button', { name: 'Redo', exact: true }).isDisabled())
+      throw new Error('Undo and Redo are available while JSON is unapplied.');
+    await admin.getByRole('button', { name: 'Undo', exact: true }).dispatchEvent('click');
+    await admin.getByRole('button', { name: 'Redo', exact: true }).dispatchEvent('click');
+    if (await admin.locator('.flo-json-panel textarea').inputValue() !== '{"unfinished":'
+      || !(await admin.locator('.flo-builder-status').textContent()).includes('Unapplied JSON edits'))
+      throw new Error('Undo or Redo discarded unapplied JSON.');
     await admin.locator('.flo-json-panel textarea').fill(JSON.stringify({ ...initial,
       stages: [{ ...initial.stages[0], title: '<img src=x onerror=alert(1)>' }] }));
     await admin.getByRole('button', { name: 'Apply JSON' }).click();
