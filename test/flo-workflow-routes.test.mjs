@@ -111,9 +111,19 @@ test('admin assignment to private copy, applicant submission, buyer Restart and 
     { token: reissued.body.supplier_url.split('/').at(-1) });
   assert.equal(second.body.status, 'restarted'); assert.equal(second.body.application_revision, 2);
   assert.equal(second.body.restart.comments, 'Update the registered business name');
-  assert.equal((await send(`/portal/api/flo/cases/${appId}/reissue-link`, undefined, 'POST', {})).status, 409);
   const secondCookie = second.headers['set-cookie'][0].split(';')[0];
-  const headers2 = { cookie: secondCookie, 'x-flo-application-id': appId, 'x-flo-csrf': second.body.csrf_token,
+  const supersededHeaders = { cookie: secondCookie, 'x-flo-application-id': appId, 'x-flo-csrf': second.body.csrf_token,
+    origin: 'https://flo.ai7uae.com' };
+  const reissuedAfterRedemption = await send(`/portal/api/flo/cases/${appId}/reissue-link`, undefined, 'POST', {});
+  assert.equal(reissuedAfterRedemption.status, 200, 'buyer can recover a lost applicant session');
+  assert.equal(reissuedAfterRedemption.body.application_revision, 2);
+  assert.equal((await send('/flo/api/application', 'flo.ai7uae.com', 'GET', undefined, supersededHeaders)).status, 401,
+    'reissue revokes the earlier applicant session');
+  const resumed = await send('/flo/api/session', 'flo.ai7uae.com', 'POST',
+    { token: reissuedAfterRedemption.body.supplier_url.split('/').at(-1) });
+  assert.equal(resumed.status, 200);
+  const headers2 = { cookie: resumed.headers['set-cookie'][0].split(';')[0],
+    'x-flo-application-id': appId, 'x-flo-csrf': resumed.body.csrf_token,
     origin: 'https://flo.ai7uae.com' };
   assert.equal((await send('/flo/api/draft', 'flo.ai7uae.com', 'POST', { business_name: 'Aetherix Systems FZCO LLC' }, headers2)).status, 200);
   assert.equal((await send('/flo/api/submit', 'flo.ai7uae.com', 'POST', {}, headers2)).status, 202);

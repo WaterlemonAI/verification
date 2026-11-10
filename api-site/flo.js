@@ -194,9 +194,9 @@
         }); root.append(button);
       }
     }
-    if (item.workflow_schema && item.status === 'restarted' && !item.link_redeemed_at) {
+    if (item.workflow_schema && item.status === 'restarted') {
       root.append(node('h3', 'Correction link'),
-        node('p', 'If the applicant did not receive the Restart email, issue a new one-time link. The previous link will stop working.'));
+        node('p', 'If the applicant cannot continue from the Restart email, issue a new one-time link. Any earlier link or open supplier session will stop working.'));
       const reissue = node('button', 'Reissue correction link'); reissue.type = 'button';
       reissue.addEventListener('click', async () => {
         reissue.disabled = true; $('flo-notice').textContent = '';
