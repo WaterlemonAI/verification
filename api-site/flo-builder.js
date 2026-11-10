@@ -214,9 +214,9 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
       } catch (error) { reportError(error); }
     }));
     if (!readOnly) panel.append(button('Cancel JSON edits', () => { pendingJson = false; render(); report('Advanced JSON edits discarded.'); }));
-    panel.append(button('Copy JSON', async () => { try { await navigator.clipboard.writeText(JSON.stringify(model.value, null, 2)); report('JSON copied.'); }
+    panel.append(button('Copy JSON', async () => { try { await navigator.clipboard.writeText(pendingJson ? jsonEditor.value : JSON.stringify(model.value, null, 2)); report('JSON copied.'); }
       catch { report('Clipboard unavailable. Select the JSON to copy it.'); } }));
-    panel.append(button('Download JSON', () => { const blob = new Blob([JSON.stringify(model.value, null, 2)], { type: 'application/json' });
+    panel.append(button('Download JSON', () => { const blob = new Blob([pendingJson ? jsonEditor.value : JSON.stringify(model.value, null, 2)], { type: 'application/json' });
       const link = el('a'); link.href = URL.createObjectURL(blob); link.download = 'flo-workflow.json'; link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 1000); }));
     if (!readOnly) jsonEditor.addEventListener('input', () => { pendingJson = true; report('Apply JSON before leaving this tab or saving.'); });
