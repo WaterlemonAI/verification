@@ -28,7 +28,7 @@ const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: true,
   executablePath: process.env.CHROME_PATH || (process.platform === 'darwin'
     ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : chromium.executablePath()) });
-const initial = { schema_version: '1.0.0', name: 'Supplier profile',
+const initial = { schema_version: '1.0.0', name: 'Business verification',
   stages: [{ id: 'identity', title: 'Business identity', description: 'Provide legal details.', fields: [
     { id: 'business_name', label: 'Registered business name', type: 'text', required: true },
     { id: 'entity_type', label: 'Entity type', type: 'select', options: ['Company', 'Individual'], required: true },
@@ -45,6 +45,8 @@ const initial = { schema_version: '1.0.0', name: 'Supplier profile',
   checks: ['uae-trade-licence'], report_sections: ['Business identity'], tokens: { primary_color: '#064b79' } };
 const check = { id: 'uae-trade-licence', label: 'UAE trade licence', description: 'Verify name and licence.',
   required_fields: ['business_name', 'licence_number'], required_documents: ['trade_licence'] };
+const ibanCheck = { id: 'iban-verification', label: 'IBAN verification', description: 'Verify the bank account.',
+  required_fields: ['business_name', 'iban'], required_documents: ['bank_letter'] };
 let platformSchema = structuredClone(initial), ownedSchema = null, adminRevision = 1, orgRevision = 1;
 let adminPublished = false, orgPublished = false, validationCalls = 0, caseCalls = 0;
 try {
@@ -58,7 +60,7 @@ try {
       else if (path === '/admin/api/auth/session') response = { account: { email: 'admin@example.com' }, csrf_token: 'csrf' };
       else if (path === '/admin/api/integrations') response = { integrations: [] };
       else if (path === '/admin/api/customers') response = { customers: [] };
-      else if (path === '/admin/api/flows/catalog') response = { checks: [check] };
+      else if (path === '/admin/api/flows/catalog') response = { checks: [check, ibanCheck] };
       else if (path === '/admin/api/flows/validate') { response = diagnoseWorkflowSchema(data.schema); validationCalls++; }
       else if (path === '/admin/api/flows' && method === 'GET') response = { templates: [], workflow_platform_enabled: true,
         workflows: adminPublished ? [{ flow_id: 'flow-platform', name: platformSchema.name, lifecycle: 'active',
@@ -89,7 +91,7 @@ try {
         { flow_id: 'flow-platform', name: platformSchema.name, lifecycle: 'active', published_version: '1.0.0', owner_workspace_id: null },
         ...(ownedSchema ? [{ flow_id: 'flow-owned', name: ownedSchema.name, lifecycle: orgPublished ? 'active' : 'draft',
           published_version: orgPublished ? '1.0.0' : null, owner_workspace_id: 'a'.repeat(16), draft_revision: orgRevision }] : [])] };
-      else if (path === '/portal/api/flo/workflows/catalog') response = { checks: [check] };
+      else if (path === '/portal/api/flo/workflows/catalog') response = { checks: [check, ibanCheck] };
       else if (path === '/portal/api/flo/workflows/validate') { response = diagnoseWorkflowSchema(data.schema); validationCalls++; }
       else if (path.endsWith('/definition')) response = { schema: platformSchema, version: '1.0.0' };
       else if (path.endsWith('/copy')) { ownedSchema = structuredClone(platformSchema); response = { workflow: { flow_id: 'flow-owned',
@@ -126,11 +128,30 @@ try {
       stages: [{ ...initial.stages[0], title: '<img src=x onerror=alert(1)>' }] }));
     await admin.getByRole('button', { name: 'Apply JSON' }).click();
     await admin.locator('.flo-builder-issues li').waitFor();
+    const unappliedJson = await admin.locator('.flo-json-panel textarea').inputValue();
+    await admin.locator('.flo-builder-issues li button').first().click();
+    if (await admin.locator('.flo-builder-tabs [aria-selected="true"]').textContent() !== 'JSON'
+      || await admin.locator('.flo-json-panel textarea').inputValue() !== unappliedJson)
+      throw new Error('Validation issue navigation discarded unapplied JSON.');
+    await admin.evaluate(() => { window.confirm = () => false; });
+    await admin.locator('#flo-workflow-new').click();
+    if (await admin.locator('.flo-json-panel textarea').inputValue() !== unappliedJson)
+      throw new Error('Switching workflows discarded unapplied JSON without confirmation.');
+    await admin.evaluate(() => { window.confirm = () => true; });
     await admin.getByRole('button', { name: 'Cancel JSON edits' }).click();
     await admin.getByRole('button', { name: 'Advanced edit' }).click();
     await admin.locator('.flo-json-panel textarea').fill(JSON.stringify(initial));
     await admin.getByRole('button', { name: 'Apply JSON' }).click();
     await admin.getByText('JSON applied to the builder.').waitFor();
+    await admin.locator('#flo-builder-root .flo-builder-tabs').getByRole('button', { name: 'Checks and report' }).click();
+    await admin.locator('.flo-check-option').filter({ hasText: 'IBAN verification' }).locator('input').check();
+    await admin.getByRole('button', { name: '+ Add IBAN' }).click();
+    await admin.locator('[data-flo-id="iban"]').waitFor();
+    await admin.locator('#flo-builder-root .flo-builder-tabs').getByRole('button', { name: 'Checks and report' }).click();
+    await admin.getByRole('button', { name: '+ Add Bank letter' }).click();
+    await admin.locator('[data-flo-id="bank_letter"]').waitFor();
+    if (!(await admin.locator('.flo-builder-status').textContent()).includes('Unsaved changes'))
+      throw new Error('Canonical components did not change the builder model.');
     await admin.locator('#flo-builder-root .flo-builder-tabs').getByRole('button', { name: 'Builder' }).click();
     await admin.locator('#flo-builder-root .flo-palette').getByRole('button', { name: '+ Stage' }).click();
     await admin.locator('#flo-builder-root .flo-palette').getByRole('button', { name: '+ Field' }).click();
@@ -155,6 +176,8 @@ try {
     await admin.locator('#flo-builder-root [data-flo-id="entity_type"]').getByRole('button', { name: 'Move Entity type down' }).click();
     await admin.locator('#flo-builder-root .flo-builder-tabs').getByRole('button', { name: 'Preview' }).click();
     await admin.locator('.flo-preview form').waitFor();
+    if ((await admin.locator('.flo-preview').textContent()).toLowerCase().includes('supplier onboarding'))
+      throw new Error('Generic builder preview still uses supplier-specific copy.');
     if (await admin.locator('.flo-preview').evaluate((node) => node.style.getPropertyValue('--brand')) !== '#064b79')
       throw new Error('Preview did not use the workflow theme colour.');
     if (await admin.locator('.flo-preview input[type=file]:not([disabled])').count()) throw new Error('Preview can upload.');
@@ -182,6 +205,9 @@ try {
     supplier.on('pageerror', (error) => errors.push(`supplier: ${error.message}`));
     await supplier.goto(`${base}/f/generic-token-abcdefghijklmnopqrstuvwxyz0123456789`);
     await supplier.locator('#form .field').first().waitFor();
+    if ((await supplier.locator('#subtitle').textContent()).toLowerCase().includes('supplier onboarding')
+      || !(await supplier.locator('#subtitle').textContent()).includes('Business verification'))
+      throw new Error('Generic applicant journey still uses supplier-specific copy.');
     await supplier.locator('#form [name="entity_type"]').selectOption('Company');
     await supplier.locator('#form [name="licence_number"]').waitFor();
     const supplierLabels = await supplier.locator('#form .field>span').allTextContents();

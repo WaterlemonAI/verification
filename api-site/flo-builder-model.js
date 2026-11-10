@@ -3,6 +3,20 @@ const clone = (value) => structuredClone(value);
 const idPattern = /^[a-z][a-z0-9_]{1,63}$/;
 const arrays = ['fields', 'documents', 'declarations'];
 export const FIELD_TYPES = Object.freeze(['text', 'email', 'url', 'date', 'select', 'textarea', 'number', 'people']);
+export const CANONICAL_COMPONENTS = Object.freeze({
+  fields: Object.freeze({
+    business_name: { label: 'Registered business name', type: 'text' },
+    licence_number: { label: 'Trade licence number', type: 'text' },
+    iban: { label: 'IBAN', type: 'text' },
+    stakeholders: { label: 'Stakeholders', type: 'people' },
+    website_url: { label: 'Business website', type: 'url' }
+  }),
+  documents: Object.freeze({
+    trade_licence: { label: 'Trade licence' },
+    bank_letter: { label: 'Bank letter' },
+    ejari: { label: 'Ejari certificate' }
+  })
+});
 
 export function dependencyProblem(schema) {
   const seen = new Set(); const earlierFields = new Set();
@@ -83,6 +97,18 @@ export class FloBuilderModel {
       return schema;
     });
     return item.id;
+  }
+  addCanonical(kind, id, stageIndex = 0) {
+    const definition = CANONICAL_COMPONENTS[kind]?.[id];
+    if (!definition) throw new Error('Unknown required input.');
+    if (findItem(this.schema, id)) throw new Error(`${definition.label} is already in this workflow.`);
+    this.commit((schema) => {
+      if (!schema.stages[stageIndex]) throw new Error('Select a stage first.');
+      schema.stages[stageIndex][kind].push({ id, label: definition.label, required: true,
+        ...(kind === 'fields' ? { type: definition.type } : {}) });
+      return schema;
+    });
+    return id;
   }
   duplicate(id) {
     let copiedId;

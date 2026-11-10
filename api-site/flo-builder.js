@@ -1,4 +1,4 @@
-import { FloBuilderModel, FIELD_TYPES } from './flo-builder-model.js';
+import { FloBuilderModel, FIELD_TYPES, CANONICAL_COMPONENTS } from './flo-builder-model.js';
 import { renderSchemaProgress, renderSchemaStage } from './flo-schema-view.js';
 
 const el = (tag, text = '', className = '') => { const item = document.createElement(tag);
@@ -36,8 +36,9 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
     catch (error) { reportError(error); render(); }
   }
   model.onchange = (value) => { onChange(value, model.dirty); updateStatus(); };
-  function updateStatus() { status.textContent = `${stageSummary(model.value)} · ${model.dirty ? 'Unsaved changes' : 'Saved draft'}`;
-    status.dataset.dirty = String(model.dirty); }
+  function updateStatus() { const dirty = model.dirty || pendingJson;
+    status.textContent = `${stageSummary(model.value)} · ${pendingJson ? 'Unapplied JSON edits' : dirty ? 'Unsaved changes' : 'Saved draft'}`;
+    status.dataset.dirty = String(dirty); }
   function issueTarget(path) {
     const parts = path.split('.'); if (parts[0] !== 'stages') return null;
     const stage = model.value.stages[Number(parts[1])]; if (!stage) return null;
@@ -51,6 +52,7 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
     for (const issue of issueList) {
       const target = issueTarget(issue.path);
       const row = el('li'); const item = button(`${issue.path}: ${issue.message}`, () => {
+        if (tab === 'json' && pendingJson) { report('Apply the JSON or cancel advanced edits before opening a builder item.'); return; }
         if (target) { selectedId = target; tab = 'builder'; render();
           content.querySelector(`[data-flo-id="${CSS.escape(target)}"]`)?.scrollIntoView({ block: 'center' }); }
       });
@@ -179,6 +181,23 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
         ? [...model.value.checks, check.id] : model.value.checks.filter((id) => id !== check.id) })));
       wrapper.append(box, el('span', `${check.label} — ${check.description}`),
         el('small', `Needs fields: ${check.required_fields.join(', ') || 'none'}; documents: ${check.required_documents.join(', ') || 'none'}`)); panel.append(wrapper);
+      if (box.checked) {
+        const present = new Set(model.value.stages.flatMap((stage) => [
+          ...stage.fields.map((field) => field.id), ...stage.documents.map((document) => document.id)]));
+        const missing = el('div', '', 'flo-check-missing');
+        for (const [kind, required] of [['fields', check.required_fields], ['documents', check.required_documents]]) {
+          for (const id of required) {
+            if (present.has(id)) continue;
+            const definition = CANONICAL_COMPONENTS[kind]?.[id];
+            if (!definition) { missing.append(el('p', `Required ${kind.slice(0, -1)} ${id} needs an approved component.`)); continue; }
+            missing.append(button(`+ Add ${definition.label}`, () => run(() => {
+              selectedId = model.addCanonical(kind, id, model.position(selectedId)?.stageIndex ?? 0);
+              tab = 'builder'; report(`${definition.label} added with required ID ${id}.`);
+            }, id)));
+          }
+        }
+        if (missing.childNodes.length) panel.append(missing);
+      }
     }
     propertyText(panel, 'Report sections, one per line', (model.value.report_sections || []).join('\n'),
       (value) => model.updateRoot({ report_sections: value.split('\n').map((part) => part.trim()).filter(Boolean) }), true);
@@ -203,7 +222,7 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
     const next = button('Next', () => { previewStage++; render(); }); next.disabled = previewStage === schema.stages.length - 1;
     controls.append(back, next, el('span', 'Upload and Submit are disabled in preview.'));
     shell.append(bar, el('p', 'FLO · SECURE ONBOARDING', 'flo-preview-eyebrow'), title,
-      el('p', 'Your buyer requested this information for supplier onboarding.'), progress, form, controls);
+      el('p', 'Complete the information requested for this workflow.'), progress, form, controls);
     content.replaceChildren(shell);
   }
   function drawJson() {
@@ -223,7 +242,8 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
     panel.append(button('Download JSON', () => { const blob = new Blob([pendingJson ? jsonEditor.value : JSON.stringify(model.value, null, 2)], { type: 'application/json' });
       const link = el('a'); link.href = URL.createObjectURL(blob); link.download = 'flo-workflow.json'; link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 1000); }));
-    if (!readOnly) jsonEditor.addEventListener('input', () => { pendingJson = true; report('Apply JSON before leaving this tab or saving.'); });
+    if (!readOnly) jsonEditor.addEventListener('input', () => { pendingJson = jsonEditor.value !== JSON.stringify(model.value, null, 2);
+      updateStatus(); report(pendingJson ? 'Apply JSON before leaving this tab or saving.' : 'JSON matches the builder.'); });
     content.replaceChildren(panel);
   }
   function render() {
@@ -246,7 +266,7 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
     report('Workflow is valid for the current check catalog.'); return true; }
   return {
     getSchema() { if (pendingJson) throw new Error('Apply or cancel advanced JSON edits first.'); return model.value; },
-    get dirty() { return model.dirty; },
+    get dirty() { return model.dirty || pendingJson; },
     markSaved() { model.markSaved(); render(); },
     async validate() { this.getSchema(); return validateCurrent(); },
     async showPreview() { this.getSchema(); if (!await validateCurrent()) return; tab = 'preview'; render(); },

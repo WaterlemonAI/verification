@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FloBuilderModel, dependencyProblem } from '../api-site/flo-builder-model.js';
+import { FloBuilderModel, dependencyProblem, CANONICAL_COMPONENTS } from '../api-site/flo-builder-model.js';
 import { schemaHash, validateWorkflowSchema } from '../lib/flows/template-schema.mjs';
+import { visibleCheckCatalog } from '../lib/flows/checks-catalog.mjs';
 
 const schema = () => ({ schema_version: '1.0.0', name: 'Supplier details', stages: [
   { id: 'identity', title: 'Identity', description: '', fields: [
@@ -72,4 +73,24 @@ test('all field types create unique IDs and respect stage and field limits', () 
   assert.equal(model.value.stages.length, 7);
   model.add('stages'); assert.equal(model.value.stages.length, 8);
   assert.throws(() => validateWorkflowSchema({ ...model.value, stages: [...model.value.stages, model.value.stages[0]] }), /invalid_schema/);
+});
+
+test('every approved check dependency can be added with its canonical ID without JSON editing', () => {
+  for (const check of visibleCheckCatalog()) {
+    const current = schema(); current.checks = [check.id];
+    current.stages[0].fields = []; current.stages[0].documents = [];
+    const model = new FloBuilderModel(current);
+    for (const id of check.required_fields) {
+      assert.ok(CANONICAL_COMPONENTS.fields[id], `${check.id} field ${id} has no visual component`);
+      assert.equal(model.addCanonical('fields', id), id);
+    }
+    for (const id of check.required_documents) {
+      assert.ok(CANONICAL_COMPONENTS.documents[id], `${check.id} document ${id} has no visual component`);
+      assert.equal(model.addCanonical('documents', id), id);
+    }
+    assert.deepEqual(validateWorkflowSchema(model.value), model.value, check.id);
+  }
+  const model = new FloBuilderModel(schema());
+  assert.throws(() => model.addCanonical('documents', 'trade_licence'), /already in this workflow/);
+  assert.throws(() => model.addCanonical('fields', 'unapproved_field'), /Unknown required input/);
 });

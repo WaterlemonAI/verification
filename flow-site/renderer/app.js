@@ -15,7 +15,7 @@ async function api(route, method = 'GET', data) {
 function render() {
   const app = state.application; const schema = app.presentation;
   $('title').textContent = schema.name; document.title = schema.name;
-  $('subtitle').textContent = `${app.brand_name || 'Your buyer'} requested this information for supplier onboarding.`;
+  $('subtitle').textContent = `${app.brand_name || 'Your organisation'} requested this information for ${schema.name}.`;
   const links = $('links'); links.replaceChildren();
   for (const [title, href] of [['Support', app.support_url], ['Privacy', app.privacy_url]]) {
     if (!href || !/^https:\/\//i.test(href)) continue;
