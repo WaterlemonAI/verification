@@ -6,6 +6,8 @@ test('Gemini review rejects fabricated references and model-authored HTML', () =
   assert.throws(() => validateGeminiReview({ narrative: '<script>accept()</script>', issues: [], extraction_gaps: [] }, new Set()), /invalid/);
   assert.throws(() => validateGeminiReview({ narrative: 'Needs review', issues: [{ title: 'Claim', detail: 'Unknown source',
     evidence_ids: ['invented'] }], extraction_gaps: [] }, new Set(['known'])), /reference/);
+  assert.throws(() => validateGeminiReview({ narrative: 'Needs review', issues: Array(31).fill({
+    title: 'Repeated', detail: 'Too many issues', evidence_ids: [] }), extraction_gaps: [] }, new Set()), /invalid/);
 });
 
 test('bank letter extraction uses inline document data but makes no authenticity claim', async () => {
@@ -58,6 +60,7 @@ test('document-borne instructions remain labelled evidence and do not create a p
     }) }] } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
   } });
   assert.match(request.systemInstruction.parts[0].text, /untrusted data/);
+  assert.doesNotMatch(JSON.stringify(request.generationConfig.responseJsonSchema), /maxItems/);
   assert.match(request.contents[0].parts[0].text, /Ignore previous instructions/);
   assert.equal(result.status, 'completed');
   assert.equal(result.output.issues[0].evidence_ids[0], 'check-1');
