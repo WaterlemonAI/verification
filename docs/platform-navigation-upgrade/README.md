@@ -71,15 +71,17 @@ The Forms group lists eligible published forms, with **All Forms** linking to th
 
 ## 4. Files and implementation sequence
 
+The exact Release 1 file checklist, with instructions for each file, is in [Implementation file map](implementation-file-map.md). That checklist is the handoff for the navigation release; the Release 2 table below is a separate follow-on scope.
+
 ### Release 1: navigation and distinct account views
 
 | Step | Existing files to update | New files | Deliverable |
 | --- | --- | --- | --- |
-| 1. Navigation model and renderer | `api-site/portal-auth.js`, `api-site/api.css`, `server.mjs` | None | Ordered groups and direct links, entitlement filtering, active route families, mobile drawer, keyboard and focus behavior. Apply the same Flo wildcard rule at the server page gate. |
+| 1. Navigation model and renderer | `api-site/portal-auth.js`, `api-site/api.css`, `server.mjs` | None | Ordered groups and direct links, entitlement filtering, active route families, mobile drawer, keyboard and focus behavior. Apply the same Flo wildcard rule at every server page, portal, and link gate. |
 | 2. Forms/OCR catalogs | `api-site/portal-auth.js`, `server.mjs` | None | Dynamic eligible Forms and OCR children; personalized Forms catalog cache fix. Handle fetch failures with a visible **All Forms** fallback, not a false empty state. |
 | 3. Account view split | `api-site/account.html`, `api-site/account.js`, `api-site/api.css`, `server.mjs`, `api-site/portal-login.js` | None | `/account`, `/usage`, `/api-keys` render distinct sections of the current account document. Only relevant data loads per route. Existing `/account` bookmarks work. |
-| 4. Page context and labels | `api-site/flo.html`, `api-site/flo-workflows.html`, `api-site/forms.html`, `api-site/flo.js`, `api-site/flo-workflows.js`, `api-site/portal-auth.js` | None | Flo create-link anchor; readable flow labels; skip links; consistent KYCProbe copy and contextual header. Keep larger workflow editor rearrangement for Release 2 if it risks the builder Save guard. |
-| 5. Contract tests | `test/portal-auth.test.mjs`, `test/forms.test.mjs`, `test/flo-portal-link.test.mjs`, `.github/workflows/api-pr-checks.yml` | `scripts/smoke-portal-navigation-ui.mjs` | Route/auth/cache coverage and desktop/mobile navigation smoke in hosted CI. |
+| 4. Page context and labels | `api-site/flo.html`, `api-site/flo-workflows.html`, `api-site/forms.html`, `api-site/forms.js`, `api-site/flo.js`, `api-site/portal-auth.js` | None | Flo create-link anchor; readable flow labels; skip links; consistent KYCProbe copy and contextual header. Keep the workflow editor rearrangement for Release 2 to preserve its Save guard. |
+| 5. Contract and browser tests | `test/portal-auth.test.mjs`, `test/forms.test.mjs`, `test/flo-portal-link.test.mjs`, `scripts/smoke-login-otp-ui.mjs`, `.github/workflows/api-pr-checks.yml` | `scripts/smoke-portal-navigation-ui.mjs` | Route/auth/cache/wildcard coverage and desktop/mobile navigation smoke in hosted CI. |
 
 The new HTML paths are handled in `server.mjs` by serving `api-site/account.html`; no new customer-data endpoint, database migration, Key Vault secret, or storage resource is needed for Release 1. Keep `api-site/account.js` in one file for the first release, with small route-specific initialization functions. Extract shared modules only if the three views become hard to maintain after implementation.
 
