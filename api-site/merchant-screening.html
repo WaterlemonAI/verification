@@ -11,6 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=9" />
     <script src="/portal-auth.js?v=4" defer></script>
+    <script src="/status-view.js" defer></script>
     <script src="/merchant-screening.js?v=2" defer></script>
   </head>
   <body>
@@ -146,7 +147,7 @@
               <p class="form-error" id="form-error" role="alert"></p>
               <button type="submit" id="send-request">Run screening <span>→</span></button>
             </form>
-            <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
+            <div id="check-state" class="check-state" role="status" aria-live="polite"></div><div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
             <div class="response-actions"><button class="copy" id="copy-response" disabled>Copy JSON</button><button class="copy" id="download-report" disabled>Download PDF</button></div>
             <pre id="response-json" aria-live="polite">{
   "message": "Your JSON response will appear here."

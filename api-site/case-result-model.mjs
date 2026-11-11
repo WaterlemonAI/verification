@@ -20,6 +20,24 @@ export function fieldName(key) {
     .replace(/^./, (letter) => letter.toUpperCase());
 }
 
+export function caseActionSummary(item = {}) {
+  const codes = (item.outcome_reason_codes || []).slice(0, 8).map(fieldName);
+  const status = item.request_status || (item.final_http_status == null ? 'pending'
+    : item.final_http_status >= 200 && item.final_http_status < 300 ? 'succeeded' : 'failed');
+  if (status === 'pending') return { attention: 'Awaiting result', next: 'Check again when the API result is ready.', reasons: codes };
+  if (status !== 'succeeded') return { attention: 'API request did not complete',
+    next: 'Review the error and request data before deciding whether to retry.', reasons: codes };
+  if (item.outcome === 'extracted') return { attention: 'Extraction ready for review',
+    next: 'Compare extracted fields with the source document; extraction is not verification.', reasons: codes };
+  if (item.outcome === 'not_run' || item.outcome === 'could_not_complete')
+    return { attention: 'Check unavailable', next: 'Review coverage and provider status before retrying.', reasons: codes };
+  if (item.outcome === 'review_required' || item.outcome === 'unclassified' || item.outcome === 'pending')
+    return { attention: 'Review required', next: 'Inspect the evidence, coverage and source result.', reasons: codes };
+  if (item.outcome === 'failed') return { attention: 'Check did not pass',
+    next: 'Review the service-specific reason and original response.', reasons: codes };
+  return { attention: 'Result available', next: 'Confirm the outcome against the source response and coverage.', reasons: codes };
+}
+
 function scalar(value) {
   if (value == null || value === '') return null;
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
@@ -83,6 +101,11 @@ function formCheckFields(check) {
 
 export function buildCasePresentation(item, response) {
   const view = { metrics: [], sections: [], note: '' };
+  const action = caseActionSummary(item);
+  view.action = action;
+  if (action.reasons.length) view.sections.push({ title: 'Why this case needs attention',
+    fields: action.reasons.map((value, index) => ({ label: `Reason ${index + 1}`, value })),
+    note: action.next });
   const service = item?.service_id || '';
   const addMetric = (label, value) => {
     const display = scalar(value);

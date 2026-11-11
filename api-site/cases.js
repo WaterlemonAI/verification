@@ -1,4 +1,4 @@
-import { buildCasePresentation, serviceName } from './case-result-model.mjs?v=2';
+import { buildCasePresentation, caseActionSummary, serviceName } from './case-result-model.mjs?v=2';
 
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -17,6 +17,10 @@ import { buildCasePresentation, serviceName } from './case-result-model.mjs?v=2'
   };
   let cursor = null;
   let selected = null;
+  const servicePages = { 'uae-tlv': '/', 'uae-trade-licence': '/', 'iban-verification': '/iban',
+    'entity-search': '/entity-search', 'adverse-media': '/adverse-media',
+    'merchant-screening': '/merchant-screening', 'bank-statement-analysis': '/bank-statement-analysis',
+    'ejari-verification': '/ejari-verification' };
 
   async function request(path) {
     const response = await fetch(path, { credentials: 'same-origin', headers: { accept: 'application/json' } });
@@ -116,10 +120,12 @@ import { buildCasePresentation, serviceName } from './case-result-model.mjs?v=2'
     try {
       const result = await request(`/portal/api/cases?${filterQuery()}`);
       for (const item of result.cases) {
+        const action = caseActionSummary(item);
         const button = document.createElement('button');
         button.type = 'button'; button.className = 'case-list-item'; button.dataset.caseId = item.id;
         button.append(text('strong', serviceName(item.service_id)), text('span', outcomeLabel(item), `case-badge case-${item.outcome}`),
-          text('small', `${new Date(item.accepted_at).toLocaleString()} · ${requestStatusLabel(item)}`));
+          text('small', `${new Date(item.accepted_at).toLocaleString()} · ${requestStatusLabel(item)}`),
+          text('small', `${action.attention} · ${action.next}`, 'case-action-cue'));
         button.addEventListener('click', () => loadDetail(item.id));
         $('case-list').append(button);
       }
@@ -140,10 +146,18 @@ import { buildCasePresentation, serviceName } from './case-result-model.mjs?v=2'
       const result = await request(`/portal/api/cases/${id}`);
       if (selected !== id) return;
       const item = result.case;
+      const action = caseActionSummary(item);
       panel.replaceChildren();
       panel.append(text('p', serviceName(item.service_id), 'label'), text('h2', outcomeLabel(item)),
         text('p', `${requestStatusLabel(item)} · HTTP status describes the API request, not the verification result.`,
           'case-request-note'));
+      panel.append(text('p', `${action.attention}. ${action.next}`, 'case-guidance'));
+      if (action.reasons.length) panel.append(text('p', `Reasons: ${action.reasons.join(' · ')}`, 'case-guidance'));
+      if (servicePages[item.service_id]) {
+        const docs = text('a', `Open ${serviceName(item.service_id)} documentation`);
+        docs.href = servicePages[item.service_id]; panel.append(docs);
+      }
+      $('cases-attention').textContent = `${action.attention} · ${action.next}`;
       if (outcomeLabel(item) === 'No material findings') {
         panel.append(text('p', 'No material findings within completed screening coverage. This is not legal or credit clearance.'));
       }

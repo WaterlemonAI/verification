@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildCasePresentation, serviceName } from '../api-site/case-result-model.mjs';
+import { buildCasePresentation, caseActionSummary, serviceName } from '../api-site/case-result-model.mjs';
+
+test('case action cues keep transport, extraction and review distinct', () => {
+  assert.match(caseActionSummary({ request_status: 'failed', outcome: 'passed' }).attention, /did not complete/);
+  assert.match(caseActionSummary({ request_status: 'succeeded', outcome: 'extracted' }).next, /not verification/);
+  assert.match(caseActionSummary({ request_status: 'succeeded', outcome: 'not_run' }).attention, /unavailable/);
+  assert.match(caseActionSummary({ request_status: 'succeeded', outcome: 'review_required',
+    outcome_reason_codes: ['partial_coverage'] }).reasons[0], /Partial coverage/);
+});
 
 test('screening view shows evidence and incomplete coverage without inventing clearance', () => {
   const view = buildCasePresentation({ service_id: 'adverse-media', outcome: 'review_required' }, {

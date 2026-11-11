@@ -62,12 +62,15 @@ function inputFor(field) {
 
 async function loadIndex() {
   const response = await fetch('/forms.json');
+  if (!response.ok) throw new Error('Forms could not be loaded. Try again.');
   const { forms } = await response.json();
   const list = byId('forms-list');
+  list.replaceChildren(); byId('forms-retry').hidden = true;
   if (!forms.length) {
-    list.textContent = 'No public Forms are available yet.';
+    byId('forms-status').textContent = 'No Forms are enabled for this workspace.';
     return;
   }
+  byId('forms-status').textContent = `${forms.length} Form${forms.length === 1 ? '' : 's'} available.`;
   forms.forEach((form) => {
     const link = document.createElement('a');
     link.className = 'form-card';
@@ -95,6 +98,14 @@ async function loadForm() {
   byId('form-title').innerHTML = '';
   byId('form-title').append(document.createTextNode(formDefinition.name));
   byId('form-description').textContent = formDefinition.description || 'Consolidated verification workflow.';
+  document.title = `KYCProbe — ${formDefinition.name}`;
+  const syncNavigation = () => {
+    const context = document.querySelector('.portal-context strong');
+    if (context) context.textContent = formDefinition.name;
+    const current = document.querySelector('.portal-sidebar a[aria-current="page"]');
+    if (current?.dataset.path === `/forms/${formDefinition.id}`) current.textContent = formDefinition.name;
+  };
+  syncNavigation(); document.addEventListener('portal:navigation-ready', syncNavigation, { once: true });
   const apiOrigin = ['localhost', '127.0.0.1'].includes(location.hostname) ? location.origin : 'https://api.ai7uae.com';
   const endpoint = `${apiOrigin}/forms/${formDefinition.id}/submissions`;
   byId('endpoint').textContent = endpoint;
@@ -183,10 +194,15 @@ byId('submission-form').addEventListener('submit', async (event) => {
     byId('copy-response').disabled = false;
     byId('response-status').textContent = response.ok ? `Queued · HTTP ${response.status}` : `HTTP ${response.status}`;
     byId('response-status').className = response.ok ? 'success' : 'error';
+    if (response.ok) {
+      const submissionId = body.submission_id || body.id || '';
+      byId('form-submission-id').textContent = submissionId;
+      byId('form-receipt').hidden = !submissionId;
+    }
     if (response.ok) sessionStorage.removeItem(pendingKey);
     if (!response.ok) formError.textContent = body.error || 'The Form could not be submitted.';
   } catch {
-    formError.textContent = 'The API could not be reached.';
+    formError.textContent = 'The response was not received. Retry with the same inputs; this page reuses the idempotency key, so an accepted submission is not duplicated.';
     byId('response-status').textContent = 'Network error';
     byId('response-status').className = 'error';
   } finally { button.disabled = false; }
@@ -197,8 +213,14 @@ byId('copy-response').addEventListener('click', async () => {
   byId('copy-response').textContent = 'Copied';
   setTimeout(() => { byId('copy-response').textContent = 'Copy JSON'; }, 1200);
 });
+byId('copy-submission-id').addEventListener('click', () =>
+  navigator.clipboard.writeText(byId('form-submission-id').textContent));
+window.KYCStatusView?.attach('forms');
 
+byId('forms-retry').addEventListener('click', () => loadIndex().catch((error) => {
+  byId('forms-status').textContent = error.message; byId('forms-retry').hidden = false;
+}));
 (formId ? loadForm() : loadIndex()).catch((error) => {
-  byId('forms-index').innerHTML = `<p class="form-error"></p>`;
-  byId('forms-index').querySelector('p').textContent = error.message;
+  byId('forms-status').textContent = error.message;
+  if (!formId) byId('forms-retry').hidden = false;
 });

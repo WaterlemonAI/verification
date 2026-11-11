@@ -204,3 +204,5 @@ byId('bsa-form').addEventListener('submit', async (event) => {
 
 byId('api-key').addEventListener('input', () => { formError.textContent = ''; });
 byId('statement-file').addEventListener('change', () => { formError.textContent = ''; });
+
+window.KYCStatusView?.attach('bank-statement-analysis');

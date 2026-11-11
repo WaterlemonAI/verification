@@ -8,11 +8,13 @@
 </head>
 <body>
   <div class="utility-bar"><span>KYCProbe Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · Dubai ↗</a></div>
+  <a class="portal-skip-link" href="#main-content">Skip to main content</a>
   <header><a class="brand" href="https://kycprobe.com"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a><span class="status"><i></i> API available</span></header>
-  <main class="cases-main">
+  <main class="cases-main" id="main-content" tabindex="-1">
     <section class="cases-hero"><p class="eyebrow">WORKSPACE CASES</p><h1>Case <em>Manager.</em></h1><p>Review saved results from checks submitted after your workspace enabled Case Manager.</p></section>
     <div class="cases-content">
       <p id="cases-notice" role="status"></p>
+      <p id="cases-attention" class="case-guidance" role="status">Select a case to see why it needs attention and the next review action.</p>
       <form id="cases-filters" class="cases-filters" hidden>
         <label>From <input id="case-from" type="date" required /></label>
         <label>Through <input id="case-to" type="date" required /></label>

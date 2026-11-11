@@ -50,6 +50,7 @@ try {
     const context = await browser.newContext({ viewport });
     const appId = '11111111-1111-4111-8111-111111111111';
     const documents = []; let draft = {}; let preview = false; let submitted = false; let accepted = false;
+    let buyerDetailReads = 0;
     await context.route('**/flo/api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
       const data = route.request().postDataJSON?.() || {};
@@ -92,10 +93,10 @@ try {
         flow_id: 'kys-v1', template_version: '1.0.0', status: accepted ? 'accepted' : 'pending_review',
         created_at: new Date().toISOString() }] };
       else if (path.endsWith('/decision')) { accepted = true; response = { status: 'accepted', application_id: appId }; }
-      else if (path === `/portal/api/flo/cases/${appId}`) response = { application: {
+      else if (path === `/portal/api/flo/cases/${appId}`) { buyerDetailReads += 1; response = { application: {
         application_id: appId, customer_reference: 'SYNTHETIC', flow_id: 'kys-v1', template_version: '1.0.0',
         supplier_email: 'supplier@example.com',
-        status: accepted ? 'accepted' : 'pending_review', created_at: new Date().toISOString(),
+        status: accepted ? 'accepted' : buyerDetailReads === 1 ? 'processing' : 'pending_review', created_at: new Date().toISOString(),
         review_requirements: { text: ['business_name', 'licence_number'],
           documents: ['trade_licence', 'formation_document', 'bank_letter'] },
         draft: { business_name: 'Synthetic Trading LLC', licence_number: 'LIC-1',
@@ -108,11 +109,13 @@ try {
         { service_id: 'entity-adverse-media', subject_id: appId, transport: 'not_run', coverage: 'unavailable',
           business_result: 'could_not_complete', reason_codes: ['input_missing'] }],
         ai7edd_review: { status: 'not_run', reason_codes: ['ai7edd_unconfigured'] },
-        reports: [{ version: 1 }], events: [{ at: new Date().toISOString(), type: 'review_ready', actor: 'flo_worker' }] } };
+        reports: [{ version: 1 }], events: [{ at: new Date().toISOString(), type: 'review_ready', actor: 'flo_worker' }] } }; }
       else response = { error: 'Unexpected route' };
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(response) });
     });
     const page = await context.newPage();
+    await page.addInitScript(() => { const original = window.setTimeout;
+      window.setTimeout = (fn, delay, ...args) => original(fn, delay === 8000 ? 80 : delay, ...args); });
     await page.goto(`${base}/f/synthetic-token-abcdefghijklmnopqrstuvwxyz0123456789`);
     await page.locator('#journey').waitFor({ state: 'visible' });
     for (const [name, value] of Object.entries({ business_name: 'Synthetic Trading LLC', licence_number: 'LIC-1',
@@ -141,7 +144,14 @@ try {
     await page.getByText('Onboarding link created').waitFor();
     await page.getByText('22222222-2222-4222-8222-222222222222').waitFor();
     if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `flo-buyer-link-${viewport.width}.png`), fullPage: true });
+    await page.getByText('1 of 1 loaded applications need buyer attention.').waitFor();
+    await page.locator('.flo-attention-cue').getByText(/Buyer review needed/).waitFor();
     await page.getByRole('button', { name: /SYNTHETIC/ }).click();
+    await page.locator('#flo-action-status').filter({ hasText: 'Checks are processing · this view refreshes automatically' }).waitFor();
+    await page.locator('#flo-action-status').filter({ hasText: 'Buyer review needed · inspect evidence and decide' }).waitFor();
+    if (buyerDetailReads < 2) throw new Error('Processing case did not refresh to buyer review.');
+    await page.waitForTimeout(250);
+    if (buyerDetailReads !== 2) throw new Error('Case continued refreshing after reaching buyer review.');
     await page.getByText('AML', { exact: true }).waitFor();
     await page.locator('.flo-screening-group').first().getByText('Potential flag').waitFor();
     await page.locator('.flo-screening-group').first().getByText(/incomplete coverage/).waitFor();
@@ -159,6 +169,39 @@ try {
     await page.getByText('Status: accepted').waitFor();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
     if (overflow) throw new Error(`Flo buyer UI overflows at ${viewport.width}px`);
+    const raceA = '33333333-3333-4333-8333-333333333333';
+    const raceB = '44444444-4444-4444-8444-444444444444';
+    let raceAReads = 0; let releaseRaceA;
+    const raceGate = new Promise((resolve) => { releaseRaceA = resolve; });
+    const raceItem = (id, reference, status) => ({ application_id: id, customer_reference: reference,
+      flow_id: 'kys-v1', template_version: '1.0.0', supplier_email: 'supplier@example.com', status,
+      created_at: new Date().toISOString(), review_requirements: { text: [], documents: [] },
+      draft: {}, documents: [], checks: [], subjects: [], reports: [], events: [] });
+    await context.route('**/portal/api/flo/cases**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/portal/api/flo/cases') return route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ counts: { processing_review: 2 }, next_cursor: null, cases: [
+          { ...raceItem(raceA, 'RACE-A', 'processing'), bucket: 'processing_review' },
+          { ...raceItem(raceB, 'RACE-B', 'pending_review'), bucket: 'processing_review' }] }) });
+      if (path === `/portal/api/flo/cases/${raceA}` || path === `/portal/api/flo/cases/${raceB}`) {
+        if (path.endsWith(raceA) && ++raceAReads === 2) await raceGate;
+        const item = path.endsWith(raceA) ? raceItem(raceA, 'RACE-A', 'processing')
+          : raceItem(raceB, 'RACE-B', 'pending_review');
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ application: item }) });
+      }
+      return route.fallback();
+    });
+    await page.goto(`${base}/buyer`);
+    await page.locator(`#flo-list .flo-case[data-case-id="${raceA}"]`).click();
+    await page.locator('#flo-action-status').filter({ hasText: 'Checks are processing' }).waitFor();
+    await page.waitForTimeout(250);
+    if (raceAReads !== 2) throw new Error('Flo race fixture did not start an in-flight automatic refresh.');
+    await page.locator(`#flo-list .flo-case[data-case-id="${raceB}"]`).click();
+    await page.locator('#flo-detail h2').filter({ hasText: 'RACE-B' }).waitFor();
+    releaseRaceA();
+    await page.waitForTimeout(150);
+    if (await page.locator('#flo-detail h2').textContent() !== 'RACE-B')
+      throw new Error('An earlier Flo refresh replaced the newly selected case.');
     await context.close();
     console.log(`Flo supplier and buyer UI passed at ${viewport.width}px`);
 

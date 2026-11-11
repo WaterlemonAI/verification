@@ -23,7 +23,8 @@ try {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
     const portal = await browser.newContext({ viewport });
     const page = await portal.newPage();
-    await page.goto(`${base}/login?next=%2Faccount`);
+    const normalTarget = viewport.width === 390 ? '/home' : '/usage';
+    await page.goto(`${base}/login${normalTarget === '/usage' ? '?next=%2Fusage' : ''}`);
     await page.locator('#login-email').fill('portal@example.test');
     await page.locator('#login-password').fill('PortalPass!234');
     await page.locator('#login-form button[type="submit"]').click();
@@ -37,11 +38,47 @@ try {
     }
     await page.locator('#login-code').fill(portalCode);
     await page.locator('#code-form button[type="submit"]').click();
-    await page.waitForURL(`${base}/account`);
+    await page.waitForURL(`${base}${normalTarget}`);
     if ((await portal.request.get(`${base}/portal/api/auth/session`)).status() !== 200) {
       throw new Error('Portal session was not issued after email verification');
     }
     await portal.close();
+
+    const initialId = viewport.width === 390 ? 'aaaaaaaaaaaaaaab' : 'aaaaaaaaaaaaaaaa';
+    const initialEmail = `first-${viewport.width}@example.test`;
+    await store.setCustomer({ id: initialId, name: 'First login workspace', status: 'active' });
+    await store.setPortalUser({ ...createPortalAccount(initialEmail, 'FirstLogin!234',
+      { id: initialId, name: 'First login workspace' }), initial_key_pending: true });
+    const firstContext = await browser.newContext({ viewport });
+    await firstContext.route('**/portal/api/keys', (route) => route.fulfill({ status: 503,
+      contentType: 'application/json', body: '{"error":"Key list temporarily unavailable."}' }));
+    const firstPage = await firstContext.newPage();
+    await firstPage.goto(`${base}/login?next=%2Faccount`);
+    await firstPage.locator('#login-email').fill(initialEmail);
+    await firstPage.locator('#login-password').fill('FirstLogin!234');
+    await firstPage.locator('#login-form button[type="submit"]').click();
+    await firstPage.locator('#code-form').waitFor({ state: 'visible' });
+    await firstPage.locator('#login-code').fill(sent.at(-1).code);
+    await firstPage.locator('#code-form button[type="submit"]').click();
+    await firstPage.waitForURL(`${base}/api-keys`);
+    await firstPage.locator('#new-key-panel').waitFor({ state: 'visible' });
+    const revealed = await firstPage.locator('#new-key-value').textContent();
+    if (!revealed || revealed.length < 20) throw new Error('Initial key was not revealed on API Keys.');
+    if (!(await firstPage.locator('#retry-key-list').isVisible()))
+      throw new Error('Failed key-list request did not offer retry.');
+    await firstPage.reload();
+    await firstPage.locator('#new-key-panel').waitFor({ state: 'visible' });
+    if ((await firstPage.locator('#new-key-value').textContent()) !== revealed)
+      throw new Error('Initial key was lost before acknowledgment.');
+    await firstContext.unroute('**/portal/api/keys');
+    await firstPage.locator('#retry-key-list').click();
+    await firstPage.locator('#retry-key-list').waitFor({ state: 'hidden' });
+    await firstPage.locator('#ack-new-key').click();
+    await firstPage.reload();
+    if (await firstPage.locator('#new-key-panel').isVisible()
+      || (await firstPage.locator('#new-key-value').textContent()) === revealed)
+      throw new Error('Acknowledged key was revealed again after reload.');
+    await firstContext.close();
 
     const admin = await browser.newContext({ viewport });
     const adminPage = await admin.newPage();

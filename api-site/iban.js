@@ -175,3 +175,5 @@ byId('iban-form').addEventListener('submit', async (event) => {
     sendButton.disabled = false;
   }
 });
+
+window.KYCStatusView?.attach('iban');

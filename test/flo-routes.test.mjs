@@ -38,6 +38,7 @@ test('Flo host isolation, explicit assignment, one-time redemption and supplier 
 
   const input = { customer_reference: 'ORDER-1', supplier_email: 'supplier@example.com' };
   const auth = { authorization: `Bearer ${issued.apiKey}`, 'idempotency-key': 'order-1-request' };
+  await usage.configure(workspace, { mode: 'postpay', currency: 'USD', allowedModules: [], rates: {} });
   const first = await send('/flows/kys-v1/links', 'api.ai7uae.com', 'POST', input, auth);
   assert.equal(first.status, 403, await first.text());
   await flo.putTemplate({ enabled: true });

@@ -11,10 +11,12 @@
 </head>
 <body>
   <div class="utility-bar"><span>KYCProbe Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · Dubai ↗</a></div>
+  <a class="portal-skip-link" href="#main-content">Skip to main content</a>
   <header><a class="brand" href="https://kycprobe.com"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a><span class="status"><i></i> API available</span></header>
-  <main class="account-main">
-    <section class="account-hero"><p class="eyebrow">WORKSPACE ACCESS</p><h1>Account <em>settings.</em></h1><p>Manage API credentials for your workspace. Every key works across the APIs enabled for your account.</p><div id="account-identity"></div></section>
+  <main class="account-main" id="main-content" tabindex="-1">
+    <section class="account-hero"><p class="eyebrow" id="account-page-eyebrow">WORKSPACE</p><h1 id="account-page-title">Account settings</h1><p id="account-page-intro">Manage your workspace and team.</p><div id="account-identity"></div></section>
     <section class="account-content">
+      <section data-account-view="account" hidden>
       <section class="account-team" aria-labelledby="team-title">
         <div class="account-section-head"><div><p class="label">ORGANIZATION</p><h2 id="team-title">Your team</h2><p>Members use their own sign-in and API keys. API calls and credit are shared by this workspace.</p></div></div>
         <p id="team-summary" role="status">Loading team…</p>
@@ -31,19 +33,32 @@
         <p id="case-settings-message" role="status"></p>
         <p class="case-settings-note">This setting controls only the Case Manager copy. OCR cases, including Forms with OCR, expire after at most 30 days. Disabling Case Manager retires its existing copies; enabling it again does not restore them. Separately, adverse-media JSON is retained for 365 days, OCR source data for 30 days, and bank-statement source data currently has no fixed deletion schedule. Some PDFs are permanent and publicly accessible by link. This setting does not delete those separate copies or revoke their links.</p>
       </section>
+      </section>
+      <section data-account-view="api-keys" hidden>
       <div class="account-section-head"><div><p class="label">API CREDENTIALS</p><h2>Your API keys</h2><p>Every member may create their own organization key. Keys share this workspace’s credit; full values are displayed only when created or rotated.</p></div></div>
-      <div id="new-key-panel" class="account-key-reveal" hidden><strong>New key — copy now</strong><div class="account-key-value"><code id="new-key-value"></code><button id="copy-new-key" class="copy-key-icon" type="button" aria-label="Copy API key" title="Copy API key"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg></button></div><p>The old key stops working immediately after rotation.</p></div>
+      <div id="new-key-panel" class="account-key-reveal" hidden><strong>New key — copy now</strong><div class="account-key-value"><code id="new-key-value"></code><button id="copy-new-key" class="copy-key-icon" type="button" aria-label="Copy API key" title="Copy API key"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></svg></button></div><p>Store the replacement before continuing. Rotation immediately invalidates the prior key; integrations using it must be updated.</p><button id="ack-new-key" type="button">I have stored this key</button><button id="retry-key-list" type="button" hidden>Retry key list</button></div>
       <form id="create-key-form" class="account-create-form"><label>Key label<input id="key-label" maxlength="60" placeholder="Production integration" required /></label><button type="submit">Create API key</button></form>
       <p id="account-message" role="status"></p><div id="key-list" class="account-key-list"></div>
-      <div class="account-section-head"><div><p class="label">USAGE METER</p><h2>Credit and API calls</h2><p>Every admitted hit appears here with its transaction ID, UTC timestamp, HTTP response code and cost. Rates are set by your administrator.</p></div><button id="refresh-usage" type="button">Refresh</button></div>
+      </section>
+      <section data-account-view="usage" hidden>
+      <div class="account-section-head"><div><p class="label">USAGE &amp; BILLING</p><h2>Credit and API calls</h2><p>Balance, charged calls and spend below are all-time account totals. By default the table shows the latest 100 transactions; apply UTC filters to browse older rows. Rates are set by your administrator.</p></div><button id="refresh-usage" type="button">Refresh</button></div>
+      <form id="usage-filters" class="account-usage-filters"><label>From (UTC)<input id="usage-from" type="date"></label><label>Through (UTC)<input id="usage-to" type="date"></label><label>Module<select id="usage-module"><option value="">All modules</option></select></label><button type="submit">Apply filters</button><button id="clear-usage-filters" type="button">Clear</button><button id="export-usage" type="button">Export CSV</button></form>
+      <p id="usage-count" role="status">Showing the latest 100 transactions.</p><p id="usage-export-message" role="status"></p>
+      <div id="usage-rate-card" class="account-rate-card"></div>
       <p id="usage-status" role="status"></p><div class="account-usage-wrap"><table class="account-usage-table"><thead><tr><th>UTC time</th><th>Transaction ID</th><th>Key</th><th>API</th><th>HTTP code</th><th>Cost</th></tr></thead><tbody id="usage-rows"></tbody></table></div>
+      <button id="usage-more" type="button" hidden>Load more transactions</button>
+      </section>
+      <section data-account-view="account" hidden>
       <div class="account-section-head"><div><p class="label">SERVICE STATUS</p><h2>API health</h2><p>Transport and route configuration for APIs enabled in this workspace. This check does not run chargeable supplier probes.</p></div><button id="refresh-health" type="button">Refresh</button></div>
       <p id="health-status" role="status"></p><div id="health-list" class="account-health-list"></div>
+      </section>
+      <section data-account-view="api-keys" hidden>
       <div class="account-section-head"><div><p class="label">AUTOMATION</p><h2>Manage keys by API</h2><p>Rotate the key used for a request with a server-to-server call. The response returns the replacement once and immediately invalidates the old value.</p></div></div>
       <pre class="account-command">curl -X POST https://api.ai7uae.com/service/keys/self/rotate \
   -H "Authorization: Bearer YOUR_CURRENT_API_KEY"</pre>
       <pre class="account-command">curl https://api.ai7uae.com/service/health \
   -H "Authorization: Bearer YOUR_API_KEY"</pre>
+      </section>
     </section>
   </main>
 </body>

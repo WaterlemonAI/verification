@@ -296,3 +296,5 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
     sendButton.disabled = false;
   }
 });
+
+window.KYCStatusView?.attach('adverse-media');

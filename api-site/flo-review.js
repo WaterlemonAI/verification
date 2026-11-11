@@ -257,8 +257,14 @@
     for (const check of item.checks || []) {
       const card = el('article', null, 'flo-assessment');
       card.append(el('strong', nice(check.service_id)));
-      pairs(card, check, ['subject_id', 'transport', 'coverage', 'business_result', 'reason_codes',
-        'http_status', 'started_at', 'completed_at']);
+      const next = check.transport === 'not_run' ? 'Check was not run; review required inputs.'
+        : check.transport !== 'completed' ? 'Provider did not complete; inspect the failure before retrying.'
+          : check.coverage !== 'complete' ? 'Coverage is incomplete; inspect unavailable sources.'
+            : check.business_result === 'requires_review' ? 'Review source evidence before deciding.'
+              : 'Review the provider result and source evidence.';
+      pairs(card, check, ['business_result', 'coverage', 'source', 'source_id', 'completed_at',
+        'transport', 'reason_codes', 'http_status', 'subject_id', 'started_at']);
+      card.append(el('p', `Next action: ${next}`, 'flo-check-action'));
       if (check.raw_response != null) {
         const response = el('details', null, 'flo-screening-evidence'); response.append(el('summary', 'Provider response'));
         response.addEventListener('toggle', () => {

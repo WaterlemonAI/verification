@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="/api.css?v=9" />
     <script src="/portal-auth.js?v=4" defer></script>
     <script src="/entity-search-fields.js?v=1" defer></script>
+    <script src="/status-view.js" defer></script>
     <script src="/entity-search.js?v=4" defer></script>
   </head>
   <body>
@@ -191,7 +192,7 @@
               <p class="form-error" id="form-error" role="alert"></p>
               <button type="submit" id="send-request">Send request <span>→</span></button>
             </form>
-            <div class="response-head">
+            <div id="check-state" class="check-state" role="status" aria-live="polite"></div><div class="response-head">
               <span id="response-label">API RESPONSE</span>
               <span class="response-actions"><button id="copy-response" type="button" disabled>Copy JSON</button><a id="download-pdf" hidden>Download PDF</a><span id="response-status">Ready</span></span>
             </div>

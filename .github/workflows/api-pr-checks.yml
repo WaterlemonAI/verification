@@ -68,7 +68,9 @@ jobs:
           npx playwright-core install chromium
           node scripts/smoke-case-manager-ui.mjs
           node scripts/smoke-login-otp-ui.mjs
+          node scripts/smoke-portal-navigation-ui.mjs
           node scripts/smoke-ejari-ui.mjs
+          node scripts/smoke-service-status-ui.mjs
           node scripts/smoke-flo-ui.mjs
           node scripts/smoke-flo-builder-ui.mjs
       - name: Validate document OCR Bicep
