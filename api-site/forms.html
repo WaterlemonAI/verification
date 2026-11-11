@@ -11,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/api.css?v=9" />
     <script src="/portal-auth.js?v=4" defer></script>
-    <script src="/forms.js?v=2" defer></script>
+    <script src="/status-view.js" defer></script><script src="/forms.js?v=2" defer></script>
   </head>
   <body>
     <div class="utility-bar"><span>KYCProbe Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · Dubai ↗</a></div>
@@ -73,6 +73,7 @@
               <p class="form-error" id="form-error" role="alert"></p>
               <button type="submit" id="send-request">Submit Form <span>→</span></button>
             </form>
+            <div id="check-state" class="check-state" role="status" aria-live="polite"></div><p id="form-receipt" role="status" hidden>Submission ID: <code id="form-submission-id"></code> <button id="copy-submission-id" type="button">Copy ID</button><span> · Await the signed callback for the final result.</span></p>
             <div class="response-head"><span>API RESPONSE</span><span id="response-status">Ready</span></div>
             <div class="response-actions"><button id="copy-response" disabled>Copy JSON</button></div>
             <pre id="response-json" aria-live="polite">{

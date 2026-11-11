@@ -307,3 +307,5 @@ byId('entity-search-form').addEventListener('submit', async (event) => {
     sendButton.disabled = false;
   }
 });
+
+window.KYCStatusView?.attach('entity-search');

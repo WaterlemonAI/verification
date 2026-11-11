@@ -194,10 +194,15 @@ byId('submission-form').addEventListener('submit', async (event) => {
     byId('copy-response').disabled = false;
     byId('response-status').textContent = response.ok ? `Queued · HTTP ${response.status}` : `HTTP ${response.status}`;
     byId('response-status').className = response.ok ? 'success' : 'error';
+    if (response.ok) {
+      const submissionId = body.submission_id || body.id || '';
+      byId('form-submission-id').textContent = submissionId;
+      byId('form-receipt').hidden = !submissionId;
+    }
     if (response.ok) sessionStorage.removeItem(pendingKey);
     if (!response.ok) formError.textContent = body.error || 'The Form could not be submitted.';
   } catch {
-    formError.textContent = 'The API could not be reached.';
+    formError.textContent = 'The response was not received. Retry with the same inputs; this page reuses the idempotency key, so an accepted submission is not duplicated.';
     byId('response-status').textContent = 'Network error';
     byId('response-status').className = 'error';
   } finally { button.disabled = false; }
@@ -208,6 +213,9 @@ byId('copy-response').addEventListener('click', async () => {
   byId('copy-response').textContent = 'Copied';
   setTimeout(() => { byId('copy-response').textContent = 'Copy JSON'; }, 1200);
 });
+byId('copy-submission-id').addEventListener('click', () =>
+  navigator.clipboard.writeText(byId('form-submission-id').textContent));
+window.KYCStatusView?.attach('forms');
 
 byId('forms-retry').addEventListener('click', () => loadIndex().catch((error) => {
   byId('forms-status').textContent = error.message; byId('forms-retry').hidden = false;

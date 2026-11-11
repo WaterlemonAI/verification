@@ -200,3 +200,5 @@ byId('merchant-screening-form').addEventListener('submit', async (event) => {
     sendButton.disabled = false;
   }
 });
+
+window.KYCStatusView?.attach('merchant-screening');

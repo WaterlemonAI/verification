@@ -352,6 +352,10 @@ body.portal-ready { padding-left: 276px; }
 .home-card:hover{border-color:var(--green);box-shadow:0 8px 22px #102b4814}.home-card span{color:var(--muted);font-size:.78rem}
 .home-main>section>a{display:inline-block;margin-top:.75rem;color:var(--green)}
 .home-main>button,.account-key-reveal>button{padding:.7rem .9rem;border:0;background:var(--mint);color:var(--dark);font-weight:800;cursor:pointer}
+.check-state{display:grid;gap:.3rem;margin:1rem 0;padding:.9rem 1rem;border:1px solid #cbd9e5;border-left:4px solid #315c8d;background:#f1f6fb;color:var(--ink);line-height:1.5}
+.check-state strong{font-size:.88rem}.check-state span{font-size:.78rem;color:#3c5067}
+.check-state[data-state=review]{border-left-color:#b36813;background:#fff8eb}
+.check-state[data-state=pending]{border-left-color:#527a9b;background:#f1f6fb}
 .account-content>[data-account-view]{min-width:0}
 .account-rate-card{display:grid;gap:.45rem;margin:1rem 0 1.5rem;padding:1.2rem;border:1px solid #dae3ea;background:#fff}
 .account-rate-card h2{margin:0 0 .4rem;font-size:1.2rem}

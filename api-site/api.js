@@ -258,3 +258,5 @@ form.addEventListener('submit', async (event) => {
     sendButton.disabled = false;
   }
 });
+
+window.KYCStatusView?.attach('trade-licence');

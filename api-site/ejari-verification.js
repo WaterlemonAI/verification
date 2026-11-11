@@ -88,3 +88,5 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 })();
+
+window.KYCStatusView?.attach('ejari', { statusId: 'ejari-status', jsonId: 'ejari-json' });
