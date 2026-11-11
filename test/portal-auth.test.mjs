@@ -280,6 +280,13 @@ test('one-time customer invitation creates a portal account and initial workspac
       assert.equal(response.status, 200, `${route} should serve for ${modules.join(',')}`);
     }
   }
+  const legacyAccount = await store.getPortalUser('user@example.com');
+  await store.setPortalUser({ ...legacyAccount, role: undefined });
+  for (const route of ['/flo', '/flo-workflows']) {
+    const response = await fetch(baseUrl + route, { headers: { cookie: loginCookie, accept: 'text/html' } });
+    assert.equal(response.status, 200, `${route} should serve for a legacy administrator`);
+  }
+  await store.setPortalUser(legacyAccount);
   await usageStore.configure(customerId, { mode: 'postpay', currency: 'USD',
     allowedModules: [], rates: {} });
   for (const route of ['/flo', '/flo-workflows']) {

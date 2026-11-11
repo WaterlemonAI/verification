@@ -1,5 +1,5 @@
 (() => {
-  const pending = new Set(['pending', 'queued', 'running', 'processing', 'submitted', 'accepted']);
+  const pending = new Set(['pending', 'queued', 'running', 'processing', 'submitted']);
   const failed = new Set(['error', 'failed', 'expired', 'unavailable', 'could_not_complete']);
   const safe = (value) => typeof value === 'string' ? value.slice(0, 160) : '';
   const parse = (value) => { try { return JSON.parse(value); } catch { return null; } };
@@ -9,7 +9,8 @@
     if (/^ready$/.test(text)) return ['Awaiting result', 'Submit a request to see its progress and source result.'];
     if (failed.has(status) || /request error|connection error|could not complete|^(?:http )?[45]\d\d/.test(text))
       return ['Could not complete', 'Review the error and source response before retrying.'];
-    if (pending.has(status) || /submitting|uploading|collecting|searching|processing|queued|still processing/.test(text))
+    if (pending.has(status) || service === 'forms' && status === 'accepted'
+      || /submitting|uploading|collecting|searching|processing|queued|still processing/.test(text))
       return [status === 'queued' || service === 'forms' ? 'Queued' : 'Processing',
         service === 'forms' ? 'Await the signed callback for the final result. There is no live status endpoint.'
           : 'This request has not reached a final result. Keep the result URL or job ID if supplied.'];

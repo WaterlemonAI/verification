@@ -50,6 +50,7 @@ try {
     const context = await browser.newContext({ viewport });
     const appId = '11111111-1111-4111-8111-111111111111';
     const documents = []; let draft = {}; let preview = false; let submitted = false; let accepted = false;
+    let buyerDetailReads = 0;
     await context.route('**/flo/api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
       const data = route.request().postDataJSON?.() || {};
@@ -92,10 +93,10 @@ try {
         flow_id: 'kys-v1', template_version: '1.0.0', status: accepted ? 'accepted' : 'pending_review',
         created_at: new Date().toISOString() }] };
       else if (path.endsWith('/decision')) { accepted = true; response = { status: 'accepted', application_id: appId }; }
-      else if (path === `/portal/api/flo/cases/${appId}`) response = { application: {
+      else if (path === `/portal/api/flo/cases/${appId}`) { buyerDetailReads += 1; response = { application: {
         application_id: appId, customer_reference: 'SYNTHETIC', flow_id: 'kys-v1', template_version: '1.0.0',
         supplier_email: 'supplier@example.com',
-        status: accepted ? 'accepted' : 'pending_review', created_at: new Date().toISOString(),
+        status: accepted ? 'accepted' : buyerDetailReads === 1 ? 'processing' : 'pending_review', created_at: new Date().toISOString(),
         review_requirements: { text: ['business_name', 'licence_number'],
           documents: ['trade_licence', 'formation_document', 'bank_letter'] },
         draft: { business_name: 'Synthetic Trading LLC', licence_number: 'LIC-1',
@@ -108,11 +109,13 @@ try {
         { service_id: 'entity-adverse-media', subject_id: appId, transport: 'not_run', coverage: 'unavailable',
           business_result: 'could_not_complete', reason_codes: ['input_missing'] }],
         ai7edd_review: { status: 'not_run', reason_codes: ['ai7edd_unconfigured'] },
-        reports: [{ version: 1 }], events: [{ at: new Date().toISOString(), type: 'review_ready', actor: 'flo_worker' }] } };
+        reports: [{ version: 1 }], events: [{ at: new Date().toISOString(), type: 'review_ready', actor: 'flo_worker' }] } }; }
       else response = { error: 'Unexpected route' };
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(response) });
     });
     const page = await context.newPage();
+    await page.addInitScript(() => { const original = window.setTimeout;
+      window.setTimeout = (fn, delay, ...args) => original(fn, delay === 8000 ? 80 : delay, ...args); });
     await page.goto(`${base}/f/synthetic-token-abcdefghijklmnopqrstuvwxyz0123456789`);
     await page.locator('#journey').waitFor({ state: 'visible' });
     for (const [name, value] of Object.entries({ business_name: 'Synthetic Trading LLC', licence_number: 'LIC-1',
@@ -141,7 +144,14 @@ try {
     await page.getByText('Onboarding link created').waitFor();
     await page.getByText('22222222-2222-4222-8222-222222222222').waitFor();
     if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `flo-buyer-link-${viewport.width}.png`), fullPage: true });
+    await page.getByText('1 of 1 loaded applications need buyer attention.').waitFor();
+    await page.locator('.flo-attention-cue').getByText(/Buyer review needed/).waitFor();
     await page.getByRole('button', { name: /SYNTHETIC/ }).click();
+    await page.locator('#flo-action-status').filter({ hasText: 'Checks are processing · this view refreshes automatically' }).waitFor();
+    await page.locator('#flo-action-status').filter({ hasText: 'Buyer review needed · inspect evidence and decide' }).waitFor();
+    if (buyerDetailReads < 2) throw new Error('Processing case did not refresh to buyer review.');
+    await page.waitForTimeout(250);
+    if (buyerDetailReads !== 2) throw new Error('Case continued refreshing after reaching buyer review.');
     await page.getByText('AML', { exact: true }).waitFor();
     await page.locator('.flo-screening-group').first().getByText('Potential flag').waitFor();
     await page.locator('.flo-screening-group').first().getByText(/incomplete coverage/).waitFor();

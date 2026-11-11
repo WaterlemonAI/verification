@@ -63,6 +63,9 @@ try {
     await page.locator('#ejari-submit').click();
     await page.locator('#ejari-summary').waitFor({ state: 'visible', timeout: 10_000 });
     assert.match(await page.locator('#ejari-summary').textContent(), /verified/);
+    await page.locator('#check-state').filter({ hasText: 'Provider result received' }).waitFor();
+    assert.match(await page.locator('#check-state').textContent(), /Provider status: verified/);
+    assert.doesNotMatch(await page.locator('#check-state').textContent(), /certificate verified|approval/i);
     assert.equal(await page.locator('#ejari-download').isVisible(), true);
     assert.deepEqual(errors, []);
     await page.close();

@@ -29,7 +29,8 @@ test('buyer UI creates a metered Supplier Onboarding v1 link without an API key'
           response.writeHead(403); response.end(); return null;
         }
         return { account: { client_id: workspace,
-          role: request.headers.cookie.includes('session=member') ? 'member' : 'org_admin',
+          role: request.headers.cookie.includes('session=member') ? 'member'
+            : request.headers.cookie.includes('session=legacy') ? undefined : 'org_admin',
           email: 'buyer@example.com' } };
       },
       hasEntitlement: async (id) => { const { allowed_modules } = await usage.account(id);
@@ -66,6 +67,8 @@ test('buyer UI creates a metered Supplier Onboarding v1 link without an API key'
     { cookie: 'session=member' })).status, 403);
   assert.deepEqual((await send('/portal/api/flo/flows')).body.flows.map((flow) => flow.flow_id),
     ['supplier-onboarding-v1']);
+  assert.equal((await send('/portal/api/flo/flows', 'GET', undefined,
+    { cookie: 'session=legacy' })).status, 200);
   assert.equal((await send('/portal/api/flo/status')).body.workflow_platform_enabled, false);
   assert.equal((await send(path, 'POST', input, { ...headers, cookie: 'session=member' })).status, 403);
   assert.equal((await send(path, 'POST', input, { 'idempotency-key': headers['idempotency-key'] })).status, 403);

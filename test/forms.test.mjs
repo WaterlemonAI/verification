@@ -101,8 +101,15 @@ test('admin creates a versioned Form and public schema hides mappings', async ()
   const portal = await (await fetch(`${baseUrl}/forms/vendor-onboarding`, { headers: { host: 'api.ai7uae.com' } })).text();
   assert.match(portal, /One input/);
   assert.match(portal, /x-ai7-signature/);
+  assert.match(portal, /Await the signed callback for the final result/);
+  assert.match(portal, /id="form-submission-id"/);
+  assert.match(portal, /id="copy-submission-id"/);
   const script = await (await fetch(`${baseUrl}/forms.js`, { headers: { host: 'api.ai7uae.com' } })).text();
   assert.match(script, /forms\/\$\{formDefinition\.id\}\/submissions/);
+  assert.match(script, /body\.submission_id/);
+  assert.match(script, /Retry with the same inputs/);
+  assert.doesNotMatch(script, /sessionStorage\.setItem\([^\n]*callback_access_key/);
+  assert.doesNotMatch(script, /\/forms\/\$\{formDefinition\.id\}\/submissions\/\$\{submissionId\}/);
 });
 
 test('signed-in Forms catalog is workspace filtered and not shared-cacheable', async () => {
