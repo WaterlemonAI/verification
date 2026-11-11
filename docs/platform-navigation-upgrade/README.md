@@ -2,6 +2,8 @@
 
 **Baseline:** production `main` at `bef5557377d505ccbc6339276cf62432e853dfc7` (11 November 2026). This plan covers the signed-in **customer workspace** on `app.kycprobe.com`. The platform administrator at `/admin` and supplier journeys on `flo.ai7uae.com` remain separate products; their navigation is not copied into the customer workspace.
 
+**Expanded PR #148 scope:** [Same-release experience expansion](same-release-expansion.md) is the current handoff for adding the home page, navigation search, case actions, result/progress clarity, usage export, key safety, accessibility and performance work to the first release. It pulls forward the usage and API/OCR presentation items below. Flo editor reorganisation, Flo deep-link state and administrator terminology remain later refinements.
+
 **Design constraint:** keep the current KYCProbe logo, Manrope/DM Mono typography, navy/blue/gold palette, surfaces, and component tone. Change information architecture, behavior, density, and wording. Do not change API billing, case retention, workflow schemas, access policy, or existing URLs during the navigation release.
 
 ## 1. Target information architecture
