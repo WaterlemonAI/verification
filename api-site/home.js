@@ -1,7 +1,6 @@
 (() => {
   const $ = (id) => document.getElementById(id);
   const actions = [
-    { module: 'flo', label: 'Create an onboarding link', href: '/flo#new-application', admin: true },
     { module: 'uae-trade-licence', label: 'Check a trade licence', href: '/' },
     { module: 'iban-verification', label: 'Check an IBAN', href: '/iban' },
     { module: 'forms', label: 'Open Forms', href: '/forms' }
@@ -26,14 +25,19 @@
     catch { $('home-status').textContent = 'Workspace data could not be loaded.'; $('home-retry').hidden = false; return; }
     const admin = (session.account?.role || 'org_admin') === 'org_admin';
     $('home-intro').textContent = `${session.account?.client_name || 'Your workspace'} · Choose a task or review recent activity.`;
-    $('home-actions').replaceChildren(...actions.filter((item) => allowed(access, item.module) && (!item.admin || admin))
+    $('home-actions').replaceChildren(...actions.filter((item) => allowed(access, item.module))
       .map((item) => link(item.label, item.href, 'Open tool')));
-    if (!$('home-actions').children.length) $('home-actions').textContent = 'No tools are enabled for this workspace.';
+    if (!$('home-actions').children.length) $('home-actions').textContent = 'Checking available tools…';
     const [floStatus, caseSettings] = await Promise.allSettled([
       admin && allowed(access, 'flo') ? json('/portal/api/flo/status') : Promise.resolve(null),
       json('/portal/api/case-manager/settings')
     ]);
     const pending = [];
+    if (floStatus.status === 'fulfilled' && floStatus.value?.enabled && floStatus.value?.has_active_flow) {
+      if (!$('home-actions').children.length) $('home-actions').replaceChildren();
+      $('home-actions').prepend(link('Create an onboarding link', '/flo#new-application', 'Open tool'));
+    }
+    if (!$('home-actions').children.length) $('home-actions').textContent = 'No tools are enabled for this workspace.';
     if (floStatus.status === 'fulfilled' && floStatus.value?.enabled) {
       $('home-flo-section').hidden = false;
       pending.push(json('/portal/api/flo/cases?limit=5').then(({ cases }) => {

@@ -48,8 +48,24 @@ try {
       contentType: 'application/json', body: JSON.stringify({ forms: [] }) }));
     const page = await context.newPage();
     const chargeable = [];
+    const coverageCases = {
+      'entity-search': [
+        [{ data: { profiles: [] } }, 'Coverage unknown'],
+        [{ profiles_success: true, data: { profiles: [] } }, 'Coverage unknown'],
+        [{ profiles_success: true, apc_success: true, data: { profiles: [] } }, 'No candidates in completed coverage']
+      ],
+      'adverse-media': [
+        [{ status: 'completed', results: [] }, 'Coverage unknown'],
+        [{ status: 'completed', coverage: { complete: true }, results: [] }, 'Coverage unknown'],
+        [{ status: 'completed', coverage: { complete: true }, summary: { decision_eligible: true }, results: [] }, 'No material findings in completed coverage']
+      ],
+      'merchant-screening': [
+        [{ status: 'completed', findings: [] }, 'Coverage unknown'],
+        [{ status: 'completed', summary: { decision_eligible: true }, findings: [] }, 'No material findings in completed coverage']
+      ]
+    };
     page.on('request', (request) => { if (new URL(request.url()).pathname.startsWith('/service/')) chargeable.push(request.url()); });
-    for (const [path, , , result, expected] of pages) {
+    for (const [path, , service, result, expected] of pages) {
       await page.goto(base + path);
       if (path === '/forms') await page.locator('#form-detail').evaluate((node) => { node.hidden = false; });
       await page.locator('#check-state').waitFor();
@@ -66,6 +82,11 @@ try {
         throw new Error(`Unsafe result wording or secret leak on ${path}`);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
       if (overflow > 1) throw new Error(`${path} overflows ${width}px by ${overflow}`);
+      for (const [coverageResult, label] of coverageCases[service] || []) {
+        await page.evaluate(({ id, value }) => { document.getElementById(id).textContent = JSON.stringify(value); },
+          { id: ids[1], value: coverageResult });
+        await page.locator('#check-state strong').getByText(label).waitFor();
+      }
     }
     if (chargeable.length) throw new Error('Service status smoke sent a chargeable request.');
     console.log(`Service status wording passed at ${width}px`);

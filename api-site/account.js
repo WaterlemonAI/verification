@@ -7,6 +7,8 @@
   let usageCursor = null;
   let usageLoaded = 0;
   let usageFilters = null;
+  let usageGeneration = 0;
+  let usagePageLoading = false;
   const view = location.pathname.replace(/\/$/, '') === '/usage' ? 'usage'
     : location.pathname.replace(/\/$/, '') === '/api-keys' ? 'api-keys' : 'account';
   const viewCopy = {
@@ -131,17 +133,30 @@
   }
 
   async function loadUsage(append = false) {
+    if (append && (usagePageLoading || !usageFilters || !usageCursor)) return;
+    const generation = append ? usageGeneration : ++usageGeneration;
+    const filters = usageFilters ? { ...usageFilters } : null;
+    const cursor = append ? usageCursor : null;
+    usagePageLoading = true;
+    byId('usage-more').disabled = true;
+    if (!append) {
+      usageCursor = null;
+      byId('usage-more').hidden = true;
+      byId('usage-count').textContent = 'Loading transactions…';
+      byId('usage-rows').replaceChildren();
+    }
     byId('usage-status').textContent = 'Loading usage…';
     try {
-      const query = usageFilters ? new URLSearchParams({ ...usageFilters, limit: '50',
-        ...(append && usageCursor ? { cursor: usageCursor } : {}) }) : null;
+      const query = filters ? new URLSearchParams({ ...filters, limit: '50',
+        ...(cursor ? { cursor } : {}) }) : null;
       const result = await request(`/portal/api/usage${query ? `?${query}` : ''}`);
+      if (generation !== usageGeneration) return;
       const { account, logs } = result;
       if (!append) usageLoaded = 0;
       usageLoaded += logs.length;
       usageCursor = result.next_cursor || null;
       byId('usage-more').hidden = !usageCursor;
-      byId('usage-count').textContent = usageFilters
+      byId('usage-count').textContent = filters
         ? `Showing ${usageLoaded} filtered transaction${usageLoaded === 1 ? '' : 's'}${usageCursor ? ' · more available' : ''}.`
         : `Showing ${logs.length} of the latest 100 transactions.`;
       byId('usage-status').textContent = `${account.mode === 'postpay' ? 'Postpay · unlimited usage' : `Prepaid balance ${account.currency} ${account.balance}`} · ${account.charged_calls} all-time charged calls · all-time cost ${account.currency} ${account.spent}`;
@@ -167,9 +182,13 @@
         body.append(row);
       }
       if (!logs.length && !append) { const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 6;
-        cell.textContent = usageFilters ? 'No transactions match these filters.' : 'No API calls logged yet.';
+        cell.textContent = filters ? 'No transactions match these filters.' : 'No API calls logged yet.';
         row.append(cell); body.append(row); }
-    } catch (error) { byId('usage-status').textContent = error.message; }
+    } catch (error) { if (generation === usageGeneration) byId('usage-status').textContent = error.message; }
+    finally { if (generation === usageGeneration) {
+      usagePageLoading = false;
+      byId('usage-more').disabled = false;
+    } }
   }
 
   async function loadCaseSettings() {

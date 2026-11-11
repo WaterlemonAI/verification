@@ -22,15 +22,25 @@
       if (body?.profiles_success === false || body?.apc_success === false || status === 'partial')
         return ['Coverage incomplete', 'Review unavailable sources and candidate profiles.'];
       const profiles = body?.data?.profiles;
-      if (Array.isArray(profiles)) return [profiles.length ? 'Candidates found' : 'No candidates in completed coverage',
-        profiles.length ? 'Review each candidate before attributing a match.' : 'This result applies only to the completed sources.'];
+      if (Array.isArray(profiles)) {
+        if (profiles.length) return ['Candidates found', 'Review each candidate and source coverage before attributing a match.'];
+        if (body.profiles_success === true && body.apc_success === true)
+          return ['No candidates in completed coverage', 'This result applies only to the completed sources.'];
+        return ['Coverage unknown', 'No candidates are listed, but the response does not confirm that all searches completed.'];
+      }
     }
     if (service === 'adverse-media' || service === 'merchant-screening') {
       if (status === 'partial' || body?.coverage?.complete === false || body?.summary?.decision_eligible === false)
         return ['Review required', 'Coverage or decision eligibility is incomplete; inspect the source results.'];
       const hits = service === 'adverse-media' ? body?.results : body?.findings;
-      if (Array.isArray(hits)) return [hits.length ? 'Findings to review' : 'No material findings in completed coverage',
-        hits.length ? 'Inspect source evidence before making a decision.' : 'This is not a legal or commercial clearance.'];
+      if (Array.isArray(hits)) {
+        if (hits.length) return ['Findings to review', 'Inspect source evidence and coverage before making a decision.'];
+        const complete = status === 'completed' && body?.summary?.decision_eligible === true
+          && (service === 'adverse-media' ? body?.coverage?.complete === true : true);
+        return complete
+          ? ['No material findings in completed coverage', 'This is not a legal or commercial clearance.']
+          : ['Coverage unknown', 'No findings are listed, but the response does not confirm completed screening.'];
+      }
     }
     if (service === 'iban') {
       const match = body?.data?.results;

@@ -52,6 +52,8 @@ try {
     let csvMode = 'normal';
     let formsMode = 'normal';
     let delayCatalog = width === 1440;
+    let releaseCatalog;
+    const catalogGate = new Promise((resolve) => { releaseCatalog = resolve; });
     let ocrMode = 'normal';
     const calls = [];
     await context.route('**/portal/api/**', async (route) => {
@@ -73,7 +75,8 @@ try {
         : path === '/portal/api/entitlements' ? { allowed_modules: modules,
           available_modules: ['flo', 'forms', 'uae-trade-licence', 'iban-verification',
             'uae-trade-license-ocr', 'passport-icao-ocr', 'company-search'] }
-          : path === '/portal/api/flo/status' ? { enabled: true, workflow_platform_enabled: true }
+          : path === '/portal/api/flo/status' ? { enabled: floStatusMode !== 'disabled',
+            has_active_flow: floStatusMode !== 'no_flow', workflow_platform_enabled: true }
             : path === '/portal/api/case-manager/settings' ? { available: true,
               policy: { enabled: false, ttl_days: 30, version: 1 } }
               : path === '/portal/api/team' ? { created: false, name: 'Test workspace', domain: 'example.test',
@@ -96,7 +99,7 @@ try {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(response) });
     });
     await context.route('**/forms.json', async (route) => {
-      if (delayCatalog) { delayCatalog = false; await new Promise((resolve) => setTimeout(resolve, 300)); }
+      if (delayCatalog) { delayCatalog = false; await catalogGate; }
       if (formsMode === 'failed') {
         await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }); return;
       }
@@ -122,6 +125,7 @@ try {
     if (width === 1440) {
       await page.locator('body[data-portal-catalog="loading"]').waitFor();
       const mainTop = await page.locator('main').evaluate((node) => node.getBoundingClientRect().top);
+      releaseCatalog();
       await page.locator('body[data-portal-catalog="ready"]').waitFor();
       const settledTop = await page.locator('main').evaluate((node) => node.getBoundingClientRect().top);
       if (Math.abs(mainTop - settledTop) > 1) throw new Error('Catalog loading shifted the main content.');
@@ -168,6 +172,15 @@ try {
     if (await page.locator('.portal-brand').getAttribute('href') !== '/home'
       || !await page.locator('#home-actions a[href="/flo#new-application"]').count())
       throw new Error('Workspace home or brand link is missing.');
+    if (width === 1440) for (const mode of ['disabled', 'no_flow', 'failed']) {
+      floStatusMode = mode;
+      await page.reload();
+      await page.waitForFunction((failure) => document.querySelector('#home-status')?.textContent
+        === (failure ? 'Some activity is unavailable.' : ''), mode === 'failed');
+      if (await page.locator('#home-actions a[href="/flo#new-application"]').count())
+        throw new Error(`Workspace home offered an unavailable Flo action (${mode}).`);
+    }
+    floStatusMode = 'normal';
     await page.goto(base + '/account');
     await page.locator('body[data-portal-catalog="ready"]').waitFor();
     if (width < 760) {
@@ -205,6 +218,52 @@ try {
     await page.locator('#export-usage').click();
     if ((await download).suggestedFilename() !== 'kycprobe-usage.csv')
       throw new Error('Usage export did not download a CSV.');
+    if (width === 1440) {
+      let releaseOldFilter; let releaseOldPage;
+      const oldFilterGate = new Promise((resolve) => { releaseOldFilter = resolve; });
+      const oldPageGate = new Promise((resolve) => { releaseOldPage = resolve; });
+      const raceCalls = [];
+      await context.route('**/portal/api/usage?*', async (route) => {
+        const query = new URL(route.request().url()).searchParams;
+        const from = query.get('from'); const cursor = query.get('cursor');
+        raceCalls.push({ from, cursor });
+        if (from === '2026-11-10') await oldFilterGate;
+        if (cursor === 'next') await oldPageGate;
+        const transaction = from === '2026-11-10' ? 'stale-filter'
+          : from === '2026-11-09' ? 'replacement' : cursor ? 'stale-page' : 'current-first';
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+          account: { mode: 'postpay', currency: 'USD', charged_calls: 4, spent: '3.00', rates: {} },
+          logs: [{ date_time: '2026-11-11', transaction_id: transaction, key_id: '', modules: ['flo'],
+            response_code: 200, cost: '0.00' }],
+          next_cursor: from === '2026-11-11' && !cursor ? 'next' : null
+        }) });
+      });
+      await page.locator('#usage-from').fill('2026-11-10');
+      const oldFilterRequest = page.waitForRequest((request) => new URL(request.url()).searchParams.get('from') === '2026-11-10');
+      await page.locator('#usage-filters button[type="submit"]').click();
+      await oldFilterRequest;
+      await page.locator('#usage-from').fill('2026-11-11');
+      await page.locator('#usage-filters button[type="submit"]').click();
+      await page.locator('#usage-rows').getByText('current-first', { exact: true }).waitFor();
+      releaseOldFilter();
+      await page.waitForTimeout(100);
+      if (await page.locator('#usage-rows').getByText('stale-filter', { exact: true }).count())
+        throw new Error('Stale usage filter response replaced current rows.');
+      const oldPageRequest = page.waitForRequest((request) => new URL(request.url()).searchParams.get('cursor') === 'next');
+      await page.locator('#usage-more').evaluate((button) => { button.click(); button.click(); });
+      await oldPageRequest;
+      await page.waitForTimeout(100);
+      if (raceCalls.filter((call) => call.cursor === 'next').length !== 1)
+        throw new Error('Duplicate usage page request was sent.');
+      await page.locator('#usage-from').fill('2026-11-09');
+      await page.locator('#usage-filters button[type="submit"]').click();
+      await page.locator('#usage-rows').getByText('replacement', { exact: true }).waitFor();
+      releaseOldPage();
+      await page.waitForTimeout(100);
+      if (await page.locator('#usage-rows').getByText('stale-page', { exact: true }).count()
+        || await page.locator('#usage-rows').getByText('current-first', { exact: true }).count())
+        throw new Error('Stale usage page was appended after a filter change.');
+    }
     await page.goto(base + '/api-keys');
     await page.locator('body.portal-ready').waitFor();
     if (!(await page.locator('[data-account-view="api-keys"]').first().isVisible())
