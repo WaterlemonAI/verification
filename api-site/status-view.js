@@ -76,7 +76,7 @@
       const heading = document.createElement('strong'); heading.textContent = title;
       const note = document.createElement('span'); note.textContent = detail;
       panel.append(heading, note);
-      panel.dataset.state = /incomplete|review|could not/i.test(title) ? 'review'
+      panel.dataset.state = /incomplete|unknown|review|could not/i.test(title) ? 'review'
         : /queued|processing|awaiting/i.test(title) ? 'pending' : 'result';
     };
     const schedule = () => { if (!queued) { queued = true; queueMicrotask(update); } };

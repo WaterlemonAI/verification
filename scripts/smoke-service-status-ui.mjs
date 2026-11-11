@@ -86,6 +86,8 @@ try {
         await page.evaluate(({ id, value }) => { document.getElementById(id).textContent = JSON.stringify(value); },
           { id: ids[1], value: coverageResult });
         await page.locator('#check-state strong').getByText(label).waitFor();
+        if (label === 'Coverage unknown' && await panel.getAttribute('data-state') !== 'review')
+          throw new Error(`${service} showed unknown coverage as a completed result.`);
       }
     }
     if (chargeable.length) throw new Error('Service status smoke sent a chargeable request.');
