@@ -41,6 +41,8 @@ test('one-time customer invitation creates a portal account and initial workspac
     assert.equal(denied.status, 302);
     assert.equal(denied.headers.get('location'), '/login?next=' + encodeURIComponent(route));
   }
+  const unauthenticatedCsv = await fetch(`${baseUrl}/portal/api/usage.csv?from=2026-11-01&to=2026-11-01`);
+  assert.equal(unauthenticatedCsv.status, 401);
 
   const protectedForm = await fetch(`${baseUrl}/forms/public-onboarding`, { redirect: 'manual', headers: { accept: 'text/html' } });
   assert.equal(protectedForm.status, 302);
@@ -130,6 +132,16 @@ test('one-time customer invitation creates a portal account and initial workspac
     assert.equal(view.status, 200);
     assert.match(await view.text(), /data-account-view/);
   }
+  const day = new Date().toISOString().slice(0, 10);
+  const filteredUsage = await fetch(`${baseUrl}/portal/api/usage?from=${day}&to=${day}&limit=2`, { headers: { cookie } });
+  assert.equal(filteredUsage.status, 200);
+  assert.equal(filteredUsage.headers.get('cache-control'), 'private, no-store');
+  assert.ok(Array.isArray((await filteredUsage.json()).logs));
+  const csv = await fetch(`${baseUrl}/portal/api/usage.csv?from=${day}&to=${day}`, { headers: { cookie } });
+  assert.equal(csv.status, 200);
+  assert.match(csv.headers.get('content-type'), /text\/csv/);
+  assert.match(await csv.text(), /Transaction ID/);
+  assert.equal((await fetch(`${baseUrl}/portal/api/usage?from=bad&to=${day}`, { headers: { cookie } })).status, 400);
 
   const loginPage = await fetch(`${baseUrl}/login`);
   const loginHtml = await loginPage.text();
@@ -274,6 +286,18 @@ test('one-time customer invitation creates a portal account and initial workspac
     const response = await fetch(baseUrl + route, { headers: { cookie: loginCookie, accept: 'text/html' } });
     assert.equal(response.status, 404, `${route} must reject an unassigned workspace`);
   }
+
+  const reverse = String(9_999_999_999_999 - Date.now()).padStart(13, '0');
+  for (let index = 0; index < 1001; index++) {
+    const rowKey = `call-${reverse}-${String(index).padStart(36, '0')}`;
+    usageStore.rows.set(rowKey, { partitionKey: `usage-${customerId}`, rowKey,
+      transactionId: `export-${index}`, keyId: '', moduleIdsJson: '["flo"]', method: 'POST', path: '/flows/test',
+      responseCode: 200, costMicros: '0', breakdownJson: '[]', state: 'completed',
+      startedAt: new Date().toISOString(), completedAt: new Date().toISOString() });
+  }
+  const oversizedCsv = await fetch(`${baseUrl}/portal/api/usage.csv?from=${day}&to=${day}`, { headers: { cookie: loginCookie } });
+  assert.equal(oversizedCsv.status, 413);
+  assert.match((await oversizedCsv.json()).error, /Narrow/);
 
   const forbiddenLogout = await fetch(`${baseUrl}/portal/api/auth/logout`, { method: 'POST', headers: { cookie: loginCookie } });
   assert.equal(forbiddenLogout.status, 403);

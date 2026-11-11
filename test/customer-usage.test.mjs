@@ -3,6 +3,49 @@ import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { AzureCustomerUsageStore, MemoryCustomerUsageStore, moneyMicros, validateUsagePolicy } from '../lib/customer-usage.mjs';
+import { usageCsv } from '../lib/usage-export.mjs';
+
+test('filtered usage pages stay workspace scoped and CSV escapes spreadsheet formulas', async () => {
+  const usage = new MemoryCustomerUsageStore();
+  const owner = 'usage-page-owner'; const other = 'usage-page-other';
+  for (const id of [owner, other]) await usage.configure(id,
+    { mode: 'postpay', currency: 'USD', allowedModules: ['forms', 'iban-verification'], rates: {} });
+  for (let index = 0; index < 5; index++) {
+    const admission = await usage.admit(owner, { transactionId: `page-${index}`,
+      moduleIds: [index % 2 ? 'forms' : 'iban-verification'], method: 'POST', path: '/service/check' });
+    await usage.complete(owner, admission.logKey, index === 4 ? 500 : 200);
+  }
+  const foreign = await usage.admit(other, { transactionId: 'foreign', moduleIds: ['forms'],
+    method: 'POST', path: '/service/check' });
+  await usage.complete(other, foreign.logKey, 200);
+  const day = new Date().toISOString().slice(0, 10);
+  const options = { from: day, to: day, limit: 2 };
+  const seen = []; let cursor = '';
+  do { const page = await usage.listLogs(owner, { ...options, cursor });
+    seen.push(...page.logs.map((row) => row.transaction_id)); cursor = page.next_cursor || ''; }
+  while (cursor);
+  assert.equal(new Set(seen).size, 5);
+  assert.equal(seen.includes('foreign'), false);
+  const forms = await usage.listLogs(owner, { ...options, module: 'forms', limit: 100 });
+  assert.equal(forms.logs.length, 2);
+  await assert.rejects(usage.listLogs(owner, { ...options, cursor: 'invalid' }), /usage_cursor_invalid/);
+  const csv = usageCsv([{ date_time: '2026-01-01T00:00:00Z', transaction_id: '=1+1',
+    modules: ['forms'], state: 'refunded', response_code: 500, cost: '0.000000',
+    refund_amount: '1.000000', refund_reason: 'provider_failed', key_id: 'key', method: 'POST', path: '/forms' }]);
+  assert.match(csv, /"'=1\+1"/);
+  assert.match(csv, /Refund amount/);
+  assert.throws(() => usageCsv(Array(1001).fill({})), /usage_export_too_large/);
+
+  const source = [...usage.rows.values()].filter((row) => row.partitionKey === `usage-${owner}`)
+    .sort((a, b) => a.rowKey.localeCompare(b.rowKey));
+  const tableClient = { async *listEntities({ queryOptions }) {
+    assert.match(String(queryOptions.filter), /PartitionKey/);
+    yield* source;
+  } };
+  const azure = new AzureCustomerUsageStore({ tableClient });
+  const azurePage = await azure.listLogs(owner, { ...options, module: 'forms', limit: 100 });
+  assert.deepEqual(azurePage.logs.map((row) => row.transaction_id).sort(), forms.logs.map((row) => row.transaction_id).sort());
+});
 
 process.env.NODE_ENV = 'test';
 const { createAppServer } = await import('../server.mjs');

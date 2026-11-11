@@ -41,9 +41,12 @@
       <p id="account-message" role="status"></p><div id="key-list" class="account-key-list"></div>
       </section>
       <section data-account-view="usage" hidden>
-      <div class="account-section-head"><div><p class="label">USAGE &amp; BILLING</p><h2>Credit and API calls</h2><p>The transaction list shows the latest 100 entries with UTC timestamp, HTTP response and cost. Rates are set by your administrator.</p></div><button id="refresh-usage" type="button">Refresh</button></div>
+      <div class="account-section-head"><div><p class="label">USAGE &amp; BILLING</p><h2>Credit and API calls</h2><p>Balance, charged calls and spend below are all-time account totals. By default the table shows the latest 100 transactions; apply UTC filters to browse older rows. Rates are set by your administrator.</p></div><button id="refresh-usage" type="button">Refresh</button></div>
+      <form id="usage-filters" class="account-usage-filters"><label>From (UTC)<input id="usage-from" type="date"></label><label>Through (UTC)<input id="usage-to" type="date"></label><label>Module<select id="usage-module"><option value="">All modules</option></select></label><button type="submit">Apply filters</button><button id="clear-usage-filters" type="button">Clear</button><button id="export-usage" type="button">Export CSV</button></form>
+      <p id="usage-count" role="status">Showing the latest 100 transactions.</p><p id="usage-export-message" role="status"></p>
       <div id="usage-rate-card" class="account-rate-card"></div>
       <p id="usage-status" role="status"></p><div class="account-usage-wrap"><table class="account-usage-table"><thead><tr><th>UTC time</th><th>Transaction ID</th><th>Key</th><th>API</th><th>HTTP code</th><th>Cost</th></tr></thead><tbody id="usage-rows"></tbody></table></div>
+      <button id="usage-more" type="button" hidden>Load more transactions</button>
       </section>
       <section data-account-view="account" hidden>
       <div class="account-section-head"><div><p class="label">SERVICE STATUS</p><h2>API health</h2><p>Transport and route configuration for APIs enabled in this workspace. This check does not run chargeable supplier probes.</p></div><button id="refresh-health" type="button">Refresh</button></div>

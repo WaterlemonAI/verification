@@ -356,6 +356,13 @@ body.portal-ready { padding-left: 276px; }
 .check-state strong{font-size:.88rem}.check-state span{font-size:.78rem;color:#3c5067}
 .check-state[data-state=review]{border-left-color:#b36813;background:#fff8eb}
 .check-state[data-state=pending]{border-left-color:#527a9b;background:#f1f6fb}
+.account-usage-filters{display:flex;flex-wrap:wrap;align-items:end;gap:.65rem;padding:1rem;border:1px solid var(--line);background:#fff}
+.account-usage-filters label{display:grid;gap:.3rem;min-width:130px;font-size:.74rem;font-weight:700}
+.account-usage-filters input,.account-usage-filters select{min-height:42px;padding:.5rem;border:1px solid #aabbd0;background:#fff;color:var(--ink)}
+.account-usage-filters button,#usage-more{min-height:42px;padding:.6rem .85rem;border:1px solid var(--dark);background:#fff;color:var(--dark);font-weight:800;cursor:pointer}
+.account-usage-filters button[type=submit],#export-usage{background:var(--mint)}
+#usage-count,#usage-export-message{font-size:.78rem;color:var(--muted)}
+@media(max-width:760px){.account-usage-filters label{flex:1 1 130px}.account-usage-filters button{flex:1 1 110px}}
 .account-content>[data-account-view]{min-width:0}
 .account-rate-card{display:grid;gap:.45rem;margin:1rem 0 1.5rem;padding:1.2rem;border:1px solid #dae3ea;background:#fff}
 .account-rate-card h2{margin:0 0 .4rem;font-size:1.2rem}

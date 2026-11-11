@@ -4,6 +4,9 @@
   let casePolicyVersion = 0;
   let currentAccount = null;
   let keysById = new Map();
+  let usageCursor = null;
+  let usageLoaded = 0;
+  let usageFilters = null;
   const view = location.pathname.replace(/\/$/, '') === '/usage' ? 'usage'
     : location.pathname.replace(/\/$/, '') === '/api-keys' ? 'api-keys' : 'account';
   const viewCopy = {
@@ -127,11 +130,21 @@
     } catch (error) { byId('health-status').textContent = error.message; }
   }
 
-  async function loadUsage() {
+  async function loadUsage(append = false) {
     byId('usage-status').textContent = 'Loading usage…';
     try {
-      const { account, logs } = await request('/portal/api/usage');
-      byId('usage-status').textContent = `${account.mode === 'postpay' ? 'Postpay · unlimited usage' : `Prepaid balance ${account.currency} ${account.balance}`} · ${account.charged_calls} charged calls · total cost ${account.currency} ${account.spent}`;
+      const query = usageFilters ? new URLSearchParams({ ...usageFilters, limit: '50',
+        ...(append && usageCursor ? { cursor: usageCursor } : {}) }) : null;
+      const result = await request(`/portal/api/usage${query ? `?${query}` : ''}`);
+      const { account, logs } = result;
+      if (!append) usageLoaded = 0;
+      usageLoaded += logs.length;
+      usageCursor = result.next_cursor || null;
+      byId('usage-more').hidden = !usageCursor;
+      byId('usage-count').textContent = usageFilters
+        ? `Showing ${usageLoaded} filtered transaction${usageLoaded === 1 ? '' : 's'}${usageCursor ? ' · more available' : ''}.`
+        : `Showing ${logs.length} of the latest 100 transactions.`;
+      byId('usage-status').textContent = `${account.mode === 'postpay' ? 'Postpay · unlimited usage' : `Prepaid balance ${account.currency} ${account.balance}`} · ${account.charged_calls} all-time charged calls · all-time cost ${account.currency} ${account.spent}`;
       const rateCard = byId('usage-rate-card'); rateCard.replaceChildren();
       const heading = document.createElement('h2'); heading.textContent = 'Current rate card'; rateCard.append(heading);
       const rates = Object.entries(account.rates || {});
@@ -143,7 +156,7 @@
           `${account.currency} ${tier.price}${tier.up_to == null ? ' per call' : ` through ${tier.up_to} calls`}`).join(' · ');
         row.append(name, price); rateCard.append(row);
       }
-      const body = byId('usage-rows'); body.replaceChildren();
+      const body = byId('usage-rows'); if (!append) body.replaceChildren();
       for (const log of logs) {
         const row = document.createElement('tr');
         const cost = `${account.currency} ${log.cost}${log.refund_amount && log.refund_amount !== '0.000000' ? ` · refunded ${log.refund_amount}` : ''}`;
@@ -153,7 +166,9 @@
         }
         body.append(row);
       }
-      if (!logs.length) { const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 6; cell.textContent = 'No API calls logged yet.'; row.append(cell); body.append(row); }
+      if (!logs.length && !append) { const row = document.createElement('tr'); const cell = document.createElement('td'); cell.colSpan = 6;
+        cell.textContent = usageFilters ? 'No transactions match these filters.' : 'No API calls logged yet.';
+        row.append(cell); body.append(row); }
     } catch (error) { byId('usage-status').textContent = error.message; }
   }
 
@@ -243,7 +258,35 @@
     byId('account-message').textContent = error.message;
   }));
   byId('refresh-health').addEventListener('click', loadHealth);
-  byId('refresh-usage').addEventListener('click', loadUsage);
+  byId('refresh-usage').addEventListener('click', () => loadUsage());
+  byId('usage-more').addEventListener('click', () => loadUsage(true));
+  byId('usage-filters').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const from = byId('usage-from').value; const to = byId('usage-to').value;
+    if (!from || !to) { byId('usage-export-message').textContent = 'Choose both UTC dates to filter usage.'; return; }
+    usageFilters = { from, to, ...(byId('usage-module').value ? { module: byId('usage-module').value } : {}) };
+    usageCursor = null; byId('usage-export-message').textContent = ''; loadUsage();
+  });
+  byId('clear-usage-filters').addEventListener('click', () => {
+    byId('usage-filters').reset(); usageFilters = null; usageCursor = null;
+    byId('usage-export-message').textContent = ''; loadUsage();
+  });
+  byId('export-usage').addEventListener('click', async () => {
+    const message = byId('usage-export-message');
+    if (!usageFilters) { message.textContent = 'Apply a UTC date range before exporting.'; return; }
+    const button = byId('export-usage'); button.disabled = true; message.textContent = 'Preparing CSV…';
+    try {
+      const response = await fetch(`/portal/api/usage.csv?${new URLSearchParams(usageFilters)}`,
+        { credentials: 'same-origin', headers: { accept: 'text/csv' } });
+      if (!response.ok) { const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'CSV export is unavailable.'); }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a'); link.href = url; link.download = 'kycprobe-usage.csv'; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      message.textContent = 'CSV prepared for the selected UTC range.';
+    } catch (error) { message.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
 
   request('/portal/api/auth/session').then(async (session) => {
     csrf = session.csrf_token;
@@ -266,6 +309,13 @@
     } else if (view === 'usage') {
       try { const { keys } = await request('/portal/api/keys'); keysById = new Map(keys.map((key) => [key.id, key])); }
       catch { keysById = new Map(); }
+      try { const entitlements = await request('/portal/api/entitlements');
+        const assigned = entitlements.allowed_modules || [];
+        for (const id of entitlements.available_modules || []) if (assigned.includes('*') || assigned.includes(id)) {
+          const option = document.createElement('option'); option.value = id; option.textContent = id.replaceAll('-', ' ');
+          byId('usage-module').append(option);
+        }
+      } catch { /* Date filtering remains available if the catalog is temporarily unavailable. */ }
       await loadUsage();
     } else {
       const teamLoad = loadTeam().catch((error) => { byId('team-summary').textContent = error.message; });

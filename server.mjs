@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
 import { createPlatformMailer } from './lib/platform-mail.mjs';
 import { createCustomerUsageStore, moneyMicros, validateUsagePolicy, validateCasePolicy } from './lib/customer-usage.mjs';
+import { usageCsv } from './lib/usage-export.mjs';
 import { createInvitation, invitationCustomerId, validInvitation, publicCustomer, INVITATION_HOURS } from './lib/customer-invitation.mjs';
 import { createTeamInvitation, emailDomain, publicTeamInvitation, teamInvitationId, validTeamInvitation, TEAM_INVITATION_HOURS } from './lib/team-invitation.mjs';
 import { createPasswordResetToken, parsePasswordResetToken, RESET_MINUTES } from './lib/password-reset.mjs';
@@ -1987,16 +1988,41 @@ async function handlePortalApi(req, res, url, store, loginThrottle, resetThrottl
     return json(res, 200, await customerServiceHealth(store, usageStore, account.client_id));
   }
 
-  if (req.method === 'GET' && (url.pathname === '/portal/api/usage' || url.pathname === '/portal/api/entitlements')) {
+  if (req.method === 'GET' && ['/portal/api/usage', '/portal/api/usage.csv', '/portal/api/entitlements'].includes(url.pathname)) {
     const { account, session } = await currentPortalSession(req, store);
     if (!session) return json(res, 401, { status: 'Error', error: 'Sign in to continue.' });
     const managed = Boolean((await store.getCustomer?.(account.client_id))?.usagePolicyVersion);
     const usage = await usageStore.account(account.client_id, managed);
-    return json(res, 200, url.pathname.endsWith('/entitlements')
-      ? { allowed_modules: usage.allowed_modules,
-          available_modules: moduleCatalog(await store.listIntegrations({ publicOnly: true })).filter((module) => module.available).map((module) => module.id),
-          mode: usage.mode, balance: usage.balance, currency: usage.currency }
-      : { account: usage, logs: await usageStore.logs(account.client_id, 100) });
+    if (url.pathname.endsWith('/entitlements')) return json(res, 200,
+      { allowed_modules: usage.allowed_modules,
+        available_modules: moduleCatalog(await store.listIntegrations({ publicOnly: true })).filter((module) => module.available).map((module) => module.id),
+        mode: usage.mode, balance: usage.balance, currency: usage.currency });
+    const exporting = url.pathname.endsWith('.csv');
+    const filtered = exporting || url.searchParams.size > 0;
+    if (!filtered) return json(res, 200, { account: usage, logs: await usageStore.logs(account.client_id, 100) });
+    const options = { from: url.searchParams.get('from') || '', to: url.searchParams.get('to') || '',
+      module: url.searchParams.get('module') || '', limit: exporting ? 100 : Number(url.searchParams.get('limit') || 50),
+      cursor: exporting ? '' : url.searchParams.get('cursor') || '' };
+    try {
+      if (!exporting) {
+        const page = await usageStore.listLogs(account.client_id, options);
+        return json(res, 200, { account: usage, ...page, filtered_count: page.logs.length },
+          { 'cache-control': 'private, no-store' });
+      }
+      const rows = []; let scanned = 0; let cursor = '';
+      for (let pageNumber = 0; pageNumber < 12; pageNumber++) {
+        const page = await usageStore.listLogs(account.client_id, { ...options, cursor });
+        rows.push(...page.logs); scanned += page.scanned_count;
+        if (rows.length > 1000 || scanned > 5000 || pageNumber === 11 && page.next_cursor)
+          return json(res, 413, { error: 'Export is too large. Narrow the date range or module.' });
+        if (!page.next_cursor) { const bytes = Buffer.from(usageCsv(rows));
+          res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8', 'content-length': bytes.length,
+            'content-disposition': 'attachment; filename="kycprobe-usage.csv"', 'cache-control': 'private, no-store' });
+          return res.end(bytes); }
+        cursor = page.next_cursor;
+      }
+    } catch (error) { return json(res, 400, { error: error.message === 'usage_cursor_invalid'
+      ? 'Invalid usage cursor.' : 'Choose a valid UTC date range of at most 90 days and an enabled module.' }); }
   }
 
   return json(res, 404, { status: 'Error', error: 'Portal operation was not found.' });

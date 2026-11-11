@@ -45,16 +45,24 @@ const form = { id: 'vendor-onboarding', name: 'Vendor onboarding verification', 
   services: [{ id: 'company-search', name: 'Company Search' }], fields: [] };
 try {
   for (const width of [1440, 390, 320]) {
-    const context = await browser.newContext({ viewport: { width, height: 850 } });
+    const context = await browser.newContext({ viewport: { width, height: 850 }, acceptDownloads: true });
     let modules = ['*'];
     let role = 'org_admin';
     let floStatusMode = 'normal'; let caseStatusMode = 'normal';
+    let csvMode = 'normal';
     let formsMode = 'normal';
     let ocrMode = 'normal';
     const calls = [];
     await context.route('**/portal/api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
       calls.push(path);
+      if (path === '/portal/api/usage.csv') {
+        if (csvMode === 'too-large') await route.fulfill({ status: 413, contentType: 'application/json',
+          body: JSON.stringify({ error: 'Export is too large. Narrow the date range or module.' }) });
+        else await route.fulfill({ status: 200, contentType: 'text/csv',
+          body: '"UTC time","Transaction ID"\r\n"2026-11-11","tx-1"\r\n' });
+        return;
+      }
       if (path === '/portal/api/flo/status' && floStatusMode === 'failed'
         || path === '/portal/api/case-manager/settings' && caseStatusMode === 'failed') {
         await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }); return;
@@ -74,7 +82,14 @@ try {
                   : path === '/portal/api/keys' ? { keys: [] }
                     : path === '/portal/api/usage' ? { account: { mode: 'postpay', currency: 'USD',
                       balance: '0', charged_calls: 1, spent: '3.00',
-                      rates: { flo: [{ up_to: null, price: '3.00' }] } }, logs: [] }
+                      rates: { flo: [{ up_to: null, price: '3.00' }] } },
+                      logs: new URL(route.request().url()).searchParams.has('from')
+                        ? (new URL(route.request().url()).searchParams.has('cursor')
+                          ? [{ date_time: '2026-11-11', transaction_id: 'tx-3', modules: ['flo'], cost: '3.00' }]
+                          : ['tx-1', 'tx-2'].map((transaction_id) => ({ date_time: '2026-11-11', transaction_id,
+                            modules: ['flo'], cost: '3.00' }))) : [],
+                      next_cursor: new URL(route.request().url()).searchParams.has('from')
+                        && !new URL(route.request().url()).searchParams.has('cursor') ? 'next' : null }
                       : path === '/portal/api/flo/flows' ? { flows: [] }
                         : path === '/portal/api/flo/cases' ? { cases: [], counts: {}, next_cursor: null } : {};
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(response) });
@@ -167,6 +182,20 @@ try {
       || await page.locator('[data-account-view="account"]:visible').count()
       || !(await page.locator('#usage-rate-card').textContent()).includes('3.00'))
       throw new Error('Usage view did not isolate and show rates.');
+    await page.locator('#usage-from').fill('2026-11-11');
+    await page.locator('#usage-to').fill('2026-11-11');
+    await page.locator('#usage-filters button[type="submit"]').click();
+    await page.getByText('Showing 2 filtered transactions · more available.').waitFor();
+    await page.locator('#usage-more').click();
+    await page.getByText('Showing 3 filtered transactions.').waitFor();
+    csvMode = 'too-large';
+    await page.locator('#export-usage').click();
+    await page.getByText('Export is too large. Narrow the date range or module.').waitFor();
+    csvMode = 'normal';
+    const download = page.waitForEvent('download');
+    await page.locator('#export-usage').click();
+    if ((await download).suggestedFilename() !== 'kycprobe-usage.csv')
+      throw new Error('Usage export did not download a CSV.');
     await page.goto(base + '/api-keys');
     await page.locator('body.portal-ready').waitFor();
     if (!(await page.locator('[data-account-view="api-keys"]').first().isVisible())
