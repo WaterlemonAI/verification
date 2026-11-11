@@ -23,7 +23,7 @@ const files = {
 const genericOcr = '<!doctype html><html lang="en"><head><link rel="stylesheet" href="/api.css"><script src="/portal-auth.js" defer></script></head><body><header></header><main id="main-content"><h1>Document extraction</h1></main></body></html>';
 const server = createServer((req, res) => {
   const path = new URL(req.url, 'http://localhost').pathname;
-  const page = path === '/home' ? 'api-site/home.html'
+  const page = path === '/login' ? 'api-site/login.html' : path === '/home' ? 'api-site/home.html'
     : ['/account', '/usage', '/api-keys'].includes(path) ? 'api-site/account.html'
     : path === '/forms' || /^\/forms\/[a-z0-9-]+$/.test(path) ? 'api-site/forms.html'
       : path === '/flo' ? 'api-site/flo.html'
@@ -48,6 +48,8 @@ try {
     const context = await browser.newContext({ viewport: { width, height: 850 }, acceptDownloads: true });
     let modules = ['*'];
     let role = 'org_admin';
+    let entitlementsMode = 'normal';
+    let sessionMode = 'normal';
     let floStatusMode = 'normal'; let caseStatusMode = 'normal';
     let csvMode = 'normal';
     let formsMode = 'normal';
@@ -69,6 +71,12 @@ try {
       if (path === '/portal/api/flo/status' && floStatusMode === 'failed'
         || path === '/portal/api/case-manager/settings' && caseStatusMode === 'failed') {
         await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }); return;
+      }
+      if (path === '/portal/api/entitlements' && entitlementsMode === 'failed') {
+        await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }); return;
+      }
+      if (path === '/portal/api/auth/session' && sessionMode === 'unauthorized') {
+        await route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }); return;
       }
       const response = path === '/portal/api/auth/session' ? { account: { client_name: 'Test workspace',
         email: 'review@example.test', role }, csrf_token: 'csrf' }
@@ -181,6 +189,18 @@ try {
         throw new Error(`Workspace home offered an unavailable Flo action (${mode}).`);
     }
     floStatusMode = 'normal';
+    if (width === 1440) {
+      entitlementsMode = 'failed';
+      await page.goto(base + '/account');
+      await page.locator('#portal-navigation-unavailable').filter({ hasText: 'Your session is still open' }).waitFor();
+      if (new URL(page.url()).pathname !== '/account' || await page.locator('#portal-sidebar').count())
+        throw new Error('Entitlement outage redirected the signed-in user or showed unverified navigation.');
+      entitlementsMode = 'normal';
+      await page.getByRole('button', { name: 'Retry workspace access' }).click();
+      await page.locator('body[data-portal-catalog="ready"]').waitFor();
+      if (await page.locator('#portal-navigation-unavailable').count())
+        throw new Error('Navigation retry did not recover after the entitlement outage.');
+    }
     await page.goto(base + '/account');
     await page.locator('body[data-portal-catalog="ready"]').waitFor();
     if (width < 760) {
@@ -326,6 +346,15 @@ try {
       throw new Error('Flo administration was shown to a workspace member.');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     if (overflow > 1) throw new Error('Navigation page overflows ' + width + 'px by ' + overflow);
+    if (width === 1440) {
+      sessionMode = 'unauthorized';
+      await page.goto(base + '/account');
+      await page.waitForTimeout(300);
+      if (new URL(page.url()).pathname !== '/login'
+        || new URL(page.url()).searchParams.get('next') !== '/account')
+        throw new Error(`Expired session did not redirect to login: ${page.url()}`);
+      sessionMode = 'normal';
+    }
     console.log('Portal navigation passed at ' + width + 'px');
     await context.close();
   }

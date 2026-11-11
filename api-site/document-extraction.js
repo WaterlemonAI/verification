@@ -7,6 +7,18 @@ let pollTimer;
 let pollController;
 let currentResultUrl = '';
 
+function safeResultUrl(value) {
+  if (typeof value !== 'string' || !service?.publicPath) return '';
+  try {
+    const url = new URL(value, location.origin);
+    const prefix = `${service.publicPath}/jobs/`;
+    if (url.origin !== location.origin || url.username || url.password || url.search || url.hash
+      || !url.pathname.startsWith(prefix)
+      || !/^ocr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/result$/i.test(url.pathname.slice(prefix.length))) return '';
+    return url.href;
+  } catch { return ''; }
+}
+
 function show(value, label) {
   latestJson = JSON.stringify(value, null, 2);
   byId('response-json').textContent = latestJson;
@@ -47,7 +59,7 @@ async function poll(resultUrl, key, attempts = 0) {
     byId('ocr-progress').textContent = 'Polling paused after 40 checks. Copy the result URL and use your API key later.';
     byId('send-request').disabled = false; return; }
   pollController = new AbortController();
-  const response = await fetch(resultUrl, { headers: { authorization: `Bearer ${key}` }, cache: 'no-store',
+  const response = await fetch(resultUrl, { headers: { authorization: `Bearer ${key}` }, cache: 'no-store', redirect: 'error',
     signal: pollController.signal });
   const data = await response.json();
   const state = String(data.status || '').toLowerCase();
@@ -68,8 +80,10 @@ byId('ocr-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   clearTimeout(pollTimer);
   pollController?.abort();
+  currentResultUrl = '';
   byId('ocr-progress').textContent = '';
   byId('ocr-result-reference').hidden = true;
+  byId('ocr-result-url').textContent = '';
   byId('form-error').textContent = '';
   const key = byId('api-key').value.trim();
   const file = byId('file').files[0];
@@ -92,12 +106,11 @@ byId('ocr-form').addEventListener('submit', async (event) => {
     const data = await response.json();
     show(data, response.status === 202 ? 'Queued' : response.ok ? 'Completed extraction' : `HTTP ${response.status}`);
     if (data.result_url) {
-      try { const reference = new URL(data.result_url, location.origin);
-      if (reference.protocol === 'https:' || reference.origin === location.origin) {
-        currentResultUrl = reference.href;
+      currentResultUrl = safeResultUrl(data.result_url);
+      if (currentResultUrl) {
         byId('ocr-result-url').textContent = currentResultUrl;
         byId('ocr-result-reference').hidden = false;
-      } } catch { /* Keep the receipt visible even if a provider URL is malformed. */ }
+      } else byId('form-error').textContent = 'The result URL was rejected. Polling did not start; use the receipt to contact support.';
     }
     if (response.status === 202 && currentResultUrl) await poll(currentResultUrl, key);
     else byId('send-request').disabled = false;

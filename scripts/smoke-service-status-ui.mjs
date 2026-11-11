@@ -91,6 +91,32 @@ try {
       }
     }
     if (chargeable.length) throw new Error('Service status smoke sent a chargeable request.');
+    const jobPath = '/service/uae_trade_license_ocr/jobs/ocr_11111111-1111-4111-8111-111111111111/result';
+    const receipts = [jobPath, 'https://outside.example/collect', '/service/uae_trade_license_ocr/jobs/not-a-job/result'];
+    const polled = []; const outside = [];
+    await context.route('**/service/uae_trade_license_ocr', (route) => route.fulfill({ status: 202,
+      contentType: 'application/json', body: JSON.stringify({ status: 'queued', result_url: receipts.shift() }) }));
+    await context.route(`**${jobPath}`, (route) => { polled.push(route.request().headers().authorization);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'completed', data: {} }) }); });
+    await context.route('https://outside.example/**', (route) => { outside.push(route.request().headers().authorization);
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
+    await page.goto(base + '/document-extraction/uae-trade-license-ocr');
+    await page.locator('#service-title').filter({ hasText: 'UAE Trade License OCR' }).waitFor();
+    await page.locator('#api-key').fill('SYNTHETIC_OCR_KEY');
+    await page.locator('#file').setInputFiles({ name: 'synthetic.pdf', mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4\nsynthetic') });
+    await page.locator('#send-request').click();
+    await page.locator('#ocr-progress').filter({ hasText: 'Final job state: completed.' }).waitFor();
+    if (polled.length !== 1 || polled[0] !== 'Bearer SYNTHETIC_OCR_KEY')
+      throw new Error('OCR polling did not use the allowed KYCProbe job URL.');
+    for (const invalid of ['external', 'wrong path']) {
+      await page.locator('#send-request').click();
+      await page.locator('#form-error').filter({ hasText: 'result URL was rejected' }).waitFor();
+      if (await page.locator('#ocr-result-reference').isVisible()
+        || await page.locator('#ocr-result-url').textContent()
+        || polled.length !== 1 || outside.length)
+        throw new Error(`OCR tester retained or fetched an unsafe ${invalid} result URL.`);
+    }
     console.log(`Service status wording passed at ${width}px`);
     await context.close();
   }

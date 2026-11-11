@@ -27,6 +27,7 @@
   const formPath = /^\/forms\/[a-z0-9-]+$/.test(path);
   const ocrPath = /^\/document-extraction\/[a-z0-9-]+$/.test(path);
   let navigationAbort = null;
+  let sessionLoading = false;
 
   function confirmExternalLink(event) {
     const link = event.target.closest?.('a[href]');
@@ -43,8 +44,20 @@
 
   async function getJson(url) {
     const response = await fetch(url, { credentials: 'same-origin', headers: { accept: 'application/json' } });
-    if (!response.ok) throw new Error('Navigation data unavailable.');
+    if (!response.ok) { const error = new Error('Navigation data unavailable.'); error.status = response.status; throw error; }
     return response.json();
+  }
+
+  function showUnavailable() {
+    const main = document.querySelector('main');
+    if (!main || document.querySelector('#portal-navigation-unavailable')) return;
+    const notice = el('section', null, 'check-state'); notice.id = 'portal-navigation-unavailable';
+    notice.dataset.state = 'review'; notice.setAttribute('role', 'alert');
+    const title = el('strong', 'Workspace navigation is unavailable.');
+    const detail = el('span', 'Your session is still open. Retry loading workspace access.');
+    const retry = el('button', 'Retry workspace access'); retry.type = 'button';
+    retry.addEventListener('click', async () => { retry.disabled = true; await loadSession(); retry.disabled = false; });
+    notice.append(title, detail, retry); main.prepend(notice);
   }
 
   async function loadData(entitlements) {
@@ -283,14 +296,21 @@
   }
 
   async function loadSession() {
-    const response = await fetch('/portal/api/auth/session', { credentials: 'same-origin', headers: { accept: 'application/json' } });
-    if (!response.ok) { if (protectedPaths.has(path) || formPath || ocrPath) location.replace(loginTarget()); return; }
-    const session = await response.json();
-    const entitlements = await getJson('/portal/api/entitlements');
-    renderPortal(session, entitlements, { loading: true });
-    renderPortal(session, entitlements, await loadData(entitlements));
+    if (sessionLoading) return;
+    sessionLoading = true;
+    try {
+      const response = await fetch('/portal/api/auth/session', { credentials: 'same-origin', headers: { accept: 'application/json' } });
+      if (response.status === 401) { if (protectedPaths.has(path) || formPath || ocrPath) location.replace(loginTarget()); return; }
+      if (!response.ok) throw new Error('Session check unavailable.');
+      const session = await response.json();
+      const entitlements = await getJson('/portal/api/entitlements');
+      document.querySelector('#portal-navigation-unavailable')?.remove();
+      renderPortal(session, entitlements, { loading: true });
+      renderPortal(session, entitlements, await loadData(entitlements));
+    } catch (error) {
+      if (error.status === 401 && (protectedPaths.has(path) || formPath || ocrPath)) location.replace(loginTarget());
+      else showUnavailable();
+    } finally { sessionLoading = false; }
   }
-  loadSession().catch(() => {
-    if (protectedPaths.has(path) || formPath || ocrPath) location.replace(loginTarget());
-  });
+  loadSession();
 })();

@@ -169,6 +169,39 @@ try {
     await page.getByText('Status: accepted').waitFor();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
     if (overflow) throw new Error(`Flo buyer UI overflows at ${viewport.width}px`);
+    const raceA = '33333333-3333-4333-8333-333333333333';
+    const raceB = '44444444-4444-4444-8444-444444444444';
+    let raceAReads = 0; let releaseRaceA;
+    const raceGate = new Promise((resolve) => { releaseRaceA = resolve; });
+    const raceItem = (id, reference, status) => ({ application_id: id, customer_reference: reference,
+      flow_id: 'kys-v1', template_version: '1.0.0', supplier_email: 'supplier@example.com', status,
+      created_at: new Date().toISOString(), review_requirements: { text: [], documents: [] },
+      draft: {}, documents: [], checks: [], subjects: [], reports: [], events: [] });
+    await context.route('**/portal/api/flo/cases**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === '/portal/api/flo/cases') return route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ counts: { processing_review: 2 }, next_cursor: null, cases: [
+          { ...raceItem(raceA, 'RACE-A', 'processing'), bucket: 'processing_review' },
+          { ...raceItem(raceB, 'RACE-B', 'pending_review'), bucket: 'processing_review' }] }) });
+      if (path === `/portal/api/flo/cases/${raceA}` || path === `/portal/api/flo/cases/${raceB}`) {
+        if (path.endsWith(raceA) && ++raceAReads === 2) await raceGate;
+        const item = path.endsWith(raceA) ? raceItem(raceA, 'RACE-A', 'processing')
+          : raceItem(raceB, 'RACE-B', 'pending_review');
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ application: item }) });
+      }
+      return route.fallback();
+    });
+    await page.goto(`${base}/buyer`);
+    await page.locator(`#flo-list .flo-case[data-case-id="${raceA}"]`).click();
+    await page.locator('#flo-action-status').filter({ hasText: 'Checks are processing' }).waitFor();
+    await page.waitForTimeout(250);
+    if (raceAReads !== 2) throw new Error('Flo race fixture did not start an in-flight automatic refresh.');
+    await page.locator(`#flo-list .flo-case[data-case-id="${raceB}"]`).click();
+    await page.locator('#flo-detail h2').filter({ hasText: 'RACE-B' }).waitFor();
+    releaseRaceA();
+    await page.waitForTimeout(150);
+    if (await page.locator('#flo-detail h2').textContent() !== 'RACE-B')
+      throw new Error('An earlier Flo refresh replaced the newly selected case.');
     await context.close();
     console.log(`Flo supplier and buyer UI passed at ${viewport.width}px`);
 

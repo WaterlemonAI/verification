@@ -97,6 +97,7 @@
     if (!automatic) refreshAttempts = 0;
     selected = id;
     const { application: item, diagnostic_enabled: diagnosticEnabled } = await request(`/portal/api/flo/cases/${id}`);
+    if (selected !== id) return;
     for (const button of document.querySelectorAll('#flo-list .flo-case')) {
       button.classList.toggle('active', button.dataset.caseId === id);
       if (button.dataset.caseId === id)
@@ -254,7 +255,7 @@
     if (selected === id && ['submitted', 'processing'].includes(item.status)) {
       if (refreshAttempts < 15) {
         refreshTimer = setTimeout(() => { refreshAttempts += 1;
-          detail(id, true).catch((error) => { progress.textContent = `Refresh paused: ${error.message}`; }); }, 8000);
+          detail(id, true).catch((error) => { if (selected === id) progress.textContent = `Refresh paused: ${error.message}`; }); }, 8000);
       } else progress.textContent = 'Still processing. Refresh the case later to continue reviewing.';
     }
   }
