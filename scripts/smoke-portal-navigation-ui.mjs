@@ -44,13 +44,14 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 const form = { id: 'vendor-onboarding', name: 'Vendor onboarding verification', description: 'Check one vendor.',
   services: [{ id: 'company-search', name: 'Company Search' }], fields: [] };
 try {
-  for (const width of [1440, 390, 320]) {
+  for (const width of [1440, 720, 390, 320]) {
     const context = await browser.newContext({ viewport: { width, height: 850 }, acceptDownloads: true });
     let modules = ['*'];
     let role = 'org_admin';
     let floStatusMode = 'normal'; let caseStatusMode = 'normal';
     let csvMode = 'normal';
     let formsMode = 'normal';
+    let delayCatalog = width === 1440;
     let ocrMode = 'normal';
     const calls = [];
     await context.route('**/portal/api/**', async (route) => {
@@ -95,6 +96,7 @@ try {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(response) });
     });
     await context.route('**/forms.json', async (route) => {
+      if (delayCatalog) { delayCatalog = false; await new Promise((resolve) => setTimeout(resolve, 300)); }
       if (formsMode === 'failed') {
         await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }); return;
       }
@@ -117,6 +119,13 @@ try {
       status: 200, contentType: 'application/json', body: JSON.stringify({ form }) }));
     const page = await context.newPage();
     await page.goto(base + '/account');
+    if (width === 1440) {
+      await page.locator('body[data-portal-catalog="loading"]').waitFor();
+      const mainTop = await page.locator('main').evaluate((node) => node.getBoundingClientRect().top);
+      await page.locator('body[data-portal-catalog="ready"]').waitFor();
+      const settledTop = await page.locator('main').evaluate((node) => node.getBoundingClientRect().top);
+      if (Math.abs(mainTop - settledTop) > 1) throw new Error('Catalog loading shifted the main content.');
+    }
     await page.locator('body[data-portal-catalog="ready"]').waitFor();
     floStatusMode = 'failed'; caseStatusMode = 'failed';
     await page.reload();
