@@ -36,7 +36,7 @@ test('one-time customer invitation creates a portal account and initial workspac
   });
   assert.equal(protectedPage.status, 302);
   assert.equal(protectedPage.headers.get('location'), '/login?next=%2Fadverse-media');
-  for (const route of ['/account', '/usage', '/api-keys']) {
+  for (const route of ['/home', '/account', '/usage', '/api-keys']) {
     const denied = await fetch(baseUrl + route, { redirect: 'manual', headers: { accept: 'text/html' } });
     assert.equal(denied.status, 302);
     assert.equal(denied.headers.get('location'), '/login?next=' + encodeURIComponent(route));
@@ -122,6 +122,9 @@ test('one-time customer invitation creates a portal account and initial workspac
   const accountPage = await fetch(`${baseUrl}/account`, { headers: { accept: 'text/html', cookie } });
   assert.equal(accountPage.status, 200);
   assert.match(await accountPage.text(), /Your API keys/);
+  const homePage = await fetch(`${baseUrl}/home`, { headers: { accept: 'text/html', cookie } });
+  assert.equal(homePage.status, 200);
+  assert.match(await homePage.text(), /What needs attention/);
   for (const route of ['/usage', '/api-keys']) {
     const view = await fetch(baseUrl + route, { headers: { accept: 'text/html', cookie } });
     assert.equal(view.status, 200);

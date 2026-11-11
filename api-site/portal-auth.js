@@ -1,6 +1,6 @@
 (() => {
   const path = location.pathname.length > 1 ? location.pathname.replace(/\/$/, '') : '/';
-  const protectedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening',
+  const protectedPaths = new Set(['/home', '/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening',
     '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/usage', '/api-keys',
     '/cases', '/flo', '/flo-workflows']);
   const verification = [
@@ -60,7 +60,9 @@
     ]);
     return {
       flo: flo.status === 'fulfilled' ? flo.value : null,
+      floFailed: needsFlo && flo.status === 'rejected',
       cases: cases.status === 'fulfilled' ? cases.value : null,
+      casesFailed: cases.status === 'rejected',
       forms: forms.status === 'fulfilled' ? forms.value : null,
       formsFailed: needsForms && forms.status === 'rejected',
       ocr: ocr.status === 'fulfilled' && Array.isArray(ocr.value) ? ocr.value : null,
@@ -69,6 +71,9 @@
   }
 
   function renderPortal(session, entitlements, data) {
+    const previousSearch = document.querySelector('#portal-nav-search');
+    const searchQuery = previousSearch?.value || '';
+    const restoreSearchFocus = previousSearch === document.activeElement;
     navigationAbort?.abort();
     navigationAbort = new AbortController();
     document.querySelector('#portal-sidebar')?.remove();
@@ -78,9 +83,19 @@
     sidebar.id = 'portal-sidebar';
     sidebar.setAttribute('aria-label', 'Workspace navigation');
     const brand = el('a', null, 'portal-brand');
-    brand.href = '/'; brand.setAttribute('aria-label', 'KYCProbe home');
+    brand.href = '/home'; brand.setAttribute('aria-label', 'KYCProbe workspace home');
     const logo = el('img'); logo.src = '/assets/kycprobe-logo-white.png'; logo.alt = 'KYCProbe by AI7Lab';
     brand.append(logo); sidebar.append(brand);
+    const search = el('div', null, 'portal-nav-search');
+    const searchLabel = el('label', 'Find a tool'); searchLabel.htmlFor = 'portal-nav-search';
+    const searchInput = el('input'); searchInput.id = 'portal-nav-search'; searchInput.type = 'search';
+    searchInput.placeholder = 'Search tools'; searchInput.autocomplete = 'off'; searchInput.value = searchQuery;
+    const searchCount = el('p', '', 'portal-search-count'); searchCount.id = 'portal-search-count';
+    searchCount.setAttribute('role', 'status');
+    const searchClear = el('button', 'Clear search', 'portal-search-clear'); searchClear.type = 'button'; searchClear.hidden = true;
+    const searchResults = el('div', null, 'portal-search-results'); searchResults.hidden = true;
+    searchResults.setAttribute('aria-label', 'Matching tools');
+    search.append(searchLabel, searchInput, searchClear, searchCount, searchResults); sidebar.append(search);
     const groups = [];
     let active = null;
 
@@ -113,27 +128,31 @@
       button.type = 'button'; button.setAttribute('aria-controls', 'portal-group-' + id);
       button.setAttribute('aria-expanded', 'false');
       const panel = el('div', null, 'portal-submenu'); panel.id = 'portal-group-' + id; panel.hidden = true;
-      section.append(button, panel);
+      const heading = el('h2', null, 'portal-group-heading'); heading.append(button);
+      section.append(heading, panel);
       for (const [label, href, destination] of links) addLink(panel, label, href, destination);
       if (note) {
         panel.append(el('p', note, 'portal-nav-note'));
-        const retry = el('button', 'Retry catalog', 'portal-catalog-retry');
+        if (!data.loading) { const retry = el('button', 'Retry status or catalog', 'portal-catalog-retry');
         retry.type = 'button';
         retry.addEventListener('click', async () => {
           retry.disabled = true;
           renderPortal(session, entitlements, await loadData(entitlements));
         });
-        panel.append(retry);
+        panel.append(retry); }
       }
       button.addEventListener('click', () => setGroup(id, button.getAttribute('aria-expanded') !== 'true'));
       groups.push({ id, button, panel }); sidebar.append(section);
     }
 
-    const floEnabled = account.role === 'org_admin' && data.flo?.enabled === true;
+    const floAllowed = (account.role || 'org_admin') === 'org_admin' && allowed(entitlements, 'flo');
+    const floEnabled = floAllowed && data.flo?.enabled === true;
     if (floEnabled) {
       const links = [['Applications and reports', '/flo', '/flo'], ['Create onboarding link', '/flo#new-application', '/flo']];
       if (data.flo.workflow_platform_enabled) links.push(['Workflows', '/flo-workflows', '/flo-workflows']);
       addGroup('flo', 'Flo', links);
+    } else if (floAllowed && (data.loading || data.floFailed)) {
+      addGroup('flo', 'Flo', [], data.loading ? 'Loading Flo access…' : 'Flo status could not be loaded.');
     }
     const verificationLinks = verification.filter((entry) => allowed(entitlements, entry[2]))
       .map(([href, label]) => [label, href, href]);
@@ -141,22 +160,54 @@
     const ocrLinks = (data.ocr || []).filter((entry) => allowed(entitlements, entry.id))
       .map((entry) => [entry.name.replace(/\s*\([^)]*\)\s*$/, ''), '/document-extraction/' + entry.id,
         '/document-extraction/' + entry.id]);
-    if (ocrLinks.length || data.ocrFailed) addGroup('ocr', 'OCR', ocrLinks,
-      data.ocrFailed ? 'OCR services could not be loaded.' : '');
+    if (ocrLinks.length || data.ocrFailed || data.loading && (entitlements.available_modules || []).some((id) =>
+      (id.endsWith('-ocr') || id === 'moa-analysis') && allowed(entitlements, id))) addGroup('ocr', 'OCR', ocrLinks,
+      data.loading ? 'Loading OCR services…' : data.ocrFailed ? 'OCR services could not be loaded.' : '');
     const formsAllowed = allowed(entitlements, 'forms');
     if (formsAllowed) {
       const links = [['All Forms', '/forms', '/forms'], ...(data.forms?.forms || [])
         .map((form) => [form.name, '/forms/' + form.id, '/forms/' + form.id])];
-      addGroup('forms', 'Forms', links, data.formsFailed ? 'Forms could not be loaded.' : '');
-      if (!data.formsFailed && !(data.forms?.forms || []).length)
+      addGroup('forms', 'Forms', links, data.loading ? 'Loading Forms…' : data.formsFailed ? 'Forms could not be loaded.' : '');
+      if (!data.loading && !data.formsFailed && !(data.forms?.forms || []).length)
         groups.at(-1).panel.append(el('p', 'No Forms are enabled for this workspace.', 'portal-nav-note'));
     }
     const direct = el('div', null, 'portal-nav-direct');
     if (data.cases?.available) addLink(direct, 'API Case Manager', '/cases', '/cases');
+    else if (data.loading || data.casesFailed) {
+      const status = el('p', data.loading ? 'Loading Case Manager access…' : 'Case Manager status could not be loaded.', 'portal-nav-note');
+      direct.append(status);
+      if (data.casesFailed) { const retry = el('button', 'Retry Case Manager status', 'portal-catalog-retry');
+        retry.type = 'button'; retry.addEventListener('click', async () => {
+          retry.disabled = true; renderPortal(session, entitlements, await loadData(entitlements));
+        }); direct.append(retry); }
+    }
     addLink(direct, 'Account Settings', '/account', '/account');
     addLink(direct, 'Usage & Billing', '/usage', '/usage');
     addLink(direct, 'API Keys', '/api-keys', '/api-keys');
     sidebar.append(direct);
+    const searchTargets = [...sidebar.querySelectorAll('.portal-nav-group .portal-submenu a')];
+    function updateSearch() {
+      const query = searchInput.value.trim().toLowerCase();
+      searchResults.replaceChildren();
+      searchResults.hidden = !query; searchClear.hidden = !query;
+      for (const group of groups) group.button.closest('.portal-nav-group').hidden = Boolean(query);
+      direct.hidden = Boolean(query);
+      if (!query) { searchCount.textContent = ''; return; }
+      const aliases = (link) => /trade licence/i.test(link.textContent) ? 'trade license business registration'
+        : /iban/i.test(link.textContent) ? 'bank account' : /passport/i.test(link.textContent) ? 'identity document' : '';
+      const matches = searchTargets.filter((link) =>
+        `${link.textContent} ${link.getAttribute('href')} ${aliases(link)}`.toLowerCase().includes(query));
+      for (const match of matches) { const result = el('a', match.textContent, 'portal-search-result');
+        result.href = match.href; searchResults.append(result); }
+      searchCount.textContent = `${matches.length} matching tool${matches.length === 1 ? '' : 's'}`;
+    }
+    searchInput.addEventListener('input', updateSearch);
+    searchInput.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown' && !searchResults.hidden) { event.preventDefault(); searchResults.querySelector('a')?.focus(); }
+      if (event.key === 'Escape' && searchInput.value) { event.stopPropagation(); searchInput.value = ''; updateSearch(); }
+    });
+    searchClear.addEventListener('click', () => { searchInput.value = ''; updateSearch(); searchInput.focus(); });
+    updateSearch();
     const identity = el('div', null, 'portal-account');
     identity.append(el('span', 'WORKSPACE'), el('strong', account.client_name || 'API workspace'),
       el('small', account.email || ''));
@@ -179,7 +230,8 @@
       menu.setAttribute('aria-label', 'Open navigation');
       const context = el('div', null, 'portal-context');
       const fallback = path === '/flo' ? ['Flo', 'Applications and reports']
-        : path === '/cases' ? ['Workspace', 'API Case Manager']
+        : path === '/home' ? ['Workspace', 'Home']
+          : path === '/cases' ? ['Workspace', 'API Case Manager']
           : path === '/usage' ? ['Workspace', 'Usage & Billing']
             : path === '/api-keys' ? ['Workspace', 'API Keys']
               : path === '/account' ? ['Workspace', 'Account Settings']
@@ -201,7 +253,7 @@
       sidebar.inert = mobile.matches && !open;
       for (const child of document.body.children)
         if (child !== sidebar && child !== overlay) child.inert = mobile.matches && open;
-      if (open) sidebar.querySelector('button, a')?.focus();
+      if (open) searchInput.focus();
       else if (returnFocus) menu?.focus();
     }
     menu?.addEventListener('click', () => setDrawer(!document.body.classList.contains('portal-menu-open'), true));
@@ -213,7 +265,7 @@
     }, { signal: navigationAbort.signal });
     mobile.addEventListener('change', () => setDrawer(false), { signal: navigationAbort.signal });
     setDrawer(false);
-    const activeGroup = active?.group || (path === '/flo-workflows' ? 'flo' : '');
+    const activeGroup = active?.group || (path === '/flo-workflows' || data.floFailed ? 'flo' : '');
     let remembered = '';
     try { remembered = sessionStorage.getItem('portal_open_group') || ''; } catch { /* storage unavailable */ }
     if (activeGroup || remembered) setGroup(activeGroup || remembered, true);
@@ -225,6 +277,8 @@
       else signOut.disabled = false;
     });
     document.body.classList.add('portal-ready');
+    document.body.dataset.portalCatalog = data.loading ? 'loading' : 'ready';
+    if (restoreSearchFocus) searchInput.focus();
     document.dispatchEvent(new Event('portal:navigation-ready'));
   }
 
@@ -233,6 +287,7 @@
     if (!response.ok) { if (protectedPaths.has(path) || formPath || ocrPath) location.replace(loginTarget()); return; }
     const session = await response.json();
     const entitlements = await getJson('/portal/api/entitlements');
+    renderPortal(session, entitlements, { loading: true });
     renderPortal(session, entitlements, await loadData(entitlements));
   }
   loadSession().catch(() => {

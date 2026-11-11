@@ -18,11 +18,13 @@
       ...(options.method && options.method !== 'GET' ? { 'x-ai7-csrf': csrf } : {}), ...(options.headers || {})
     } });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error || `Request failed (${response.status}).`);
+    if (!response.ok) { const error = new Error(body.error || `Request failed (${response.status}).`);
+      error.status = response.status; throw error; }
     return body;
   }
 
   function showNewKey(value) {
+    sessionStorage.setItem('ai7_new_api_key', value);
     byId('new-key-value').textContent = value;
     byId('new-key-panel').hidden = false;
     byId('new-key-panel').scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -30,6 +32,7 @@
 
   async function loadKeys() {
     const { keys } = await request('/portal/api/keys');
+    byId('retry-key-list').hidden = true;
     keysById = new Map(keys.map((key) => [key.id, key]));
     const list = byId('key-list');
     list.replaceChildren();
@@ -43,14 +46,16 @@
       if (key.status === 'active' && (currentAccount.role === 'org_admin' || key.ownerEmail === currentAccount.email)) {
         const rotate = document.createElement('button'); rotate.textContent = 'Rotate'; rotate.type = 'button';
         rotate.addEventListener('click', async () => {
-          if (!confirm(`Rotate ${key.label || 'this key'}? Its current value will stop working.`)) return;
+          if (!confirm(`Rotate ${key.label || 'this key'} (owner ${key.ownerEmail || 'workspace'}, ending ${key.lastFour})? The old value stops working immediately; update every integration using it.`)) return;
           rotate.disabled = true;
-          try { const result = await request(`/portal/api/keys/${key.id}/rotate`, { method: 'POST' }); showNewKey(result.api_key); await loadKeys(); }
+          try { const result = await request(`/portal/api/keys/${key.id}/rotate`, { method: 'POST' }); showNewKey(result.api_key);
+            try { await loadKeys(); } catch { byId('retry-key-list').hidden = false;
+              byId('account-message').textContent = 'Key rotated. Store the replacement above; the list could not refresh.'; } }
           catch (error) { byId('account-message').textContent = error.message; rotate.disabled = false; }
         });
         const revoke = document.createElement('button'); revoke.textContent = 'Revoke'; revoke.type = 'button';
         revoke.addEventListener('click', async () => {
-          if (!confirm(`Revoke ${key.label || 'this key'}? This cannot be undone.`)) return;
+          if (!confirm(`Revoke ${key.label || 'this key'} (owner ${key.ownerEmail || 'workspace'}, ending ${key.lastFour})? It stops working immediately and this cannot be undone.`)) return;
           revoke.disabled = true;
           try { await request(`/portal/api/keys/${key.id}/revoke`, { method: 'POST' }); await loadKeys(); }
           catch (error) { byId('account-message').textContent = error.message; revoke.disabled = false; }
@@ -214,7 +219,8 @@
       headers: { 'idempotency-key': pending.idempotencyKey }, body: JSON.stringify({ label }) });
       showNewKey(result.api_key); sessionStorage.removeItem('ai7_pending_create_key'); form.reset();
       try { await loadKeys(); }
-      catch { byId('account-message').textContent = 'Key created. The list could not refresh; reload this page after storing the new key.'; }
+      catch { byId('retry-key-list').hidden = false;
+        byId('account-message').textContent = 'Key created. Store the value above; the list could not refresh.'; }
     }
     catch (error) { byId('account-message').textContent = error.message; }
     finally { button.disabled = false; }
@@ -228,6 +234,14 @@
     button.setAttribute('aria-label', 'Copied API key');
     setTimeout(() => { button.innerHTML = icon; button.setAttribute('aria-label', 'Copy API key'); button.disabled = false; }, 1200);
   });
+  byId('ack-new-key').addEventListener('click', () => {
+    sessionStorage.removeItem('ai7_new_api_key');
+    byId('new-key-value').textContent = '';
+    byId('new-key-panel').hidden = true;
+  });
+  byId('retry-key-list').addEventListener('click', () => loadKeys().catch((error) => {
+    byId('account-message').textContent = error.message;
+  }));
   byId('refresh-health').addEventListener('click', loadHealth);
   byId('refresh-usage').addEventListener('click', loadUsage);
 
@@ -244,8 +258,11 @@
     if (initial && view !== 'api-keys') { location.replace('/api-keys'); return; }
     for (const section of document.querySelectorAll('[data-account-view]')) section.hidden = section.dataset.accountView !== view;
     if (view === 'api-keys') {
-      if (initial) { sessionStorage.removeItem('ai7_new_api_key'); showNewKey(initial); }
-      await loadKeys();
+      if (initial) showNewKey(initial);
+      try { await loadKeys(); } catch (error) {
+        byId('account-message').textContent = error.message;
+        byId('retry-key-list').hidden = false;
+      }
     } else if (view === 'usage') {
       try { const { keys } = await request('/portal/api/keys'); keysById = new Map(keys.map((key) => [key.id, key])); }
       catch { keysById = new Map(); }
@@ -254,5 +271,8 @@
       const teamLoad = loadTeam().catch((error) => { byId('team-summary').textContent = error.message; });
       await Promise.all([loadHealth(), teamLoad, ...(session.account.role === 'org_admin' ? [loadCaseSettings()] : [])]);
     }
-  }).catch(() => location.replace(`/login?next=${encodeURIComponent(location.pathname + location.search)}`));
+  }).catch((error) => {
+    if (error.status === 401) location.replace(`/login?next=${encodeURIComponent(location.pathname + location.search)}`);
+    else byId(view === 'account' ? 'team-summary' : view === 'usage' ? 'usage-status' : 'account-message').textContent = error.message;
+  });
 })();

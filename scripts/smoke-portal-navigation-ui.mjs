@@ -8,6 +8,7 @@ const files = {
   '/api.css': ['api-site/api.css', 'text/css'],
   '/portal-auth.js': ['api-site/portal-auth.js', 'text/javascript'],
   '/account.js': ['api-site/account.js', 'text/javascript'],
+  '/home.js': ['api-site/home.js', 'text/javascript'],
   '/forms.js': ['api-site/forms.js', 'text/javascript'],
   '/flo.js': ['api-site/flo.js', 'text/javascript'],
   '/flo-review.js': ['api-site/flo-review.js', 'text/javascript'],
@@ -22,7 +23,8 @@ const files = {
 const genericOcr = '<!doctype html><html lang="en"><head><link rel="stylesheet" href="/api.css"><script src="/portal-auth.js" defer></script></head><body><header></header><main id="main-content"><h1>Document extraction</h1></main></body></html>';
 const server = createServer((req, res) => {
   const path = new URL(req.url, 'http://localhost').pathname;
-  const page = ['/account', '/usage', '/api-keys'].includes(path) ? 'api-site/account.html'
+  const page = path === '/home' ? 'api-site/home.html'
+    : ['/account', '/usage', '/api-keys'].includes(path) ? 'api-site/account.html'
     : path === '/forms' || /^\/forms\/[a-z0-9-]+$/.test(path) ? 'api-site/forms.html'
       : path === '/flo' ? 'api-site/flo.html'
         : path === '/flo-workflows' ? 'api-site/flo-workflows.html' : null;
@@ -46,12 +48,17 @@ try {
     const context = await browser.newContext({ viewport: { width, height: 850 } });
     let modules = ['*'];
     let role = 'org_admin';
+    let floStatusMode = 'normal'; let caseStatusMode = 'normal';
     let formsMode = 'normal';
     let ocrMode = 'normal';
     const calls = [];
     await context.route('**/portal/api/**', async (route) => {
       const path = new URL(route.request().url()).pathname;
       calls.push(path);
+      if (path === '/portal/api/flo/status' && floStatusMode === 'failed'
+        || path === '/portal/api/case-manager/settings' && caseStatusMode === 'failed') {
+        await route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }); return;
+      }
       const response = path === '/portal/api/auth/session' ? { account: { client_name: 'Test workspace',
         email: 'review@example.test', role }, csrf_token: 'csrf' }
         : path === '/portal/api/entitlements' ? { allowed_modules: modules,
@@ -95,7 +102,18 @@ try {
       status: 200, contentType: 'application/json', body: JSON.stringify({ form }) }));
     const page = await context.newPage();
     await page.goto(base + '/account');
-    await page.locator('body.portal-ready').waitFor();
+    await page.locator('body[data-portal-catalog="ready"]').waitFor();
+    floStatusMode = 'failed'; caseStatusMode = 'failed';
+    await page.reload();
+    await page.locator('body[data-portal-catalog="ready"]').waitFor();
+    if (!await page.locator('.portal-nav-group[data-group="flo"] .portal-catalog-retry').count()
+      || !await page.locator('.portal-nav-direct .portal-catalog-retry').count())
+      throw new Error('Failed Flo or Case Manager status has no retry.');
+    floStatusMode = 'normal'; caseStatusMode = 'normal';
+    if (width < 760) await page.locator('#portal-menu').click();
+    await page.locator('.portal-nav-group[data-group="flo"] .portal-catalog-retry').click();
+    await page.locator('.portal-nav-direct a[href="/cases"]').waitFor();
+    if (width < 760) await page.keyboard.press('Escape');
     const groupNames = await page.locator('.portal-group-toggle').allTextContents();
     if (groupNames.join('|') !== 'Flo|Verification API|OCR|Forms')
       throw new Error('Group order differs at ' + width + ': ' + groupNames.join('|'));
@@ -109,6 +127,25 @@ try {
       throw new Error('Account route exposes another view.');
     if (calls.includes('/portal/api/usage') || calls.includes('/portal/api/keys'))
       throw new Error('Account Settings loaded usage or keys.');
+    if (!(await page.locator('.portal-group-heading button').count()))
+      throw new Error('Accordion headings are missing.');
+    if (width < 760) await page.locator('#portal-menu').click();
+    await page.locator('#portal-nav-search').fill('bank');
+    if (!await page.locator('.portal-search-results a[href$="/iban"]').count()
+      || await page.locator('.portal-search-results a[href$="/flo"]').count())
+      throw new Error('Menu search did not filter authorized destinations.');
+    await page.locator('#portal-nav-search').press('ArrowDown');
+    if (!await page.locator('.portal-search-results a:focus').count())
+      throw new Error('Menu search did not move focus to a result.');
+    await page.locator('.portal-search-clear').click();
+    if (width < 760) await page.keyboard.press('Escape');
+    await page.goto(base + '/home');
+    await page.locator('#home-actions .home-card').first().waitFor();
+    if (await page.locator('.portal-brand').getAttribute('href') !== '/home'
+      || !await page.locator('#home-actions a[href="/flo#new-application"]').count())
+      throw new Error('Workspace home or brand link is missing.');
+    await page.goto(base + '/account');
+    await page.locator('body[data-portal-catalog="ready"]').waitFor();
     if (width < 760) {
       const menu = page.locator('#portal-menu');
       await menu.click();

@@ -317,6 +317,17 @@ body.portal-ready { padding-left: 276px; }
 .portal-skip-link{position:fixed;top:-5rem;left:1rem;z-index:40;padding:.7rem 1rem;color:var(--dark);background:var(--mint);font-weight:800}
 .portal-skip-link:focus{top:1rem}
 .portal-sidebar{padding-bottom:max(1rem,env(safe-area-inset-bottom));scrollbar-width:thin}
+.portal-nav-search{display:grid;gap:.35rem;margin:.1rem 0 .75rem;padding:.5rem .6rem;border-bottom:1px solid #ffffff20}
+.portal-nav-search label{font-size:.68rem;font-weight:800;color:#dbe7f3}
+.portal-nav-search input{width:100%;min-height:40px;padding:.5rem .65rem;border:1px solid #7890a7;border-radius:4px;color:var(--ink);background:#fff;font:inherit}
+.portal-search-count{margin:.1rem 0;color:#b7c8d9;font-size:.72rem}
+.portal-search-results{display:grid;gap:.2rem;max-height:48vh;overflow:auto}
+.portal-search-results[hidden],.portal-search-clear[hidden]{display:none}
+.portal-search-result{display:block;padding:.6rem .5rem;color:#fff;overflow-wrap:anywhere;font-size:.76rem}
+.portal-search-clear{width:fit-content;border:0;background:transparent;color:var(--mint);text-decoration:underline;cursor:pointer}
+.portal-group-heading{margin:0;font:inherit}
+.portal-nav-group .portal-group-heading .portal-group-toggle{width:100%}
+.portal-nav-group[hidden],.portal-nav-direct[hidden]{display:none}
 .portal-nav-group{min-width:0}
 .portal-group-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:44px;border:0;border-left:2px solid transparent;padding:.7rem;color:#dbe7f3;background:transparent;text-align:left;font:800 .78rem Manrope,sans-serif;cursor:pointer}
 .portal-group-toggle::after{content:"⌄";font-size:1rem;transition:transform .15s}
@@ -333,6 +344,14 @@ body.portal-ready { padding-left: 276px; }
 .portal-nav-group .portal-nav-note{margin:.2rem .7rem;color:#b7c8d9;font:400 .72rem Manrope,sans-serif;letter-spacing:normal;line-height:1.5}
 .portal-catalog-retry{width:fit-content;margin:.2rem .7rem;border:1px solid #7890a7;padding:.45rem .6rem;color:var(--white);background:transparent;cursor:pointer}
 .portal-group-toggle:focus-visible,.portal-sidebar a:focus-visible,.portal-sidebar button:focus-visible,.portal-menu:focus-visible,.portal-overlay:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+.portal-nav-search input:focus-visible,.home-card:focus-visible,.account-content button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+.home-main{min-height:100vh;padding:clamp(2rem,5vw,5rem);background:var(--paper)}
+.home-hero{max-width:850px;margin-bottom:2rem}.home-hero h1{font-size:clamp(2.4rem,5vw,4.5rem);line-height:1.08;letter-spacing:-.045em;margin:.5rem 0}.home-hero p{color:var(--muted)}
+.home-main>section{margin:1.5rem 0}.home-main h2{font-size:1.35rem}.home-card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:.8rem}
+.home-card{display:grid;gap:.7rem;min-height:98px;padding:1.1rem;border:1px solid var(--line);background:#fff;color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
+.home-card:hover{border-color:var(--green);box-shadow:0 8px 22px #102b4814}.home-card span{color:var(--muted);font-size:.78rem}
+.home-main>section>a{display:inline-block;margin-top:.75rem;color:var(--green)}
+.home-main>button,.account-key-reveal>button{padding:.7rem .9rem;border:0;background:var(--mint);color:var(--dark);font-weight:800;cursor:pointer}
 .account-content>[data-account-view]{min-width:0}
 .account-rate-card{display:grid;gap:.45rem;margin:1rem 0 1.5rem;padding:1.2rem;border:1px solid #dae3ea;background:#fff}
 .account-rate-card h2{margin:0 0 .4rem;font-size:1.2rem}

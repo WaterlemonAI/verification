@@ -40,19 +40,19 @@
   const resetForm = document.getElementById('reset-form');
   const title = document.getElementById('auth-title');
   const intro = document.getElementById('auth-intro');
-  const allowedPaths = new Set(['/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening',
+  const allowedPaths = new Set(['/home', '/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening',
     '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/usage', '/api-keys',
     '/cases', '/flo', '/flo-workflows']);
 
   function destination() {
-    const value = new URLSearchParams(location.search).get('next') || '/';
+    const value = new URLSearchParams(location.search).get('next') || '/home';
     try {
       const parsed = new URL(value, location.origin);
       const path = parsed.pathname.length > 1 ? parsed.pathname.replace(/\/$/, '') : '/';
       const detail = /^\/forms\/[a-z0-9-]+$/.test(path) || /^\/document-extraction\/[a-z0-9-]+$/.test(path);
       return parsed.origin === location.origin && (allowedPaths.has(path) || detail)
-        ? `${parsed.pathname}${parsed.search}${parsed.hash}` : '/';
-    } catch { return '/'; }
+        ? `${parsed.pathname}${parsed.search}${parsed.hash}` : '/home';
+    } catch { return '/home'; }
   }
 
   function setMode(mode) {
