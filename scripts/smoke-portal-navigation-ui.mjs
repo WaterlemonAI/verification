@@ -296,19 +296,19 @@ try {
       || !(await page.locator('#new-application').count())) throw new Error('Flo creation anchor missing.');
     formsMode = 'long';
     await page.goto(base + '/forms');
-    await page.locator('body.portal-ready').waitFor();
+    await page.locator('body[data-portal-catalog="ready"]').waitFor();
     const longMenu = page.locator('.portal-nav-group[data-group="forms"] .portal-submenu');
     if (await longMenu.locator('a').count() !== 26
       || !await longMenu.evaluate((node) => node.scrollHeight > node.clientHeight))
       throw new Error('Long Forms catalog is not bounded and scrollable.');
     formsMode = 'empty';
     await page.goto(base + '/forms');
-    await page.locator('body.portal-ready').waitFor();
+    await page.locator('#forms-status').filter({ hasText: 'No Forms are enabled' }).waitFor();
     if (!(await page.locator('#forms-status').textContent()).includes('No Forms are enabled'))
       throw new Error('Empty Forms state is unclear.');
     formsMode = 'failed';
     await page.reload();
-    await page.locator('body.portal-ready').waitFor();
+    await page.locator('#forms-status').filter({ hasText: 'could not be loaded' }).waitFor();
     if (!(await page.locator('#forms-status').textContent()).includes('could not be loaded')
       || !(await page.locator('#forms-retry').isVisible())) throw new Error('Failed Forms state has no retry.');
     formsMode = 'normal';
