@@ -4,6 +4,9 @@
 #flo-detail{background:#f6f7f9}
 #flo-detail>h2{font-size:1.55rem;margin:.25rem 0}
 #flo-detail>p:not(.flo-kicker){color:#5b6676;margin:.25rem 0 1.25rem}
+.flo-attention{margin:0 0 1rem;padding:.85rem 1rem;border:1px solid #dce2e9;border-left:4px solid #bc790e;background:#fff;color:#24344c;font-weight:700}
+.flo-case .flo-attention-cue{color:#a32640;font-weight:700}.flo-case .flo-action-cue{color:#4c6078}
+#flo-detail .flo-progress{padding:.85rem 1rem;border:1px solid #bfd3e5;border-left:4px solid #315c8d;border-radius:8px;background:#eff5fb;color:#23446b;font-weight:700}
 .flo-kicker{font-size:.7rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#657184;margin:0 0 .35rem}
 .flo-review-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem;margin:1rem 0 1.25rem}
 .flo-summary-card{display:grid;gap:.4rem;align-content:start;min-height:112px;background:#fff;border:1px solid #dce2e9;border-radius:12px;padding:1rem;overflow-wrap:anywhere}

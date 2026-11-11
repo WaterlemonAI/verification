@@ -4,6 +4,21 @@
   let selected = '';
   let pendingLink = null;
   let bucket = ''; let nextCursor = null;
+  let refreshTimer = null; let refreshAttempts = 0;
+  const needsAttention = (item) => ['pending_review', 'needs_correction', 'failed'].includes(item.status)
+    || item.link_delivery === 'failed' || item.process_enqueue_state === 'failed';
+  const actionCue = (item) => {
+    if (item.link_delivery === 'failed') return 'Email delivery failed · open the case to retry delivery';
+    if (item.process_enqueue_state === 'failed') return 'Processing could not be queued · review the case';
+    if (item.status === 'link_issued') return 'Link sent · wait for the applicant to open it';
+    if (item.status === 'in_progress') return 'Applicant is completing the form';
+    if (item.status === 'restarted') return 'Correction requested · wait for a revised submission';
+    if (['submitted', 'processing'].includes(item.status)) return 'Checks are processing · this view refreshes automatically';
+    if (['pending_review', 'needs_correction'].includes(item.status)) return 'Buyer review needed · inspect evidence and decide';
+    if (item.status === 'failed') return 'Processing failed · inspect provider and document errors';
+    if (item.status === 'accepted' || item.status === 'rejected') return 'Final decision recorded';
+    return 'Open the case to inspect its status and evidence';
+  };
   const flowNames = new Map([['supplier-onboarding-v1', 'Supplier Onboarding v1'], ['kys-v1', 'Know Your Supplier v1']]);
   const flowLabel = (id) => flowNames.get(id) || id.replace(/^flow-/, 'Workflow ').replaceAll('-', ' ');
   const bucketLabels = { '': 'All', open: 'Open', in_progress: 'In progress', processing_review: 'Processing / Review',
@@ -77,7 +92,9 @@
     } catch (error) { $('flo-notice').textContent = error.message; }
     finally { button.disabled = false; }
   }
-  async function detail(id) {
+  async function detail(id, automatic = false) {
+    clearTimeout(refreshTimer);
+    if (!automatic) refreshAttempts = 0;
     selected = id;
     const { application: item, diagnostic_enabled: diagnosticEnabled } = await request(`/portal/api/flo/cases/${id}`);
     for (const button of document.querySelectorAll('#flo-list .flo-case')) {
@@ -88,6 +105,8 @@
     const shell = $('flo-detail');
     shell.replaceChildren(node('p', 'APPLICATION REVIEW', 'flo-kicker'),
       node('h2', item.customer_reference), node('p', `Status: ${item.status.replaceAll('_', ' ')} · ${item.flow_id}`));
+    const progress = node('p', actionCue(item), 'flo-progress'); progress.id = 'flo-action-status';
+    progress.setAttribute('role', 'status'); shell.append(progress);
     const overview = window.FloReview.render(shell, item);
     const root = document.createElement('section'); root.className = 'flo-review-section flo-case-actions';
     overview.append(root);
@@ -232,6 +251,12 @@
       overview.insertBefore(root, overview.querySelector('.flo-overview-grid'));
     }
     else root.remove();
+    if (selected === id && ['submitted', 'processing'].includes(item.status)) {
+      if (refreshAttempts < 15) {
+        refreshTimer = setTimeout(() => { refreshAttempts += 1;
+          detail(id, true).catch((error) => { progress.textContent = `Refresh paused: ${error.message}`; }); }, 8000);
+      } else progress.textContent = 'Still processing. Refresh the case later to continue reviewing.';
+    }
   }
   async function loadCases() {
     const flow = $('flo-filter').value;
@@ -248,13 +273,15 @@
       tabs.append(tab);
     }
     const list = $('flo-list'); list.replaceChildren();
+    $('flo-attention').textContent = `${cases.filter(needsAttention).length} of ${cases.length} loaded applications need buyer attention.`;
     if (!cases.length) list.append(node('p', 'No Flo applications yet.'));
     for (const item of cases) {
       const button = node('button', '', 'flo-case');
       button.dataset.caseId = item.application_id;
       button.classList.toggle('active', item.application_id === selected);
       button.append(node('strong', item.customer_reference),
-        node('small', `${item.flow_id} · revision ${item.application_revision || 1} · ${item.bucket.replaceAll('_', ' ')} · email ${item.link_delivery || 'not attempted'} · ${item.created_at}`));
+        node('small', `${item.flow_id} · revision ${item.application_revision || 1} · ${item.bucket.replaceAll('_', ' ')} · email ${item.link_delivery || 'not attempted'} · ${item.created_at}`),
+        node('small', actionCue(item), needsAttention(item) ? 'flo-attention-cue' : 'flo-action-cue'));
       button.addEventListener('click', () => detail(item.application_id).catch((error) => { $('flo-notice').textContent = error.message; }));
       list.append(button);
     }
@@ -275,7 +302,8 @@
     const result = await request(`/portal/api/flo/cases?${params}`);
     nextCursor = result.next_cursor; $('flo-more').hidden = !nextCursor;
     for (const item of result.cases) { const button = node('button', '', 'flo-case'); button.dataset.caseId = item.application_id;
-      button.append(node('strong', item.customer_reference), node('small', `${item.flow_id} · revision ${item.application_revision || 1} · ${item.bucket.replaceAll('_', ' ')} · ${item.created_at}`));
+      button.append(node('strong', item.customer_reference), node('small', `${item.flow_id} · revision ${item.application_revision || 1} · ${item.bucket.replaceAll('_', ' ')} · ${item.created_at}`),
+        node('small', actionCue(item), needsAttention(item) ? 'flo-attention-cue' : 'flo-action-cue'));
       button.addEventListener('click', () => detail(item.application_id).catch((error) => { $('flo-notice').textContent = error.message; }));
       $('flo-list').append(button); }
   }
@@ -291,4 +319,5 @@
     } catch (error) { $('flo-notice').textContent = error.message; }
   }
   start();
+  window.addEventListener('pagehide', () => clearTimeout(refreshTimer));
 })();

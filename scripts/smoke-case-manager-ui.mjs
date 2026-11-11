@@ -138,7 +138,8 @@ try {
     for (const serviceId of ['uae-tlv', 'iban-verification']) {
       await page.locator(`.case-list-item[data-case-id="${caseIds.get(serviceId)}"]`).getByText('Passed').waitFor();
     }
-    await page.locator(`.case-list-item[data-case-id="${caseIds.get('entity-search')}"]`).getByText('Review required').waitFor();
+    await page.locator(`.case-list-item[data-case-id="${caseIds.get('entity-search')}"] .case-badge`).getByText('Review required').waitFor();
+    await page.locator(`.case-list-item[data-case-id="${caseIds.get('entity-search')}"] .case-action-cue`).waitFor();
     await page.locator(`.case-list-item[data-case-id="${clearSearch.id}"]`).getByText('No candidates found').waitFor();
     await page.locator(`.case-list-item[data-case-id="${clearSearch.id}"]`).click();
     await page.locator('#case-detail').getByText('No candidates were returned in the completed provider checks. This does not certify every underlying source as clear.').waitFor();
