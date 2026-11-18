@@ -8,10 +8,11 @@ const dailyArchive = {
   coverage_end: '2026-10-26T01:30:00Z'
 };
 
-test('daily local archive covers the disclosed rolling window despite normal ingest lag', () => {
-  assert.equal(stateCoversRequest(dailyArchive, {}, now), true);
+test('daily local archive covers recent explicit dates but not the default one-year window', () => {
+  assert.equal(stateCoversRequest(dailyArchive, {}, now), false);
   assert.equal(stateCoversRequest(dailyArchive, { date_from: '2026-10-24' }, now), true);
-  assert.equal(stateCoversRequest(dailyArchive, { date_to: '2026-10-26' }, now), true);
+  assert.equal(stateCoversRequest(dailyArchive, { date_to: '2026-10-26' }, now), false);
+  assert.equal(stateCoversRequest({ ...dailyArchive, coverage_start: '2025-10-26T00:00:00Z' }, {}, now), true);
 });
 
 test('archive is incomplete for older requested dates or a missed daily update', () => {
