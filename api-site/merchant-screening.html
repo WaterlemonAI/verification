@@ -13,6 +13,7 @@
     <script src="/portal-auth.js?v=4" defer></script>
     <script src="/status-view.js" defer></script>
     <script src="/merchant-screening.js?v=2" defer></script>
+      <script src="/response-field-reference.js?v=1" defer></script>
   </head>
   <body>
     <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · Dubai ↗</a></div>
@@ -92,6 +93,7 @@
             <p>A successful request returns the full assessment even when optional enrichment is unavailable. Always inspect <code>status</code>, <code>summary.decision_eligible</code>, and the coverage fields before using the result.</p>
             <div class="schema-table" aria-label="Merchant screening response fields">
               <div class="schema-head"><span>Field</span><span>Type</span><span>Description</span></div>
+              <div><code>request</code><span>object</span><span>Applied request values and defaults. Omitted <code>declared_merchant_name</code>, <code>declared_mcc</code>, and <code>customer_logo_url</code> are returned as <code>null</code>; this is not a merchant classification.</span></div>
               <div><code>screening_id</code><span>UUID</span><span>Unique screening reference.</span></div>
               <div><code>status</code><span>string</span><span><code>completed</code> or <code>partial</code> when required coverage is unavailable.</span></div>
               <div><code>merchant_identity</code><span>object</span><span>Observed names, addresses, contacts, social profiles, founders, leadership, and source-scoped public claims.</span></div>

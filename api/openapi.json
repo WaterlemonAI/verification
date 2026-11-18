@@ -20,6 +20,10 @@
     "/service/moa_analysis": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1moa_analysis" },
     "/service/articles_of_association_ocr": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1articles_of_association_ocr" },
     "/service/emirates_id_ocr": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1emirates_id_ocr" },
+    "/service/dubai_ejari_verification": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification" },
+    "/service/dubai_ejari_verification/jobs/{jobId}": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification~1jobs~1{jobId}" },
+    "/service/dubai_ejari_verification/jobs/{jobId}/result": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification~1jobs~1{jobId}~1result" },
+    "/service/dubai_ejari_verification/jobs/{jobId}/certificate.pdf": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification~1jobs~1{jobId}~1certificate.pdf" },
     "/service/{documentService}/jobs/{jobId}": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1{documentService}~1jobs~1{jobId}" },
     "/service/{documentService}/jobs/{jobId}/result": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1{documentService}~1jobs~1{jobId}~1result" },
     "/service/emirates_id_ocr/jobs/{jobId}/artifacts/{artifactName}": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1emirates_id_ocr~1jobs~1{jobId}~1artifacts~1{artifactName}" },
@@ -63,9 +67,9 @@
           "400": { "description": "The request is invalid." },
           "401": { "description": "An active API key is required." },
           "402": { "description": "Insufficient prepaid credit." },
-          "403": { "description": "The Peppol module is not enabled for this workspace." },
+          "403": { "description": "The Peppol module is not enabled for this workspace.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "429": { "description": "Rate limit reached." },
-          "503": { "description": "The global index is not ready or temporarily unavailable." }
+          "503": { "description": "The global index is not ready or temporarily unavailable. The body uses PeppolGlobalResult with status unavailable, an empty matches array, and a reason_code when known.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeppolGlobalResult" } } } }
         }
       }
     },
@@ -75,17 +79,17 @@
         "operationId": "listPeppolCountries",
         "security": [{ "ApiKey": [] }],
         "responses": {
-          "200": { "description": "Available country codes and card counts.", "content": { "application/json": { "schema": { "type": "object", "properties": {
+          "200": { "description": "Available country codes and card counts.", "content": { "application/json": { "schema": { "type": "object", "required": ["status", "snapshot_at", "cards", "countries"], "properties": {
             "status": { "type": "string", "const": "ready" },
             "snapshot_at": { "type": "string", "format": "date-time" },
             "cards": { "type": "integer" },
-            "countries": { "type": "array", "items": { "type": "object", "properties": {
-              "code": { "type": "string", "pattern": "^[A-Z]{2}$" }, "count": { "type": "integer" }
+            "countries": { "type": "array", "description": "Zero or more countries in the loaded export; counts vary by snapshot.", "items": { "type": "object", "required": ["code", "count"], "properties": {
+              "code": { "type": "string", "pattern": "^[A-Z]{2}$", "description": "Two-letter country code." }, "count": { "type": "integer", "description": "Published business cards for this country in the snapshot." }
             } } }
           } } } } },
           "401": { "description": "An active API key is required." },
-          "403": { "description": "The Peppol module is not enabled for this workspace." },
-          "503": { "description": "The global index is not ready or temporarily unavailable." }
+          "403": { "description": "The Peppol module is not enabled for this workspace.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "503": { "description": "The global index is not ready or temporarily unavailable.", "content": { "application/json": { "schema": { "type": "object", "required": ["status", "countries"], "properties": { "status": { "type": "string", "const": "unavailable" }, "countries": { "type": "array", "maxItems": 0, "items": { "type": "object" } } } } } } }
         }
       }
     },
@@ -326,6 +330,10 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Workspace entitlement or upstream screening access denied. The JSON error body may come from either source; its fields depend on the source of the denial.",
+            "content": { "application/json": { "schema": { "type": "object", "description": "Source-dependent error details. Inspect the HTTP status before interpreting the body.", "additionalProperties": true } } }
           },
           "500": {
             "description": "The screening service is temporarily unavailable.",
@@ -673,16 +681,58 @@
         },
         "additionalProperties": false
       },
+      "MerchantScreeningNormalizedRequest": {
+        "type": "object",
+        "description": "Normalized request echoed in the result. Omitted optional inputs are represented by defaults or null, rather than being omitted.",
+        "required": ["website_url", "country_code", "declared_merchant_name", "declared_mcc", "max_pages", "high_risk_threshold_percent", "review_threshold_percent", "get_pdf", "customer_logo_url"],
+        "properties": {
+          "website_url": { "type": "string", "format": "uri", "description": "Validated public HTTPS URL supplied for screening." },
+          "country_code": { "type": "string", "description": "Normalized two-letter country code." },
+          "declared_merchant_name": { "type": ["string", "null"], "description": "Submitted merchant name, or null when omitted." },
+          "declared_mcc": { "type": ["string", "null"], "description": "Submitted four-digit MCC, or null when omitted; a missing MCC is not a classification result." },
+          "max_pages": { "type": "integer", "description": "Applied crawl page limit; defaults to 12." },
+          "high_risk_threshold_percent": { "type": "number", "description": "Applied High Risk boundary; defaults to 60." },
+          "review_threshold_percent": { "type": "number", "description": "Applied Review boundary; defaults to 25." },
+          "get_pdf": { "type": "boolean", "description": "Whether PDF generation was requested; defaults to false." },
+          "customer_logo_url": { "type": ["string", "null"], "format": "uri", "description": "Submitted PDF logo URL, or null when omitted." }
+        },
+        "additionalProperties": false
+      },
       "MerchantCoverageStatus": {
         "type": "object",
         "required": ["status"],
         "properties": {
-          "status": { "type": "string", "enum": ["available", "completed", "partial", "unavailable", "not_configured"] },
-          "reason": { "type": "string" },
-          "items": { "type": "array", "items": {} }
+          "status": { "type": "string", "enum": ["available", "completed", "partial", "unavailable", "not_configured"], "description": "Coverage state for this source; an unavailable or unconfigured required source makes the overall result partial." },
+          "provider": { "type": "string", "description": "Source category or provider label when available." },
+          "reason": { "type": "string", "description": "Customer-readable explanation when coverage is incomplete." },
+          "items": { "type": "array", "description": "Zero or more source observations; type and structure depend on the provider and source records.", "items": {} }
         },
         "additionalProperties": true
       },
+      "MerchantDomain": { "type": "object", "description": "RDAP domain-registration observation; age and creation date can be null or absent when RDAP lacks them.", "required": ["status", "domain"], "properties": { "status": { "type": "string", "enum": ["available", "partial", "unavailable"] }, "domain": { "type": "string" }, "created_at": { "type": ["string", "null"], "format": "date-time" }, "age_days": { "type": ["integer", "null"], "description": "Calculated from the RDAP registration event, when present; not proof of merchant history." }, "source_url": { "type": "string", "format": "uri" }, "rdap_status": { "type": "array", "items": { "type": "string" }, "description": "Zero or more RDAP status flags from the registry." }, "http_status": { "type": "integer", "description": "Returned when the RDAP request failed with an HTTP response." }, "error": { "type": "string", "description": "Returned when RDAP lookup fails before a usable response." } }, "additionalProperties": true },
+      "MerchantIdentity": {
+        "type": "object",
+        "description": "Claims observed on the merchant website. Names, contacts, people, and partnerships are evidence to review, not independently verified identities.",
+        "properties": {
+          "names": { "type": "array", "items": { "type": "string" }, "description": "Zero or more website names from structured data, page title, or metadata." },
+          "addresses": { "type": "array", "items": { "type": "string" }, "description": "Zero or more addresses found on the bounded crawl." },
+          "phones": { "type": "array", "items": { "type": "string" }, "description": "Zero or more published telephone numbers." },
+          "emails": { "type": "array", "items": { "type": "string" }, "description": "Zero or more published email addresses." },
+          "social_profiles": { "type": "array", "description": "Linked social profiles; website links are not account ownership proof.", "items": { "type": "object", "properties": { "network": { "type": "string" }, "url": { "type": "string", "format": "uri" }, "verification_status": { "type": "string" } }, "additionalProperties": true } },
+          "founders": { "type": "array", "description": "People identified as founders in website structured data.", "items": { "$ref": "#/components/schemas/MerchantPersonClaim" } },
+          "senior_leadership": { "type": "array", "description": "People identified with senior roles in website structured data.", "items": { "$ref": "#/components/schemas/MerchantPersonClaim" } },
+          "publicly_listed_partnerships": { "type": "array", "description": "Website partnership claims, not independent confirmations.", "items": { "$ref": "#/components/schemas/MerchantPublicClaim" } },
+          "event_sponsorships": { "type": "array", "description": "Website sponsorship claims, not independent confirmations.", "items": { "$ref": "#/components/schemas/MerchantPublicClaim" } },
+          "partnership_and_sponsorship_claims": { "type": "array", "description": "Combined website partnership and sponsorship claims.", "items": { "$ref": "#/components/schemas/MerchantPublicClaim" } }
+        }, "additionalProperties": true
+      },
+      "MerchantPersonClaim": { "type": "object", "properties": { "name": { "type": ["string", "null"], "description": "Name as published on the website." }, "role": { "type": ["string", "null"], "description": "Published role or inferred founder label." }, "source_url": { "type": "string", "format": "uri" }, "evidence_ids": { "type": "array", "items": { "type": "string" }, "description": "Evidence references for this claim." } }, "additionalProperties": true },
+      "MerchantPublicClaim": { "type": "object", "properties": { "claim": { "type": "string", "description": "Quoted or summarized claim from a collected page." }, "source_url": { "type": "string", "format": "uri" }, "evidence_ids": { "type": "array", "items": { "type": "string" } }, "verification_status": { "type": "string", "description": "Scope of validation; a merchant website claim is not independently confirmed." } }, "additionalProperties": true },
+      "MerchantProduct": { "type": "object", "description": "Product candidate found in website metadata or structured data; zero or more may be returned.", "properties": { "name": { "type": "string" }, "description": { "type": ["string", "null"] }, "sku": { "type": ["string", "null"] }, "brand": { "type": ["string", "null"] }, "price": { "type": ["string", "null"], "description": "Price as published; not normalized to a numeric currency amount." }, "currency": { "type": ["string", "null"] }, "url": { "type": "string", "format": "uri" }, "evidence_ids": { "type": "array", "items": { "type": "string" } }, "candidate_mcc": { "type": ["object", "null"], "description": "Low-confidence candidate MCC from product text, or null. It is not an acquirer classification.", "properties": { "code": { "type": "string" }, "description": { "type": "string" }, "confidence": { "type": "string" } } }, "risk_level": { "type": "string" }, "risk_signals": { "type": "array", "items": { "type": "string" } }, "mapping_status": { "type": "string" } }, "additionalProperties": true },
+      "MerchantOutgoingLink": { "type": "object", "description": "Unique external destination found on one or more collected pages.", "properties": { "url": { "type": "string", "format": "uri" }, "host": { "type": "string" }, "category": { "type": "string" }, "source_types": { "type": "array", "items": { "type": "string" } }, "source_pages": { "type": "array", "items": { "type": "string", "format": "uri" } }, "prohibited_risk_signals": { "type": "array", "items": { "type": "string" }, "description": "Keyword signals only; not a confirmed prohibited destination." }, "risk_level": { "type": "string" }, "verification_status": { "type": "string" } }, "additionalProperties": true },
+      "MerchantFinding": { "type": "object", "description": "Explainable observation requiring interpretation against the cited website evidence.", "properties": { "code": { "type": "string" }, "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] }, "summary": { "type": "string" }, "source_url": { "type": "string", "format": "uri" } }, "additionalProperties": true },
+      "MerchantEvidence": { "type": "object", "description": "Evidence page captured during the bounded crawl.", "properties": { "evidence_id": { "type": "string" }, "type": { "type": "string" }, "source_url": { "type": "string", "format": "uri" }, "retrieved_at": { "type": "string", "format": "date-time" }, "http_status": { "type": "integer" }, "sha256": { "type": "string", "description": "SHA-256 digest of the collected content." } }, "additionalProperties": true },
+      "MerchantSummary": { "type": "object", "description": "Risk result and execution coverage. A partial result is not decision eligible regardless of its score.", "properties": { "risk_score": { "type": "number", "minimum": 0, "maximum": 100, "description": "Configured policy score on a 0–100 scale." }, "risk_level": { "type": "string", "enum": ["high_risk", "review", "safe"] }, "risk_dimensions": { "type": "object", "properties": { "policy": { "type": "number" }, "security": { "type": "number" }, "destination": { "type": "number" }, "product": { "type": "number" }, "domain_age": { "type": "number" }, "declared_mcc_mismatch": { "type": "number" } } }, "outcome": { "type": "string", "enum": ["enhanced_due_diligence", "manual_review", "review_complete"] }, "decision_eligible": { "type": "boolean", "description": "False if any required enrichment source is incomplete." }, "human_review_required": { "type": "boolean" }, "threshold_status": { "type": "string", "enum": ["high_risk", "review", "safe"] }, "thresholds": { "type": "object", "properties": { "high_risk_percent": { "type": "number" }, "review_percent": { "type": "number" }, "safe_below_percent": { "type": "number" } } }, "statement": { "type": "string" }, "confidence": { "type": "string", "enum": ["medium", "low"], "description": "Confidence in the bounded website coverage, not confidence in legal identity." }, "coverage": { "type": "object", "description": "Per-source completion status.", "properties": { "website": { "type": "string" }, "domain_registration": { "type": "string" }, "screenshots": { "type": "string" }, "x_mentions": { "type": "string" }, "destination_reputation": { "type": "string" } } } }, "additionalProperties": true },
       "MerchantScreeningResponse": {
         "type": "object",
         "required": ["screening_id", "status", "completed_at", "request", "merchant_identity", "domain", "policies", "products", "outgoing_links", "security", "screenshots", "social_mentions", "destination_reputation", "findings", "summary", "evidence", "methodology"],
@@ -690,21 +740,21 @@
           "screening_id": { "type": "string", "format": "uuid" },
           "status": { "type": "string", "enum": ["completed", "partial"] },
           "completed_at": { "type": "string", "format": "date-time" },
-          "request": { "$ref": "#/components/schemas/MerchantScreeningRequest" },
-          "merchant_identity": { "type": "object", "additionalProperties": true },
-          "domain": { "$ref": "#/components/schemas/MerchantCoverageStatus" },
-          "policies": { "type": "object", "additionalProperties": true },
-          "products": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-          "outgoing_links": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-          "security": { "type": "object", "additionalProperties": true },
+          "request": { "$ref": "#/components/schemas/MerchantScreeningNormalizedRequest" },
+          "merchant_identity": { "$ref": "#/components/schemas/MerchantIdentity" },
+          "domain": { "$ref": "#/components/schemas/MerchantDomain" },
+          "policies": { "type": "object", "description": "Country policy baseline, found/missing policy pages, and retention-language observation. Exact evidence depends on the crawled website.", "additionalProperties": true },
+          "products": { "type": "array", "description": "Zero or more product candidates from the bounded crawl; multiple results are expected for catalogs.", "items": { "$ref": "#/components/schemas/MerchantProduct" } },
+          "outgoing_links": { "type": "array", "description": "Zero or more unique external destinations; a link may have multiple source pages and risk signals.", "items": { "$ref": "#/components/schemas/MerchantOutgoingLink" } },
+          "security": { "type": "object", "description": "Observed TLS connection and recommended HTTP security headers; not a vulnerability scan.", "additionalProperties": true },
           "screenshots": { "$ref": "#/components/schemas/MerchantCoverageStatus" },
-          "social_mentions": { "type": "object", "additionalProperties": true },
+          "social_mentions": { "type": "object", "description": "Per-network coverage and mentions where an approved source is configured; zero or more items may be returned.", "additionalProperties": true },
           "destination_reputation": { "$ref": "#/components/schemas/MerchantCoverageStatus" },
-          "crawl": { "type": "object", "additionalProperties": true },
-          "findings": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-          "summary": { "type": "object", "additionalProperties": true },
-          "evidence": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-          "methodology": { "type": "object", "additionalProperties": true },
+          "crawl": { "type": "object", "description": "Robots status, bounded page count, page errors, and crawl limits. Counts and errors depend on the website.", "additionalProperties": true },
+          "findings": { "type": "array", "description": "Zero or more policy, security, product, domain, and destination observations.", "items": { "$ref": "#/components/schemas/MerchantFinding" } },
+          "summary": { "$ref": "#/components/schemas/MerchantSummary" },
+          "evidence": { "type": "array", "description": "Zero or more collected page evidence records.", "items": { "$ref": "#/components/schemas/MerchantEvidence" } },
+          "methodology": { "type": "object", "description": "Versioned screening limits and interpretation notes; review these before treating a signal as a finding.", "additionalProperties": true },
           "report": { "$ref": "#/components/schemas/MerchantScreeningReport" }
         },
         "additionalProperties": false
@@ -964,25 +1014,26 @@
       },
       "PeppolGlobalResult": {
         "type": "object",
+        "description": "Global Directory snapshot name-search result. A name match is not proof of legal identity or current network participation.",
         "required": ["status", "source", "queried_name", "country", "checked_at", "matches"],
         "properties": {
-          "status": { "type": "string", "enum": ["name_match", "not_found", "unavailable"] },
+          "status": { "type": "string", "enum": ["name_match", "not_found", "unavailable"], "description": "name_match means one or more indexed business cards matched the normalized name; not_found only describes this snapshot; unavailable means the index could not be queried." },
           "source": { "type": "string", "const": "peppol_directory_export" },
           "queried_name": { "type": "string" },
           "country": { "type": ["string", "null"], "description": "Selected ISO alpha-2 country or null for global search." },
           "checked_at": { "type": "string", "format": "date-time" },
-          "snapshot_at": { "type": "string", "format": "date-time" },
-          "stale": { "type": "boolean" },
-          "returned_count": { "type": "integer" },
-          "truncated": { "type": "boolean" },
-          "reason_code": { "type": "string" },
-          "matches": { "type": "array", "items": { "type": "object", "properties": {
-            "participant_id": { "type": "object" },
-            "document_types": { "type": "array", "items": { "type": "object" } },
-            "entities": { "type": "array", "items": { "type": "object" } },
-            "matched_name": { "type": "string" },
-            "country_code": { "type": "string" }
-          } } }
+          "snapshot_at": { "type": "string", "format": "date-time", "description": "Timestamp of the loaded export; absent when no usable snapshot is available." },
+          "stale": { "type": "boolean", "description": "True when the export is older than 48 hours; absent when no usable snapshot is available." },
+          "returned_count": { "type": "integer", "description": "Number of matches returned, at most 10; absent if the index is unavailable." },
+          "truncated": { "type": "boolean", "description": "True when more than 10 cards matched; absent if the index is unavailable." },
+          "reason_code": { "type": "string", "description": "Present for index unavailability; currently index_unavailable." },
+          "matches": { "type": "array", "maxItems": 10, "description": "Zero to ten matching business cards. Multiple participant records may share the same normalized name.", "items": { "type": "object", "properties": {
+            "participant_id": { "type": "object", "description": "Directory participant identifier; source cards may include additional attributes.", "properties": { "scheme": { "type": "string", "description": "Participant identifier scheme." }, "value": { "type": "string", "description": "Participant identifier value as published." } }, "additionalProperties": true },
+            "document_types": { "type": "array", "description": "Zero or more supported document types published on this card.", "items": { "type": "object", "properties": { "scheme": { "type": "string" }, "value": { "type": "string" }, "display_name": { "type": "string", "description": "Human-readable document type name when supplied." } }, "additionalProperties": true } },
+            "entities": { "type": "array", "description": "Zero or more published business entities and names on this card.", "items": { "type": "object", "properties": { "names": { "type": "array", "description": "One or more published names or language variants.", "items": { "type": "object", "properties": { "name": { "type": "string" } }, "additionalProperties": true } }, "country_code": { "type": "string" }, "websites": { "type": "array", "description": "Zero or more websites published on the business card; these are source claims.", "items": { "type": "string", "format": "uri" } } }, "additionalProperties": true } },
+            "matched_name": { "type": "string", "description": "Indexed name that matched the search." },
+            "country_code": { "type": "string", "description": "Two-letter country code assigned to this card in the export." }
+          }, "additionalProperties": true } }
         }
       },
       "VerificationResult": {
@@ -3081,7 +3132,7 @@
       },
       "AdverseMediaResult": {
         "type": "object",
-        "required": ["result_id", "title", "url", "publisher", "published_at", "language", "source_type", "excerpt", "identity_match", "search_plus_match", "media_bucket", "subject_role", "risk_score", "risk_level", "categories", "legal_stage", "review_required"],
+        "required": ["result_id", "title", "url", "publisher", "published_at", "language", "source_type", "excerpt", "identity_match", "search_plus_match", "media_bucket", "subject_role", "risk_score", "risk_level", "categories", "legal_stage", "evidence_assessment", "review_required"],
         "properties": {
           "result_id": { "type": "string" },
           "title": { "type": "string" },
@@ -3109,6 +3160,7 @@
           "risk_level": { "type": "string", "enum": ["safe", "review", "high", "not_applicable"] },
           "categories": { "type": "array", "items": { "type": "string", "enum": ["financial_crime", "crime_and_enforcement", "sanctions_and_security", "regulatory_and_governance", "cybersecurity_and_data_protection", "corporate_misconduct", "governance_and_leadership_dispute", "workforce_and_restructuring", "financial_distress"] } },
           "legal_stage": { "type": "string" },
+          "evidence_assessment": { "type": ["string", "null"], "description": "Short assessment of what the cited evidence says about the subject, or null when no assessment is available. A related-party caveat may appear here; it is not a legal determination." },
           "review_required": { "type": "boolean", "description": "True when the retained result is in the Review or High Risk band." }
         },
         "additionalProperties": false
@@ -3120,9 +3172,9 @@
           "screening_id": { "type": "string", "format": "uuid" },
           "status": { "type": "string", "enum": ["completed", "partial"] },
           "completed_at": { "type": "string", "format": "date-time" },
-          "entity": { "type": "object", "additionalProperties": true },
-          "summary": { "type": "object", "additionalProperties": true },
-          "coverage": { "type": "object", "additionalProperties": true },
+          "entity": { "type": "object", "description": "Screened entity and submitted aliases/identifiers. Exact attributes depend on the request and entity type.", "additionalProperties": true },
+          "summary": { "type": "object", "description": "Outcome, score bands, media-bucket counts, and decision eligibility. A partial run is inconclusive regardless of its observed results.", "additionalProperties": true },
+          "coverage": { "type": "object", "description": "Search sources, requested and completed language/country coverage, archive dates, and safe diagnostic reasons. Values depend on the sources that completed.", "additionalProperties": true },
           "results": {
             "type": "array",
             "description": "Adverse Media bucket only; retained for existing consumers.",
@@ -3132,9 +3184,9 @@
             "type": "object",
             "required": ["adverse_media", "general_news_mentions", "no_impact_media"],
             "properties": {
-              "adverse_media": { "type": "array", "items": { "$ref": "#/components/schemas/AdverseMediaResult" } },
-              "general_news_mentions": { "type": "array", "items": { "$ref": "#/components/schemas/AdverseMediaResult" } },
-              "no_impact_media": { "type": "array", "items": { "$ref": "#/components/schemas/AdverseMediaResult" } }
+              "adverse_media": { "type": "array", "description": "Zero or more potentially adverse results; these are also exposed in results for compatibility.", "items": { "$ref": "#/components/schemas/AdverseMediaResult" } },
+              "general_news_mentions": { "type": "array", "description": "Zero or more relevant but non-adverse news mentions.", "items": { "$ref": "#/components/schemas/AdverseMediaResult" } },
+              "no_impact_media": { "type": "array", "description": "Zero or more excluded, unrelated, or low-impact results kept for transparency.", "items": { "$ref": "#/components/schemas/AdverseMediaResult" } }
             },
             "additionalProperties": false
           },
