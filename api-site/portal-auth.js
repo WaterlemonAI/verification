@@ -1,6 +1,6 @@
 (() => {
   const path = location.pathname.length > 1 ? location.pathname.replace(/\/$/, '') : '/';
-  const protectedPaths = new Set(['/home', '/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening',
+  const protectedPaths = new Set(['/home', '/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/peppol-directory',
     '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/usage', '/api-keys',
     '/cases', '/flo', '/flo-workflows']);
   const verification = [
@@ -9,6 +9,7 @@
     ['/entity-search', 'Entity Search', 'entity-search'],
     ['/adverse-media', 'Adverse Media', 'adverse-media'],
     ['/merchant-screening', 'Merchant Screening', 'merchant-screening'],
+    ['/peppol-directory', 'Peppol Directory', 'peppol-directory'],
     ['/bank-statement-analysis', 'Bank Statement Analysis', 'bank-statement-analysis'],
     ['/ejari-verification', 'Dubai Ejari Verification', 'ejari-verification']
   ];

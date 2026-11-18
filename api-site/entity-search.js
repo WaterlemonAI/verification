@@ -157,7 +157,8 @@ function renderResponseFields(filter = '') {
     const description = document.createElement('span');
     path.textContent = field.path;
     type.textContent = field.type;
-    description.textContent = field.description || 'Documented response field or container.';
+    const label = field.path.split('.').at(-1).replace(/\[\]$/, '').replaceAll('_', ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+    description.textContent = field.description || (field.type === 'array' ? `Zero or more ${label} results; count and item details depend on the selected check and underlying source.` : field.type === 'object' ? `${label} container; inspect its child paths and returned keys. Contents depend on the underlying source.` : `${label} value; availability and precise interpretation depend on the underlying source record.`);
     row.append(path, type, description);
     fragment.append(row);
   });

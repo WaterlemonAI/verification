@@ -2038,7 +2038,7 @@ function portalPagePath(pathname) {
 
 function protectedPortalPath(pathname) {
   const page = portalPagePath(pathname);
-  return ['/home', '/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/usage', '/api-keys', '/cases', '/flo', '/flo-workflows'].includes(page)
+  return ['/home', '/', '/iban', '/entity-search', '/adverse-media', '/merchant-screening', '/peppol-directory', '/bank-statement-analysis', '/ejari-verification', '/forms', '/account', '/usage', '/api-keys', '/cases', '/flo', '/flo-workflows'].includes(page)
     || /^\/forms\/[a-z0-9-]+$/.test(page)
     || /^\/document-extraction\/[a-z0-9-]+$/.test(page);
 }
@@ -3215,7 +3215,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         const { account, session } = await currentPortalSession(req, store);
         if (!session) return portalLoginRedirect(res, url.pathname, url.search);
         const page = portalPagePath(url.pathname);
-        const pageModule = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/bank-statement-analysis': 'bank-statement-analysis', '/ejari-verification': 'ejari-verification', '/forms': 'forms' }[page]
+        const pageModule = { '/': 'uae-trade-licence', '/iban': 'iban-verification', '/entity-search': 'entity-search', '/adverse-media': 'adverse-media', '/merchant-screening': 'merchant-screening', '/peppol-directory': 'peppol-directory', '/bank-statement-analysis': 'bank-statement-analysis', '/ejari-verification': 'ejari-verification', '/forms': 'forms' }[page]
           || (/^\/forms\/[a-z0-9-]+$/.test(page) ? 'forms' : '')
           || (/^\/document-extraction\/[a-z0-9-]+$/.test(page) ? page.split('/').at(-1) : '');
         if (pageModule) {
@@ -3264,6 +3264,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (directory.endsWith('api-site') && (url.pathname === '/entity-search' || url.pathname === '/entity-search/')) return serveStatic(res, directory, '/entity-search.html');
       if (directory.endsWith('api-site') && (url.pathname === '/adverse-media' || url.pathname === '/adverse-media/')) return serveStatic(res, directory, '/adverse-media.html');
       if (directory.endsWith('api-site') && (url.pathname === '/merchant-screening' || url.pathname === '/merchant-screening/')) return serveStatic(res, directory, '/merchant-screening.html');
+      if (directory.endsWith('api-site') && (url.pathname === '/peppol-directory' || url.pathname === '/peppol-directory/')) return serveStatic(res, directory, '/peppol-directory.html');
       if (directory.endsWith('api-site') && (url.pathname === '/bank-statement-analysis' || url.pathname === '/bank-statement-analysis/')) return serveStatic(res, directory, '/bank-statement-analysis.html');
       if (directory.endsWith('api-site') && (url.pathname === '/ejari-verification' || url.pathname === '/ejari-verification/')) return serveStatic(res, directory, '/ejari-verification.html');
       if (directory.endsWith('api-site') && (url.pathname === '/forms' || url.pathname === '/forms/' || /^\/forms\/[a-z0-9-]+\/?$/.test(url.pathname))) return serveStatic(res, directory, '/forms.html');
