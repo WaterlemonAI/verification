@@ -628,6 +628,8 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       failed_free_search_queries: usage.failed_free_search_queries || 0,
       hosted_archive_attempts: usage.hosted_archive_attempts || 0,
       hosted_archive_retries: usage.hosted_archive_retries || 0,
+      archive_origin: screeningResult.coverage?.archive_origin,
+      archive_reason_code: screeningResult.coverage?.archive_reason_code || null,
       provider_calls: costGuard?.providerCalls || { brave: 0, gemini: 0 },
       reserved_provider_cost_usd: costGuard?.reservedProviderCostUsd || 0,
       source_status: screeningResult.coverage?.source_status,
