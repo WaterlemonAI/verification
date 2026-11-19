@@ -116,7 +116,9 @@ before(async () => {
       if (url.hostname === 'api.gdeltproject.org') {
         assert.equal(options.headers['x-subscription-token'], undefined);
         assert.equal(url.searchParams.get('format'), 'json');
-        assert.equal(url.searchParams.get('timespan'), '1y');
+        assert.match(url.searchParams.get('startdatetime'), /^\d{14}$/);
+        assert.match(url.searchParams.get('enddatetime'), /^\d{14}$/);
+        assert.equal(url.searchParams.get('timespan'), null);
         const failureCheck = url.searchParams.get('query').includes('AI Failure Example');
         const schemaEscapeCheck = url.searchParams.get('query').includes('Schema Escape Example');
         const chinaCheck = url.searchParams.get('query').includes('华信科技');
@@ -297,7 +299,7 @@ test('adverse media endpoint returns a customer-safe evidence response', async (
       aliases: ['J Example'],
       countries: ['AE'],
       languages: ['en'],
-      date_from: '2025-01-01',
+      date_from: '2026-10-01',
       max_results: 25
     })
   });
@@ -338,6 +340,17 @@ test('adverse media endpoint returns a customer-safe evidence response', async (
   assert.equal(requests.length, 7);
 });
 
+test('standard endpoint cannot bypass Search+ entitlement with a body flag', async () => {
+  const before = requests.length;
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: 'John Example', search_plus: true })
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /adverse_media_search_plus/);
+  assert.equal(requests.length, before);
+});
+
 test('identical checks reuse cached evidence without paid search calls', async () => {
   const paidSearchCount = () => requests.filter(({ url }) => url.hostname === 'api.search.brave.com').length;
   const beforeCount = paidSearchCount();
@@ -346,19 +359,36 @@ test('identical checks reuse cached evidence without paid search calls', async (
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       entity_type: 'individual', name: 'John Example', aliases: ['J Example'], countries: ['AE'],
-      languages: ['en'], date_from: '2025-01-01', risk_threshold: 1, max_results: 25
+      languages: ['en'], date_from: '2026-10-01', max_results: 25
     })
   });
   const body = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(body.summary.risk_threshold, 1);
-  assert.equal(body.summary.results_at_or_above_threshold, 0);
-  assert.equal(body.summary.human_review_required, false);
-  assert.equal(body.summary.threshold_status, 'safe');
-  assert.equal(body.summary.risk_level, 'safe');
-  assert.equal(body.results[0].risk_level, 'safe');
-  assert.equal(body.results[0].review_required, false);
+  assert.equal(body.summary.risk_threshold, 0.65);
+  assert.equal(body.summary.results_at_or_above_threshold, 1);
+  assert.equal(body.summary.human_review_required, true);
+  assert.equal(body.summary.profile_status, 'unsafe');
+  assert.equal(body.summary.threshold_status, 'high_risk');
+  assert.equal(body.summary.risk_level, 'high');
+  assert.equal(body.results[0].risk_level, 'high');
+  assert.equal(body.results[0].review_required, true);
   assert.equal(paidSearchCount(), beforeCount);
+});
+
+test('a changed threshold gets a fresh search and never clears a confirmed adverse profile', async () => {
+  const paidSearchCount = () => requests.filter(({ url }) => url.hostname === 'api.search.brave.com').length;
+  const beforeCount = paidSearchCount();
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'individual', name: 'John Example', aliases: ['J Example'],
+      countries: ['AE'], languages: ['en'], date_from: '2026-10-01', risk_threshold: 1, max_results: 25 })
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.ok(paidSearchCount() > beforeCount);
+  assert.equal(body.summary.profile_status, 'unsafe');
+  assert.equal(body.summary.risk_level, 'below_review_threshold');
+  assert.equal(body.results[0].review_required, true);
 });
 
 test('customers can configure High Risk and Review percentage bands', async () => {
@@ -477,9 +507,10 @@ test('returns deterministic evidence when optional AI classification is unavaila
   assert.equal(body.results.length, 0);
   assert.equal(body.media_buckets.general_news_mentions.length, 1);
   assert.equal(body.media_buckets.general_news_mentions[0].ai_classification, undefined);
-  assert.equal(body.status, 'partial');
+  assert.equal(body.status, 'completed');
   assert.equal(body.summary.decision_eligible, false);
-  assert.equal(body.summary.threshold_status, 'incomplete_coverage');
+  assert.equal(body.summary.profile_status, 'inconclusive');
+  assert.equal(body.summary.threshold_status, 'classification_incomplete');
   assert.equal(body.methodology, undefined);
   assert.equal(body.usage, undefined);
 });
@@ -494,7 +525,7 @@ test('does not suppress exact-name adverse evidence using a zero-confidence AI n
   const body = await response.json();
   const paidCalls = requests.slice(beforeCount).filter(({ url }) => url.hostname === 'api.search.brave.com');
   assert.equal(response.status, 200);
-  assert.equal(body.status, 'partial');
+  assert.equal(body.status, 'completed');
   assert.ok(body.media_buckets.no_impact_media.length >= 1);
   assert.ok(body.media_buckets.no_impact_media.some((result) => /Prabhpreet Singh Gill|Pay10/.test(result.title)));
   assert.equal(body.summary.potentially_relevant_results, 0);

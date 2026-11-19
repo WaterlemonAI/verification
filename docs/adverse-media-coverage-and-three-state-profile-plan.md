@@ -2,6 +2,8 @@
 
 **Base:** unreleased `codex/adverse-media-one-year-default` branch. This is the corrected implementation plan; no runtime behavior described below is claimed to be deployed.
 
+The local implementation and current release-gate evidence are tracked in [the candidate QA record](./adverse-media-profile-qa.md). The runtime changes are not deployed.
+
 ## Decisions and why the earlier plan was wrong
 
 The earlier plan omitted the public GDELT fallback and treated Search+ publisher searches as interchangeable with the base searches. That would leave avoidable archive gaps and could reduce base coverage when Search+ is on. The 19 November 2026 50-case benchmark used live Brave/Gemini but replayed Azure lookup snapshots into the local API route. It had **zero public GDELT calls**, because staged `infrastructure/api.bicep` sets `GDELT_PUBLIC_FALLBACK_ENABLED=false`. Twenty-five historical requests were therefore partial. The published CSV (16 completed) and later retained JSON/PDFs (20 completed) disagree for eight cases and cannot be used as one frozen quality result.

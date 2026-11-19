@@ -1,6 +1,6 @@
 const samples = {
   curl: `curl --request POST \\
-  --url https://api.ai7uae.com/service/adverse_media \\
+  --url https://api.ai7uae.com/service/adverse_media_search_plus \\
   --header 'Authorization: Bearer YOUR_AI7_API_KEY' \\
   --header 'Content-Type: application/json' \\
   --data '{
@@ -12,14 +12,11 @@ const samples = {
     "high_risk_threshold_percent": 90,
     "review_threshold_percent": 65,
     "search_plus": true,
-    "deep_research": true,
-    "callback_url": "https://your-domain.example/webhooks/ai7",
-    "callback_access_key": "YOUR_CALLBACK_BEARER_KEY",
     "customer_logo_url": "https://your-domain.example/logo.png",
     "max_results": 25
   }'`,
   javascript: `const response = await fetch(
-  'https://api.ai7uae.com/service/adverse_media',
+  'https://api.ai7uae.com/service/adverse_media_search_plus',
   {
     method: 'POST',
     headers: {
@@ -35,9 +32,6 @@ const samples = {
       high_risk_threshold_percent: 90,
       review_threshold_percent: 65,
       search_plus: true,
-      deep_research: true,
-      callback_url: 'https://your-domain.example/webhooks/ai7',
-      callback_access_key: 'YOUR_CALLBACK_BEARER_KEY',
       customer_logo_url: 'https://your-domain.example/logo.png',
       max_results: 25
     })
@@ -48,7 +42,7 @@ const result = await response.json();`,
   python: `import requests
 
 response = requests.post(
-    "https://api.ai7uae.com/service/adverse_media",
+    "https://api.ai7uae.com/service/adverse_media_search_plus",
     headers={"Authorization": "Bearer YOUR_AI7_API_KEY"},
     json={
         "entity_type": "individual",
@@ -59,9 +53,6 @@ response = requests.post(
         "high_risk_threshold_percent": 90,
         "review_threshold_percent": 65,
         "search_plus": True,
-        "deep_research": True,
-        "callback_url": "https://your-domain.example/webhooks/ai7",
-        "callback_access_key": "YOUR_CALLBACK_BEARER_KEY",
         "customer_logo_url": "https://your-domain.example/logo.png",
         "max_results": 25,
     },
@@ -256,6 +247,10 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
   let body;
   try { body = requestBody(); }
   catch (error) { formError.textContent = error.message; return; }
+  if (body.search_plus && body.deep_research) {
+    formError.textContent = 'Search+ cannot be combined with deep research callbacks.';
+    return;
+  }
 
   sendButton.disabled = true;
   copyResponse.disabled = true;
@@ -266,7 +261,7 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
   responseJson.textContent = JSON.stringify({ status: 'pending', request: body }, null, 2);
   responseJson.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   try {
-    const response = await fetch('/service/adverse_media', {
+    const response = await fetch(body.search_plus ? '/service/adverse_media_search_plus' : '/service/adverse_media', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -279,10 +274,11 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
     copyResponse.disabled = false;
     latestReportUrl = parsed?.report?.download_url || '';
     downloadReport.disabled = !latestReportUrl;
-    const isPartial = response.ok && parsed?.status === 'partial';
-    responseStatus.className = response.ok && !isPartial ? 'success' : 'error';
-    responseStatus.textContent = isPartial
-      ? `${response.status} Partial — manual review required`
+    const profile = parsed?.summary?.profile_status;
+    const incomplete = response.ok && parsed?.coverage?.complete === false;
+    responseStatus.className = response.ok && profile === 'safe' && !incomplete ? 'success' : 'error';
+    responseStatus.textContent = response.ok && profile
+      ? `${profile[0].toUpperCase()}${profile.slice(1)}${incomplete ? ' · Coverage incomplete' : ''}`
       : `${response.status} ${response.statusText}`;
   } catch {
     responseStatus.className = 'error';

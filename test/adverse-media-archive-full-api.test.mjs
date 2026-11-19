@@ -58,10 +58,10 @@ after(async () => {
 });
 
 const cases = [
-  { name: 'DP World', date_from: '2024-07-15', expected: 'partial', search_plus: true },
+  { name: 'DP World', date_from: '2024-07-15', expected: 'partial' },
   { name: 'Emirates NBD', date_from: '2025-06-01', expected: 'partial' },
   { name: 'Etihad Airways', date_from: '2026-10-21', expected: 'partial' },
-  { name: 'DP World', date_from: '2026-10-24', expected: 'completed', search_plus: true },
+  { name: 'DP World', date_from: '2026-10-24', expected: 'completed' },
   { name: 'Emirates NBD', date_from: '2026-10-24', expected: 'completed' },
   { name: 'Etihad Airways', date_from: '2026-10-24', expected: 'completed' }
 ];
@@ -75,7 +75,7 @@ for (const scenario of cases) {
       headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({ entity_type: 'business', name: scenario.name,
         countries: ['AE'], languages: ['en'], date_from: scenario.date_from,
-        max_results: 5, ...(scenario.search_plus ? { search_plus: true } : {}) })
+        max_results: 5 })
     });
     const body = await response.json();
     assert.equal(response.status, 200, JSON.stringify(body));

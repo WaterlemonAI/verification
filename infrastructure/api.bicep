@@ -839,7 +839,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
             { name: 'GDELT_INDEX_TABLE', value: 'GdeltEntityMentions' }
-            { name: 'GDELT_PUBLIC_FALLBACK_ENABLED', value: 'false' }
+            { name: 'GDELT_PUBLIC_FALLBACK_ENABLED', value: 'true' }
             { name: 'ADVERSE_MEDIA_REPORT_BLOB_URL', value: 'https://${reportStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_CONTAINER', value: 'adverse-media-reports' }

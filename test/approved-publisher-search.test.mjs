@@ -348,7 +348,8 @@ test('publisher coverage separates completed batches from batches that exhaust r
 
 test('identity scoring separates expanded full names from typo-like near matches', async () => {
   const run = async (evidenceName) => {
-    const request = validateAdverseMediaRequest({ entity_type: 'individual', name: 'Arbaz Uddin', languages: ['en'] });
+    const request = validateAdverseMediaRequest({ entity_type: 'individual', name: 'Arbaz Uddin', languages: ['en'],
+      max_results: evidenceName.startsWith('Arban') ? 16 : 15 });
     const fetchImpl = async (input) => {
       const url = new URL(input);
       if (url.hostname === 'api.search.brave.com') {

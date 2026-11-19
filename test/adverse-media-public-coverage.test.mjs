@@ -43,10 +43,58 @@ test('historical fallback remains available when the local index read throws', a
   assert.equal(result.origin, 'hosted');
 });
 
-test('both historical paths failing never returns completed coverage', async () => {
-  await assert.rejects(globalArchiveSearch({ name: 'Synthetic Example', aliases: [], countries: [], languages: ['en'] },
-    async () => ({ ok: false, status: 503, headers: { get: () => null } }),
-    async () => { throw new Error('local_index_read_failed'); }), /archive_search_failed_503/);
+test('both historical paths failing return partial after three public attempts', async () => {
+  let attempts = 0;
+  const result = await globalArchiveSearch({ name: 'Synthetic Example', aliases: [], countries: [], languages: ['en'] },
+    async () => { attempts += 1; return { ok: false, status: 503, headers: { get: () => null } }; },
+    async () => { throw new Error('local_index_read_failed'); });
+  assert.equal(attempts, 3);
+  assert.equal(result.hostedAttempts, 3);
+  assert.equal(result.complete, false);
+  assert.equal(result.localFailure, 'public_archive_incomplete');
+});
+
+test('public fallback requests only the gap after Azure and preserves indexed evidence', async () => {
+  const request = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Group',
+    date_from: '2026-10-01', date_to: '2026-11-18' });
+  const urls = [];
+  const result = await globalArchiveSearch(request, async (url) => {
+    urls.push(new URL(url));
+    return Response.json({ articles: [] });
+  }, async () => ({ results: [{ title: 'Example Group investigation', url: 'https://news.example/one' }],
+    complete: false, state: { coverage_start: '2026-10-22T21:15:00Z', coverage_end: '2026-11-19T01:30:00Z' } }));
+  assert.equal(result.complete, true);
+  assert.equal(result.results.length, 1);
+  assert.equal(urls.length, 1);
+  assert.equal(urls[0].searchParams.get('startdatetime'), '20261001000000');
+  assert.equal(urls[0].searchParams.get('enddatetime'), '20261022211500');
+  assert.equal(urls[0].searchParams.get('timespan'), null);
+});
+
+test('third direct DOC attempt succeeds before final archive result', async () => {
+  const request = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Group' });
+  let calls = 0;
+  const result = await globalArchiveSearch(request, async (input) => {
+    calls += 1;
+    assert.equal(new URL(input).pathname, '/api/v2/doc/doc');
+    return calls < 3 ? Response.json({ error: 'busy' }, { status: 503 })
+      : Response.json({ articles: [{ title: 'Example Group fined', url: 'https://news.example/fined',
+        seendate: '20261118T010000Z' }] });
+  }, async () => null);
+  assert.equal(calls, 3);
+  assert.equal(result.complete, true);
+  assert.equal(result.hostedAttempts, 3);
+  assert.equal(result.results.length, 1);
+  assert.equal(result.publicWindows[0].status, 'complete');
+});
+
+test('public result cap cannot claim complete archive coverage', async () => {
+  const result = await globalArchiveSearch(validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Group' }), async () => Response.json({
+    articles: Array.from({ length: 250 }, (_, index) => ({ title: `Article ${index}`, url: `https://example.org/${index}`,
+      seendate: '20261118T010000Z' }))
+  }), async () => null);
+  assert.equal(result.complete, false);
+  assert.equal(result.hostedAttempts, 1);
 });
 
 test('Azure-only mode retains available history without calling public GDELT', async () => {

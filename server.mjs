@@ -662,6 +662,9 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     if (dedicatedSearchPlus && (input.deep_research === true || input.callback_url || input.callback_access_key)) {
       return json(res, 400, { status: 'Error', error: 'Deep research callbacks are not available for Adverse Media (Search+).' });
     }
+    if (!dedicatedSearchPlus && input.search_plus === true) {
+      return json(res, 400, { status: 'Error', error: 'Use /service/adverse_media_search_plus for Search+ screening.' });
+    }
     const request = validateAdverseMediaRequest(dedicatedSearchPlus ? { ...input, search_plus: true } : input);
     const callbackAccessKey = validateCallbackAccessKey(input.callback_access_key, request.callback_url);
     if (request.deep_research && request.callback_url) {
@@ -700,21 +703,12 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     costGuard = createScreeningCostGuard(fetchImpl);
     const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, aiClassifier, fetchImpl, costGuard,
       ...(archiveSearch ? { archiveSearch } : {}),
-      deferAiUntilSourcesComplete: dedicatedSearchPlus, sourceAttemptsExhausted: !dedicatedSearchPlus });
+      deferAiUntilSourcesComplete: dedicatedSearchPlus, sourceAttemptsExhausted: true });
     screeningResult = result;
     screeningFinishedAt = Date.now();
     const presented = presentAdverseMediaResponse(result);
-    if (dedicatedSearchPlus && !result.coverage.complete) {
-      logMetrics('search_incomplete');
-      return json(res, 503, { status: 'Error', reason_code: 'SEARCH_INCOMPLETE',
-        error: 'Required Adverse Media (Search+) searches did not complete. Please try again shortly.',
-        reason_codes: presented.coverage.reason_codes });
-    }
-    if (dedicatedSearchPlus && (result.methodology.ai_classification.status === 'failed'
-      || result.results.length > 0 && !result.results.some((item) => item.ai_classification?.provider === 'gemini_party_facts'))) {
-      logMetrics('classification_unavailable');
-      return json(res, 503, { status: 'Error', error: 'Adverse Media (Search+) classification is temporarily unavailable.' });
-    }
+    // Preserve the final partial screening, including confirmed adverse leads,
+    // after all source retries. A 503 is reserved for total service failure.
     const response = await finalizeAdverseMediaReport({
       request,
       response: presented,
