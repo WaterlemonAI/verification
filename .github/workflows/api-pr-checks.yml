@@ -35,6 +35,7 @@ on:
       - infrastructure/api-case-manager-cutover-certificates.bicep
       - infrastructure/api-case-manager-release-reader.bicep
       - .github/workflows/deploy-api.yml
+      - .github/workflows/deploy-gdelt-backfill.yml
       - .github/workflows/deploy-flo-staging.yml
       - .github/workflows/api-pr-checks.yml
 
