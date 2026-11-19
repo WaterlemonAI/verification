@@ -89,6 +89,12 @@ legend { padding: 0; margin-bottom: .5rem; color: #122d45; font-size: clamp(1.45
 .check .field-title { min-height: 0; }
 .check input, .intro-agreement input { flex: none; width: 1.1rem; height: 1.1rem; margin: .1rem 0 0; accent-color: var(--brand); }
 .meeting { margin: 1.8rem 0 0; padding: 1.3rem; border: 1px solid #c6d7e8; border-radius: 13px; background: linear-gradient(120deg, #f4f8fd, #fbfdff); }
+.people-summary { margin: 1.8rem 0 0; padding: 1.25rem; border: 1px solid #c6d7e8; border-radius: 12px; background: #f7fafd; }
+.people-summary h2 { margin: 0 0 .25rem; color: #1d405f; font-size: 1.12rem; }
+.people-summary > p { margin: 0 0 1rem; color: var(--muted); font-size: .86rem; }
+.people-row { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr; gap: .8rem; padding: .7rem 0; border-top: 1px solid var(--line); font-size: .87rem; overflow-wrap: anywhere; }
+.people-row strong { color: #244663; }
+.people-row span { color: #3e566b; }
 .meeting h2 { margin: 0 0 .35rem; font-size: 1.15rem; color: #1d405f; }
 .meeting p { margin: 0 0 1rem; color: var(--muted); font-size: .9rem; }
 .meeting-controls { display: flex; flex-wrap: wrap; gap: .7rem; align-items: end; }
@@ -134,6 +140,7 @@ button:not(.button-secondary):hover:not(:disabled) { background: #154875; box-sh
   .secure-label { font-size: 0; width: 2rem; height: 2rem; justify-content: center; padding: 0; }
   .secure-dot { width: .55rem; height: .55rem; }
   .field-grid, .document-grid { grid-template-columns: 1fr; }
+  .people-row { grid-template-columns: 1fr; gap: .2rem; }
   .step-marker { gap: .45rem; font-size: .73rem; }
   .step-number { width: 1.8rem; height: 1.8rem; }
   .step-marker:not(:last-child)::after { top: .9rem; }

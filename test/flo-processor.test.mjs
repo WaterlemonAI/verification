@@ -160,3 +160,49 @@ test('document-sourced owners and representative receive both stakeholder screen
   assert.equal(calls.length, 4);
   assert.ok(updated.subjects.find((subject) => subject.name === 'Rafi Director').roles.includes('representative'));
 });
+
+test('trade licence verification managers and owners become source-linked screening subjects', async () => {
+  const store = new MemoryFloStore(); const workspace = '1234567890abcdef';
+  const { case: item } = await store.createCase(workspace,
+    { customer_reference: 'MANAGER-1', supplier_email: 'a@example.com', prefill: {} },
+    'manager-case', '2'.repeat(64), { enabled: true });
+  await store.updateCase(workspace, item.application_id, (current) => {
+    current.workflow_schema = { schema_version: '1.0.0', name: 'Al Naboodah', stages: [],
+      checks: ['stakeholder-aml', 'stakeholder-adverse-media', 'uae-trade-licence'], tokens: {} };
+    current.status = 'submitted'; current.draft = { supplier_type: 'Company or other Legal person',
+      registration_jurisdiction: 'United Arab Emirates', business_name: 'Example LLC',
+      licence_number: '123', registration_country: 'AE' };
+    current.documents = [
+      { document_id: 'licence', type: 'trade_licence', extraction_state: 'completed',
+        extraction_result: { data: { license_number: '123', business_manager_names: 'Sam Manager' } } },
+      { document_id: 'identity', type: 'identity_document', extraction_state: 'completed',
+        extraction_result: { data: { full_name_english: 'Rafi Representative' } } }
+    ]; return current;
+  });
+  const calls = [];
+  await processGenericFloApplication({ workspace_id: workspace, application_id: item.application_id }, {
+    floStore: store, callProvider: async (serviceId, input) => {
+      calls.push({ serviceId, input });
+      return { httpStatus: 200, response: serviceId === 'uae-trade-licence'
+        ? { status: 'Success', uae_tl_verification: {
+          business_manager: { name: 'Sam Manager', nationality: 'AE' },
+          directors_business_owners: [{ name: 'Amina Owner', shareholding_percent: '70%' }] } }
+        : { status: 'Success' } };
+    }, createReport: async () => ({ report_id: randomUUID(), pdf: Buffer.from('%PDF'), html: '<p>Review</p>',
+      model: {}, version: '1.0.0', sha256: 'a'.repeat(64), generated_at: new Date().toISOString() })
+  });
+  const updated = await store.getCase(workspace, item.application_id);
+  const manager = updated.subjects.find((subject) => subject.name === 'Sam Manager');
+  const owner = updated.subjects.find((subject) => subject.name === 'Amina Owner');
+  assert.ok(manager.roles.includes('verified business manager'));
+  assert.ok(manager.source_ids.some((source) => updated.checks.some((check) => check.check_id === source
+    && check.service_id === 'uae-trade-licence')));
+  assert.equal(owner.shareholding_percent, '70%');
+  for (const person of [manager, owner]) {
+    assert.ok(updated.checks.some((check) => check.service_id === 'stakeholder-aml'
+      && check.subject_id === person.subject_id));
+    assert.ok(updated.checks.some((check) => check.service_id === 'stakeholder-adverse-media'
+      && check.subject_id === person.subject_id));
+  }
+  assert.equal(calls.filter((call) => call.serviceId.startsWith('stakeholder-')).length, 6);
+});

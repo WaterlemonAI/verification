@@ -70,6 +70,7 @@ function render() {
     onFieldChange: (id, value, dependent) => {
       if (dependent) { app.draft[id] = value; render(); }
     } });
+  renderDocumentPeople();
   renderMeeting();
   if (app.document_issues?.length) {
     const issues = document.createElement('section'); issues.className = 'restart';
@@ -84,6 +85,34 @@ function render() {
     const details = document.createElement('p'); details.textContent = app.restart.comments;
     const targets = document.createElement('p'); targets.textContent = [...(app.restart.fields || []), ...(app.restart.documents || [])].join(', ');
     banner.append(heading, details, targets); $('form').prepend(banner); }
+}
+function renderDocumentPeople() {
+  const app = state.application;
+  if (state.step !== 1 || app.draft?.supplier_type !== 'Company or other Legal person') return;
+  const sourceDoc = app.documents.findLast((entry) => ['trade_licence', 'incorporation_record'].includes(entry.type)
+    && entry.extraction_state === 'completed');
+  const data = sourceDoc?.extraction_result?.data || {};
+  const names = (value) => typeof value === 'string' && value !== 'Not Found'
+    ? value.split(';').map((entry) => entry.trim()).filter(Boolean) : [];
+  const ownerNames = [...new Set([...names(data.stakeholder_names),
+    ...names(data.owner_details).map((entry) => entry.split('|')[0].trim())].filter(Boolean))];
+  const panel = document.createElement('section'); panel.className = 'people-summary';
+  const heading = document.createElement('h2'); heading.textContent = 'People identified from your document';
+  const detail = document.createElement('p');
+  detail.textContent = 'We use these names for individual AML and adverse-media screening. Trade licence verification may identify additional managers for buyer review.';
+  panel.append(heading, detail);
+  for (const [title, list, empty] of [
+    ['Business manager', names(data.business_manager_names), 'Not named on the uploaded document'],
+    ['Owners and directors', ownerNames, 'Use the field above if no owners or directors are named'],
+    ...(names(data.owner_details).length ? [['Ownership details', names(data.owner_details)
+      .map((entry) => entry.replaceAll('|', ' · ')), '']] : [])
+  ]) {
+    const row = document.createElement('div'); row.className = 'people-row';
+    const label = document.createElement('strong'); label.textContent = title;
+    const value = document.createElement('span'); value.textContent = list.length ? list.join(', ') : empty;
+    row.append(label, value); panel.append(row);
+  }
+  $('form').append(panel);
 }
 function renderMeeting() {
   const app = state.application; const rule = app.presentation.meeting?.required_for;
