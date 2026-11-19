@@ -271,6 +271,7 @@ test('adverse media defaults to a disclosed one-year UTC window', () => {
     date_to: '2026-11-18' });
   assert.equal(yearEndingOnDate.date_from, '2025-11-18');
   assert.equal(yearEndingOnDate.date_to, '2026-11-18');
+  assert.equal(yearEndingOnDate.archive_all_stored, false);
 
   const leapYear = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd',
     date_to: '2024-02-29' });
@@ -278,6 +279,7 @@ test('adverse media defaults to a disclosed one-year UTC window', () => {
 
   const today = new Date().toISOString().slice(0, 10);
   const current = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd' });
+  assert.equal(current.archive_all_stored, true);
   assert.equal(current.date_to, today);
   assert.equal(current.date_from, validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd',
     date_to: today }).date_from);

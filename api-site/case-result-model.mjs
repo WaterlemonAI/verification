@@ -147,7 +147,7 @@ export function buildCasePresentation(item, response) {
       title: fieldName(source.source || 'Source'), meta: scalar(source.status) || '',
       description: source.reason || source.message || ''
     }));
-    addFields('Coverage limitations', response.coverage, ['limitation', 'archive_window', 'retryable']);
+    addFields('Coverage limitations', response.coverage, ['limitation', 'archive_scope', 'archive_window', 'retryable']);
   } else if (service === 'merchant-screening') {
     addMetric('Merchant', response.merchant_identity?.names?.[0]);
     addMetric('Domain', response.domain?.domain);
