@@ -25,7 +25,8 @@ const mime = (path) => path.endsWith('.css') ? 'text/css; charset=utf-8'
   : path.endsWith('.js') ? 'text/javascript' : path.endsWith('.png') ? 'image/png' : 'text/html';
 const server = createServer((req, res) => { const path = new URL(req.url, 'http://localhost').pathname;
   const file = files[path]; if (!file) { res.writeHead(404); res.end(); return; }
-  const bytes = readFileSync(join(root, file)); res.writeHead(200, { 'content-type': mime(file), 'content-length': bytes.length }); res.end(bytes); });
+  const bytes = readFileSync(join(root, file)); res.writeHead(200, { 'content-type': mime(file), 'content-length': bytes.length,
+    'content-security-policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'" }); res.end(bytes); });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await chromium.launch({ headless: true,
@@ -199,6 +200,18 @@ try {
     if (await admin.locator('.flo-supplier-canvas').evaluate((node) => node.style.getPropertyValue('--brand')) !== '#064b79')
       throw new Error('Preview did not use the workflow theme colour.');
     if (await admin.locator('.flo-supplier-canvas input[type=file]:not([disabled])').count()) throw new Error('Preview can upload.');
+    if (viewport.width === 1440) {
+      await admin.locator('.flo-preview-bar').getByRole('button', { name: 'Mobile' }).click();
+      await admin.waitForFunction(() => document.querySelector('.flo-supplier-mobile')?.style.visibility === '');
+      const mobileStyles = await admin.locator('.flo-supplier-mobile').evaluate((host) => {
+        const shell = host.shadowRoot.querySelector('.shell');
+        const badge = host.shadowRoot.querySelector('.secure-label');
+        return { shellWidth: shell.getBoundingClientRect().width, hostWidth: host.getBoundingClientRect().width,
+          badgeFontSize: getComputedStyle(badge).fontSize };
+      });
+      if (Math.abs(mobileStyles.shellWidth - mobileStyles.hostWidth) > 2 || mobileStyles.badgeFontSize !== '0px')
+        throw new Error(`Mobile preview styles blocked by CSP: ${JSON.stringify(mobileStyles)}`);
+    }
     let previewLabels = await admin.locator('.flo-supplier-canvas .field>span').allTextContents();
     await admin.locator('#flo-workflow-save').click(); await admin.getByText('Draft saved.', { exact: true }).waitFor();
     if (JSON.stringify(platformSchema).includes('undefined')) throw new Error('Invalid saved schema');

@@ -230,39 +230,6 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
     const sheet = el('link'); sheet.rel = 'stylesheet'; sheet.href = '/flo-supplier-preview.css';
     sheet.addEventListener('load', () => { canvas.style.visibility = ''; });
     sheet.addEventListener('error', () => { canvas.style.visibility = ''; report('Supplier preview styles could not load.'); });
-    const previewStyle = el('style'); previewStyle.textContent = `
-      :host { display: block; position: relative; overflow: hidden; background: #f2f5f9; font: 16px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; color: #172f45; --brand: #002c5f; --accent: #f9b233; --ink: #172f45; --muted: #5b6d7c; --line: #dce5ee; --soft: #f7f9fc; --focus: #d28b00; }
-      :host(.flo-supplier-mobile) .shell { width: 100%; min-height: 680px; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
-      :host(.flo-supplier-mobile) .field-grid, :host(.flo-supplier-mobile) .document-grid { grid-template-columns: 1fr; }
-      :host(.flo-supplier-mobile) .al-naboodah-brand .brand-row { min-height: 82px; padding: .2rem 1.2rem; }
-      :host(.flo-supplier-mobile) .al-naboodah-brand #brand-logo { width: 145px; height: 78px; }
-      :host(.flo-supplier-mobile) .secure-label { width: 2rem; height: 2rem; padding: 0; justify-content: center; font-size: 0; }
-      :host(.flo-supplier-mobile) .hero-copy { padding: 1.15rem 1.25rem 1.3rem; }
-      :host(.flo-supplier-mobile) .eyebrow { margin-bottom: .35rem; font-size: .64rem; letter-spacing: .14em; }
-      :host(.flo-supplier-mobile) h1 { max-width: none; font-size: 1.75rem; line-height: 1.15; letter-spacing: -.03em; }
-      :host(.flo-supplier-mobile) #subtitle { margin-top: .55rem; font-size: .84rem; line-height: 1.4; }
-      :host(.flo-supplier-mobile) .journey { padding: .85rem 1.25rem .95rem; }
-      :host(.flo-supplier-mobile) .journey-heading { margin-bottom: .6rem; font-size: .69rem; }
-      :host(.flo-supplier-mobile) .step-marker { display: flex; flex-direction: column; align-items: center; gap: .25rem; text-align: center; font-size: .66rem; }
-      :host(.flo-supplier-mobile) .step-number { width: 1.65rem; height: 1.65rem; font-size: .72rem; }
-      :host(.flo-supplier-mobile) .step-label { display: block; margin: 0; max-width: 10ch; line-height: 1.2; }
-      :host(.flo-supplier-mobile) .step-marker::after { display: none; }
-      :host(.flo-supplier-mobile) #form { padding: 1.25rem 1.25rem 0; }
-      :host(.flo-supplier-mobile) legend { font-size: 1.3rem; }
-      :host(.flo-supplier-mobile) .description { margin-bottom: 1rem; font-size: .85rem; }
-      :host(.flo-supplier-mobile) .preview-intro { padding: .5rem; }
-      :host(.flo-supplier-mobile) .intro-top, :host(.flo-supplier-mobile) .intro-content { padding-left: 1rem; padding-right: 1rem; }
-      :host(.flo-supplier-mobile) .intro-top { padding-top: 1rem; padding-bottom: .85rem; }
-      :host(.flo-supplier-mobile) .intro-top h2 { font-size: 1.3rem; }
-      :host(.flo-supplier-mobile) .intro-content { padding-top: 1rem; }
-      :host(.flo-supplier-mobile) #intro-documents { gap: .38rem; margin-bottom: .8rem; }
-      :host(.flo-supplier-mobile) #intro-documents li { font-size: .8rem; line-height: 1.4; }
-      :host(.flo-supplier-mobile) .intro-actions { padding: .65rem 1rem 1rem; }
-      .preview-intro { position: absolute; inset: 0; z-index: 2; display: grid; place-items: start center; padding: 1.5rem; background: #0c213ba8; }
-      .preview-intro-card { width: min(100%, 600px); border-radius: 17px; overflow: hidden; background: #fff; box-shadow: 0 20px 55px #0d234568; }
-      .preview-intro .intro-actions { padding-top: .8rem; }
-      .preview-intro-note { margin: 0; padding: 0 2rem 1rem; color: #536779; font-size: .8rem; }
-    `;
     const shell = el('main', '', `shell${alNaboodah ? ' al-naboodah-brand' : ''}`);
     if (/^#[0-9a-fA-F]{6}$/.test(schema.tokens?.primary_color || ''))
       shell.style.setProperty('--brand', schema.tokens.primary_color);
@@ -297,7 +264,7 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
       () => { previewStage++; drawPreview(); });
     next.disabled = previewStage === schema.stages.length - 1;
     actions.append(back, next); shell.append(header, journey, form, actions);
-    surface.append(sheet, previewStyle, shell);
+    surface.append(sheet, shell);
     const terms = schema.stages.flatMap((stage) => stage.declarations)
       .find((entry) => entry.id === 'sample_terms');
     if (previewIntroVisible && terms && previewStage === 0) {
