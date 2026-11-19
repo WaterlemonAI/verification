@@ -13,6 +13,7 @@
     <script src="/portal-auth.js?v=4" defer></script>
     <script src="/status-view.js" defer></script>
     <script src="/adverse-media.js?v=7" defer></script>
+      <script src="/response-field-reference.js?v=1" defer></script>
   </head>
   <body>
     <div class="utility-bar"><span>AI7 UAE Verification Platform</span><a href="https://www.ai7lab.net" target="_blank" rel="noopener">An AI7Lab company · Dubai ↗</a></div>
@@ -128,6 +129,7 @@
               <div><code>coverage.search_plus.publishers_screened</code><span>object[]</span><span>Exact publisher name, domain, country, and category included in successfully completed site-restricted index queries.</span></div>
               <div><code>coverage.search_plus.publishers_not_completed</code><span>object[]</span><span>Publishers assigned to a batch that failed after controlled retries.</span></div>
               <div><code>coverage.search_plus.matched_publishers</code><span>object[]</span><span>Approved publishers represented in the retained customer-facing results.</span></div>
+              <div><code>results[].evidence_assessment</code><span>string or null</span><span>Brief source-based assessment or related-party caveat; null when unavailable. It is not a legal determination.</span></div>
               <div><code>results[].title</code><span>string</span><span>Article or page title.</span></div>
               <div><code>results[].url</code><span>URI</span><span>Original evidence URL.</span></div>
               <div><code>results[].source_type</code><span>string</span><span>News index, open web, Search+ publisher search, global archive, or official regulatory evidence.</span></div>

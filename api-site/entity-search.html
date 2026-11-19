@@ -102,7 +102,7 @@
           <article id="responses">
             <p class="label">RESPONSES</p>
             <h2>Complete pass-through response</h2>
-            <p>The wrapper returns the upstream HTTP status and JSON body without renaming, filtering, or dropping fields. The searchable reference below includes every response path defined by the official schema and its official response variants. Object containers that are intentionally open-ended are also preserved in full.</p>
+            <p>The wrapper returns the upstream HTTP status and JSON body without renaming, filtering, or dropping fields. The searchable reference below includes every response path defined by the official schema and its official response variants. Object containers that are intentionally open-ended are also preserved in full. An array path can return zero or many matches; the <code>[]</code> rows describe each match. Fields without a defined explanation depend on the selected dataset and the underlying source record.</p>
             <div class="schema-tools">
               <input id="schema-filter" type="search" placeholder="Filter 382 response paths" aria-label="Filter response fields" />
               <span class="schema-count" id="schema-count">382 fields</span>
@@ -117,6 +117,7 @@
               <div><b class="ok">200</b><span>Search completed; response variants depend on the selected checks</span></div>
               <div><b>400</b><span>Invalid request or invalid search-type combination</span></div>
               <div><b>401</b><span>Missing or invalid AI7 API key</span></div>
+              <div><b>403</b><span>Workspace entitlement or upstream screening access denied; error fields depend on the source</span></div>
               <div><b>500</b><span>Screening service is temporarily unavailable</span></div>
             </div>
           </article>

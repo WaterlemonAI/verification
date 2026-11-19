@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#071412" />
+  <meta name="description" content="KYCProbe Peppol Directory API documentation and response field reference." />
+  <title>KYCProbe API — Peppol Directory</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/api.css?v=9" />
+  <script src="/portal-auth.js?v=4" defer></script>
+  <script src="/response-field-reference.js?v=1" defer></script>
+</head>
+<body>
+  <div class="utility-bar"><span>KYCProbe Verification Platform</span></div>
+  <a class="skip-link" href="#docs">Skip to documentation</a>
+  <header><a class="brand" href="/home"><img src="/assets/kycprobe-logo-white.png" alt="KYCProbe by AI7Lab" /></a><span class="status"><i></i> API available</span></header>
+  <main id="docs">
+    <section class="hero"><p class="eyebrow">PUBLISHED BUSINESS CARDS / GLOBAL SNAPSHOT</p><h1>Peppol Directory<br /><em>name search.</em></h1><p>Search a local export of published Peppol business cards by organization name, with an optional country filter. This is directory evidence; a name match does not establish legal identity or current network participation.</p><div class="meta"><span>POST</span><code>/service/peppol_check</code></div></section>
+    <section class="layout">
+      <aside aria-label="On this page"><p>ON THIS PAGE</p><a href="#request">Request</a><a href="#responses">Responses</a><a href="#countries">Countries</a></aside>
+      <div class="content">
+        <article id="request"><p class="label">REQUEST</p><h2>Search a published name</h2><p>Send a workspace API key in the Bearer header and a JSON body with <code>name</code> (3–200 searchable characters). Optional <code>country</code> is a two-letter ISO code such as <code>AE</code>; omit it for a global search. The API normalizes the name before looking it up in the local export. No live Peppol Directory call is made.</p><div class="code-block sample"><pre>curl -X POST 'https://api.ai7uae.com/service/peppol_check' \
+  -H 'Authorization: Bearer YOUR_AI7_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Example Trading LLC","country":"AE"}'</pre></div></article>
+        <article id="responses"><p class="label">RESPONSES</p><h2>Snapshot search result</h2><p><code>matches</code> can contain zero to ten business cards. Each card can contain multiple document types and business entities. The exported card fields depend on what the publisher supplied. <code>not_found</code> means no matching name was found in this snapshot; it does not prove the organization is absent from Peppol.</p><h3>Status codes</h3><div class="responses"><div><b class="ok">200</b><span>Search completed; inspect <code>status</code>, <code>matches</code>, and snapshot age</span></div><div><b>400</b><span>Invalid name or country input</span></div><div><b>401</b><span>Missing or invalid API key</span></div><div><b>402</b><span>Insufficient prepaid credit</span></div><div><b>403</b><span>Peppol module unavailable to this workspace; error body has <code>status</code> and <code>error</code></span></div><div><b>429</b><span>Rate limit reached</span></div><div><b>503</b><span>Index unavailable; response <code>status</code> is <code>unavailable</code> and <code>matches</code> is empty</span></div></div><p><a href="/openapi.json" target="_blank" rel="noopener">Open the complete OpenAPI 3.1 contract ↗</a></p></article>
+        <article id="countries"><p class="label">COUNTRY CATALOG</p><h2>Check available country codes</h2><p><code>GET /service/peppol_check/countries</code> returns the snapshot time, total card count, and a <code>countries</code> array. Each item contains a two-letter <code>code</code> and its <code>count</code>. The list may include multiple countries and depends on the loaded export. HTTP 503 with <code>status: unavailable</code> and an empty list means the index is not ready.</p></article>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
