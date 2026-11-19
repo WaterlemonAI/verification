@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { BlobServiceClient } from '@azure/storage-blob';
 import { TableClient } from '@azure/data-tables';
 import unzipper from 'unzipper';
@@ -16,6 +17,7 @@ const BATCH_CONCURRENCY = 6;
 const STATE_BLOB = 'state/watermark.json';
 const MAX_COMPRESSED_FILE_BYTES = 32 * 1024 * 1024;
 const MAX_UNCOMPRESSED_FILE_BYTES = 256 * 1024 * 1024;
+const INTERVAL_MS = 15 * 60 * 1_000;
 
 function required(name) {
   const value = process.env[name];
@@ -126,18 +128,22 @@ export function entityRows(tsv) {
   return { byPartition, records, mentions };
 }
 
-async function retryingFetch(url, attempts = 4) {
+async function retryingFetch(url, attempts = 4, signal, fetchImpl = fetch) {
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (signal?.aborted) throw signal.reason;
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
-      if (response.ok || response.status === 404) return response;
+      const requestSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000);
+      const response = await fetchImpl(url, { signal: requestSignal });
+      if (response.ok) return response;
+      if (response.status === 404 && attempt === attempts - 1) return response;
       lastError = new Error(`source_http_${response.status}`);
-      if (![429, 500, 502, 503, 504].includes(response.status)) throw lastError;
+      if (![404, 429, 500, 502, 503, 504].includes(response.status)) return response;
     } catch (error) {
+      if (signal?.aborted) throw signal.reason;
       lastError = error;
     }
-    await new Promise((resolve) => setTimeout(resolve, 2_000 * (2 ** attempt)));
+    if (attempt < attempts - 1) await delay(2_000 * (2 ** attempt), undefined, signal ? { signal } : undefined);
   }
   throw lastError;
 }
@@ -151,19 +157,28 @@ async function latestTimestamp() {
   return match[1];
 }
 
-async function readBlobJson(container, name) {
+export async function loadArchiveState(container) {
   try {
-    const response = await container.getBlobClient(name).download();
+    const response = await container.getBlobClient(STATE_BLOB).download();
     const chunks = [];
     for await (const chunk of response.readableStreamBody) chunks.push(Buffer.from(chunk));
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return { state: JSON.parse(Buffer.concat(chunks).toString('utf8')), etag: response.etag };
   } catch (error) {
-    if (error.statusCode === 404) return null;
+    if (error.statusCode === 404) return { state: null, etag: null };
     throw error;
   }
 }
 
-async function writeBatches(table, byPartition) {
+export async function saveArchiveState(container, state, etag, signal) {
+  const response = await container.getBlockBlobClient(STATE_BLOB).uploadData(Buffer.from(JSON.stringify(state)), {
+    blobHTTPHeaders: { blobContentType: 'application/json' },
+    conditions: etag ? { ifMatch: etag } : { ifNoneMatch: '*' },
+    abortSignal: signal
+  });
+  return response.etag;
+}
+
+async function writeBatches(table, byPartition, signal) {
   const batches = [];
   for (const rows of byPartition.values()) {
     for (let i = 0; i < rows.length; i += 100) {
@@ -175,13 +190,15 @@ async function writeBatches(table, byPartition) {
     while (cursor < batches.length) {
       const batch = batches[cursor];
       cursor += 1;
-      await table.submitTransaction(batch);
+      await table.submitTransaction(batch, { abortSignal: signal });
     }
   });
-  await Promise.all(workers);
+  const completed = await Promise.allSettled(workers);
+  const failed = completed.find((worker) => worker.status === 'rejected');
+  if (failed) throw failed.reason;
 }
 
-export async function main() {
+export function archiveClients() {
   const accountUrl = required('GDELT_STORAGE_ACCOUNT_URL');
   const credential = new ContainerAppsManagedIdentityCredential();
   const account = new URL(accountUrl);
@@ -189,7 +206,51 @@ export async function main() {
   const blobService = new BlobServiceClient(accountUrl, credential);
   const container = blobService.getContainerClient(CONTAINER_NAME);
   const table = new TableClient(tableUrl, TABLE_NAME, credential);
-  const previous = await readBlobJson(container, STATE_BLOB);
+  return { container, table };
+}
+
+export async function processGdeltInterval({ timestamp, container, table, signal, fetchImpl = fetch, fetchAttempts = 4 }) {
+  const sourceUrl = `${SOURCE_ORIGIN}/gdeltv2/${timestamp}.gkg.csv.zip`;
+  const rawName = `raw/gkg/${timestamp.slice(0, 4)}/${timestamp.slice(4, 6)}/${timestamp.slice(6, 8)}/${timestamp}.gkg.csv.zip`;
+  const raw = container.getBlockBlobClient(rawName);
+  let zip;
+  if (await raw.exists()) {
+    // A stored interval is immutable. Replays use the same bytes that were
+    // originally indexed, including when a previous run died before commit.
+    const stored = await raw.download(0, undefined, { abortSignal: signal });
+    if (Number(stored.contentLength) > MAX_COMPRESSED_FILE_BYTES) throw new Error(`gdelt_zip_too_large_${timestamp}`);
+    const chunks = [];
+    for await (const chunk of stored.readableStreamBody) chunks.push(Buffer.from(chunk));
+    zip = Buffer.concat(chunks);
+    const expectedMd5 = stored.metadata?.md5;
+    if (expectedMd5 && createHash('md5').update(zip).digest('hex') !== expectedMd5) {
+      throw new Error(`gdelt_stored_zip_hash_mismatch_${timestamp}`);
+    }
+  } else {
+    const response = await retryingFetch(sourceUrl, fetchAttempts, signal, fetchImpl);
+    if (!response.ok) throw new Error(response.status === 404
+      ? `gdelt_source_missing_${timestamp}` : `gdelt_source_http_${response.status}_${timestamp}`);
+    const declaredSize = Number(response.headers.get('content-length') || 0);
+    if (declaredSize > MAX_COMPRESSED_FILE_BYTES) throw new Error(`gdelt_zip_too_large_${timestamp}`);
+    zip = Buffer.from(await response.arrayBuffer());
+    if (zip.length > MAX_COMPRESSED_FILE_BYTES) throw new Error(`gdelt_zip_too_large_${timestamp}`);
+    const md5 = createHash('md5').update(zip).digest('hex');
+    await raw.uploadData(zip, { blobHTTPHeaders: { blobContentType: 'application/zip' },
+      metadata: { source: 'gdelt', md5 }, conditions: { ifNoneMatch: '*' }, abortSignal: signal });
+  }
+  if (zip.length > MAX_COMPRESSED_FILE_BYTES) throw new Error(`gdelt_zip_too_large_${timestamp}`);
+  const directory = await unzipper.Open.buffer(zip);
+  const entry = directory.files.find((file) => file.type === 'File');
+  if (!entry) throw new Error(`gdelt_zip_empty_${timestamp}`);
+  if (Number(entry.vars?.uncompressedSize || 0) > MAX_UNCOMPRESSED_FILE_BYTES) throw new Error(`gdelt_entry_too_large_${timestamp}`);
+  const parsed = entityRows((await entry.buffer()).toString('utf8'));
+  await writeBatches(table, parsed.byPartition, signal);
+  return { records: parsed.records, mentions: parsed.mentions };
+}
+
+export async function main() {
+  const { container, table } = archiveClients();
+  const { state: previous, etag } = await loadArchiveState(container);
   const latest = await latestTimestamp();
   const end = parseTimestamp(latest);
   const start = previous?.coverage_end
@@ -201,36 +262,19 @@ export async function main() {
   let filesProcessed = 0;
   let sourceRecords = 0;
   let entityMentions = 0;
-  let lastProcessed = previous?.coverage_end ? new Date(previous.coverage_end) : start;
+  let lastProcessed = previous?.coverage_end ? new Date(previous.coverage_end) : new Date(start.getTime() - INTERVAL_MS);
   for (const timestamp of targets) {
-    const sourceUrl = `${SOURCE_ORIGIN}/gdeltv2/${timestamp}.gkg.csv.zip`;
-    const response = await retryingFetch(sourceUrl);
-    if (response.status === 404) continue;
-    const declaredSize = Number(response.headers.get('content-length') || 0);
-    if (declaredSize > MAX_COMPRESSED_FILE_BYTES) throw new Error(`gdelt_zip_too_large_${timestamp}`);
-    const zip = Buffer.from(await response.arrayBuffer());
-    if (zip.length > MAX_COMPRESSED_FILE_BYTES) throw new Error(`gdelt_zip_too_large_${timestamp}`);
-    const md5 = createHash('md5').update(zip).digest('hex');
-    const rawName = `raw/gkg/${timestamp.slice(0, 4)}/${timestamp.slice(4, 6)}/${timestamp.slice(6, 8)}/${timestamp}.gkg.csv.zip`;
-    const raw = container.getBlockBlobClient(rawName);
-    if (!(await raw.exists())) {
-      await raw.uploadData(zip, { blobHTTPHeaders: { blobContentType: 'application/zip' }, metadata: { source: 'gdelt', md5 } });
-    }
-    const directory = await unzipper.Open.buffer(zip);
-    const entry = directory.files.find((file) => file.type === 'File');
-    if (!entry) throw new Error(`gdelt_zip_empty_${timestamp}`);
-    if (Number(entry.vars?.uncompressedSize || 0) > MAX_UNCOMPRESSED_FILE_BYTES) throw new Error(`gdelt_entry_too_large_${timestamp}`);
-    const parsed = entityRows((await entry.buffer()).toString('utf8'));
-    await writeBatches(table, parsed.byPartition);
+    const parsed = await processGdeltInterval({ timestamp, container, table });
     filesProcessed += 1;
     sourceRecords += parsed.records;
     entityMentions += parsed.mentions;
     lastProcessed = parseTimestamp(timestamp);
-    process.stdout.write(`${JSON.stringify({ event: 'gdelt_file_indexed', timestamp, records: parsed.records, mentions: parsed.mentions })}\n`);
+    process.stdout.write(`${JSON.stringify({ event: 'gdelt_file_indexed', timestamp, ...parsed })}\n`);
   }
 
-  const coverageStart = previous?.coverage_start || parseTimestamp(intervalTimestamp(start)).toISOString();
+  const coverageStart = previous?.coverage_start || parseTimestamp(targets[0]).toISOString();
   const state = {
+    ...previous,
     version: 1,
     coverage_start: coverageStart,
     coverage_end: lastProcessed.toISOString(),
@@ -239,9 +283,7 @@ export async function main() {
     entity_mentions_indexed: Number(previous?.entity_mentions_indexed || 0) + entityMentions,
     last_run: { files_processed: filesProcessed, source_records: sourceRecords, entity_mentions_indexed: entityMentions }
   };
-  await container.getBlockBlobClient(STATE_BLOB).uploadData(Buffer.from(JSON.stringify(state)), {
-    blobHTTPHeaders: { blobContentType: 'application/json' }
-  });
+  await saveArchiveState(container, state, etag);
   process.stdout.write(`${JSON.stringify({ event: 'gdelt_ingestion_completed', ...state.last_run, coverage_start: state.coverage_start, coverage_end: state.coverage_end })}\n`);
 }
 

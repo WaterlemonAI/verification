@@ -1,0 +1,18 @@
+# GDELT historical backfill
+
+The existing daily `caj-ai7uae-gdelt-ingest` job continues to ingest current GKG intervals. A separate `caj-ai7uae-gdelt-backfill` job walks the archive backward from the earliest committed interval. It runs Saturday 22:00 to Sunday 00:00 UAE time (Saturday 18:00–20:00 UTC; cron `0 18 * * 6`). It starts no new file during the final 90 seconds and aborts remaining I/O near midnight. The target is a rolling 365 days of contiguous archive coverage. The job uses as much of each two-hour window as source and storage throughput allow; no file count is promised.
+
+For each interval, the job reuses the immutable ZIP already in Blob or fetches and stores the public GDELT ZIP, upserts deterministic entity rows, and **only then** advances `state/watermark.json` by one interval using its ETag. The daily ingester uses the same conditional watermark update. A crash, 404, table failure, or conflicting writer leaves the failed interval outside the committed coverage; the next run retries it. Do not skip a missing interval or change `coverage_start` by hand. `coverage_end` and the daily freshness timestamp are unchanged by backfill.
+
+## Release
+
+1. Review and merge the source change on `main`. Confirm the existing **Deploy AI7 UAE API** workflow successfully published the image digest for the reviewed source commit. Record the remaining API workflow status separately; the archive job does not depend on unrelated worker builds or application deployment.
+2. Dispatch **Deploy GDELT archive backfill** from `main` with that exact published-image commit SHA. The workflow verifies it is an ancestor of the current main commit and that the GDELT runtime files and locked dependencies have not changed. Its preflight checks the existing UAE North daily job, managed identity, registry and archive endpoint; it resolves the digest-pinned image from ACR. The workflow previews both templates, updates the daily job first, then creates the weekly job. It verifies the resulting image and cron and retains deployment evidence. Stop on any preflight or what-if discrepancy; do not move the archive to a different environment or expand RBAC beyond approved GDELT job scopes.
+3. Read back both job configurations and confirm their digest, schedule, one replica, shared identity and storage target. The next automatic execution is Saturday 22:00 UAE time. Creating the job does not start a historical scan.
+4. After the first execution, inspect the job execution status and its bounded `gdelt_backfill_progress` / `gdelt_backfill_completed` events. Read `coverage_start`, `coverage_end`, `backfill.last_completed_interval`, and `last_successful_at` before and after. Confirm `coverage_start` moves backward contiguously while `coverage_end` and the daily timestamp remain current. Check Blob and Table storage growth and source 404/429/5xx rates. The following Saturday must resume at the interval immediately before the saved start.
+
+## Failure and rollback
+
+If a source interval stays unavailable after retries, the run fails and the watermark does not cross it. Investigate that exact public ZIP or already stored Blob; a gap-aware model would require a separate design. If a checkpoint receives HTTP 412, another job changed the watermark; the run stops safely and the next schedule reloads it. A daily run must not be considered successful if any target interval failed.
+
+To pause historical work, disable or remove only `caj-ai7uae-gdelt-backfill` through an approved production change. Keep its watermark and archive data. The daily job can be restored to the previously verified digest if necessary; its schedule and storage remain unchanged. Do not delete the archive, reset `coverage_start`, or redeploy a mutable image tag.

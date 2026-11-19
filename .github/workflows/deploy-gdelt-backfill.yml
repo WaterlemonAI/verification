@@ -1,0 +1,167 @@
+name: Deploy GDELT archive backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      publishedImageSha:
+        description: Reviewed main commit whose API image was already published
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ai7uae-gdelt-archive-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: ai7uae-api
+    steps:
+      - name: Check out reviewed main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify published image source is compatible
+        shell: bash
+        env:
+          PUBLISHED_IMAGE_SHA: ${{ inputs.publishedImageSha }}
+        run: |
+          set -euo pipefail
+          [[ "${PUBLISHED_IMAGE_SHA}" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          git merge-base --is-ancestor "${PUBLISHED_IMAGE_SHA}" HEAD
+          git diff --quiet "${PUBLISHED_IMAGE_SHA}" HEAD -- \
+            Dockerfile.api package.json package-lock.json \
+            scripts/gdelt-ingest.mjs scripts/gdelt-backfill.mjs lib/azure-managed-identity.mjs
+
+      - name: Sign in to Azure with workload identity
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate archive templates
+        run: |
+          az bicep build --file infrastructure/api-gdelt-job.bicep
+          az bicep build --file infrastructure/api-gdelt-backfill-job.bicep
+
+      - name: Verify existing archive and resolve published image
+        id: archive
+        shell: bash
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          PUBLISHED_IMAGE_SHA: ${{ inputs.publishedImageSha }}
+        run: |
+          set -euo pipefail
+          test -n "${AZURE_RESOURCE_GROUP}" && test -n "${ACR_NAME}" && test -n "${ACR_LOGIN_SERVER}"
+          job="$(az containerapp job show --resource-group "${AZURE_RESOURCE_GROUP}" --name caj-ai7uae-gdelt-ingest --output json)"
+          jq -e --arg registry "${ACR_LOGIN_SERVER}" \
+            '(.location | ascii_downcase == "uae north") and (.properties.environmentId | endswith("/managedEnvironments/cae-ai7uae-web-uaen-001")) and .properties.configuration.triggerType == "Schedule" and .properties.configuration.scheduleTriggerConfig.cronExpression == "30 1 * * *" and .properties.configuration.scheduleTriggerConfig.parallelism == 1 and .properties.template.containers[0].command == ["node", "scripts/gdelt-ingest.mjs"] and .properties.configuration.registries[0].server == $registry' \
+            <<< "${job}" > /dev/null
+          jq -e '.properties.template.containers[0].env as $env | [
+            {name:"GDELT_STORAGE_ACCOUNT_URL",value:"https://stai7uaegdeltuaen001.blob.core.windows.net"},
+            {name:"GDELT_ARCHIVE_CONTAINER",value:"gdelt-archive"},
+            {name:"GDELT_INDEX_TABLE",value:"GdeltEntityMentions"}
+          ] | all(.[]; . as $expected | $env | any(.name == $expected.name and .value == $expected.value))' \
+            <<< "${job}" > /dev/null
+          environment_id="$(jq -r .properties.environmentId <<< "${job}")"
+          identity_id="$(az identity show --resource-group "${AZURE_RESOURCE_GROUP}" --name id-ai7uae-gdelt-ingest --query id --output tsv)"
+          identity_client="$(az identity show --resource-group "${AZURE_RESOURCE_GROUP}" --name id-ai7uae-gdelt-ingest --query clientId --output tsv)"
+          jq -e --arg identity "${identity_id}" '.identity.userAssignedIdentities | keys | any(ascii_downcase == ($identity | ascii_downcase))' <<< "${job}" > /dev/null
+          digest="$(az acr repository show --name "${ACR_NAME}" --image "ai7uae-api:${PUBLISHED_IMAGE_SHA}" --query digest --output tsv)"
+          [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
+          {
+            echo "image=${ACR_LOGIN_SERVER}/ai7uae-api@${digest}"
+            echo "environment_id=${environment_id}"
+            echo "identity_id=${identity_id}"
+            echo "identity_client=${identity_client}"
+          } >> "${GITHUB_OUTPUT}"
+          printf '{"workflow_sha":"%s","image_source_sha":"%s","image_digest":"%s","archive_job":"%s","backfill_job":"%s"}\n' \
+            "${GITHUB_SHA}" "${PUBLISHED_IMAGE_SHA}" "${digest}" caj-ai7uae-gdelt-ingest caj-ai7uae-gdelt-backfill > gdelt-deployment-evidence.json
+
+      - name: Preview daily and weekly job changes
+        shell: bash
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          CONTAINERAPPS_ENVIRONMENT_ID: ${{ steps.archive.outputs.environment_id }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          IMAGE: ${{ steps.archive.outputs.image }}
+          IDENTITY_ID: ${{ steps.archive.outputs.identity_id }}
+          IDENTITY_CLIENT: ${{ steps.archive.outputs.identity_client }}
+        run: |
+          set -euo pipefail
+          for template in infrastructure/api-gdelt-job.bicep infrastructure/api-gdelt-backfill-job.bicep; do
+            if [[ "${template}" == *backfill* ]]; then
+              expected='caj-ai7uae-gdelt-backfill'
+            else
+              expected='caj-ai7uae-gdelt-ingest'
+            fi
+            changes="$(az deployment group what-if --resource-group "${AZURE_RESOURCE_GROUP}" --template-file "${template}" \
+              --parameters image="${IMAGE}" environmentId="${CONTAINERAPPS_ENVIRONMENT_ID}" \
+                ingestionIdentityResourceId="${IDENTITY_ID}" ingestionIdentityClientId="${IDENTITY_CLIENT}" \
+                acrLoginServer="${ACR_LOGIN_SERVER}" \
+              --no-pretty-print --query "changes[?changeType!='Ignore'].{type:changeType,id:resourceId}" --output json)"
+            jq -e --arg expected "${expected}" \
+              'length == 1 and all(.[]; . as $change | ($change.id | endswith("/Microsoft.App/jobs/" + $expected)) and (["NoChange", "Create", "Modify"] | index($change.type) != null))' \
+              <<< "${changes}" > /dev/null
+            jq -c . <<< "${changes}"
+          done
+
+      - name: Update daily ingest before enabling backfill
+        shell: bash
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          CONTAINERAPPS_ENVIRONMENT_ID: ${{ steps.archive.outputs.environment_id }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          IMAGE: ${{ steps.archive.outputs.image }}
+          IDENTITY_ID: ${{ steps.archive.outputs.identity_id }}
+          IDENTITY_CLIENT: ${{ steps.archive.outputs.identity_client }}
+        run: |
+          set -euo pipefail
+          az deployment group create --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "gdelt-daily-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/api-gdelt-job.bicep \
+            --parameters image="${IMAGE}" environmentId="${CONTAINERAPPS_ENVIRONMENT_ID}" \
+              ingestionIdentityResourceId="${IDENTITY_ID}" ingestionIdentityClientId="${IDENTITY_CLIENT}" \
+              acrLoginServer="${ACR_LOGIN_SERVER}" --output none
+          deployed="$(az containerapp job show --resource-group "${AZURE_RESOURCE_GROUP}" --name caj-ai7uae-gdelt-ingest --query 'properties.template.containers[0].image' --output tsv)"
+          test "${deployed}" = "${IMAGE}"
+
+      - name: Enable Saturday backfill
+        shell: bash
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          CONTAINERAPPS_ENVIRONMENT_ID: ${{ steps.archive.outputs.environment_id }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          IMAGE: ${{ steps.archive.outputs.image }}
+          IDENTITY_ID: ${{ steps.archive.outputs.identity_id }}
+          IDENTITY_CLIENT: ${{ steps.archive.outputs.identity_client }}
+        run: |
+          set -euo pipefail
+          az deployment group create --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "gdelt-weekly-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/api-gdelt-backfill-job.bicep \
+            --parameters image="${IMAGE}" environmentId="${CONTAINERAPPS_ENVIRONMENT_ID}" \
+              ingestionIdentityResourceId="${IDENTITY_ID}" ingestionIdentityClientId="${IDENTITY_CLIENT}" \
+              acrLoginServer="${ACR_LOGIN_SERVER}" --output none
+          schedule="$(az containerapp job show --resource-group "${AZURE_RESOURCE_GROUP}" --name caj-ai7uae-gdelt-backfill --query 'properties.configuration.scheduleTriggerConfig.cronExpression' --output tsv)"
+          deployed="$(az containerapp job show --resource-group "${AZURE_RESOURCE_GROUP}" --name caj-ai7uae-gdelt-backfill --query 'properties.template.containers[0].image' --output tsv)"
+          test "${schedule}" = '0 18 * * 6'
+          test "${deployed}" = "${IMAGE}"
+
+      - name: Retain deployment evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdelt-archive-deployment-${{ github.run_id }}-${{ github.run_attempt }}
+          path: gdelt-deployment-evidence.json
+          if-no-files-found: error
+          retention-days: 30
