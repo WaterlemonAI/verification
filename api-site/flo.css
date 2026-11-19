@@ -23,6 +23,9 @@
 .flo-review-section{background:#fff;border:1px solid #dce2e9;border-radius:10px;padding:1rem;margin:0 0 .85rem;min-width:0}
 .flo-review-section h3{font-size:1rem;margin:.15rem 0 .8rem}
 .flo-review-section h4{font-size:.88rem;margin:.15rem 0 .6rem}
+.flo-person-item{display:block;margin:.5rem 0;padding:.75rem;border:1px solid #dce5ee;border-radius:8px;background:#f7f9fc;overflow-wrap:anywhere}
+.flo-person-item strong{display:block;margin-bottom:.25rem;color:#1d405f}
+.flo-person-item small{display:block;color:#52637a;line-height:1.45}
 .flo-signal-list{list-style:none;padding:0!important;margin:0;border:1px solid #dce2e9;border-radius:10px;overflow:hidden}
 #flo-detail .flo-signal{display:grid;grid-template-columns:6rem 1fr;column-gap:.6rem;row-gap:.2rem;padding:.8rem 1rem;margin:0;border-bottom:1px solid #e8ecf1}
 .flo-signal:last-child{border-bottom:0!important}

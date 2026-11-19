@@ -300,6 +300,15 @@ jobs:
           az bicep build --file infrastructure/api-case-manager-release-reader.bicep
           az bicep build --file infrastructure/api-ejari-platform.bicep
 
+      # The image build can outlive GitHub's short-lived OIDC assertion. Obtain a
+      # fresh workload identity assertion before the release preflight and apply.
+      - name: Refresh Azure workload identity before release preflight
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Verify production Flo private storage path
         if: (github.event_name == 'workflow_dispatch' && inputs.provisionFloPlatform) || vars.FLO_ENABLED == 'true'
         shell: bash

@@ -189,6 +189,34 @@
       'licence_number', 'company_type', 'representativeEmail', 'representativePhone', 'representativeTitle',
       'identityType', 'authorityBasis', 'ownershipComplete', 'meetingAvailability']);
     section(profile, 'People and ownership', draft, ['owners', 'stakeholders', 'keyPersonChanges', 'keyPersonExplanation']);
+    if (item.workflow_schema) {
+      const people = (item.subjects || []).filter((subject) => subject.subject_id !== item.application_id);
+      const sourceName = (id) => id === 'supplier' ? 'Supplier answer'
+        : item.documents?.find((doc) => doc.document_id === id) ? nice(item.documents.find((doc) => doc.document_id === id).type)
+          : item.checks?.find((check) => check.check_id === id) ? 'Trade licence verification API' : id;
+      const showPeople = (title, rows, missing) => {
+        const card = el('section', null, 'flo-review-section'); card.append(el('h3', title));
+        if (!rows.length) card.append(el('p', missing, 'flo-empty'));
+        for (const person of rows) {
+          const record = el('div', null, 'flo-person-item');
+          const aml = item.checks?.find((check) => check.service_id === 'stakeholder-aml'
+            && check.subject_id === person.subject_id);
+          const media = item.checks?.find((check) => check.service_id === 'stakeholder-adverse-media'
+            && check.subject_id === person.subject_id);
+          record.append(el('strong', person.name), el('small', [
+            (person.roles || []).join(', '), person.shareholding_percent ? `Shareholding ${person.shareholding_percent}` : '',
+            `AML: ${screeningState(aml)}`, `Adverse media: ${screeningState(media)}`,
+            `Source: ${(person.source_ids || []).map(sourceName).join(', ') || 'Unavailable'}`
+          ].filter(Boolean).join(' · ')));
+          card.append(record);
+        }
+        profile.append(card);
+      };
+      showPeople('Business manager', people.filter((person) => person.roles?.some((role) => /manager/i.test(role))),
+        'No business manager identified in the uploaded documents or trade licence verification result.');
+      showPeople('Owners and directors', people.filter((person) => person.roles?.some((role) => /owner|director|shareholder/i.test(role))),
+        'No owner or director identified; obtain details before concluding stakeholder coverage.');
+    }
     section(profile, 'Premises and operating profile', draft, ['locationEvidenceType', 'registeredAddressSame', 'registered_address',
       'operatingAddress', 'operating_address', 'fulfilmentLocations', 'addressChanges', 'addressChangeExplanation',
       'siteActivities', 'activities', 'website', 'website_url']);
