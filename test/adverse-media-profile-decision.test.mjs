@@ -79,7 +79,10 @@ test('external attack and historical compilation require corroboration before Un
       url: 'https://news.example/vessel' },
     { name: 'Archive Company', title: 'Archive Company - Wikipedia history of fraud and hacking incidents',
       description: 'Historical compilation of fraud and hacking attacks on the company, updated this week.',
-      url: 'https://en.wikipedia.org/wiki/Archive_Company' }
+      url: 'https://en.wikipedia.org/wiki/Archive_Company' },
+    { name: 'Masdar', title: 'Iran–Israel/US Cyber War 2026: Iranian Hackers, APT Groups & Cyber Attacks',
+      description: "RuskiNet claimed disruption of masdar.ae, the official site of Abu Dhabi's state-owned renewable energy company.",
+      url: 'https://socradar.io/iran-israel-cyber-conflict-dashboard' }
   ];
   for (const fixture of fixtures) {
     const request = validateAdverseMediaRequest({ entity_type: 'business', name: fixture.name, languages: ['en'] });
