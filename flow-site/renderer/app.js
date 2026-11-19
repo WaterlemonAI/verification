@@ -42,7 +42,10 @@ async function api(route, method = 'GET', data) {
 }
 function render() {
   const app = state.application; const schema = app.presentation;
-  const brand = app.flow_id === 'al-naboodah-digital' ? 'Al Naboodah' : app.brand_name || 'Your buyer';
+  const alNaboodah = app.flow_id === 'al-naboodah-digital'
+    || /^Al Naboodah Supplier Onboarding\b/i.test(schema.name || '');
+  document.documentElement.classList.toggle('al-naboodah-brand', alNaboodah);
+  const brand = alNaboodah ? 'Al Naboodah' : app.brand_name || 'Your buyer';
   $('title').textContent = schema.name; document.title = schema.name;
   $('brand-name').textContent = brand;
   $('subtitle').textContent = `${brand} invited you to complete this supplier verification.`;
@@ -53,8 +56,9 @@ function render() {
     const anchor = document.createElement('a'); anchor.textContent = title; anchor.href = href;
     anchor.rel = 'noopener noreferrer'; anchor.referrerPolicy = 'no-referrer'; anchor.target = '_blank'; links.append(anchor);
   }
-  const logo = app.logo_asset_url && /^\/flo\/assets\/[a-z][a-z0-9-]{2,63}\/[0-9a-f-]{36}$/.test(app.logo_asset_url)
-    ? app.logo_asset_url : app.flow_id === 'al-naboodah-digital' ? '/assets/renderer/al-naboodah-logo.png' : null;
+  const logo = alNaboodah ? '/assets/renderer/al-naboodah-logo.png'
+    : app.logo_asset_url && /^\/flo\/assets\/[a-z][a-z0-9-]{2,63}\/[0-9a-f-]{36}$/.test(app.logo_asset_url)
+      ? app.logo_asset_url : null;
   if (logo) {
     $('brand-logo').src = logo; $('brand-logo').alt = brand;
     $('brand-logo').hidden = false; $('brand-name').hidden = true;

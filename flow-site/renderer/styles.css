@@ -32,6 +32,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 #brand-name { overflow-wrap: anywhere; }
 .secure-label { flex: none; display: inline-flex; align-items: center; gap: .55rem; padding: .42rem .75rem; border: 1px solid #ffffff4d; border-radius: 999px; background: #ffffff12; color: #f5f8fc; font-size: .78rem; font-weight: 650; letter-spacing: .015em; }
 .secure-dot { width: .45rem; height: .45rem; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px #ffffff23; }
+.al-naboodah-brand .brand-row { min-height: 140px; padding-top: .2rem; padding-bottom: .2rem; background: #fff;
+  border-bottom: 3px solid; border-image: linear-gradient(90deg, #16b5df, #ffb834 28%, #ad0b3e 54%, #159447 78%, #002c5f) 1; }
+.al-naboodah-brand #brand-logo { width: 220px; height: 132px; max-width: none; max-height: none;
+  padding: 0; border-radius: 0; object-fit: cover; object-position: center; }
+.al-naboodah-brand .secure-label { border-color: #d8e3ed; background: #f4f8fc; color: #244365; }
+.al-naboodah-brand .secure-dot { box-shadow: 0 0 0 3px #e5edf5; }
 .hero-copy { padding: clamp(2rem, 5vw, 3.5rem) clamp(1.5rem, 5vw, 3.6rem) clamp(2.1rem, 5vw, 3.5rem); }
 .eyebrow { margin: 0 0 .7rem; color: #e7f1ff; font-size: .72rem; font-weight: 800; letter-spacing: .18em; }
 h1, h2, h3, p { overflow-wrap: anywhere; }
@@ -150,6 +156,8 @@ button:not(.button-secondary):hover:not(:disabled) { background: #154875; box-sh
   .brand-row { gap: .7rem; }
   .brand-identity { font-size: .9rem; }
   #brand-logo { max-width: 165px; max-height: 54px; }
+  .al-naboodah-brand .brand-row { min-height: 118px; }
+  .al-naboodah-brand #brand-logo { width: 185px; height: 110px; max-width: none; max-height: none; }
   #steps { gap: .35rem; }
   .step-marker { display: block; }
   .step-label { display: block; margin-top: .35rem; line-height: 1.25; }
