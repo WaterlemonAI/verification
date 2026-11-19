@@ -28,7 +28,9 @@ async function api(route, method = 'GET', data) {
       ...(method === 'GET' ? {} : { 'x-flo-csrf': state.csrf }) },
     ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result.gaps?.length ? `Complete: ${result.gaps.join(', ')}` : result.error || 'Request failed');
+  if (!response.ok) throw new Error(result.gaps?.length
+    ? result.gaps.find((gap) => gap.includes('is expired, please update recent')) || `Complete: ${result.gaps.join(', ')}`
+    : result.error || 'Request failed');
   return result;
 }
 function render() {
@@ -52,6 +54,12 @@ function render() {
       if (dependent) { app.draft[id] = value; render(); }
     } });
   renderMeeting();
+  if (app.document_issues?.length) {
+    const issues = document.createElement('section'); issues.className = 'restart';
+    for (const issue of app.document_issues) { const line = document.createElement('p');
+      line.textContent = issue.message; issues.append(line); }
+    $('form').prepend(issues);
+  }
   $('back').hidden = state.step === 0; $('next').hidden = state.step === schema.stages.length - 1;
   $('submit').hidden = state.step !== schema.stages.length - 1;
   if (app.restart) { const banner = document.createElement('section'); banner.className = 'restart';
@@ -160,14 +168,15 @@ function prefillFromDocuments() {
     app.draft.bank_outside_registration = normal(suggestions.bank_country) === normal(suggestions.registration_country) ? 'No' : 'Yes';
   }
 }
-async function extractFirstStage() {
-  if (state.application.presentation.stages[state.step]?.id !== 'documents_first' || !state.application.documents.length) return;
+async function extractDocuments({ prefill = false } = {}) {
+  if (!state.application.documents.length
+    || !state.application.documents.some((doc) => ['not_run', 'queued'].includes(doc.extraction_state))) return;
   await api('extract', 'POST', {});
   // Dedicated OCR jobs may take longer than the document step. Keep the form usable.
   for (let attempt = 0; attempt < 15; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, 2000));
     state.application = (await api('application')).application;
-    if (state.application.preview_ready_at) { prefillFromDocuments(); return; }
+    if (state.application.preview_ready_at) { if (prefill) prefillFromDocuments(); return; }
   }
   notice('Document extraction is continuing. Please confirm any details that are still blank.');
 }
@@ -178,9 +187,15 @@ $('next').addEventListener('click', () => action(async () => { await saveStep();
   const rule = state.application.presentation.meeting?.required_for;
   if (state.step === 0 && rule && state.application.draft?.[rule.field] === rule.equals
     && state.application.meeting?.status !== 'booked') throw new Error('Book a video meeting before continuing.');
-  try { await extractFirstStage(); } catch { notice('Document extraction is unavailable. Please enter any missing details.'); }
+  try { await extractDocuments({ prefill: true }); } catch { notice('Document extraction is unavailable. Please retry after it is restored.'); }
+  const blockingDocument = state.application.document_issues?.find((issue) => issue.code !== 'ocr_incomplete');
+  if (blockingDocument) throw new Error(blockingDocument.message);
   state.step++; render(); window.scrollTo(0, 0); }));
-$('submit').addEventListener('click', () => action(async () => { await saveStep(); const result = await api('submit', 'POST', {});
+$('submit').addEventListener('click', () => action(async () => { await saveStep();
+  await extractDocuments();
+  const blockingDocument = state.application.document_issues?.[0];
+  if (blockingDocument) throw new Error(blockingDocument.message);
+  const result = await api('submit', 'POST', {});
   $('form').hidden = true; $('steps').hidden = true; document.querySelector('.actions').hidden = true;
   $('receipt').hidden = false; $('reference').textContent = result.application_id; }));
 async function start() {

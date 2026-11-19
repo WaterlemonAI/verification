@@ -78,3 +78,16 @@ test('builder contract enforces stage, field and document slot bounds', () => {
     id: `extra_doc_${index}`, label: `Extra document ${index}`, required: false })));
   assert.equal(diagnoseWorkflowSchema(tooManyDocs).issues[0].path, 'limits');
 });
+
+test('one address-proof choice can require the matching upload', () => {
+  const withProof = schema();
+  withProof.stages[0].fields.push({ id: 'address_proof_type', label: 'Address proof', type: 'select',
+    required: true, options: ['Ejari', 'Utility bill', 'Tenancy or lease', 'Title deed'] });
+  withProof.stages[0].documents.push({ id: 'premises_evidence', label: 'Selected proof', required: true,
+    show_if: { field: 'address_proof_type', in: ['Utility bill', 'Tenancy or lease', 'Title deed'] } });
+  const validated = validateWorkflowSchema(withProof);
+  assert.ok(schemaSubmissionGaps(validated, { draft: { business_name: 'Example', entity_type: 'Individual',
+    address_proof_type: 'Utility bill' }, documents: [] }).includes('premises_evidence'));
+  assert.ok(!schemaSubmissionGaps(validated, { draft: { business_name: 'Example', entity_type: 'Individual',
+    address_proof_type: 'Ejari' }, documents: [] }).includes('premises_evidence'));
+});

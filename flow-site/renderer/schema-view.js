@@ -18,7 +18,8 @@ export function renderSchemaStage(container, { schema, stageIndex = 0, draft = {
   declarations = {}, preview = false, onFieldChange = () => {} }) {
   const stage = schema.stages[stageIndex];
   if (!stage) throw new Error('Stage unavailable.');
-  const visible = (rule) => !rule || draft[rule.field] === rule.equals;
+  const visible = (rule) => !rule || (rule.in
+    ? rule.in.includes(draft[rule.field]) : draft[rule.field] === rule.equals);
   const hasDependents = (id) => schema.stages.some((entry) => [...entry.fields, ...entry.documents]
     .some((child) => child.show_if?.field === id));
   const fieldset = element('fieldset');
@@ -52,11 +53,12 @@ export function renderSchemaStage(container, { schema, stageIndex = 0, draft = {
     fieldset.append(wrapper);
   }
   for (const document of stage.documents.filter((entry) => visible(entry.show_if))) {
-    const control = element('input'); control.type = 'file'; control.accept = '.pdf,.png,.jpg,.jpeg';
+    const control = element('input'); control.type = 'file';
+    control.accept = document.id === 'ejari' ? '.pdf' : '.pdf,.png,.jpg,.jpeg';
     control.name = document.id; control.disabled = preview;
     const wrapper = element('label', null, 'field');
     wrapper.append(element('span', `${document.label}${document.required ? ' *' : ''}`), control);
-    const existing = documents.find((entry) => entry.type === document.id);
+    const existing = documents.findLast((entry) => entry.type === document.id);
     control.required = document.required && !existing && !preview;
     if (existing) wrapper.append(element('small', `Uploaded · ${existing.uploaded_at || 'saved'}`));
     if (preview) wrapper.append(element('small', 'Upload disabled in preview'));

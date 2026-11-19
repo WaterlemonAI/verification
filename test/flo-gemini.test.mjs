@@ -17,11 +17,13 @@ test('bank letter extraction uses inline document data but makes no authenticity
     request = JSON.parse(options.body);
     return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({
       business_name: 'Example LLC', account_holder: 'Example LLC', bank_name: 'Example Bank',
-      branch_name: 'Main Branch', bank_country: 'United Arab Emirates', iban: 'AE123', issue_date: '2026-11-01', letterhead_bank_name: 'Example Bank'
+      branch_name: 'Main Branch', bank_country: 'United Arab Emirates', iban: 'AE123', account_number: '123',
+      issue_date: '2026-11-01', expiry_date: 'Not Found', letterhead_bank_name: 'Example Bank'
     }) }] } }] }), { status: 200 });
   } });
   assert.equal(result.status, 'completed');
   assert.equal(result.data.iban, 'AE123');
+  assert.equal(result.data.account_number, '123');
   assert.equal(request.contents[0].parts[1].inlineData.mimeType, 'image/png');
   assert.match(request.systemInstruction.parts[0].text, /Do not assess authenticity/);
 });
@@ -40,6 +42,7 @@ test('generic Flo OCR uses a fixed profile and unknown document slots fall back 
   assert.equal(incorporated.status, 'completed');
   assert.equal(incorporated.data.company_name, 'Example LLC');
   assert.ok(request.generationConfig.responseJsonSchema.required.includes('business_activities'));
+  assert.ok(request.generationConfig.responseJsonSchema.required.includes('expiry_date'));
   const unknown = await extractFloDocument(bytes, 'image/png', 'custom_certificate', { apiKey: 'synthetic-key',
     fetchImpl: async (_url, options) => {
       const keys = JSON.parse(options.body).generationConfig.responseJsonSchema.required;
@@ -56,17 +59,17 @@ test('supplier VAT extraction is fixed-schema evidence and rejects extra model c
   const fetchImpl = async (_url, options) => {
     request = JSON.parse(options.body);
     return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({
-      trn: '100000000000001', registered_name: 'Example LLC', effective_date: '2026-01-01'
+      trn: '100000000000001', registered_name: 'Example LLC', effective_date: '2026-01-01', expiry_date: 'Not Found'
     }) }] } }] }), { status: 200 });
   };
   const result = await extractSupplierSupplement(bytes, 'image/png', 'vatFile', { apiKey: 'synthetic-key', fetchImpl });
   assert.equal(result.status, 'completed');
   assert.equal(result.data.trn, '100000000000001');
-  assert.deepEqual(request.generationConfig.responseJsonSchema.required, ['trn', 'registered_name', 'effective_date']);
+  assert.deepEqual(request.generationConfig.responseJsonSchema.required, ['trn', 'registered_name', 'effective_date', 'expiry_date']);
   assert.match(request.systemInstruction.parts[0].text, /Do not assess authenticity/);
   const invalid = await extractSupplierSupplement(bytes, 'image/png', 'vatFile', { apiKey: 'synthetic-key',
     fetchImpl: async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({
-      trn: '100000000000001', registered_name: 'Example LLC', effective_date: '2026-01-01', verified: true
+      trn: '100000000000001', registered_name: 'Example LLC', effective_date: '2026-01-01', expiry_date: 'Not Found', verified: true
     }) }] } }] }), { status: 200 }) });
   assert.equal(invalid.status, 'failed');
 });
@@ -90,4 +93,32 @@ test('document-borne instructions remain labelled evidence and do not create a p
   assert.equal(result.status, 'completed');
   assert.equal(result.output.issues[0].evidence_ids[0], 'check-1');
   assert.equal(item.checks[0].business_result, 'could_not_complete');
+});
+
+test('Gemini review receives trade licence API fields and explicit consistency instructions', async () => {
+  const item = { draft: { supplier_type: 'Company or other Legal person', business_name: 'Example LLC' },
+    documents: [{ document_id: 'doc-tl', type: 'trade_licence', extraction_state: 'completed',
+      extraction_result: { data: { company_name_english: 'Example LLC', company_type: 'LLC' } } }],
+    facts: [], comparisons: [], checks: [{ check_id: 'check-tlv', service_id: 'uae-trade-licence',
+      transport: 'completed', coverage: 'complete', business_result: 'requires_review', reason_codes: [],
+      raw_response: { status: 'Success', uae_tl_verification: { legal_type_from_entity: 'Limited Liability Company' } } }] };
+  let request;
+  await reviewWithGemini(item, { apiKey: 'synthetic-key', fetchImpl: async (_url, options) => {
+    request = JSON.parse(options.body);
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+      narrative: 'No discrepancy identified.', issues: [], extraction_gaps: [] }) }] } }] }), { status: 200 });
+  } });
+  assert.match(request.systemInstruction.parts[0].text, /legal\/company type/);
+  assert.match(request.contents[0].parts[0].text, /Limited Liability Company/);
+});
+
+test('Gemini OCR rejects ambiguous or malformed dates rather than accepting them as current', async () => {
+  const result = await extractFloDocument(Buffer.from('synthetic-image'), 'image/png', 'natural_identity',
+    { apiKey: 'synthetic-key', fetchImpl: async (_url, options) => {
+      const keys = JSON.parse(options.body).generationConfig.responseJsonSchema.required;
+      const data = Object.fromEntries(keys.map((key) => [key, key === 'expiry_date' ? '20/11/2027' : 'Not Found']));
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(data) }] } }] }), { status: 200 });
+    } });
+  assert.equal(result.status, 'failed');
+  assert.ok(result.reason_codes.includes('gemini_date_format_invalid'));
 });

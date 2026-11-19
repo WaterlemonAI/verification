@@ -30,6 +30,19 @@
             "field": "supplier_type",
             "equals": "Company or other Legal person"
           }
+        },
+        {
+          "id": "address_proof_type",
+          "label": "Which address proof are you uploading?",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Ejari",
+            "Utility bill",
+            "Tenancy or lease",
+            "Title deed",
+            "Other official address evidence"
+          ]
         }
       ],
       "documents": [
@@ -71,18 +84,36 @@
         },
         {
           "id": "ejari",
-          "label": "Ejari certificate, for Dubai tenancy if available",
-          "required": false
+          "label": "Current Ejari certificate",
+          "required": true,
+          "show_if": {
+            "field": "address_proof_type",
+            "equals": "Ejari"
+          }
         },
         {
           "id": "premises_evidence",
-          "label": "Current utility bill or title deed, if no verified address proof is on file",
-          "required": false
+          "label": "Current selected address proof",
+          "required": true,
+          "show_if": {
+            "field": "address_proof_type",
+            "in": [
+              "Utility bill",
+              "Tenancy or lease",
+              "Title deed",
+              "Other official address evidence"
+            ]
+          }
         },
         {
           "id": "bank_letter",
           "label": "Recent bank confirmation on bank letterhead; home-country accounts accepted",
           "required": true
+        },
+        {
+          "id": "bank_statement",
+          "label": "Optional bank statement for account cross-check",
+          "required": false
         }
       ],
       "declarations": [
@@ -400,5 +431,9 @@
       "equals": "Natural person"
     },
     "procurement_email": "arbaz@ai7lab.net"
+  },
+  "document_policy": {
+    "ocr_required": true,
+    "reject_expired": true
   }
 }
