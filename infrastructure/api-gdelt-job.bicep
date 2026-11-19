@@ -38,6 +38,7 @@ resource ingestionJob 'Microsoft.App/jobs@2024-03-01' = {
   }
   properties: {
     environmentId: environmentId
+    workloadProfileName: 'Consumption'
     configuration: {
       triggerType: 'Schedule'
       replicaTimeout: 21600
