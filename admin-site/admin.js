@@ -310,8 +310,9 @@ async function loadIntegrations() {
       const isAdverseMediaAi = item.id === 'adverse-media-ai';
       const isDocumentOcrAi = item.id === 'document-ocr-ai';
       const isDocumentOcrTaed = item.id === 'document-ocr-taed';
-      byId('supplier-credential-label').firstChild.textContent = isIban ? 'Supplier username' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi || isDocumentOcrAi || isDocumentOcrTaed) ? 'Private API key' : 'Supplier credential';
-      form.elements.credential.placeholder = isIban ? 'Enter the supplier username' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi || isDocumentOcrAi || isDocumentOcrTaed) ? 'Enter the private API key' : 'Enter the private credential';
+      const isMeeting = item.id === 'setup-video-call' || item.id === 'meeting-availability';
+      byId('supplier-credential-label').firstChild.textContent = isIban ? 'Supplier username' : isMeeting ? 'Shared meeting bearer token' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi || isDocumentOcrAi || isDocumentOcrTaed) ? 'Private API key' : 'Supplier credential';
+      form.elements.credential.placeholder = isIban ? 'Enter the supplier username' : isMeeting ? 'Enter the bearer token without Bearer prefix' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi || isDocumentOcrAi || isDocumentOcrTaed) ? 'Enter the private API key' : 'Enter the private credential';
       byId('supplier-credential-help').textContent = isIban
         ? 'The supplied IBAN collection authenticates each internal request with this username header; it does not transmit a password.'
         : isEntitySearch
@@ -324,6 +325,8 @@ async function loadIntegrations() {
             ? 'Use the dedicated document OCR ai7edd model key. It is applied only after malware scanning and Azure OCR complete, and is never shown again.'
           : isDocumentOcrTaed
             ? 'Use the TAED document extraction API key. It is applied only after malware scanning and is never shown again.'
+          : isMeeting
+            ? 'Enter only the token value. This write-only credential is shared by Setup Video Call and Find Open Slots. Replacing it here updates both APIs.'
         : 'The existing value cannot be viewed and will be replaced only after you save.';
       byId('supplier-credential-dialog').showModal();
     });
