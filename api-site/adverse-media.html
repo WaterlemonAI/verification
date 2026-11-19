@@ -116,6 +116,7 @@
               <div><code>coverage.languages_requested / languages_searched / languages_not_searched</code><span>arrays</span><span>Separates selected languages from those actually queried under the fixed search budget. Any omitted requested language blocks decision eligibility.</span></div>
               <div><code>coverage.sources</code><span>object[]</span><span>Provider-neutral status for current news, open web, Search+ publisher search, archive, and official-record coverage.</span></div>
               <div><code>coverage.archive_window</code><span>string</span><span>Actual dates retained in the local index. An incomplete requested period remains partial.</span></div>
+              <div><code>coverage.archive_scan</code><span>object or null</span><span>Rows scanned, mentions returned, elapsed time, and whether a safety limit made the archive incomplete.</span></div>
               <div><code>coverage.archive_scope</code><span>string</span><span><code>all_stored_history</code> for an undated request; <code>requested_date_window</code> when dates are supplied.</span></div>
               <div><code>coverage.archive_origin</code><span>string</span><span><code>local_index</code>, <code>local_index_partial</code>, or <code>unavailable</code> when public fallback is disabled.</span></div>
               <div><code>coverage.archive_reason_code</code><span>string or null</span><span>Distinguishes a requested period outside the retained index from a watermark or local-read problem.</span></div>

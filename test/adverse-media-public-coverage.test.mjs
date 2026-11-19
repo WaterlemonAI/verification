@@ -104,6 +104,26 @@ test('Azure-only mode reports an internal index read failure without public fall
   }
 });
 
+test('Azure scan limit is surfaced as partial without a public GDELT call', async () => {
+  const previous = process.env.GDELT_PUBLIC_FALLBACK_ENABLED;
+  process.env.GDELT_PUBLIC_FALLBACK_ENABLED = 'false';
+  try {
+    let publicCalls = 0;
+    const result = await globalArchiveSearch({ name: 'Example Group' },
+      async () => { publicCalls += 1; throw new Error('unexpected_public_call'); },
+      async () => ({ results: [], complete: false, limitReason: 'scan_row_limit_exceeded',
+        scan: { rows_scanned: 100000, rows_returned: 0, truncated: true },
+        state: { coverage_start: '2026-10-22T21:15:00Z', coverage_end: '2026-11-19T01:30:00Z' } }));
+    assert.equal(publicCalls, 0);
+    assert.equal(result.complete, false);
+    assert.equal(result.localFailure, 'scan_row_limit_exceeded');
+    assert.equal(result.scan.truncated, true);
+  } finally {
+    if (previous === undefined) delete process.env.GDELT_PUBLIC_FALLBACK_ENABLED;
+    else process.env.GDELT_PUBLIC_FALLBACK_ENABLED = previous;
+  }
+});
+
 test('older Azure archive evidence survives the live-index one-year filter', () => {
   const undated = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Group' });
   const olderDate = `${Number(undated.date_from.slice(0, 4)) - 1}-01-01T00:00:00.000Z`;
