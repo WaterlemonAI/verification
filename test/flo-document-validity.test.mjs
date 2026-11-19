@@ -39,6 +39,12 @@ test('replacing an expired document supersedes it and non-expiring proof is allo
     natural_id_expiry: '2027-01-01' }), { now: asOf }), []);
 });
 
+test('utility billing period end does not expire the address proof', () => {
+  const docs = [document('premises_evidence', { evidence_type: 'Utility bill', address: 'Dubai',
+    period_start_date: '2025-11-01', period_end_date: '2025-11-30', expiry_date: 'Not Found' })];
+  assert.deepEqual(documentValidityIssues(item(docs, { address_proof_type: 'Utility bill' }), { now: asOf }), []);
+});
+
 test('bank letter freshness, stated expiry and document-to-field mismatch are checked separately', () => {
   const issues = documentValidityIssues(item([
     document('bank_letter', { issue_date: '2026-10-01', expiry_date: 'Not Found' }),
