@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryFloStore } from '../lib/flows/store.mjs';
-import { processFloApplication } from '../lib/flows/processor.mjs';
+import { processFloApplication, processGenericFloApplication } from '../lib/flows/processor.mjs';
 import { createFloReport } from '../lib/flows/report-pdf.mjs';
 import { randomUUID } from 'node:crypto';
+import { supplierCase } from '../lib/flows/projections.mjs';
 
 process.env.FLO_DATA_KEY_HEX = '22'.repeat(32);
 
@@ -64,4 +65,64 @@ test('optional Ejari PDF result and certificate are retained in Flo and compared
   assert.equal((await store.getEvidence(workspace, item.application_id, document.certificate_document_id)).subarray(0, 4).toString(), '%PDF');
   assert.equal(completed.checks.find((check) => check.service_id === 'ejari-verification').coverage, 'complete');
   assert.equal(completed.comparisons.find((comparison) => comparison.rule === 'ejari_tenant_licence_name').outcome, 'match');
+});
+
+test('generic Flo preview extracts a custom document before supplier submission', async () => {
+  const store = new MemoryFloStore();
+  const workspace = '1234567890abcdef';
+  const { case: item } = await store.createCase(workspace,
+    { customer_reference: 'OCR', supplier_email: 'a@example.com', prefill: {} },
+    'idem-generic-ocr', 'c'.repeat(64), { enabled: true });
+  const documentId = randomUUID();
+  await store.putEvidence(workspace, item.application_id, documentId, Buffer.from('synthetic-image'));
+  await store.updateCase(workspace, item.application_id, (current) => {
+    current.status = 'in_progress';
+    current.workflow_schema = { schema_version: '1.0.0', name: 'Example', stages: [], checks: [], tokens: {} };
+    current.documents = [{ document_id: documentId, type: 'incorporation_record', mime_type: 'image/png',
+      extraction_state: 'not_run', uploaded_at: new Date().toISOString() }];
+    return current;
+  });
+  await processFloApplication({ workspace_id: workspace, application_id: item.application_id,
+    job_type: 'preview', attempt: 0 }, { floStore: store,
+    extractSupplement: async (_bytes, _mime, type) => {
+      assert.equal(type, 'incorporation_record');
+      return { status: 'completed', model_id: 'mock', schema_version: '1.0.0',
+        data: { company_name: 'Example LLC', registration_number: '42', incorporation_date: '2026-01-01',
+          registration_country: 'United Arab Emirates', business_activities: 'Construction', issuer_name: 'Registry' } };
+    } });
+  const projected = supplierCase(await store.getCase(workspace, item.application_id));
+  assert.ok(projected.preview_ready_at);
+  assert.equal(projected.documents[0].extraction_result.data.company_name, 'Example LLC');
+  assert.equal(projected.documents[0].extraction_result.data.business_activities, 'Construction');
+});
+
+test('generic checks route natural persons and foreign suppliers without a UAE licence assumption', async () => {
+  const cases = [
+    { supplier_type: 'Natural person', business_name: 'Person One', registration_country: 'AE',
+      expectedType: 'individual', expectedAmlType: 'Individual' },
+    { supplier_type: 'Company or other Legal person', registration_jurisdiction: 'Outside the UAE',
+      business_name: 'Foreign Example Ltd', registration_country: 'GB',
+      expectedType: 'business', expectedAmlType: 'Organization' }
+  ];
+  for (const [index, sample] of cases.entries()) {
+    const store = new MemoryFloStore(); const workspace = '1234567890abcdef';
+    const { case: item } = await store.createCase(workspace,
+      { customer_reference: `ROUTE-${index}`, supplier_email: 'a@example.com', prefill: {} },
+      `idem-route-${index}`, String(index + 1).repeat(64), { enabled: true });
+    await store.updateCase(workspace, item.application_id, (current) => {
+      current.workflow_schema = { schema_version: '1.0.0', name: 'Example', stages: [],
+        checks: ['uae-trade-licence', 'entity-aml', 'entity-adverse-media'], tokens: {} };
+      current.status = 'submitted'; current.draft = sample; return current;
+    });
+    const calls = [];
+    await processGenericFloApplication({ workspace_id: workspace, application_id: item.application_id }, {
+      floStore: store, callProvider: async (serviceId, input) => {
+        calls.push({ serviceId, input }); return { httpStatus: 200, response: { status: 'Success' } };
+      }, createReport: async () => ({ report_id: randomUUID(), pdf: Buffer.from('%PDF'), html: '<p>Review</p>',
+        model: {}, version: '1.0.0', sha256: 'a'.repeat(64), generated_at: new Date().toISOString() })
+    });
+    assert.equal(calls.find((call) => call.serviceId === 'entity-aml')?.input.type, sample.expectedAmlType);
+    assert.equal(calls.find((call) => call.serviceId === 'entity-adverse-media')?.input.entity_type, sample.expectedType);
+    assert.equal(calls.some((call) => call.serviceId === 'uae-trade-licence'), false);
+  }
 });

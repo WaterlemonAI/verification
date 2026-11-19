@@ -29,6 +29,8 @@ export function renderSchemaStage(container, { schema, stageIndex = 0, draft = {
       : ['textarea', 'people'].includes(field.type) ? element('textarea') : element('input');
     if (control.tagName === 'INPUT') control.type = field.type;
     control.name = field.id; control.required = field.required; control.maxLength = field.max_length || 2000;
+    if (field.type === 'date' && /(?:^|_)expiry$/.test(field.id))
+      control.min = new Date().toISOString().slice(0, 10);
     if (field.type === 'select') {
       const empty = element('option', 'Choose one'); empty.value = ''; control.append(empty);
       for (const value of field.options) { const option = element('option', value); option.value = value; control.append(option); }
@@ -55,6 +57,7 @@ export function renderSchemaStage(container, { schema, stageIndex = 0, draft = {
     const wrapper = element('label', null, 'field');
     wrapper.append(element('span', `${document.label}${document.required ? ' *' : ''}`), control);
     const existing = documents.find((entry) => entry.type === document.id);
+    control.required = document.required && !existing && !preview;
     if (existing) wrapper.append(element('small', `Uploaded · ${existing.uploaded_at || 'saved'}`));
     if (preview) wrapper.append(element('small', 'Upload disabled in preview'));
     fieldset.append(wrapper);

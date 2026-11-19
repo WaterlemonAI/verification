@@ -35,6 +35,14 @@ test('server submission rules enforce conditional fields and documents', () => {
   assert.throws(() => schemaDraft(good, { injected: 'bad' }), /invalid_draft_field/);
 });
 
+test('expired separately entered document dates block a schema submission', () => {
+  const withExpiry = schema();
+  withExpiry.stages[0].fields.push({ id: 'representative_id_expiry', label: 'ID expiry', type: 'date', required: true });
+  const validated = validateWorkflowSchema(withExpiry);
+  const draft = { business_name: 'Example LLC', entity_type: 'Individual', representative_id_expiry: '2020-01-01' };
+  assert.ok(schemaSubmissionGaps(validated, { draft, documents: [] }).includes('representative_id_expiry: document expired'));
+});
+
 test('workflow URL fields reject private and non-HTTPS destinations', () => {
   const website = schema(); website.stages[0].fields.push({ id: 'website_url', label: 'Website', type: 'url', required: false });
   const good = validateWorkflowSchema(website);

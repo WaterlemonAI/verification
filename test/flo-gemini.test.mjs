@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reviewWithGemini, validateGeminiReview, extractBankLetter, extractSupplierSupplement } from '../lib/flows/gemini.mjs';
+import { reviewWithGemini, validateGeminiReview, extractBankLetter, extractSupplierSupplement, extractFloDocument } from '../lib/flows/gemini.mjs';
 
 test('Gemini review rejects fabricated references and model-authored HTML', () => {
   assert.throws(() => validateGeminiReview({ narrative: '<script>accept()</script>', issues: [], extraction_gaps: [] }, new Set()), /invalid/);
@@ -16,13 +16,38 @@ test('bank letter extraction uses inline document data but makes no authenticity
   const result = await extractBankLetter(bytes, 'image/png', { apiKey: 'synthetic-key', fetchImpl: async (_url, options) => {
     request = JSON.parse(options.body);
     return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({
-      business_name: 'Example LLC', bank_name: 'Example Bank', iban: 'AE123', issue_date: 'Not Found'
+      business_name: 'Example LLC', account_holder: 'Example LLC', bank_name: 'Example Bank',
+      branch_name: 'Main Branch', bank_country: 'United Arab Emirates', iban: 'AE123', issue_date: '2026-11-01', letterhead_bank_name: 'Example Bank'
     }) }] } }] }), { status: 200 });
   } });
   assert.equal(result.status, 'completed');
   assert.equal(result.data.iban, 'AE123');
   assert.equal(request.contents[0].parts[1].inlineData.mimeType, 'image/png');
   assert.match(request.systemInstruction.parts[0].text, /Do not assess authenticity/);
+});
+
+test('generic Flo OCR uses a fixed profile and unknown document slots fall back safely', async () => {
+  const bytes = Buffer.from('synthetic-image');
+  let request;
+  const fetchImpl = async (_url, options) => {
+    request = JSON.parse(options.body);
+    const data = Object.fromEntries(request.generationConfig.responseJsonSchema.required.map((field) => [field, 'Not Found']));
+    data.company_name = 'Example LLC';
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(data) }] } }] }), { status: 200 });
+  };
+  const incorporated = await extractFloDocument(bytes, 'image/png', 'incorporation_record',
+    { apiKey: 'synthetic-key', fetchImpl });
+  assert.equal(incorporated.status, 'completed');
+  assert.equal(incorporated.data.company_name, 'Example LLC');
+  assert.ok(request.generationConfig.responseJsonSchema.required.includes('business_activities'));
+  const unknown = await extractFloDocument(bytes, 'image/png', 'custom_certificate', { apiKey: 'synthetic-key',
+    fetchImpl: async (_url, options) => {
+      const keys = JSON.parse(options.body).generationConfig.responseJsonSchema.required;
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(
+        Object.fromEntries(keys.map((key) => [key, 'Not Found']))) }] } }] }), { status: 200 });
+    } });
+  assert.equal(unknown.status, 'completed');
+  assert.equal(unknown.data.document_kind, 'Not Found');
 });
 
 test('supplier VAT extraction is fixed-schema evidence and rejects extra model claims', async () => {

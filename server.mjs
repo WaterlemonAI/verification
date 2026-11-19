@@ -56,7 +56,8 @@ import { cookieValue as floCookieValue, hashSecret as floHashSecret } from './li
 import { createFloReport } from './lib/flows/report-pdf.mjs';
 import { deliverFloCallback } from './lib/flows/callback.mjs';
 import { deliverFloEmail, reconcileFloNotifications } from './lib/flows/notifications.mjs';
-import { reviewWithGemini, extractBankLetter, extractSupplierSupplement } from './lib/flows/gemini.mjs';
+import { reviewWithGemini, extractBankLetter, extractFloDocument } from './lib/flows/gemini.mjs';
+import { callProcurementMeeting } from './lib/flows/meeting-client.mjs';
 import { documentOcrArtifactUrl, documentOcrSignedAccess } from './lib/document-ocr-artifact-url.mjs';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -2857,9 +2858,10 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       documentOcrStore: process.env.DOCUMENT_OCR_PRODUCTION_ENABLED === '1'
         && /^[a-f0-9]{64}$/i.test(process.env.DOCUMENT_OCR_DATA_KEY_HEX || '') ? documentOcrStore : null,
       ejariStore: process.env.EJARI_PLATFORM_ENABLED === '1' ? ejariStore : null,
-      enqueue: (next) => floQueue.enqueue(next), createReport: createFloReport,
+      enqueue: (next) => floQueue.enqueue(next), createReport: (item) => createFloReport(item,
+        { loadEvidence: (id) => floStore.getEvidence(item.workspace_id, item.application_id, id) }),
       extractBank: (bytes, mimeType) => extractBankLetter(bytes, mimeType, { fetchImpl }),
-      extractSupplement: (bytes, mimeType, type) => extractSupplierSupplement(bytes, mimeType, type, { fetchImpl }),
+      extractSupplement: (bytes, mimeType, type) => extractFloDocument(bytes, mimeType, type, { fetchImpl }),
       runGeminiReview: (item) => reviewWithGemini(item, { fetchImpl }),
       enqueueCallback: (event) => floCallbackQueue?.enqueue(event),
       callProvider: async (serviceId, input) => {
@@ -2982,7 +2984,10 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         enqueueCallback: (job) => floCallbackQueue?.enqueue(job),
         enqueueEmail: (job) => floCallbackQueue?.enqueue(job),
         mailer,
-        createReport: createFloReport,
+        meetingApi: (kind, payload, idempotencyKey) => callProcurementMeeting(kind, payload,
+          { platformStore: store, fetchImpl, idempotencyKey }),
+        createReport: (item) => createFloReport(item,
+          { loadEvidence: (id) => floStore.getEvidence(item.workspace_id, item.application_id, id) }),
         sendLink: (message) => mailer.sendFloLink?.(message),
         sendConfirmation: (message) => mailer.sendFloConfirmation?.(message),
         charge: async (request, workspaceId, flowId, channel = 'api') => {
