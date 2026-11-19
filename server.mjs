@@ -3038,7 +3038,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           }
           if (['/app.js', '/styles.css'].includes(url.pathname))
             return serveStatic(res, join(root, 'flow-site'), url.pathname);
-          if (['/assets/renderer/app.js', '/assets/renderer/styles.css', '/assets/renderer/schema-view.js'].includes(url.pathname))
+          if (['/assets/renderer/app.js', '/assets/renderer/styles.css', '/assets/renderer/schema-view.js',
+            '/assets/renderer/al-naboodah-logo.png'].includes(url.pathname))
             return serveStatic(res, join(root, 'flow-site', 'renderer'), url.pathname.replace('/assets/renderer', ''));
           const asset = /^\/assets\/([a-z][a-z0-9-]{2,63})\/(\d+\.\d+\.\d+)\/(app\.js|styles\.css)$/.exec(url.pathname);
           if (asset) {

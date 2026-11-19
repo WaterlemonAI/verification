@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateWorkflowSchema, diagnoseWorkflowSchema, schemaDraft, schemaSubmissionGaps, schemaHash } from '../lib/flows/template-schema.mjs';
 import { visibleCheckCatalog } from '../lib/flows/checks-catalog.mjs';
+import { readFileSync } from 'node:fs';
 
 const schema = () => ({ schema_version: '1.0.0', name: 'Supplier details', stages: [
   { id: 'identity', title: 'Identity', fields: [
@@ -90,4 +91,14 @@ test('one address-proof choice can require the matching upload', () => {
     address_proof_type: 'Utility bill' }, documents: [] }).includes('premises_evidence'));
   assert.ok(!schemaSubmissionGaps(validated, { draft: { business_name: 'Example', entity_type: 'Individual',
     address_proof_type: 'Ejari' }, documents: [] }).includes('premises_evidence'));
+});
+
+test('Al Naboodah asks for owner names only when OCR found none on company documents', () => {
+  const candidate = JSON.parse(readFileSync(new URL('../docs/flo/al-naboodah/decision13-workflow.json', import.meta.url)));
+  const flow = validateWorkflowSchema(candidate, candidate.checks);
+  const draft = { supplier_type: 'Company or other Legal person', registration_jurisdiction: 'United Arab Emirates' };
+  assert.ok(schemaSubmissionGaps(flow, { draft, documents: [] }).includes('stakeholders'));
+  const documents = [{ type: 'trade_licence', document_id: 'licence', extraction_state: 'completed',
+    extraction_result: { data: { stakeholder_names: 'Amina Owner', expiry_date: '2099-01-01' } } }];
+  assert.ok(!schemaSubmissionGaps(flow, { draft, documents }).includes('stakeholders'));
 });

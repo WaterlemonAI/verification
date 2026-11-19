@@ -1,6 +1,6 @@
 import { renderSchemaProgress, renderSchemaStage } from './schema-view.js';
 const state = { applicationId: sessionStorage.getItem('flo_application_id') || '',
-  csrf: sessionStorage.getItem('flo_csrf') || '', application: null, step: 0, meetingSlots: [] };
+  csrf: sessionStorage.getItem('flo_csrf') || '', application: null, step: 0, meetingSlots: [], pendingFiles: new Map() };
 const $ = (id) => document.getElementById(id);
 function notice(message) { $('notice').textContent = message; $('notice').hidden = !message; }
 function showIntro() {
@@ -11,16 +11,23 @@ function showIntro() {
   for (const doc of app.presentation.stages.flatMap((stage) => stage.documents).filter((entry) => entry.required)) {
     const item = document.createElement('li'); item.textContent = `${doc.label}${doc.show_if ? ' (if applicable)' : ''}`; list.append(item);
   }
-  $('intro-terms').textContent = app.presentation.stages[0]?.description || term.label;
-  const dialog = $('intro'); dialog.addEventListener('cancel', (event) => event.preventDefault(), { once: true });
+  $('intro-terms').textContent = app.presentation.stages[0]?.description?.split('Sample terms for design review only:')[1]?.trim()
+    || term.label;
+  const dialog = $('intro'); dialog.addEventListener('cancel', (event) => event.preventDefault());
   dialog.showModal();
 }
 $('intro-continue').addEventListener('click', async () => {
-  if (!$('intro-agree').checked) { notice('Agree to the sample terms to continue.'); return; }
+  $('intro-error').hidden = true;
+  if (!$('intro-agree').checked) {
+    $('intro-error').textContent = 'Agree to the sample terms to start your application.';
+    $('intro-error').hidden = false; $('intro-agree').focus(); return;
+  }
   $('intro-continue').disabled = true;
+  $('intro-continue').textContent = 'Starting…';
   try { await api('declarations', 'POST', { sample_terms: true });
     state.application.declarations.sample_terms = true; $('intro').close(); notice(''); render();
-  } catch (error) { notice(error.message); } finally { $('intro-continue').disabled = false; }
+  } catch (error) { $('intro-error').textContent = error.message; $('intro-error').hidden = false; }
+  finally { $('intro-continue').disabled = false; $('intro-continue').textContent = 'Start Application'; }
 });
 async function api(route, method = 'GET', data) {
   const response = await fetch(`/flo/api/${route}`, { method, credentials: 'same-origin',
@@ -35,22 +42,32 @@ async function api(route, method = 'GET', data) {
 }
 function render() {
   const app = state.application; const schema = app.presentation;
+  const brand = app.flow_id === 'al-naboodah-digital' ? 'Al Naboodah' : app.brand_name || 'Your buyer';
   $('title').textContent = schema.name; document.title = schema.name;
-  $('subtitle').textContent = `${app.brand_name || 'Your organisation'} requested this information for ${schema.name}.`;
+  $('brand-name').textContent = brand;
+  $('subtitle').textContent = `${brand} invited you to complete this supplier verification.`;
+  $('step-count').textContent = `Stage ${state.step + 1} of ${schema.stages.length}`;
   const links = $('links'); links.replaceChildren();
   for (const [title, href] of [['Support', app.support_url], ['Privacy', app.privacy_url]]) {
     if (!href || !/^https:\/\//i.test(href)) continue;
     const anchor = document.createElement('a'); anchor.textContent = title; anchor.href = href;
     anchor.rel = 'noopener noreferrer'; anchor.referrerPolicy = 'no-referrer'; anchor.target = '_blank'; links.append(anchor);
   }
-  if (app.logo_asset_url && /^\/flo\/assets\/[a-z][a-z0-9-]{2,63}\/[0-9a-f-]{36}$/.test(app.logo_asset_url)) {
-    $('brand-logo').src = app.logo_asset_url; $('brand-logo').hidden = false;
+  const logo = app.logo_asset_url && /^\/flo\/assets\/[a-z][a-z0-9-]{2,63}\/[0-9a-f-]{36}$/.test(app.logo_asset_url)
+    ? app.logo_asset_url : app.flow_id === 'al-naboodah-digital' ? '/assets/renderer/al-naboodah-logo.png' : null;
+  if (logo) {
+    $('brand-logo').src = logo; $('brand-logo').alt = brand;
+    $('brand-logo').hidden = false; $('brand-name').hidden = true;
   }
   if (/^#[0-9a-fA-F]{6}$/.test(schema.tokens?.primary_color || ''))
     document.documentElement.style.setProperty('--brand', schema.tokens.primary_color);
+  if (/^#[0-9a-fA-F]{6}$/.test(schema.tokens?.accent_color || ''))
+    document.documentElement.style.setProperty('--accent', schema.tokens.accent_color);
   renderSchemaProgress($('steps'), schema, state.step);
   renderSchemaStage($('form'), { schema, stageIndex: state.step, draft: app.draft,
-    documents: app.documents, declarations: app.declarations, onFieldChange: (id, value, dependent) => {
+    documents: app.documents, declarations: app.declarations, pendingFiles: state.pendingFiles,
+    onDocumentChange: (id, file) => { if (file) state.pendingFiles.set(id, file); else state.pendingFiles.delete(id); },
+    onFieldChange: (id, value, dependent) => {
       if (dependent) { app.draft[id] = value; render(); }
     } });
   renderMeeting();
@@ -87,12 +104,14 @@ function renderMeeting() {
       const warning = document.createElement('p'); warning.textContent = 'One invitation may not have been delivered. Please contact procurement.'; section.append(warning);
     }
   } else {
+    const controls = document.createElement('div'); controls.className = 'meeting-controls';
+    const fromLabel = document.createElement('label'); fromLabel.textContent = 'Find times from';
     const from = document.createElement('input'); from.type = 'date'; from.dataset.meeting = 'true';
-    from.setAttribute('aria-label', 'Find appointments starting from');
+    from.name = 'meeting_from_date'; from.autocomplete = 'off';
     from.min = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + 86400_000));
     const find = document.createElement('button'); find.type = 'button'; find.textContent = 'Find available times';
-    const select = document.createElement('select'); select.dataset.meeting = 'true';
-    select.setAttribute('aria-label', 'Available Dubai meeting times');
+    const selectLabel = document.createElement('label'); selectLabel.textContent = 'Available Dubai times';
+    const select = document.createElement('select'); select.dataset.meeting = 'true'; select.name = 'meeting_slot';
     const fill = () => { select.replaceChildren();
       for (const slot of state.meetingSlots) { const option = document.createElement('option'); option.value = slot.starts_at;
         option.textContent = `${slot.date} ${slot.start_time}–${slot.end_time} (Dubai)`; select.append(option); }
@@ -111,7 +130,8 @@ function renderMeeting() {
       const result = await api('meeting/book', 'POST', { starts_at: select.value }); app.meeting = result.meeting;
       state.meetingSlots = []; notice(''); render();
     } catch (error) { notice(error.message); book.disabled = false; } });
-    section.append(from, find, select, book); fill();
+    fromLabel.append(from); selectLabel.append(select);
+    controls.append(fromLabel, find, selectLabel, book); section.append(controls); fill();
   }
   $('form').append(section);
 }
@@ -122,6 +142,7 @@ async function saveStep() {
     if (input.type === 'file' || input.type === 'checkbox') continue;
     draft[input.name] = input.dataset.fieldType === 'people' ? input.value.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
       const [name, role, ownership] = line.split('|').map((part) => part.trim());
+      if (!name || !role) throw new Error('Add a name and role for each owner or director.');
       if (ownership && (!Number.isFinite(Number(ownership)) || Number(ownership) < 0 || Number(ownership) > 100))
         throw new Error('Ownership percentage must be between 0 and 100.');
       return { name, role, ownership_percentage: ownership ? Number(ownership) : null };
@@ -140,6 +161,7 @@ async function saveStep() {
     const mime = file.type === 'application/pdf' ? 'application/pdf' : file.type === 'image/png' ? 'image/png' : 'image/jpeg';
     const result = await api('documents', 'POST', { type: input.name, mime_type: mime, content_base64: btoa(binary) });
     state.application.documents.push(result.document);
+    state.pendingFiles.delete(input.name); input.value = '';
   }
 }
 function prefillFromDocuments() {
@@ -180,8 +202,21 @@ async function extractDocuments({ prefill = false } = {}) {
   }
   notice('Document extraction is continuing. Please confirm any details that are still blank.');
 }
-async function action(operation) { notice(''); const buttons = [$('back'), $('next'), $('submit')]; buttons.forEach((button) => button.disabled = true);
-  try { await operation(); } catch (error) { notice(error.message); } finally { buttons.forEach((button) => button.disabled = false); } }
+async function action(operation) {
+  notice(''); const buttons = [$('back'), $('next'), $('submit')];
+  const active = buttons.find((button) => !button.hidden && button !== $('back'));
+  const label = active?.textContent;
+  buttons.forEach((button) => { button.disabled = true; });
+  if (active) active.textContent = active === $('submit') ? 'Submitting…' : 'Saving…';
+  $('form').setAttribute('aria-busy', 'true');
+  try { await operation(); }
+  catch (error) { notice(error.message); $('notice').focus(); }
+  finally {
+    buttons.forEach((button) => { button.disabled = false; });
+    if (active) active.textContent = label;
+    $('form').removeAttribute('aria-busy');
+  }
+}
 $('back').addEventListener('click', () => { state.step--; render(); window.scrollTo(0, 0); });
 $('next').addEventListener('click', () => action(async () => { await saveStep();
   const rule = state.application.presentation.meeting?.required_for;
@@ -196,7 +231,7 @@ $('submit').addEventListener('click', () => action(async () => { await saveStep(
   const blockingDocument = state.application.document_issues?.[0];
   if (blockingDocument) throw new Error(blockingDocument.message);
   const result = await api('submit', 'POST', {});
-  $('form').hidden = true; $('steps').hidden = true; document.querySelector('.actions').hidden = true;
+  $('form').hidden = true; document.querySelector('.journey').hidden = true; document.querySelector('.actions').hidden = true;
   $('receipt').hidden = false; $('reference').textContent = result.application_id; }));
 async function start() {
   try {
@@ -207,10 +242,12 @@ async function start() {
       history.replaceState(null, '', '/flo'); }
     if (!state.applicationId) throw new Error('Open the link provided by your buyer.');
     state.application = (await api('application')).application;
-    if (!['in_progress', 'restarted'].includes(state.application.status)) { $('receipt').hidden = false;
-      $('reference').textContent = state.application.application_id; $('form').hidden = true; document.querySelector('.actions').hidden = true; return; }
     state.application.draft ||= {}; state.application.documents ||= []; state.application.declarations ||= {};
-    render(); showIntro();
+    render();
+    if (!['in_progress', 'restarted'].includes(state.application.status)) { $('receipt').hidden = false;
+      $('reference').textContent = state.application.application_id; $('form').hidden = true;
+      document.querySelector('.journey').hidden = true; document.querySelector('.actions').hidden = true; return; }
+    showIntro();
   } catch (error) { notice(error.message); $('form').hidden = true; document.querySelector('.actions').hidden = true; }
 }
 start();

@@ -1,7 +1,64 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Onboarding workflow</title><link rel="stylesheet" href="/assets/renderer/styles.css"></head><body>
-<main class="shell"><header><img id="brand-logo" alt="Organisation logo" hidden><p class="eyebrow">FLO · SECURE ONBOARDING</p><h1 id="title">Onboarding workflow</h1><p id="subtitle">Complete the information requested for this workflow.</p></header>
-<div id="notice" role="alert" hidden></div><nav id="steps" aria-label="Progress"></nav><form id="form" novalidate></form>
-<div class="actions"><button id="back" type="button">Back</button><button id="next" type="button">Save and continue</button><button id="submit" type="button" hidden>Submit application</button></div>
-<section id="receipt" hidden><h2>Application received</h2><p>Your buyer can now review your submission. Keep the reference below for your records.</p><p id="reference"></p></section>
-<dialog id="intro"><h2>Before you start</h2><p>Have these documents ready, as applicable:</p><ul id="intro-documents"></ul><p id="intro-terms"></p><label><input id="intro-agree" type="checkbox"> I agree to the sample terms above.</label><p><button id="intro-continue" type="button">Continue</button></p></dialog>
-<footer id="links"></footer></main><script type="module" src="/assets/renderer/app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f2f5f9">
+  <title>Supplier Onboarding</title>
+  <link rel="stylesheet" href="/assets/renderer/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#form">Skip to form</a>
+  <main class="shell">
+    <header class="page-header">
+      <div class="brand-row">
+        <div class="brand-identity">
+          <img id="brand-logo" alt="" width="180" height="72" hidden>
+          <span id="brand-name">Supplier Onboarding</span>
+        </div>
+        <span class="secure-label"><span class="secure-dot" aria-hidden="true"></span>Secure Supplier Portal</span>
+      </div>
+      <div class="hero-copy">
+        <p class="eyebrow">SUPPLIER VERIFICATION</p>
+        <h1 id="title">Supplier Onboarding</h1>
+        <p id="subtitle">Complete the information requested by your buyer.</p>
+      </div>
+    </header>
+
+    <div id="notice" role="alert" tabindex="-1" hidden></div>
+
+    <section class="journey" aria-label="Application progress">
+      <div class="journey-heading"><span>Your Progress</span><span id="step-count"></span></div>
+      <nav id="steps" aria-label="Progress"></nav>
+    </section>
+
+    <form id="form" novalidate></form>
+    <div class="actions">
+      <button id="back" class="button-secondary" type="button">Back</button>
+      <button id="next" type="button">Save &amp; Continue</button>
+      <button id="submit" type="button" hidden>Submit Application</button>
+    </div>
+
+    <section id="receipt" hidden>
+      <div class="receipt-mark" aria-hidden="true">✓</div>
+      <h2>Application Received</h2>
+      <p>Your buyer can now review your submission. Keep this reference for your records.</p>
+      <p id="reference"></p>
+    </section>
+
+    <dialog id="intro" aria-labelledby="intro-title">
+      <div class="intro-top"><span class="intro-badge">BEFORE YOU START</span><h2 id="intro-title">Get your documents ready</h2>
+        <p>Upload the documents that apply to you, then confirm the details we extract.</p></div>
+      <div class="intro-content"><h3>Documents to have ready</h3><ul id="intro-documents"></ul>
+        <div class="terms-box"><h3>Sample Terms &amp; Conditions</h3><p id="intro-terms"></p></div>
+        <label class="intro-agreement"><input id="intro-agree" type="checkbox"> <span>I have read and agree to the sample terms above.</span></label>
+        <p id="intro-error" role="alert" hidden></p>
+      </div>
+      <div class="intro-actions"><button id="intro-continue" type="button">Start Application</button></div>
+    </dialog>
+
+    <footer id="links"></footer>
+  </main>
+  <script type="module" src="/assets/renderer/app.js"></script>
+</body>
+</html>

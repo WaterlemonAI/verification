@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "name": "Al Naboodah Supplier Onboarding Decision 13",
+  "name": "Al Naboodah Supplier Onboarding",
   "stages": [
     {
       "id": "documents_first",
@@ -181,6 +181,16 @@
           "id": "representative_id_expiry",
           "label": "Confirm expiry date of the uploaded identity document",
           "type": "date",
+          "required": true,
+          "show_if": {
+            "field": "supplier_type",
+            "equals": "Company or other Legal person"
+          }
+        },
+        {
+          "id": "stakeholders",
+          "label": "Owners and directors not named in your uploaded document",
+          "type": "people",
           "required": true,
           "show_if": {
             "field": "supplier_type",
@@ -412,6 +422,8 @@
     "iban-verification",
     "entity-aml",
     "entity-adverse-media",
+    "stakeholder-aml",
+    "stakeholder-adverse-media",
     "merchant-screening",
     "ejari-verification"
   ],

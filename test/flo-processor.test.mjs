@@ -126,3 +126,37 @@ test('generic checks route natural persons and foreign suppliers without a UAE l
     assert.equal(calls.some((call) => call.serviceId === 'uae-trade-licence'), false);
   }
 });
+
+test('document-sourced owners and representative receive both stakeholder screenings', async () => {
+  const store = new MemoryFloStore(); const workspace = '1234567890abcdef';
+  const { case: item } = await store.createCase(workspace,
+    { customer_reference: 'STAKEHOLDER-1', supplier_email: 'a@example.com', prefill: {} },
+    'stakeholder-case', '1'.repeat(64), { enabled: true });
+  await store.updateCase(workspace, item.application_id, (current) => {
+    current.workflow_schema = { schema_version: '1.0.0', name: 'Al Naboodah', stages: [],
+      checks: ['stakeholder-aml', 'stakeholder-adverse-media'], tokens: {} };
+    current.status = 'submitted';
+    current.draft = { supplier_type: 'Company or other Legal person', business_name: 'Example LLC',
+      registration_country: 'AE' };
+    current.documents = [
+      { document_id: 'licence', type: 'trade_licence', extraction_state: 'completed',
+        extraction_result: { data: { stakeholder_names: 'Amina Owner; Rafi Director' } } },
+      { document_id: 'identity', type: 'identity_document', extraction_state: 'completed',
+        extraction_result: { data: { full_name_english: 'Rafi Director' } } }
+    ];
+    return current;
+  });
+  const calls = [];
+  await processGenericFloApplication({ workspace_id: workspace, application_id: item.application_id }, {
+    floStore: store, callProvider: async (serviceId, input) => {
+      calls.push({ serviceId, input }); return { httpStatus: 200, response: { status: 'Success' } };
+    }, createReport: async () => ({ report_id: randomUUID(), pdf: Buffer.from('%PDF'), html: '<p>Review</p>',
+      model: {}, version: '1.0.0', sha256: 'a'.repeat(64), generated_at: new Date().toISOString() })
+  });
+  const updated = await store.getCase(workspace, item.application_id);
+  assert.equal(updated.subjects.length, 3); // entity, owner, representative/director
+  assert.equal(updated.checks.filter((check) => check.service_id === 'stakeholder-aml').length, 2);
+  assert.equal(updated.checks.filter((check) => check.service_id === 'stakeholder-adverse-media').length, 2);
+  assert.equal(calls.length, 4);
+  assert.ok(updated.subjects.find((subject) => subject.name === 'Rafi Director').roles.includes('representative'));
+});
