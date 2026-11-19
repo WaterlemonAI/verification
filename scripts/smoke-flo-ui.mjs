@@ -23,6 +23,8 @@ files['/workflows'] = ['api-site/flo-workflows.html', 'text/html'];
 files['/flo-workflows.js'] = ['api-site/flo-workflows.js', 'text/javascript'];
 files['/flo-workflows.css'] = ['api-site/flo-workflows.css', 'text/css'];
 files['/flo-builder.css'] = ['api-site/flo-builder.css', 'text/css'];
+files['/flo-supplier-preview.css'] = ['flow-site/renderer/styles.css', 'text/css; charset=utf-8'];
+files['/flo-supplier-preview-logo.png'] = ['flow-site/renderer/al-naboodah-logo.png', 'image/png'];
 files['/flo-builder.js'] = ['api-site/flo-builder.js', 'text/javascript'];
 files['/flo-builder-model.js'] = ['api-site/flo-builder-model.js', 'text/javascript'];
 files['/flo-schema-view.js'] = ['flow-site/renderer/schema-view.js', 'text/javascript'];
@@ -31,6 +33,7 @@ files['/f/generic-token-abcdefghijklmnopqrstuvwxyz0123456789'] = ['flow-site/ren
 files['/assets/renderer/app.js'] = ['flow-site/renderer/app.js', 'text/javascript'];
 files['/assets/renderer/schema-view.js'] = ['flow-site/renderer/schema-view.js', 'text/javascript'];
 files['/assets/renderer/styles.css'] = ['flow-site/renderer/styles.css', 'text/css'];
+files['/assets/renderer/al-naboodah-logo.png'] = ['flow-site/renderer/al-naboodah-logo.png', 'image/png'];
 files['/f/supplier-token-abcdefghijklmnopqrstuvwxyz0123456789'] = ['flow-site/supplier-onboarding-v1/index.html', 'text/html'];
 files['/assets/supplier-onboarding-v1/1.0.0/app.js'] = ['flow-site/supplier-onboarding-v1/app.js', 'text/javascript'];
 files['/assets/supplier-onboarding-v1/1.0.0/styles.css'] = ['flow-site/supplier-onboarding-v1/styles.css', 'text/css'];
@@ -301,10 +304,10 @@ try {
     await genericPage.goto(`${base}/f/generic-token-abcdefghijklmnopqrstuvwxyz0123456789`);
     await genericPage.getByRole('heading', { name: 'Supplier profile' }).waitFor();
     await genericPage.getByLabel(/Registered business name/).fill('Aetherix Systems FZCO');
-    await genericPage.getByRole('button', { name: 'Save and continue' }).click();
+    await genericPage.getByRole('button', { name: 'Save & Continue' }).click();
     await genericPage.getByLabel(/I confirm the information is accurate/).check();
-    await genericPage.getByRole('button', { name: 'Submit application' }).click();
-    await genericPage.getByRole('heading', { name: 'Application received' }).waitFor();
+    await genericPage.getByRole('button', { name: 'Submit Application' }).click();
+    await genericPage.getByRole('heading', { name: 'Application Received' }).waitFor();
     if (await genericPage.evaluate(() => document.documentElement.scrollWidth > innerWidth))
       throw new Error(`Generic supplier UI overflows at ${viewport.width}px`);
     await genericContext.close();

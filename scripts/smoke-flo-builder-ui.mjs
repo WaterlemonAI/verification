@@ -13,13 +13,16 @@ const files = {
   '/portal-auth.js': 'api-site/portal-auth.js', '/flo-builder.js': 'api-site/flo-builder.js',
   '/flo-builder-model.js': 'api-site/flo-builder-model.js', '/flo-builder.css': 'api-site/flo-builder.css',
   '/flo-schema-view.js': 'flow-site/renderer/schema-view.js',
+  '/flo-supplier-preview.css': 'flow-site/renderer/styles.css',
+  '/flo-supplier-preview-logo.png': 'flow-site/renderer/al-naboodah-logo.png',
   '/flo-sortable.min.js': 'node_modules/sortablejs/Sortable.min.js',
   '/f/generic-token-abcdefghijklmnopqrstuvwxyz0123456789': 'flow-site/renderer/index.html',
   '/assets/renderer/app.js': 'flow-site/renderer/app.js',
   '/assets/renderer/schema-view.js': 'flow-site/renderer/schema-view.js',
   '/assets/renderer/styles.css': 'flow-site/renderer/styles.css'
 };
-const mime = (path) => path.endsWith('.css') ? 'text/css' : path.endsWith('.js') ? 'text/javascript' : 'text/html';
+const mime = (path) => path.endsWith('.css') ? 'text/css; charset=utf-8'
+  : path.endsWith('.js') ? 'text/javascript' : path.endsWith('.png') ? 'image/png' : 'text/html';
 const server = createServer((req, res) => { const path = new URL(req.url, 'http://localhost').pathname;
   const file = files[path]; if (!file) { res.writeHead(404); res.end(); return; }
   const bytes = readFileSync(join(root, file)); res.writeHead(200, { 'content-type': mime(file), 'content-length': bytes.length }); res.end(bytes); });
@@ -190,13 +193,13 @@ try {
     await admin.waitForFunction(() => document.querySelector('#flo-builder-root .flo-stage .flo-item-list .flo-item')?.dataset.floId === 'entity_type');
     await admin.locator('#flo-builder-root [data-flo-id="entity_type"]').getByRole('button', { name: 'Move Entity type down' }).click();
     await admin.locator('#flo-builder-root .flo-builder-tabs').getByRole('button', { name: 'Preview' }).click();
-    await admin.locator('.flo-preview form').waitFor();
-    if ((await admin.locator('.flo-preview').textContent()).toLowerCase().includes('supplier onboarding'))
+    await admin.locator('.flo-supplier-canvas form').waitFor();
+    if ((await admin.locator('.flo-preview-panel').textContent()).toLowerCase().includes('supplier onboarding'))
       throw new Error('Generic builder preview still uses supplier-specific copy.');
-    if (await admin.locator('.flo-preview').evaluate((node) => node.style.getPropertyValue('--brand')) !== '#064b79')
+    if (await admin.locator('.flo-supplier-canvas').evaluate((node) => node.style.getPropertyValue('--brand')) !== '#064b79')
       throw new Error('Preview did not use the workflow theme colour.');
-    if (await admin.locator('.flo-preview input[type=file]:not([disabled])').count()) throw new Error('Preview can upload.');
-    let previewLabels = await admin.locator('.flo-preview .field>span').allTextContents();
+    if (await admin.locator('.flo-supplier-canvas input[type=file]:not([disabled])').count()) throw new Error('Preview can upload.');
+    let previewLabels = await admin.locator('.flo-supplier-canvas .field>span').allTextContents();
     await admin.locator('#flo-workflow-save').click(); await admin.getByText('Draft saved.', { exact: true }).waitFor();
     if (JSON.stringify(platformSchema).includes('undefined')) throw new Error('Invalid saved schema');
     await admin.locator('#flo-builder-root .flo-builder-tabs').getByRole('button', { name: 'Builder' }).click();
@@ -241,16 +244,16 @@ try {
     await org.getByRole('button', { name: 'Cancel JSON edits' }).click();
     await org.getByRole('button', { name: 'Publish version' }).click(); await org.getByText('Published 1.0.0.').waitFor();
     await org.locator('.flo-builder-tabs').getByRole('button', { name: 'Preview' }).click();
-    await org.locator('.flo-preview .field').first().waitFor();
-    await org.locator('.flo-preview [name="entity_type"]').selectOption('Company');
-    await org.locator('.flo-preview [name="licence_number"]').waitFor();
-    previewLabels = await org.locator('.flo-preview .field>span').allTextContents();
+    await org.locator('.flo-supplier-canvas .field').first().waitFor();
+    await org.locator('.flo-supplier-canvas [name="entity_type"]').selectOption('Company');
+    await org.locator('.flo-supplier-canvas [name="licence_number"]').waitFor();
+    previewLabels = await org.locator('.flo-supplier-canvas .field>span').allTextContents();
     const supplier = await context.newPage(); pages.push(supplier);
     supplier.on('pageerror', (error) => errors.push(`supplier: ${error.message}`));
     await supplier.goto(`${base}/f/generic-token-abcdefghijklmnopqrstuvwxyz0123456789`);
     await supplier.locator('#form .field').first().waitFor();
     if ((await supplier.locator('#subtitle').textContent()).toLowerCase().includes('supplier onboarding')
-      || !(await supplier.locator('#subtitle').textContent()).includes('Business verification'))
+      || !(await supplier.locator('#title').textContent()).includes('Business verification'))
       throw new Error('Generic applicant journey still uses supplier-specific copy.');
     await supplier.locator('#form [name="entity_type"]').selectOption('Company');
     await supplier.locator('#form [name="licence_number"]').waitFor();
