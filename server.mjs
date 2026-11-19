@@ -603,7 +603,7 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
 }
 
 async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
-  variant = 'legacy') {
+  variant = 'legacy', archiveSearch = null) {
   const dedicatedSearchPlus = variant === 'search_plus';
   const startedAt = Date.now();
   let screeningResult;
@@ -699,6 +699,7 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     const aiClassifier = dedicatedSearchPlus ? createGeminiAdverseClassifier(aiApiKey) : null;
     costGuard = createScreeningCostGuard(fetchImpl);
     const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, aiClassifier, fetchImpl, costGuard,
+      ...(archiveSearch ? { archiveSearch } : {}),
       deferAiUntilSourcesComplete: dedicatedSearchPlus, sourceAttemptsExhausted: !dedicatedSearchPlus });
     screeningResult = result;
     screeningFinishedAt = Date.now();
@@ -2809,6 +2810,7 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
 }
 
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
+  adverseArchiveSearch = null,
   peppolLookup = searchPeppolIndex,
   peppolGlobalLookup = searchPeppolGlobal, peppolCountryList = peppolGlobalCountries,
   otpStore = createLoginOtpStore(),
@@ -3104,9 +3106,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       }
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return await createEntitySearchReport(req, res, store, reportStore);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media')
-        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore);
+        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
+          'legacy', adverseArchiveSearch);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media_search_plus')
-        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore, 'search_plus');
+        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
+          'search_plus', adverseArchiveSearch);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/dubai_ejari_verification' || url.pathname.startsWith('/service/dubai_ejari_verification/'))
         return await handleEjari(req, res, url, store, ejariStore, usageStore);
