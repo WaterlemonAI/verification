@@ -141,11 +141,13 @@ function prefillFromDocuments() {
   const incorporation = extracted('incorporation_record');
   const identity = extracted('natural_identity');
   const bank = extracted('bank_letter');
-  const usable = (value) => typeof value === 'string' && value.trim() && value.trim().toLowerCase() !== 'not found' ? value.trim() : '';
+  const usable = (value) => typeof value === 'string' && value.trim()
+    && !['not found', 'not readable', 'n/a'].includes(value.trim().toLowerCase()) ? value.trim() : '';
   const suggestions = {
     business_name: usable(licence.company_name_english) || usable(incorporation.company_name) || usable(identity.full_name_english),
     licence_number: usable(licence.license_number),
-    registration_country: usable(incorporation.registration_country) || (usable(licence.license_number) ? 'United Arab Emirates' : ''),
+    registration_country: usable(incorporation.registration_country)
+      || (app.draft.registration_jurisdiction === 'United Arab Emirates' ? 'United Arab Emirates' : ''),
     licence_expiry: usable(licence.expiry_date),
     natural_id_expiry: usable(identity.expiry_date),
     representative_id_expiry: usable(extracted('identity_document').expiry_date),
@@ -153,7 +155,8 @@ function prefillFromDocuments() {
   };
   for (const [field, value] of Object.entries(suggestions)) if (value && !app.draft[field]) app.draft[field] = value;
   if (!app.draft.bank_outside_registration && suggestions.bank_country && suggestions.registration_country) {
-    const normal = (value) => value.toLowerCase().replace(/[^a-z]/g, '');
+    const normal = (value) => { const raw = value.toLowerCase().replace(/[^a-z]/g, '');
+      return ['ae', 'uae', 'unitedarabemirates'].includes(raw) ? 'ae' : raw; };
     app.draft.bank_outside_registration = normal(suggestions.bank_country) === normal(suggestions.registration_country) ? 'No' : 'Yes';
   }
 }
