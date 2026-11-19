@@ -31,6 +31,20 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
   };
 
   const store = new KeyVaultStore({ vaultUri: 'https://vault.test/', managedIdentityClientId: 'runtime-client-id', fetchImpl });
+  const videoCall = (await store.listIntegrations()).find((item) => item.id === 'setup-video-call');
+  assert.equal(videoCall.masterAuthKeyConfigured, false);
+  assert.equal(videoCall.upstreamUrl, undefined);
+  assert.equal((await store.getIntegration('/service/setup_video_call', 'POST')).id, 'setup-video-call');
+  assert.equal((await store.getIntegration('/service/meeting_availability', 'POST')).id, 'meeting-availability');
+  assert.equal((await store.listIntegrations()).find((item) => item.id === 'meeting-availability').masterAuthKeyConfigured, false);
+  await store.setMasterKey('setup-video-call', 'synthetic-meeting-token');
+  assert.equal(await store.getMasterKey('setup-video-call'), 'synthetic-meeting-token');
+  assert.equal(await store.getMasterKey('meeting-availability'), 'synthetic-meeting-token');
+  assert.equal((await store.listIntegrations()).find((item) => item.id === 'setup-video-call').masterAuthKeyConfigured, true);
+  assert.equal((await store.listIntegrations()).find((item) => item.id === 'meeting-availability').masterAuthKeyConfigured, true);
+  await store.setMasterKey('meeting-availability', 'replacement-meeting-token');
+  assert.equal(await store.getMasterKey('setup-video-call'), 'replacement-meeting-token');
+  assert.equal(secrets.has('integration-meeting-availability-master-key'), false);
   const issued = await store.createClient('Production Customer');
   assert.equal(await store.isClientKey(issued.apiKey), true);
   assert.deepEqual(await store.getClientForKey(issued.apiKey), { id: issued.client.id, key_id: issued.client.id, name: 'Production Customer', status: 'active' });

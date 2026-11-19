@@ -1012,6 +1012,7 @@ async function encryptedJsonRelay(res, integration, store, fetchImpl, body) {
 }
 
 async function proxyIntegration(req, res, url, integration, store, fetchImpl, reportStore, peppolLookup) {
+  const isMeetingIntegration = integration.id === 'setup-video-call' || integration.id === 'meeting-availability';
   if (!req.ai7Client && !(await store.isClientKey(bearerToken(req)))) {
     return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
   }
@@ -1053,9 +1054,24 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl, re
       }
     }
 
+    if (isMeetingIntegration) {
+      const parsedBody = parseJsonText(body.toString('utf8'));
+      if (!parsedBody || typeof parsedBody !== 'object' || Array.isArray(parsedBody)) {
+        return json(res, 400, { status: 'Error', error: 'The request body must contain a valid JSON object.' });
+      }
+    }
+    if (integration.id === 'setup-video-call') {
+      const idempotencyKey = req.headers['idempotency-key'];
+      if (typeof idempotencyKey !== 'string' || !/^[\x21-\x7e]{1,255}$/.test(idempotencyKey)) {
+        return json(res, 400, { status: 'Error', error: 'A valid Idempotency-Key header is required.' });
+      }
+    }
+
     const target = new URL(integration.upstreamUrl);
-    target.search = url.search;
-    const headers = forwardHeaders(req);
+    if (!isMeetingIntegration) target.search = url.search;
+    const headers = isMeetingIntegration
+      ? { accept: 'application/json', 'content-type': 'application/json', ...(integration.id === 'setup-video-call' ? { 'idempotency-key': req.headers['idempotency-key'] } : {}) }
+      : forwardHeaders(req);
     delete headers['x-ai7-generate-pdf'];
     delete headers['x-ai7-report-logo-url'];
     delete headers['x-ai7-peppol-check'];
@@ -1068,6 +1084,7 @@ async function proxyIntegration(req, res, url, integration, store, fetchImpl, re
       method: integration.method,
       headers,
       body,
+      redirect: isMeetingIntegration ? 'error' : 'follow',
       signal: AbortSignal.timeout(Number(process.env.UPSTREAM_TIMEOUT_MS || 120000))
     });
     const responseBody = Buffer.from(await upstream.arrayBuffer());

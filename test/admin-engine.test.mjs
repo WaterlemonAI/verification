@@ -17,6 +17,8 @@ let app;
 let appUrl;
 let receivedUpstream;
 let receivedEntitySearch;
+let receivedVideoCall;
+let receivedAvailability;
 let relayRequests = [];
 
 const completeEntitySearchResponse = {
@@ -53,6 +55,14 @@ before(async () => {
       if (requestUrl.hostname === 'screening.test') {
         receivedEntitySearch = { url: String(url), headers: options.headers, body: JSON.parse(options.body.toString('utf8')) };
         return new Response(JSON.stringify(completeEntitySearchResponse), { status: 200, headers: { 'content-type': 'application/json', 'x-supplier': 'hidden' } });
+      }
+      if (requestUrl.hostname === 'work.ai7uae.com') {
+        if (requestUrl.pathname.endsWith('/availability')) {
+          receivedAvailability = { url: String(url), headers: options.headers, body: JSON.parse(options.body.toString('utf8')) };
+          return new Response(JSON.stringify({ slots: ['2026-11-25T10:00:00+04:00'] }), { status: 200, headers: { 'content-type': 'application/json', 'x-supplier': 'hidden' } });
+        }
+        receivedVideoCall = { url: String(url), headers: options.headers, body: JSON.parse(options.body.toString('utf8')) };
+        return new Response(JSON.stringify({ meetingId: 'synthetic-meeting-1' }), { status: 201, headers: { 'content-type': 'application/json', 'x-supplier': 'hidden' } });
       }
       if (requestUrl.hostname === 'bank.test') {
         relayRequests.push({ url: String(url), headers: options.headers, body: JSON.parse(options.body.toString('utf8')) });
@@ -117,8 +127,8 @@ test('admin can register a provider-neutral API without exposing its upstream de
 
   const listing = await fetch(`${appUrl}/admin/api/integrations`, { headers: adminHeaders() });
   const body = await listing.json();
-  assert.equal(body.integrations.length, 17);
-  assert.equal(body.integrations.filter((item) => item.formsCompatible === false && item.publicPath.startsWith('/service/')).length, 11);
+  assert.equal(body.integrations.length, 19);
+  assert.equal(body.integrations.filter((item) => item.formsCompatible === false && item.publicPath.startsWith('/service/')).length, 13);
   assert.ok(body.integrations.some((item) => item.id === 'peppol-directory' && item.publicPath === '/service/peppol_check'));
   assert.ok(body.integrations.some((item) => item.id === 'adverse-media-search-plus' && item.enabled === false));
   assert.ok(body.integrations.some((item) => item.id === 'ejari-verification'));
@@ -137,6 +147,116 @@ test('admin can register a provider-neutral API without exposing its upstream de
   assert.equal(catalog.includes('x-master-key'), false);
   assert.equal(catalog.includes('/service/company_search'), true);
   assert.equal(catalog.includes('/internal/adverse-media-ai'), false);
+});
+
+test('meeting APIs share an admin-set token and relay only their required JSON and headers', async () => {
+  const listing = await (await fetch(`${appUrl}/admin/api/integrations`, { headers: adminHeaders() })).json();
+  const integration = listing.integrations.find((item) => item.id === 'setup-video-call');
+  assert.equal(integration.name, 'Setup Video Call');
+  assert.equal(integration.publicPath, '/service/setup_video_call');
+  assert.equal(integration.masterAuthKeyConfigured, false);
+  assert.equal(JSON.stringify(listing).includes('work.ai7uae.com'), false);
+  assert.equal((await (await fetch(`${appUrl}/catalog.json`)).text()).includes('work.ai7uae.com'), false);
+  const availabilityIntegration = listing.integrations.find((item) => item.id === 'meeting-availability');
+  assert.equal(availabilityIntegration.name, 'Find Open Slots');
+  assert.equal(availabilityIntegration.publicPath, '/service/meeting_availability');
+  assert.equal(availabilityIntegration.masterAuthKeyConfigured, false);
+
+  const issued = await (await fetch(`${appUrl}/admin/api/clients`, {
+    method: 'POST', headers: adminHeaders(), body: JSON.stringify({ name: 'Video Call Test' })
+  })).json();
+  const requestBody = {
+    supplierEmail: 'supplier@example.com', procurementEmail: 'buyer@example.com',
+    date: '2026-11-25', startTime: '10:00', endTime: '10:30',
+    utcOffset: '+04:00', title: 'Supplier review', description: 'Optional agenda'
+  };
+  const headers = {
+    authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
+    'idempotency-key': 'supplier-review-20261125-001', 'x-private-client-header': 'do-not-forward'
+  };
+
+  const unauthorised = await fetch(`${appUrl}/service/setup_video_call`, {
+    method: 'POST', headers: { ...headers, authorization: 'Bearer wrong' }, body: JSON.stringify(requestBody)
+  });
+  assert.equal(unauthorised.status, 401);
+
+  const missingKey = await fetch(`${appUrl}/service/setup_video_call`, {
+    method: 'POST', headers: { authorization: headers.authorization, 'content-type': 'application/json' }, body: JSON.stringify(requestBody)
+  });
+  assert.equal(missingKey.status, 400);
+
+  const invalidJson = await fetch(`${appUrl}/service/setup_video_call`, {
+    method: 'POST', headers, body: '{'
+  });
+  assert.equal(invalidJson.status, 400);
+
+  const unconfigured = await fetch(`${appUrl}/service/setup_video_call`, {
+    method: 'POST', headers, body: JSON.stringify(requestBody)
+  });
+  assert.equal(unconfigured.status, 500);
+  assert.equal(receivedVideoCall, undefined);
+
+  const availabilityBody = { calendarEmail: 'calendar@example.com', dates: ['2026-11-25', '2026-11-27'] };
+  const availabilityHeaders = {
+    authorization: headers.authorization, 'content-type': 'application/json',
+    'x-private-client-header': 'do-not-forward'
+  };
+  const unconfiguredAvailability = await fetch(`${appUrl}/service/meeting_availability`, {
+    method: 'POST', headers: availabilityHeaders, body: JSON.stringify(availabilityBody)
+  });
+  assert.equal(unconfiguredAvailability.status, 500);
+  assert.equal(receivedAvailability, undefined);
+
+  const saved = await fetch(`${appUrl}/admin/api/integrations/setup-video-call/credential`, {
+    method: 'PUT', headers: adminHeaders(), body: JSON.stringify({ credential: 'synthetic-upstream-token' })
+  });
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).integration.masterAuthKeyConfigured, true);
+
+  const response = await fetch(`${appUrl}/service/setup_video_call?ignored=true`, {
+    method: 'POST', headers, body: JSON.stringify(requestBody)
+  });
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { meetingId: 'synthetic-meeting-1' });
+  assert.equal(response.headers.get('x-supplier'), null);
+  assert.equal(receivedVideoCall.url, 'https://work.ai7uae.com/api/integrations/procurement-meetings');
+  assert.deepEqual(receivedVideoCall.body, requestBody);
+  assert.deepEqual(receivedVideoCall.headers, {
+    accept: 'application/json', 'content-type': 'application/json',
+    'idempotency-key': 'supplier-review-20261125-001', authorization: 'Bearer synthetic-upstream-token'
+  });
+  const availabilityResponse = await fetch(`${appUrl}/service/meeting_availability?ignored=true`, {
+    method: 'POST', headers: availabilityHeaders, body: JSON.stringify(availabilityBody)
+  });
+  assert.equal(availabilityResponse.status, 200);
+  assert.deepEqual(await availabilityResponse.json(), { slots: ['2026-11-25T10:00:00+04:00'] });
+  assert.equal(availabilityResponse.headers.get('x-supplier'), null);
+  assert.equal(receivedAvailability.url, 'https://work.ai7uae.com/api/integrations/procurement-meetings/availability');
+  assert.deepEqual(receivedAvailability.body, availabilityBody);
+  assert.deepEqual(receivedAvailability.headers, {
+    accept: 'application/json', 'content-type': 'application/json', authorization: 'Bearer synthetic-upstream-token'
+  });
+  const invalidAvailability = await fetch(`${appUrl}/service/meeting_availability`, {
+    method: 'POST', headers: availabilityHeaders, body: '[]'
+  });
+  assert.equal(invalidAvailability.status, 400);
+  const unauthorisedAvailability = await fetch(`${appUrl}/service/meeting_availability`, {
+    method: 'POST', headers: { ...availabilityHeaders, authorization: 'Bearer wrong' }, body: JSON.stringify(availabilityBody)
+  });
+  assert.equal(unauthorisedAvailability.status, 401);
+  const refreshed = await (await fetch(`${appUrl}/admin/api/integrations`, { headers: adminHeaders() })).text();
+  assert.equal(refreshed.includes('synthetic-upstream-token'), false);
+  const refreshedListing = JSON.parse(refreshed);
+  assert.equal(refreshedListing.integrations.find((item) => item.id === 'meeting-availability').masterAuthKeyConfigured, true);
+  const spec = await (await fetch(`${appUrl}/openapi.json`)).json();
+  const operation = spec.paths['/service/setup_video_call'].post;
+  assert.equal(operation.parameters[0].name, 'Idempotency-Key');
+  assert.deepEqual(operation.requestBody.content['application/json'].schema.required, [
+    'supplierEmail', 'procurementEmail', 'date', 'startTime', 'endTime', 'utcOffset', 'title'
+  ]);
+  const availabilityOperation = spec.paths['/service/meeting_availability'].post;
+  assert.deepEqual(availabilityOperation.requestBody.content['application/json'].schema.required, ['calendarEmail', 'dates']);
+  assert.equal(availabilityOperation.parameters, undefined);
 });
 
 test('issued customer key works across the configured engine and can be revoked', async () => {
