@@ -3167,12 +3167,17 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           return serveStatic(res, join(root, 'node_modules', 'sortablejs'), '/Sortable.min.js');
         if (url.pathname === '/flo-schema-view.js')
           return serveStatic(res, join(root, 'flow-site', 'renderer'), '/schema-view.js');
+        if (url.pathname === '/flo-supplier-preview.css')
+          return serveStatic(res, join(root, 'flow-site', 'renderer'), '/styles.css');
+        if (url.pathname === '/flo-supplier-preview-logo.png')
+          return serveStatic(res, join(root, 'flow-site', 'renderer'), '/al-naboodah-logo.png');
         if (url.pathname === '/flo-builder.js' || url.pathname === '/flo-builder-model.js'
           || url.pathname === '/flo-builder.css')
           return serveStatic(res, join(root, 'api-site'), url.pathname);
       }
       if (url.pathname.startsWith('/node_modules/')) return json(res, 404, { error: 'Page was not found.' });
-      if (['/flo-sortable.min.js', '/flo-schema-view.js', '/flo-builder.js', '/flo-builder-model.js', '/flo-builder.css']
+      if (['/flo-sortable.min.js', '/flo-schema-view.js', '/flo-supplier-preview.css', '/flo-supplier-preview-logo.png',
+        '/flo-builder.js', '/flo-builder-model.js', '/flo-builder.css']
         .includes(url.pathname)) return json(res, 404, { error: 'Page was not found.' });
       if (url.pathname.startsWith('/portal/api/')) return handlePortalApi(req, res, url, store, portalLoginThrottle, resetThrottle,
         mailer, otpStore, usageStore, caseStore, reportStore, documentOcrStore, ejariStore);

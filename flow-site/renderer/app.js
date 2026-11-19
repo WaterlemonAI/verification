@@ -1,4 +1,4 @@
-import { renderSchemaProgress, renderSchemaStage } from './schema-view.js';
+import { renderSchemaProgress, renderSchemaStage, requiredDocumentChecklist } from './schema-view.js';
 const state = { applicationId: sessionStorage.getItem('flo_application_id') || '',
   csrf: sessionStorage.getItem('flo_csrf') || '', application: null, step: 0, meetingSlots: [], pendingFiles: new Map() };
 const $ = (id) => document.getElementById(id);
@@ -8,8 +8,8 @@ function showIntro() {
   const term = app.presentation.stages.flatMap((stage) => stage.declarations).find((entry) => entry.id === 'sample_terms');
   if (!term || app.declarations?.sample_terms) return;
   const list = $('intro-documents'); list.replaceChildren();
-  for (const doc of app.presentation.stages.flatMap((stage) => stage.documents).filter((entry) => entry.required)) {
-    const item = document.createElement('li'); item.textContent = `${doc.label}${doc.show_if ? ' (if applicable)' : ''}`; list.append(item);
+  for (const label of requiredDocumentChecklist(app.presentation)) {
+    const item = document.createElement('li'); item.textContent = label; list.append(item);
   }
   $('intro-terms').textContent = app.presentation.stages[0]?.description?.split('Sample terms for design review only:')[1]?.trim()
     || term.label;

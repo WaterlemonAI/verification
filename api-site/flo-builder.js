@@ -1,5 +1,5 @@
 import { FloBuilderModel, FIELD_TYPES, CANONICAL_COMPONENTS } from './flo-builder-model.js';
-import { renderSchemaProgress, renderSchemaStage } from './flo-schema-view.js';
+import { renderSchemaProgress, renderSchemaStage, requiredDocumentChecklist } from './flo-schema-view.js';
 
 const el = (tag, text = '', className = '') => { const item = document.createElement(tag);
   item.textContent = text; if (className) item.className = className; return item; };
@@ -17,6 +17,7 @@ function stageSummary(schema) {
 export function mountFloBuilder(root, { schema, checks = [], validate, onChange = () => {}, readOnly = false }) {
   const model = new FloBuilderModel(schema); let selectedId = schema.stages[0]?.id || null;
   let tab = readOnly ? 'preview' : 'builder', previewStage = 0, width = 'desktop', pendingJson = false;
+  let previewIntroVisible = true;
   let issueList = [], previewDraft = {}, sortable = [], jsonEditor = null;
   root.classList.add('flo-builder');
   const tabs = el('div', '', 'flo-builder-tabs');
@@ -210,23 +211,114 @@ export function mountFloBuilder(root, { schema, checks = [], validate, onChange 
     content.replaceChildren(panel);
   }
   function drawPreview() {
-    const schema = model.value; const shell = el('section', '', `flo-preview flo-preview-${width}`);
+    const schema = model.value;
+    const alNaboodah = /^Al Naboodah Supplier Onboarding\b/i.test(schema.name || '');
+    const brand = alNaboodah ? 'Al Naboodah' : 'Your buyer';
+    const panel = el('section', '', 'flo-preview-panel');
+    const bar = el('div', '', 'flo-preview-bar');
+    bar.append(el('strong', 'Supplier preview · no data is submitted'),
+      button('Desktop', () => { width = 'desktop'; drawPreview(); }),
+      button('Mobile', () => { width = 'mobile'; drawPreview(); }));
+    panel.append(bar, el('p', 'This shows the current draft. Existing supplier links keep their original published version.', 'flo-preview-note'));
+    const canvas = el('div', '', `flo-supplier-canvas flo-supplier-${width}`);
+    canvas.style.visibility = 'hidden';
+    if (/^#[0-9a-fA-F]{6}$/.test(schema.tokens?.primary_color || ''))
+      canvas.style.setProperty('--brand', schema.tokens.primary_color);
+    if (/^#[0-9a-fA-F]{6}$/.test(schema.tokens?.accent_color || ''))
+      canvas.style.setProperty('--accent', schema.tokens.accent_color);
+    const surface = canvas.attachShadow({ mode: 'open' });
+    const sheet = el('link'); sheet.rel = 'stylesheet'; sheet.href = '/flo-supplier-preview.css';
+    sheet.addEventListener('load', () => { canvas.style.visibility = ''; });
+    sheet.addEventListener('error', () => { canvas.style.visibility = ''; report('Supplier preview styles could not load.'); });
+    const previewStyle = el('style'); previewStyle.textContent = `
+      :host { display: block; position: relative; overflow: hidden; background: #f2f5f9; font: 16px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; color: #172f45; --brand: #002c5f; --accent: #f9b233; --ink: #172f45; --muted: #5b6d7c; --line: #dce5ee; --soft: #f7f9fc; --focus: #d28b00; }
+      :host(.flo-supplier-mobile) .shell { width: 100%; min-height: 680px; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+      :host(.flo-supplier-mobile) .field-grid, :host(.flo-supplier-mobile) .document-grid { grid-template-columns: 1fr; }
+      :host(.flo-supplier-mobile) .al-naboodah-brand .brand-row { min-height: 82px; padding: .2rem 1.2rem; }
+      :host(.flo-supplier-mobile) .al-naboodah-brand #brand-logo { width: 145px; height: 78px; }
+      :host(.flo-supplier-mobile) .secure-label { width: 2rem; height: 2rem; padding: 0; justify-content: center; font-size: 0; }
+      :host(.flo-supplier-mobile) .hero-copy { padding: 1.15rem 1.25rem 1.3rem; }
+      :host(.flo-supplier-mobile) .eyebrow { margin-bottom: .35rem; font-size: .64rem; letter-spacing: .14em; }
+      :host(.flo-supplier-mobile) h1 { max-width: none; font-size: 1.75rem; line-height: 1.15; letter-spacing: -.03em; }
+      :host(.flo-supplier-mobile) #subtitle { margin-top: .55rem; font-size: .84rem; line-height: 1.4; }
+      :host(.flo-supplier-mobile) .journey { padding: .85rem 1.25rem .95rem; }
+      :host(.flo-supplier-mobile) .journey-heading { margin-bottom: .6rem; font-size: .69rem; }
+      :host(.flo-supplier-mobile) .step-marker { display: flex; flex-direction: column; align-items: center; gap: .25rem; text-align: center; font-size: .66rem; }
+      :host(.flo-supplier-mobile) .step-number { width: 1.65rem; height: 1.65rem; font-size: .72rem; }
+      :host(.flo-supplier-mobile) .step-label { display: block; margin: 0; max-width: 10ch; line-height: 1.2; }
+      :host(.flo-supplier-mobile) .step-marker::after { display: none; }
+      :host(.flo-supplier-mobile) #form { padding: 1.25rem 1.25rem 0; }
+      :host(.flo-supplier-mobile) legend { font-size: 1.3rem; }
+      :host(.flo-supplier-mobile) .description { margin-bottom: 1rem; font-size: .85rem; }
+      :host(.flo-supplier-mobile) .preview-intro { padding: .5rem; }
+      :host(.flo-supplier-mobile) .intro-top, :host(.flo-supplier-mobile) .intro-content { padding-left: 1rem; padding-right: 1rem; }
+      :host(.flo-supplier-mobile) .intro-top { padding-top: 1rem; padding-bottom: .85rem; }
+      :host(.flo-supplier-mobile) .intro-top h2 { font-size: 1.3rem; }
+      :host(.flo-supplier-mobile) .intro-content { padding-top: 1rem; }
+      :host(.flo-supplier-mobile) #intro-documents { gap: .38rem; margin-bottom: .8rem; }
+      :host(.flo-supplier-mobile) #intro-documents li { font-size: .8rem; line-height: 1.4; }
+      :host(.flo-supplier-mobile) .intro-actions { padding: .65rem 1rem 1rem; }
+      .preview-intro { position: absolute; inset: 0; z-index: 2; display: grid; place-items: start center; padding: 1.5rem; background: #0c213ba8; }
+      .preview-intro-card { width: min(100%, 600px); border-radius: 17px; overflow: hidden; background: #fff; box-shadow: 0 20px 55px #0d234568; }
+      .preview-intro .intro-actions { padding-top: .8rem; }
+      .preview-intro-note { margin: 0; padding: 0 2rem 1rem; color: #536779; font-size: .8rem; }
+    `;
+    const shell = el('main', '', `shell${alNaboodah ? ' al-naboodah-brand' : ''}`);
     if (/^#[0-9a-fA-F]{6}$/.test(schema.tokens?.primary_color || ''))
       shell.style.setProperty('--brand', schema.tokens.primary_color);
-    const bar = el('div', '', 'flo-preview-bar'); bar.append(el('strong', 'Preview · no data is submitted'));
-    bar.append(button('Desktop', () => { width = 'desktop'; render(); }), button('Mobile', () => { width = 'mobile'; render(); }));
-    const title = el('h2', schema.name); const progress = el('nav'); progress.setAttribute('aria-label', 'Preview progress');
-    const form = el('form'); form.addEventListener('submit', (event) => event.preventDefault());
-    renderSchemaProgress(progress, schema, previewStage);
-    renderSchemaStage(form, { schema, stageIndex: previewStage, draft: previewDraft, preview: true,
+    if (/^#[0-9a-fA-F]{6}$/.test(schema.tokens?.accent_color || ''))
+      shell.style.setProperty('--accent', schema.tokens.accent_color);
+    const header = el('header', '', 'page-header');
+    const brandRow = el('div', '', 'brand-row'); const identity = el('div', '', 'brand-identity');
+    if (alNaboodah) {
+      const logo = el('img'); logo.src = '/flo-supplier-preview-logo.png'; logo.alt = 'Al Naboodah'; logo.id = 'brand-logo';
+      identity.append(logo);
+    } else identity.append(el('span', brand));
+    const secure = el('span', '', 'secure-label'); secure.append(el('span', '', 'secure-dot'),
+      document.createTextNode('Secure Supplier Portal'));
+    brandRow.append(identity, secure);
+    const hero = el('div', '', 'hero-copy');
+    const subtitle = el('p', `${brand} invited you to complete this supplier verification.`); subtitle.id = 'subtitle';
+    hero.append(el('p', 'SUPPLIER VERIFICATION', 'eyebrow'), el('h1', schema.name), subtitle);
+    header.append(brandRow, hero);
+    const journey = el('section', '', 'journey'); journey.setAttribute('aria-label', 'Application progress');
+    const journeyHeading = el('div', '', 'journey-heading');
+    journeyHeading.append(el('span', 'Your Progress'), el('span', `Stage ${previewStage + 1} of ${schema.stages.length}`));
+    const progress = el('nav'); progress.id = 'steps'; progress.setAttribute('aria-label', 'Progress');
+    renderSchemaProgress(progress, schema, previewStage); journey.append(journeyHeading, progress);
+    const form = el('form'); form.id = 'form'; form.addEventListener('submit', (event) => event.preventDefault());
+    renderSchemaStage(form, { schema, stageIndex: previewStage, draft: previewDraft,
+      declarations: { sample_terms: true }, preview: true,
       onFieldChange: (id, value, dependent) => { if (dependent) { previewDraft[id] = value; drawPreview(); } } });
-    const controls = el('div', '', 'flo-preview-controls');
-    const back = button('Back', () => { previewStage--; render(); }); back.disabled = previewStage === 0;
-    const next = button('Next', () => { previewStage++; render(); }); next.disabled = previewStage === schema.stages.length - 1;
-    controls.append(back, next, el('span', 'Upload and Submit are disabled in preview.'));
-    shell.append(bar, el('p', 'FLO · SECURE ONBOARDING', 'flo-preview-eyebrow'), title,
-      el('p', 'Complete the information requested for this workflow.'), progress, form, controls);
-    content.replaceChildren(shell);
+    const actions = el('div', '', 'actions');
+    const back = button('Back', () => { previewStage--; drawPreview(); }, 'button-secondary');
+    back.disabled = previewStage === 0;
+    const next = button(previewStage === schema.stages.length - 1 ? 'Submit Application' : 'Save & Continue',
+      () => { previewStage++; drawPreview(); });
+    next.disabled = previewStage === schema.stages.length - 1;
+    actions.append(back, next); shell.append(header, journey, form, actions);
+    surface.append(sheet, previewStyle, shell);
+    const terms = schema.stages.flatMap((stage) => stage.declarations)
+      .find((entry) => entry.id === 'sample_terms');
+    if (previewIntroVisible && terms && previewStage === 0) {
+      const overlay = el('div', '', 'preview-intro');
+      const card = el('div', '', 'preview-intro-card');
+      const top = el('div', '', 'intro-top');
+      top.append(el('span', 'BEFORE YOU START', 'intro-badge'), el('h2', 'Get your documents ready'),
+        el('p', 'Upload the documents that apply to you, then confirm the details we extract.'));
+      const body = el('div', '', 'intro-content'); body.append(el('h3', 'Documents to have ready'));
+      const list = el('ul'); list.id = 'intro-documents';
+      for (const label of requiredDocumentChecklist(schema)) list.append(el('li', label));
+      const termsBox = el('div', '', 'terms-box');
+      termsBox.append(el('h3', 'Sample Terms & Conditions'),
+        el('p', schema.stages[0]?.description?.split('Sample terms for design review only:')[1]?.trim() || terms.label));
+      body.append(list, termsBox);
+      const introActions = el('div', '', 'intro-actions');
+      introActions.append(button('View form', () => { previewIntroVisible = false; drawPreview(); }));
+      card.append(top, body, el('p', 'Preview only · No agreement is recorded.', 'preview-intro-note'), introActions);
+      overlay.append(card); surface.append(overlay);
+    }
+    panel.append(canvas); content.replaceChildren(panel);
   }
   function drawJson() {
     const panel = el('section', '', 'flo-json-panel'); panel.append(el('p', 'Generated JSON is read-only until you choose Advanced edit.'));

@@ -6,6 +6,16 @@ function element(tag, text, className) {
   if (className) node.className = className;
   return node;
 }
+export function requiredDocumentChecklist(schema) {
+  if (/^Al Naboodah Supplier Onboarding\b/i.test(schema.name || '')) return [
+    'Company: current UAE trade licence or foreign incorporation record, plus representative Emirates ID or passport.',
+    'Individual supplier: current Emirates ID or passport.',
+    'Place of business: current Ejari, utility bill, lease, title deed or other official proof.',
+    'Recent bank confirmation letter on bank letterhead.'
+  ];
+  return schema.stages.flatMap((stage) => stage.documents).filter((entry) => entry.required)
+    .map((entry) => `${entry.label}${entry.show_if ? ' (if applicable)' : ''}`);
+}
 export function renderSchemaProgress(container, schema, current) {
   container.replaceChildren();
   container.style.setProperty('--step-total', schema.stages.length);
