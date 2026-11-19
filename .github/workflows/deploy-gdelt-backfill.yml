@@ -90,10 +90,20 @@ jobs:
         run: |
           set -euo pipefail
           for template in infrastructure/api-gdelt-job.bicep infrastructure/api-gdelt-backfill-job.bicep; do
-            az deployment group what-if --resource-group "${AZURE_RESOURCE_GROUP}" --template-file "${template}" \
+            if [[ "${template}" == *backfill* ]]; then
+              expected='caj-ai7uae-gdelt-backfill'
+            else
+              expected='caj-ai7uae-gdelt-ingest'
+            fi
+            changes="$(az deployment group what-if --resource-group "${AZURE_RESOURCE_GROUP}" --template-file "${template}" \
               --parameters image="${IMAGE}" environmentId="${CONTAINERAPPS_ENVIRONMENT_ID}" \
                 ingestionIdentityResourceId="${IDENTITY_ID}" ingestionIdentityClientId="${IDENTITY_CLIENT}" \
-                acrLoginServer="${ACR_LOGIN_SERVER}"
+                acrLoginServer="${ACR_LOGIN_SERVER}" \
+              --no-pretty-print --query "changes[?changeType!='Ignore'].{type:changeType,id:resourceId}" --output json)"
+            jq -e --arg expected "${expected}" \
+              'length == 1 and all(.[]; . as $change | ($change.id | endswith("/Microsoft.App/jobs/" + $expected)) and (["NoChange", "Create", "Modify"] | index($change.type) != null))' \
+              <<< "${changes}" > /dev/null
+            jq -c . <<< "${changes}"
           done
 
       - name: Update daily ingest before enabling backfill
