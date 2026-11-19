@@ -3,8 +3,8 @@ name: Deploy GDELT archive backfill
 on:
   workflow_dispatch:
     inputs:
-      reviewedMainSha:
-        description: Exact reviewed main commit already published by the production API workflow
+      publishedImageSha:
+        description: Reviewed main commit whose API image was already published
         required: true
         type: string
 
@@ -24,16 +24,21 @@ jobs:
     steps:
       - name: Check out reviewed main
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Verify exact reviewed commit
+      - name: Verify published image source is compatible
         shell: bash
         env:
-          REVIEWED_MAIN_SHA: ${{ inputs.reviewedMainSha }}
+          PUBLISHED_IMAGE_SHA: ${{ inputs.publishedImageSha }}
         run: |
           set -euo pipefail
-          [[ "${REVIEWED_MAIN_SHA}" =~ ^[a-f0-9]{40}$ ]]
-          test "${GITHUB_SHA}" = "${REVIEWED_MAIN_SHA}"
+          [[ "${PUBLISHED_IMAGE_SHA}" =~ ^[a-f0-9]{40}$ ]]
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          git merge-base --is-ancestor "${PUBLISHED_IMAGE_SHA}" HEAD
+          git diff --quiet "${PUBLISHED_IMAGE_SHA}" HEAD -- \
+            Dockerfile.api package.json package-lock.json \
+            scripts/gdelt-ingest.mjs scripts/gdelt-backfill.mjs lib/azure-managed-identity.mjs
 
       - name: Sign in to Azure with workload identity
         uses: azure/login@v2
@@ -54,6 +59,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           ACR_NAME: ${{ vars.ACR_NAME }}
           ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+          PUBLISHED_IMAGE_SHA: ${{ inputs.publishedImageSha }}
         run: |
           set -euo pipefail
           test -n "${AZURE_RESOURCE_GROUP}" && test -n "${ACR_NAME}" && test -n "${ACR_LOGIN_SERVER}"
@@ -61,13 +67,17 @@ jobs:
           jq -e --arg registry "${ACR_LOGIN_SERVER}" \
             '(.location | ascii_downcase == "uae north") and (.properties.environmentId | endswith("/managedEnvironments/cae-ai7uae-web-uaen-001")) and .properties.configuration.triggerType == "Schedule" and .properties.configuration.scheduleTriggerConfig.cronExpression == "30 1 * * *" and .properties.configuration.scheduleTriggerConfig.parallelism == 1 and .properties.template.containers[0].command == ["node", "scripts/gdelt-ingest.mjs"] and .properties.configuration.registries[0].server == $registry' \
             <<< "${job}" > /dev/null
+          jq -e '.properties.template.containers[0].env as $env | [
+            {name:"GDELT_STORAGE_ACCOUNT_URL",value:"https://stai7uaegdeltuaen001.blob.core.windows.net"},
+            {name:"GDELT_ARCHIVE_CONTAINER",value:"gdelt-archive"},
+            {name:"GDELT_INDEX_TABLE",value:"GdeltEntityMentions"}
+          ] | all(.[]; . as $expected | $env | any(.name == $expected.name and .value == $expected.value))' \
+            <<< "${job}" > /dev/null
           environment_id="$(jq -r .properties.environmentId <<< "${job}")"
           identity_id="$(az identity show --resource-group "${AZURE_RESOURCE_GROUP}" --name id-ai7uae-gdelt-ingest --query id --output tsv)"
           identity_client="$(az identity show --resource-group "${AZURE_RESOURCE_GROUP}" --name id-ai7uae-gdelt-ingest --query clientId --output tsv)"
           jq -e --arg identity "${identity_id}" '.identity.userAssignedIdentities | keys | any(ascii_downcase == ($identity | ascii_downcase))' <<< "${job}" > /dev/null
-          storage="$(az storage account show --resource-group "${AZURE_RESOURCE_GROUP}" --name stai7uaegdeltuaen001 --query '{name:name,location:location}' --output json)"
-          jq -e '.name == "stai7uaegdeltuaen001" and (.location | ascii_downcase == "uaenorth")' <<< "${storage}" > /dev/null
-          digest="$(az acr repository show --name "${ACR_NAME}" --image "ai7uae-api:${GITHUB_SHA}" --query digest --output tsv)"
+          digest="$(az acr repository show --name "${ACR_NAME}" --image "ai7uae-api:${PUBLISHED_IMAGE_SHA}" --query digest --output tsv)"
           [[ "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]
           {
             echo "image=${ACR_LOGIN_SERVER}/ai7uae-api@${digest}"
@@ -75,8 +85,8 @@ jobs:
             echo "identity_id=${identity_id}"
             echo "identity_client=${identity_client}"
           } >> "${GITHUB_OUTPUT}"
-          printf '{"source_sha":"%s","image_digest":"%s","archive_job":"%s","backfill_job":"%s"}\n' \
-            "${GITHUB_SHA}" "${digest}" caj-ai7uae-gdelt-ingest caj-ai7uae-gdelt-backfill > gdelt-deployment-evidence.json
+          printf '{"workflow_sha":"%s","image_source_sha":"%s","image_digest":"%s","archive_job":"%s","backfill_job":"%s"}\n' \
+            "${GITHUB_SHA}" "${PUBLISHED_IMAGE_SHA}" "${digest}" caj-ai7uae-gdelt-ingest caj-ai7uae-gdelt-backfill > gdelt-deployment-evidence.json
 
       - name: Preview daily and weekly job changes
         shell: bash
