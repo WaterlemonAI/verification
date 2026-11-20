@@ -64,7 +64,12 @@ try {
         [{ status: 'completed', summary: { decision_eligible: true }, findings: [] }, 'No material findings in completed coverage']
       ]
     };
-    page.on('request', (request) => { if (new URL(request.url()).pathname.startsWith('/service/')) chargeable.push(request.url()); });
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      // The public adverse-media configuration read does not execute a screening or incur provider charges.
+      if (path.startsWith('/service/')
+        && !(request.method() === 'GET' && path === '/service/adverse_media/config')) chargeable.push(request.url());
+    });
     for (const [path, , service, result, expected] of pages) {
       await page.goto(base + path);
       if (path === '/forms') await page.locator('#form-detail').evaluate((node) => { node.hidden = false; });
