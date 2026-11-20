@@ -226,6 +226,35 @@ test('stored rebuild resumes forward and incorporates newly backfilled older int
   assert.equal(cursor.last_completed_interval, result.last_completed_interval);
 });
 
+test('bounded parallel rebuild advances only after a verified group and safely replays failure', async () => {
+  const container = new MemoryContainer();
+  const sourceState = { coverage_start: '2026-11-20T01:00:00.000Z',
+    coverage_end: '2026-11-20T01:45:00.000Z' };
+  const seen = [];
+  let active = 0;
+  let peak = 0;
+  const processInterval = async ({ timestamp }) => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    active -= 1;
+    seen.push(timestamp);
+    if (timestamp === '20261120014500') throw new Error('interval_verification_failed');
+  };
+  const input = { container, table: new MemoryTable(), v2: {}, sourceState,
+    maxIntervals: 4, concurrency: 2, processInterval };
+  await assert.rejects(() => rebuildStoredV2(input), /interval_verification_failed/);
+  assert.equal(peak, 2);
+  const cursor = JSON.parse(container.blobs.get('state/v2-rebuild.json').bytes.toString());
+  assert.equal(cursor.last_completed_interval, '2026-11-20T01:15:00.000Z');
+  const resumed = await rebuildStoredV2({ ...input, processInterval: async ({ timestamp }) => {
+    seen.push(timestamp);
+  } });
+  assert.equal(resumed.more, false);
+  assert.equal(resumed.last_completed_interval, sourceState.coverage_end);
+  assert.deepEqual(seen.slice(-2).sort(), ['20261120013000', '20261120014500']);
+});
+
 test('legacy high-water cursor cannot certify unprocessed history', async () => {
   const container = new MemoryContainer();
   container.blobs.set('state/v2-rebuild.json', { etag: '1', bytes: Buffer.from(JSON.stringify({

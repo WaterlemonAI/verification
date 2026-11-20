@@ -17,10 +17,11 @@ async function readCursor(container) {
 }
 
 export async function rebuildStoredV2({ container, table, v2, sourceState, maxIntervals = 400, from, to,
-  processInterval = processGdeltInterval }) {
+  concurrency = 1, processInterval = processGdeltInterval }) {
   if (!v2) throw new Error('gdelt_v2_clients_required');
   if (!sourceState?.coverage_start || !sourceState?.coverage_end) throw new Error('v1_watermark_required');
   if (!Number.isInteger(maxIntervals) || maxIntervals < 1 || maxIntervals > 2000) throw new Error('invalid_rebuild_limit');
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error('invalid_rebuild_concurrency');
   const explicitRange = Boolean(from || to);
   const cursor = explicitRange ? { value: null, etag: null } : await readCursor(container);
   const first = parseTimestamp(intervalTimestamp(asDate(from || sourceState.coverage_start)));
@@ -39,19 +40,32 @@ export async function rebuildStoredV2({ container, table, v2, sourceState, maxIn
     const knownLast = previous?.last_completed_interval && new Date(previous.last_completed_interval);
     // An old cursor lacks first_completed_interval. Replaying from the source
     // start is safe because each interval is idempotent, and repairs that cursor.
+    const backwards = !explicitRange && knownFirst && knownFirst > first;
     const current = explicitRange ? new Date(first.getTime() + processed * INTERVAL_MS)
       : !knownFirst || !knownLast ? first
-        : knownFirst > first ? new Date(knownFirst.getTime() - INTERVAL_MS)
+        : backwards ? new Date(knownFirst.getTime() - INTERVAL_MS)
           : new Date(knownLast.getTime() + INTERVAL_MS);
-    if (current > last || (!explicitRange && knownFirst && knownLast
+    if (current > last || current < first || (!explicitRange && knownFirst && knownLast
       && knownFirst <= first && knownLast >= last)) break;
-    const timestamp = intervalTimestamp(current);
-    await processInterval({ timestamp, container, table, v2, storedOnly: true });
-    lastProcessed = current.toISOString();
+    // Commit the cursor only after every interval in this bounded group has
+    // passed its raw/V1/V2 verification. A partial group safely replays from
+    // the last cursor because each summary records applied intervals.
+    const size = backwards ? 1 : Math.min(concurrency, maxIntervals - processed,
+      Math.floor((last.getTime() - current.getTime()) / INTERVAL_MS) + 1);
+    const batch = Array.from({ length: size }, (_, index) => new Date(current.getTime()
+      + (backwards ? -index : index) * INTERVAL_MS));
+    const settled = await Promise.allSettled(batch.map((interval) => processInterval({
+      timestamp: intervalTimestamp(interval), container, table, v2, storedOnly: true
+    })));
+    const failed = settled.find((item) => item.status === 'rejected');
+    if (failed) throw failed.reason;
+    lastProcessed = batch.at(-1).toISOString();
     if (!explicitRange) {
+      const low = batch[0] < batch.at(-1) ? batch[0] : batch.at(-1);
+      const high = batch[0] > batch.at(-1) ? batch[0] : batch.at(-1);
       const next = { index_version: 2, cursor_version: 2,
-        first_completed_interval: knownFirst && knownFirst < current ? knownFirst.toISOString() : current.toISOString(),
-        last_completed_interval: knownLast && knownLast > current ? knownLast.toISOString() : current.toISOString(),
+        first_completed_interval: knownFirst && knownFirst < low ? knownFirst.toISOString() : low.toISOString(),
+        last_completed_interval: knownLast && knownLast > high ? knownLast.toISOString() : high.toISOString(),
         updated_at: new Date().toISOString() };
       const response = await container.getBlockBlobClient(CURSOR_BLOB).uploadData(Buffer.from(JSON.stringify(next)), {
         conditions: cursor.etag ? { ifMatch: cursor.etag } : { ifNoneMatch: '*' },
@@ -60,7 +74,7 @@ export async function rebuildStoredV2({ container, table, v2, sourceState, maxIn
       cursor.etag = response.etag;
       cursor.value = next;
     }
-    processed += 1;
+    processed += size;
   }
   const trusted = cursor.value?.cursor_version === 2 ? cursor.value : null;
   const knownFirst = trusted?.first_completed_interval && new Date(trusted.first_completed_interval);
@@ -77,6 +91,7 @@ export async function main() {
   const { state } = await loadArchiveState(container);
   const result = await rebuildStoredV2({ container, table, v2, sourceState: state,
     maxIntervals: Number(process.env.GDELT_V2_REBUILD_MAX_INTERVALS || 400),
+    concurrency: Number(process.env.GDELT_V2_REBUILD_CONCURRENCY || 1),
     from: process.env.GDELT_V2_REBUILD_FROM, to: process.env.GDELT_V2_REBUILD_TO });
   process.stdout.write(`${JSON.stringify({ event: 'gdelt_v2_rebuild', ...result })}\n`);
 }
