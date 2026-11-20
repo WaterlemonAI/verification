@@ -268,6 +268,26 @@ test('bounded parallel rebuild advances only after a verified group and safely r
   assert.deepEqual(seen.slice(-2).sort(), ['20261120013000', '20261120014500']);
 });
 
+test('stored rebuild accepts at most eight concurrent intervals', async () => {
+  let active = 0;
+  let peak = 0;
+  const result = await rebuildStoredV2({ container: new MemoryContainer(), table: new MemoryTable(), v2: {},
+    sourceState: { coverage_start: '2026-11-20T01:00:00.000Z',
+      coverage_end: '2026-11-20T02:45:00.000Z' }, maxIntervals: 8, concurrency: 8,
+    processInterval: async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      active -= 1;
+    } });
+  assert.equal(peak, 8);
+  assert.equal(result.processed, 8);
+  assert.equal(result.more, false);
+  await assert.rejects(() => rebuildStoredV2({ container: new MemoryContainer(), table: new MemoryTable(),
+    v2: {}, sourceState: { coverage_start: '2026-11-20T01:00:00.000Z',
+      coverage_end: '2026-11-20T01:00:00.000Z' }, concurrency: 9 }), /invalid_rebuild_concurrency/);
+});
+
 test('legacy high-water cursor cannot certify unprocessed history', async () => {
   const container = new MemoryContainer();
   container.blobs.set('state/v2-rebuild.json', { etag: '1', bytes: Buffer.from(JSON.stringify({
