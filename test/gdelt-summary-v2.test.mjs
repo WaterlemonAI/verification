@@ -168,10 +168,15 @@ test('ingestion verifies V2 before advancing either coverage checkpoint', async 
   fields[3] = 'example.test';
   fields[4] = 'https://example.test/article';
   fields[13] = 'Example Holdings';
-  const zip = storedZip(`${timestamp}.gkg.csv`, `${fields.join('\t')}\n`);
+  const tsv = `${fields.join('\t')}\n`;
+  const zip = storedZip(`${timestamp}.gkg.csv`, tsv);
   const container = new MemoryContainer();
   container.blobs.set(`raw/gkg/2026/11/20/${timestamp}.gkg.csv.zip`, { bytes: zip, etag: '1' });
   const table = new MemoryTable();
+  for (const rows of entityRows(tsv).byPartition.values()) {
+    for (const row of rows) await table.createEntity(row);
+  }
+  table.submitTransaction = async () => assert.fail('stored V2 rebuild must not rewrite V1 postings');
   const v2 = { container, summaryTable: new MemoryTable(), manifestTable: new MemoryTable() };
   const result = await processGdeltInterval({ timestamp, container, table, v2, storedOnly: true });
   assert.equal(result.mentions, 1);

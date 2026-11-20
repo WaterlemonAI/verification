@@ -248,7 +248,10 @@ export async function processGdeltInterval({ timestamp, container, table, v2 = n
   if (!entry) throw new Error(`gdelt_zip_empty_${timestamp}`);
   if (Number(entry.vars?.uncompressedSize || 0) > MAX_UNCOMPRESSED_FILE_BYTES) throw new Error(`gdelt_entry_too_large_${timestamp}`);
   const parsed = entityRows((await entry.buffer()).toString('utf8'));
-  await writeBatches(table, parsed.byPartition, signal);
+  // Historical V2 rebuilds replay immutable ZIPs whose V1 postings were
+  // already committed. The verifier checks V1 samples below; rewriting every
+  // V1 posting adds storage work without changing the indexed data.
+  if (!storedOnly) await writeBatches(table, parsed.byPartition, signal);
   if (v2) {
     const concurrency = Number(process.env.GDELT_V2_WRITE_CONCURRENCY || 24);
     if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 64) {
