@@ -111,9 +111,17 @@ try {
   const report = final?.report?.report_id
     ? await reportStore.get({ ownerId, reportId: final.report.report_id }) : null;
   const usage = await reportStore.getDeepResearchUsage({ ownerId, screeningId: receipt.screening_id });
-  const evidence = final?.coverage?.archive_review?.review_id
-    ? await reportStore.listArchiveReviewItems({ ownerId,
-      reviewId: final.coverage.archive_review.review_id, pageSize: 100 }) : null;
+  const evidenceItems = [];
+  if (final?.coverage?.archive_review?.review_id) {
+    let cursor = null;
+    do {
+      const page = await reportStore.listArchiveReviewItems({ ownerId,
+        reviewId: final.coverage.archive_review.review_id, cursor, pageSize: 100 });
+      evidenceItems.push(...page.items);
+      if (evidenceItems.length > 200) throw new Error('candidate_evidence_limit');
+      cursor = page.nextCursor;
+    } while (cursor);
+  }
   const pdfHash = report?.bytes ? createHash('sha256').update(report.bytes).digest('hex') : null;
   if (process.env.ADVERSE_QA_ARTIFACT_DIR && final) {
     const directory = process.env.ADVERSE_QA_ARTIFACT_DIR;
@@ -123,11 +131,12 @@ try {
     if (report?.bytes) await writeFile(join(directory, `${receipt.screening_id}.pdf`), report.bytes, { mode: 0o600 });
   }
   status = state?.stage === 'delivered' && final && pdfHash === final.report?.sha256
-    && evidence?.items?.length === final.coverage.archive_review.unique_articles ? 'verified' : 'incomplete';
+    && evidenceItems.length === final.coverage.archive_review.unique_articles ? 'verified' : 'incomplete';
   process.stdout.write(`${JSON.stringify({ event: 'adverse_async_candidate_qa', status,
     route, subject_sha256: createHash('sha256').update(subject).digest('hex'),
     screening_id: receipt.screening_id, worker_stage: state?.stage || null,
     profile: final?.summary?.profile_status || null,
+    decision_eligible: final?.summary?.decision_eligible ?? null,
     coverage_complete: final?.coverage?.complete ?? null,
     archive_review: final?.coverage?.archive_review ? {
       status: final.coverage.archive_review.status,
@@ -138,7 +147,7 @@ try {
       adverse: final.coverage.archive_review.adverse || 0,
       unresolved: final.coverage.archive_review.unresolved || 0
     } : null,
-    evidence_items: evidence?.items?.length || 0,
+    evidence_items: evidenceItems.length,
     artifacts_retained: Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && final),
     json_sha256: final ? createHash('sha256').update(JSON.stringify(final)).digest('hex') : null,
     pdf_sha256: pdfHash, provider_calls: usage.providerCalls,
