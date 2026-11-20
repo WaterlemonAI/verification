@@ -4,6 +4,8 @@
 
 **Remaining release gates:** No approved article-text provider or article-level Gemini adjudicator is wired, so an archive with unreviewed mentions remains Inconclusive. The source has an injected `adverseArticleResolver` seam for a reviewed provider adapter; do not enable the flag for customers until its contract, cost cap and evidence safeguards are implemented and tested. Full V2 rebuild and independent V1/V2 parity, controlled live subjects, cold/warm latency and cost measurement, and a complete callback/report pilot also remain outstanding. Local tests do not substitute for these gates.
 
+The staged production sequence and evidence packet are in the [Adverse Media V2 go-live plan](adverse-media-v2-go-live-plan.md).
+
 ## Objective and boundary
 
 Return a defensible **Safe**, **Unsafe**, or **Inconclusive** adverse-media profile without scanning the entire Azure archive in the HTTP request. The lookup should use the V2 summary; a first-time, evidence-heavy subject may need asynchronous review. A completed review can be reused only for the same subject identity, archive snapshot, review policy and owner. A fast count is not a completed screening.
