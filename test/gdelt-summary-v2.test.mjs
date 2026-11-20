@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { advanceV2Watermark, hasAppliedInterval, publishV2Interval, searchV2Summary,
+import { advanceV2Watermark, applyV2SummaryInterval, hasAppliedInterval, publishV2Interval, searchV2Summary,
   summaryKey, v2Manifest } from '../lib/gdelt-summary-v2.mjs';
 import { globalArchiveSearch, presentAdverseMediaResponse, screenAdverseMedia,
   validateAdverseMediaRequest } from '../lib/adverse-media.mjs';
@@ -124,6 +124,19 @@ test('V2 interval replay is idempotent, bounded, and not verified by a writer al
   await assert.rejects(() => advanceV2Watermark(new MemoryContainer(), manifestTable, timestamp), /not_committed/);
   await assert.rejects(() => publishV2Interval({ timestamp, zip: Buffer.from('different bytes'), parsed,
     summaryTable, manifestTable }), /manifest_conflict/);
+});
+
+test('summary bitmap preserves appended and prepended interval bits', async () => {
+  const table = new MemoryTable();
+  const timestamps = ['20261120010000', '20261120011500', '20261120013000', '20261120004500'];
+  for (const timestamp of timestamps) {
+    await applyV2SummaryInterval(table, timestamp, fixture(timestamp).byPartition.values().next().value);
+  }
+  const key = summaryKey('organization', 'Example Holdings');
+  const summary = await table.getEntity(key.partitionKey, key.rowKey);
+  assert.equal(summary.mentionCount, timestamps.length);
+  for (const timestamp of timestamps) assert.equal(hasAppliedInterval(summary, timestamp), true);
+  assert.equal(hasAppliedInterval(summary, '20261120020000'), false);
 });
 
 test('independent verifier reopens raw ZIP and checks manifest, V1 posting, and summary bit', async () => {
