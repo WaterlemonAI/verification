@@ -21,7 +21,7 @@ export async function rebuildStoredV2({ container, table, v2, sourceState, maxIn
   if (!v2) throw new Error('gdelt_v2_clients_required');
   if (!sourceState?.coverage_start || !sourceState?.coverage_end) throw new Error('v1_watermark_required');
   if (!Number.isInteger(maxIntervals) || maxIntervals < 1 || maxIntervals > 2000) throw new Error('invalid_rebuild_limit');
-  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) throw new Error('invalid_rebuild_concurrency');
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 4) throw new Error('invalid_rebuild_concurrency');
   const explicitRange = Boolean(from || to);
   const cursor = explicitRange ? { value: null, etag: null } : await readCursor(container);
   const first = parseTimestamp(intervalTimestamp(asDate(from || sourceState.coverage_start)));
