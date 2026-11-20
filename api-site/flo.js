@@ -111,6 +111,33 @@
     const overview = window.FloReview.render(shell, item);
     const root = document.createElement('section'); root.className = 'flo-review-section flo-case-actions';
     overview.append(root);
+    if (item.workflow_schema?.meeting && item.draft?.[item.workflow_schema.meeting.required_for.field]
+      === item.workflow_schema.meeting.required_for.equals) {
+      root.append(node('h3', 'Supplier video meeting'));
+      if (item.meeting?.status === 'booked') {
+        root.append(node('p', `Booked for ${new Date(item.meeting.starts_at).toLocaleString('en-AE', { timeZone: 'Asia/Dubai', dateStyle: 'medium', timeStyle: 'short' })} Dubai time. Invitation: ${item.meeting.delivery_status}.`));
+        if (item.meeting.completed_at) {
+          root.append(node('p', `Confirmed by ${item.meeting.completed_by} on ${item.meeting.met_at}. ${item.meeting.note}`));
+          if (item.reports?.length && !item.reports.some((report) => report.generated_at >= item.meeting.completed_at)) {
+            const refresh = node('button', 'Refresh report with meeting record'); refresh.type = 'button';
+            refresh.addEventListener('click', async () => { refresh.disabled = true; try {
+              await request(`/portal/api/flo/cases/${id}/meeting/complete`, 'POST', {}); await detail(id);
+            } catch (error) { $('flo-notice').textContent = error.message; refresh.disabled = false; } }); root.append(refresh);
+          }
+        }
+        else {
+          const note = document.createElement('textarea'); note.placeholder = 'Record how identity and place of business were checked during the call'; root.append(note);
+          const metAt = document.createElement('input'); metAt.type = 'datetime-local';
+          metAt.setAttribute('aria-label', 'When the meeting took place in Dubai time'); root.append(metAt);
+          const confirm = node('button', 'Confirm completed video meeting'); confirm.type = 'button';
+          confirm.addEventListener('click', async () => { confirm.disabled = true; try {
+            if (!metAt.value || !note.value.trim()) throw new Error('Enter meeting time and verification notes.');
+            await request(`/portal/api/flo/cases/${id}/meeting/complete`, 'POST',
+              { met_at: `${metAt.value}:00+04:00`, note: note.value.trim() }); await detail(id);
+          } catch (error) { $('flo-notice').textContent = error.message; confirm.disabled = false; } }); root.append(confirm);
+        }
+      } else root.append(node('p', 'The supplier has not booked a time.'));
+    }
     if (item.reports?.length && !item.reports.some((report) => report.branding === 'AI7EDD')) {
       root.append(node('h3', 'Updated report version'),
         node('p', 'Create a new AI7EDD report from the recorded case evidence. Earlier report versions remain available.'));

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateWorkflowSchema, diagnoseWorkflowSchema, schemaDraft, schemaSubmissionGaps, schemaHash } from '../lib/flows/template-schema.mjs';
 import { visibleCheckCatalog } from '../lib/flows/checks-catalog.mjs';
+import { readFileSync } from 'node:fs';
 
 const schema = () => ({ schema_version: '1.0.0', name: 'Supplier details', stages: [
   { id: 'identity', title: 'Identity', fields: [
@@ -33,6 +34,14 @@ test('server submission rules enforce conditional fields and documents', () => {
   assert.deepEqual(schemaSubmissionGaps(good, { draft, documents: [] }), ['trade_licence']);
   assert.deepEqual(schemaSubmissionGaps(good, { draft: { business_name: 'Example LLC', entity_type: 'Individual' }, documents: [] }), []);
   assert.throws(() => schemaDraft(good, { injected: 'bad' }), /invalid_draft_field/);
+});
+
+test('expired separately entered document dates block a schema submission', () => {
+  const withExpiry = schema();
+  withExpiry.stages[0].fields.push({ id: 'representative_id_expiry', label: 'ID expiry', type: 'date', required: true });
+  const validated = validateWorkflowSchema(withExpiry);
+  const draft = { business_name: 'Example LLC', entity_type: 'Individual', representative_id_expiry: '2020-01-01' };
+  assert.ok(schemaSubmissionGaps(validated, { draft, documents: [] }).includes('representative_id_expiry: document expired'));
 });
 
 test('workflow URL fields reject private and non-HTTPS destinations', () => {
@@ -69,4 +78,27 @@ test('builder contract enforces stage, field and document slot bounds', () => {
   tooManyDocs.stages[0].documents.push(...Array.from({ length: 30 }, (_, index) => ({
     id: `extra_doc_${index}`, label: `Extra document ${index}`, required: false })));
   assert.equal(diagnoseWorkflowSchema(tooManyDocs).issues[0].path, 'limits');
+});
+
+test('one address-proof choice can require the matching upload', () => {
+  const withProof = schema();
+  withProof.stages[0].fields.push({ id: 'address_proof_type', label: 'Address proof', type: 'select',
+    required: true, options: ['Ejari', 'Utility bill', 'Tenancy or lease', 'Title deed'] });
+  withProof.stages[0].documents.push({ id: 'premises_evidence', label: 'Selected proof', required: true,
+    show_if: { field: 'address_proof_type', in: ['Utility bill', 'Tenancy or lease', 'Title deed'] } });
+  const validated = validateWorkflowSchema(withProof);
+  assert.ok(schemaSubmissionGaps(validated, { draft: { business_name: 'Example', entity_type: 'Individual',
+    address_proof_type: 'Utility bill' }, documents: [] }).includes('premises_evidence'));
+  assert.ok(!schemaSubmissionGaps(validated, { draft: { business_name: 'Example', entity_type: 'Individual',
+    address_proof_type: 'Ejari' }, documents: [] }).includes('premises_evidence'));
+});
+
+test('Al Naboodah asks for owner names only when OCR found none on company documents', () => {
+  const candidate = JSON.parse(readFileSync(new URL('../docs/flo/al-naboodah/decision13-workflow.json', import.meta.url)));
+  const flow = validateWorkflowSchema(candidate, candidate.checks);
+  const draft = { supplier_type: 'Company or other Legal person', registration_jurisdiction: 'United Arab Emirates' };
+  assert.ok(schemaSubmissionGaps(flow, { draft, documents: [] }).includes('stakeholders'));
+  const documents = [{ type: 'trade_licence', document_id: 'licence', extraction_state: 'completed',
+    extraction_result: { data: { stakeholder_names: 'Amina Owner', expiry_date: '2099-01-01' } } }];
+  assert.ok(!schemaSubmissionGaps(flow, { draft, documents }).includes('stakeholders'));
 });

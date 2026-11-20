@@ -1,0 +1,451 @@
+{
+  "schema_version": "1.0.0",
+  "name": "Al Naboodah Supplier Onboarding",
+  "stages": [
+    {
+      "id": "documents_first",
+      "title": "Documents first",
+      "description": "Upload current identity and premises documents before answering. Sample terms for design review only: I confirm I am authorised to submit, the documents are accurate and current, and Al Naboodah may verify identity, licences, premises, bank details and public information. I will report material changes. Submission does not guarantee approval.",
+      "fields": [
+        {
+          "id": "supplier_type",
+          "label": "Supplier type",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Company or other Legal person",
+            "Natural person"
+          ]
+        },
+        {
+          "id": "registration_jurisdiction",
+          "label": "Company registration",
+          "type": "select",
+          "required": true,
+          "options": [
+            "United Arab Emirates",
+            "Outside the UAE"
+          ],
+          "show_if": {
+            "field": "supplier_type",
+            "equals": "Company or other Legal person"
+          }
+        },
+        {
+          "id": "address_proof_type",
+          "label": "Which address proof are you uploading?",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Ejari",
+            "Utility bill",
+            "Tenancy or lease",
+            "Title deed",
+            "Other official address evidence"
+          ]
+        }
+      ],
+      "documents": [
+        {
+          "id": "trade_licence",
+          "label": "Current UAE trade licence",
+          "required": true,
+          "show_if": {
+            "field": "registration_jurisdiction",
+            "equals": "United Arab Emirates"
+          }
+        },
+        {
+          "id": "incorporation_record",
+          "label": "Current certificate of incorporation or official registry extract",
+          "required": true,
+          "show_if": {
+            "field": "registration_jurisdiction",
+            "equals": "Outside the UAE"
+          }
+        },
+        {
+          "id": "natural_identity",
+          "label": "Current Emirates ID or passport of natural person",
+          "required": true,
+          "show_if": {
+            "field": "supplier_type",
+            "equals": "Natural person"
+          }
+        },
+        {
+          "id": "identity_document",
+          "label": "Current representative Emirates ID or passport",
+          "required": true,
+          "show_if": {
+            "field": "supplier_type",
+            "equals": "Company or other Legal person"
+          }
+        },
+        {
+          "id": "ejari",
+          "label": "Current Ejari certificate",
+          "required": true,
+          "show_if": {
+            "field": "address_proof_type",
+            "equals": "Ejari"
+          }
+        },
+        {
+          "id": "premises_evidence",
+          "label": "Current selected address proof",
+          "required": true,
+          "show_if": {
+            "field": "address_proof_type",
+            "in": [
+              "Utility bill",
+              "Tenancy or lease",
+              "Title deed",
+              "Other official address evidence"
+            ]
+          }
+        },
+        {
+          "id": "bank_letter",
+          "label": "Recent bank confirmation on bank letterhead; home-country accounts accepted",
+          "required": true
+        },
+        {
+          "id": "bank_statement",
+          "label": "Optional bank statement for account cross-check",
+          "required": false
+        }
+      ],
+      "declarations": [
+        {
+          "id": "sample_terms",
+          "label": "I have read and agree to these sample terms.",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "identity",
+      "title": "Confirm identity and premises",
+      "description": "Check details extracted from your documents. Enter only missing or corrected information.",
+      "fields": [
+        {
+          "id": "business_name",
+          "label": "Confirm the legal name shown on your document",
+          "type": "text",
+          "required": true
+        },
+        {
+          "id": "registration_country",
+          "label": "Country of registration or residence",
+          "type": "text",
+          "required": true
+        },
+        {
+          "id": "licence_number",
+          "label": "Licence number, only if missing or incorrect on your document",
+          "type": "text",
+          "required": false,
+          "show_if": {
+            "field": "supplier_type",
+            "equals": "Company or other Legal person"
+          }
+        },
+        {
+          "id": "licence_expiry",
+          "label": "Confirm expiry date of the uploaded UAE trade licence",
+          "type": "date",
+          "required": true,
+          "show_if": {
+            "field": "registration_jurisdiction",
+            "equals": "United Arab Emirates"
+          }
+        },
+        {
+          "id": "website_url",
+          "label": "Business website, if any",
+          "type": "url",
+          "required": false
+        },
+        {
+          "id": "natural_id_expiry",
+          "label": "Confirm expiry date of the uploaded identity document",
+          "type": "date",
+          "required": true,
+          "show_if": {
+            "field": "supplier_type",
+            "equals": "Natural person"
+          }
+        },
+        {
+          "id": "representative_id_expiry",
+          "label": "Confirm expiry date of the uploaded identity document",
+          "type": "date",
+          "required": true,
+          "show_if": {
+            "field": "supplier_type",
+            "equals": "Company or other Legal person"
+          }
+        },
+        {
+          "id": "stakeholders",
+          "label": "Owners and directors not named in your uploaded document",
+          "type": "people",
+          "required": true,
+          "show_if": {
+            "field": "supplier_type",
+            "equals": "Company or other Legal person"
+          }
+        },
+        {
+          "id": "operating_address_same",
+          "label": "Does an uploaded licence or premises document show your actual operating address",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "id": "operating_address",
+          "label": "Actual operating address, if not shown on an uploaded document",
+          "type": "textarea",
+          "required": true,
+          "show_if": {
+            "field": "operating_address_same",
+            "equals": "No"
+          }
+        },
+        {
+          "id": "changes_over_twice",
+          "label": "In the past 12 months, has your address or a key manager/contact changed more than twice",
+          "type": "select",
+          "required": true,
+          "options": [
+            "No",
+            "Yes"
+          ]
+        },
+        {
+          "id": "changes_explanation",
+          "label": "Which changed, when, and why",
+          "type": "textarea",
+          "required": true,
+          "show_if": {
+            "field": "changes_over_twice",
+            "equals": "Yes"
+          }
+        }
+      ],
+      "documents": [],
+      "declarations": []
+    },
+    {
+      "id": "supply_payment",
+      "title": "Supply and payment",
+      "description": "Confirm the proposed supply and explain only unusual payment or commercial arrangements.",
+      "fields": [
+        {
+          "id": "iban",
+          "label": "IBAN, only if missing or incorrect on your letter",
+          "type": "text",
+          "required": false
+        },
+        {
+          "id": "bank_outside_registration",
+          "label": "Is the payment account outside your registration country",
+          "type": "select",
+          "required": true,
+          "options": [
+            "No",
+            "Yes"
+          ]
+        },
+        {
+          "id": "bank_country",
+          "label": "Bank country (confirm if missing from the bank letter)",
+          "type": "text",
+          "required": false,
+          "show_if": {
+            "field": "bank_outside_registration",
+            "equals": "Yes"
+          }
+        },
+        {
+          "id": "bank_outside_reason",
+          "label": "Commercial reason for using an account outside your registration country",
+          "type": "textarea",
+          "required": true,
+          "show_if": {
+            "field": "bank_outside_registration",
+            "equals": "Yes"
+          }
+        },
+        {
+          "id": "third_party_payment",
+          "label": "Third party paying or receiving",
+          "type": "select",
+          "required": true,
+          "options": [
+            "No",
+            "Yes"
+          ]
+        },
+        {
+          "id": "third_party_detail",
+          "label": "Party, role and commercial reason",
+          "type": "textarea",
+          "required": true,
+          "show_if": {
+            "field": "third_party_payment",
+            "equals": "Yes"
+          }
+        },
+        {
+          "id": "cash_payment",
+          "label": "Will cash be used",
+          "type": "select",
+          "required": true,
+          "options": [
+            "No",
+            "Yes"
+          ]
+        },
+        {
+          "id": "cash_reason",
+          "label": "Commercial reason for using cash and how payment can be traced",
+          "type": "textarea",
+          "required": true,
+          "show_if": {
+            "field": "cash_payment",
+            "equals": "Yes"
+          }
+        },
+        {
+          "id": "supply_type",
+          "label": "What will you supply",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Goods (including goods and services)",
+            "Services only"
+          ]
+        },
+        {
+          "id": "supply_description",
+          "label": "What will you supply, and is it within your usual licensed or professional activity?",
+          "type": "textarea",
+          "required": true
+        },
+        {
+          "id": "goods_origin",
+          "label": "Manufacturer and country of origin, if not shown on documents",
+          "type": "textarea",
+          "required": false,
+          "show_if": {
+            "field": "supply_type",
+            "equals": "Goods (including goods and services)"
+          }
+        },
+        {
+          "id": "goods_rights",
+          "label": "Your right to sell or dispose of these goods",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Owner",
+            "Contractual right to sell",
+            "Other"
+          ],
+          "show_if": {
+            "field": "supply_type",
+            "equals": "Goods (including goods and services)"
+          }
+        },
+        {
+          "id": "goods_rights_explanation",
+          "label": "Explain your right to sell or dispose of these goods",
+          "type": "textarea",
+          "required": true,
+          "show_if": {
+            "field": "goods_rights",
+            "equals": "Other"
+          }
+        },
+        {
+          "id": "intermediary",
+          "label": "Are you acting as an agent, broker or other intermediary",
+          "type": "select",
+          "required": true,
+          "options": [
+            "No",
+            "Yes"
+          ]
+        },
+        {
+          "id": "intermediary_reason",
+          "label": "Principal and commercial reason for your role",
+          "type": "textarea",
+          "required": true,
+          "show_if": {
+            "field": "intermediary",
+            "equals": "Yes"
+          }
+        }
+      ],
+      "documents": [
+        {
+          "id": "goods_origin_evidence",
+          "label": "Goods origin and right-to-sell evidence, if available",
+          "required": false,
+          "show_if": {
+            "field": "supply_type",
+            "equals": "Goods (including goods and services)"
+          }
+        },
+        {
+          "id": "payment_agreement",
+          "label": "Third-party payment evidence, if available",
+          "required": false,
+          "show_if": {
+            "field": "third_party_payment",
+            "equals": "Yes"
+          }
+        }
+      ],
+      "declarations": []
+    }
+  ],
+  "checks": [
+    "uae-trade-licence",
+    "iban-verification",
+    "entity-aml",
+    "entity-adverse-media",
+    "stakeholder-aml",
+    "stakeholder-adverse-media",
+    "merchant-screening",
+    "ejari-verification"
+  ],
+  "report_sections": [
+    "Supplier identity and documents",
+    "Premises and risk indicators",
+    "Supply and payment",
+    "Verification evidence and buyer review"
+  ],
+  "tokens": {
+    "primary_color": "#002C5F",
+    "accent_color": "#F9B233"
+  },
+  "meeting": {
+    "required_for": {
+      "field": "supplier_type",
+      "equals": "Natural person"
+    },
+    "procurement_email": "arbaz@ai7lab.net"
+  },
+  "document_policy": {
+    "ocr_required": true,
+    "reject_expired": true
+  }
+}

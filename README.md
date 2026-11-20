@@ -35,6 +35,8 @@ POST /service/iban_verification
 POST /service/entity_search
 POST /service/adverse_media
 POST /service/adverse_media_search_plus
+POST /service/setup_video_call
+POST /service/meeting_availability
 POST /service/merchant_screening
 POST /service/bank_statement_analysis
 GET  /service/bank_statement_analysis/{analysisId}
@@ -93,6 +95,8 @@ The protected console at `/admin` lets an operator:
 - invite a customer administrator to set a password without emailing an API key;
 - view every key belonging to a customer workspace; and
 - revoke a customer key without changing other customers or upstream credentials.
+
+`Setup Video Call` is a fixed JSON integration at `POST /service/setup_video_call`. Set its write-only bearer token in the admin console before use, entering the token value without `Bearer `. A client call requires a fresh `Idempotency-Key` for each new meeting; reuse that key when retrying the same request. The meeting service handles idempotency. `Find Open Slots` is available at `POST /service/meeting_availability` with `calendarEmail` and a `dates` array. It uses the same admin-managed meeting token and does not require an idempotency key. Setting or replacing the token on either admin row updates both APIs. The engine does not store meeting or availability results. See `/openapi.json` for the request fields. Workspaces with managed usage policies must have each module enabled before calling it.
 
 Customer administrators sign in at `https://app.kycprobe.com/login` and manage up to 20 active keys in **Account settings**. A 48-hour, single-use invitation link creates the portal account and an initial API key. The key appears once after setup; later keys and rotations also appear once and are retained only as SHA-256 hashes. Rotating a key retains its key ID and workspace ownership, so older key material stops authenticating and existing report ownership for that key ID remains stable. Existing customer keys remain valid; an administrator can use **Invite admin** on a legacy workspace to add password-based access without invalidating its existing key.
 
