@@ -27,9 +27,14 @@ const entityType = process.env.ADVERSE_QA_ENTITY_TYPE === 'individual' ? 'indivi
 const token = randomBytes(32).toString('hex');
 process.env.AI7_API_KEY_HASHES = createHash('sha256').update(token).digest('hex');
 process.env.API_HOSTS = 'localhost,127.0.0.1';
-// Keep the trial to a small, priceable article set. The shared worker also
-// reserves every external request under its USD 0.14 provider ceiling.
-process.env.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS = '20';
+// The default trial is small. An explicit candidate-only override can exercise
+// the runtime's 200-posting default; the shared worker still reserves every
+// external request under its USD 0.14 provider ceiling.
+const qaMaxPostings = Number(process.env.ADVERSE_QA_MAX_POSTINGS || '20');
+if (!Number.isInteger(qaMaxPostings) || qaMaxPostings < 1 || qaMaxPostings > 200) {
+  throw new Error('invalid_qa_max_postings');
+}
+process.env.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS = String(qaMaxPostings);
 
 const [{ createStore, EnvironmentStore }, { createAppServer },
   { MemoryAdverseMediaReportStore, reportOwnerId }, { MemoryAdverseMediaJsonStore },
