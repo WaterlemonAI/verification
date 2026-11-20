@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { get as httpsGet } from 'node:https';
 import { isIP } from 'node:net';
 import { tmpdir } from 'node:os';
-import { extname, join, normalize } from 'node:path';
+import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './lib/api-store.mjs';
 import { createPlatformMailer } from './lib/platform-mail.mjs';
@@ -3315,6 +3315,6 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   });
 }
 
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   createAppServer().listen(port, process.env.BIND_HOST || '0.0.0.0', () => console.log(`AI7 UAE service listening on port ${port}`));
 }

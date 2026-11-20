@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import unzipper from 'unzipper';
 import { archiveClients, entityRows, intervalTimestamp, loadArchiveState, parseTimestamp } from './gdelt-ingest.mjs';
-import { groupV2Rows, hasAppliedInterval, readV2State, v2Manifest } from '../lib/gdelt-summary-v2.mjs';
+import { groupV2Rows, hasAppliedInterval, readV2State, v2Clients, v2Manifest } from '../lib/gdelt-summary-v2.mjs';
 
 const INTERVAL_MS = 15 * 60_000;
 const asDate = (value) => /^\d{14}$/.test(String(value)) ? parseTimestamp(String(value)) : new Date(value);
@@ -64,12 +64,14 @@ export async function verifyV2Interval(timestamp, { container, summaryTable, man
 
 export async function verifyV2Range({ container, summaryTable, manifestTable, v1Table, sourceState, v2State,
   maxIntervals = 400, from, to, verifySummaries = true }) {
-  if (!sourceState?.coverage_start || !sourceState?.coverage_end || !v2State?.coverage_start || !v2State?.coverage_end) {
-    throw new Error('v2_watermarks_required');
-  }
+  if (!sourceState?.coverage_start || !sourceState?.coverage_end) throw new Error('v1_watermark_required');
+  const explicitRange = Boolean(from && to);
+  if (!explicitRange && (!v2State?.coverage_start || !v2State?.coverage_end)) throw new Error('v2_watermark_required');
   const first = parseTimestamp(intervalTimestamp(asDate(from || sourceState.coverage_start)));
   const last = parseTimestamp(intervalTimestamp(asDate(to || sourceState.coverage_end)));
-  if (first < parseTimestamp(v2State.coverage_start) || last > parseTimestamp(v2State.coverage_end) || first > last) {
+  if (first < new Date(sourceState.coverage_start) || last > new Date(sourceState.coverage_end) || first > last
+    || (!explicitRange && (first < parseTimestamp(v2State.coverage_start)
+      || last > parseTimestamp(v2State.coverage_end)))) {
     throw new Error('v2_verify_outside_committed_range');
   }
   if (!Number.isInteger(maxIntervals) || maxIntervals < 1 || maxIntervals > 50_000) throw new Error('invalid_verify_limit');
@@ -86,7 +88,8 @@ export async function verifyV2Range({ container, summaryTable, manifestTable, v1
 }
 
 export async function main() {
-  const { container, table, v2 } = archiveClients();
+  const { container, table } = archiveClients();
+  const v2 = v2Clients();
   if (!v2) throw new Error('gdelt_v2_clients_required');
   const { state } = await loadArchiveState(container);
   const { value: v2State } = await readV2State(v2.container);

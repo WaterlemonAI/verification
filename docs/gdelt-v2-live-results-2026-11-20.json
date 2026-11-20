@@ -1,0 +1,942 @@
+{
+  "run_date_utc": "2026-11-20",
+  "environment": "internal isolated Azure candidate; no customer workspace billing",
+  "candidate_image_digest": "sha256:063b87eee0663cefe7afd1b825ddaa57093148fbaa4a2d9333a8c905c9c482a1",
+  "cases": [
+    {
+      "event": "adverse_live_qa_case",
+      "case_number": 1,
+      "sequence": 1,
+      "started_at": "2026-11-20T07:30:51.512Z",
+      "subject": "DP World",
+      "route": "adverse_media",
+      "date_from": "2026-11-16",
+      "date_to": "2026-11-18",
+      "http_status": 200,
+      "screening_status": "completed",
+      "response_error": null,
+      "profile": "inconclusive",
+      "decision_eligible": false,
+      "profile_reason": "classification_uncertain",
+      "processing_reasons": [
+        "classification_uncertain"
+      ],
+      "unresolved_results": 2,
+      "bucket_counts": {
+        "adverse_media": 0,
+        "general_news_mentions": 1,
+        "no_impact_media": 1
+      },
+      "coverage_complete": true,
+      "coverage_reasons": [],
+      "source_status": [
+        {
+          "source": "current_news",
+          "status": "complete"
+        },
+        {
+          "source": "open_web",
+          "status": "complete"
+        },
+        {
+          "source": "archive",
+          "status": "complete"
+        },
+        {
+          "source": "official_records",
+          "status": "not_requested"
+        }
+      ],
+      "archive_origin": "local_index",
+      "archive_reason": null,
+      "archive_scan": {
+        "rows_scanned": 0,
+        "rows_returned": 0,
+        "names_requested": 1,
+        "names_queried": 1,
+        "lookups": 2,
+        "elapsed_ms": 62,
+        "truncated": false
+      },
+      "archive_public_windows": [],
+      "search_plus_publishers_completed": 0,
+      "result_count": 0,
+      "adverse_count": 0,
+      "findings": [],
+      "pdf": {
+        "bytes": 1253113,
+        "sha256": "5a62fc9b6fa1f3a244b408d049c86fd6118faa6caf9543046bf32e0126721ad0",
+        "valid_header": true
+      },
+      "elapsed_ms": 8110,
+      "response_sha256": "ed41bf57a14a5788fc36559b7193c8726a7f8a44692536123191af61cdb30bd2",
+      "provider_metrics": {
+        "route": "standard",
+        "total_ms": 7993,
+        "archive_rows": 0,
+        "archive_scan_ms": 62,
+        "brave": 4,
+        "gemini": 1,
+        "hosted": 0,
+        "cost": 0.021079,
+        "source_status": {
+          "global_news": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "open_web": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "publisher_search": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          },
+          "global_news_archive": {
+            "attempted": 1,
+            "completed": 1,
+            "partial": 0,
+            "failed": 0
+          },
+          "official_regulatory": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          }
+        },
+        "classification": "completed"
+      }
+    },
+    {
+      "event": "adverse_live_qa_case",
+      "case_number": 2,
+      "sequence": 2,
+      "started_at": "2026-11-20T07:30:59.622Z",
+      "subject": "DP World",
+      "route": "adverse_media_search_plus",
+      "date_from": "2026-11-16",
+      "date_to": "2026-11-18",
+      "http_status": 200,
+      "screening_status": "completed",
+      "response_error": null,
+      "profile": "inconclusive",
+      "decision_eligible": false,
+      "profile_reason": "classification_uncertain",
+      "processing_reasons": [],
+      "unresolved_results": 1,
+      "bucket_counts": {
+        "adverse_media": 0,
+        "general_news_mentions": 1,
+        "no_impact_media": 3
+      },
+      "coverage_complete": true,
+      "coverage_reasons": [],
+      "source_status": [
+        {
+          "source": "current_news",
+          "status": "complete"
+        },
+        {
+          "source": "open_web",
+          "status": "complete"
+        },
+        {
+          "source": "publisher_search",
+          "status": "complete"
+        },
+        {
+          "source": "archive",
+          "status": "complete"
+        },
+        {
+          "source": "official_records",
+          "status": "not_requested"
+        }
+      ],
+      "archive_origin": "local_index",
+      "archive_reason": null,
+      "archive_scan": {
+        "rows_scanned": 0,
+        "rows_returned": 0,
+        "names_requested": 1,
+        "names_queried": 1,
+        "lookups": 2,
+        "elapsed_ms": 15,
+        "truncated": false
+      },
+      "archive_public_windows": [],
+      "search_plus_publishers_completed": 6,
+      "result_count": 0,
+      "adverse_count": 0,
+      "findings": [],
+      "pdf": {
+        "bytes": 1263142,
+        "sha256": "1a15167f56a1afd2d92e8ee63454f98fc28ed710ecccfd11ea42fcc70a1ac3ab",
+        "valid_header": true
+      },
+      "elapsed_ms": 5509,
+      "response_sha256": "7dd6135dbb32c36f8ece31ee467d38661d094bea9213bef99ba3ddd190f02196",
+      "provider_metrics": {
+        "route": "search_plus",
+        "total_ms": 5494,
+        "archive_rows": 0,
+        "archive_scan_ms": 15,
+        "brave": 10,
+        "gemini": 1,
+        "hosted": 0,
+        "cost": 0.051518,
+        "source_status": {
+          "global_news": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "open_web": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "publisher_search": {
+            "attempted": 6,
+            "completed": 6,
+            "partial": 0,
+            "failed": 0
+          },
+          "global_news_archive": {
+            "attempted": 1,
+            "completed": 1,
+            "partial": 0,
+            "failed": 0
+          },
+          "official_regulatory": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          }
+        },
+        "classification": "completed"
+      }
+    },
+    {
+      "event": "adverse_live_qa_case",
+      "case_number": 3,
+      "sequence": 3,
+      "started_at": "2026-11-20T07:31:05.131Z",
+      "subject": "Emirates NBD",
+      "route": "adverse_media_search_plus",
+      "date_from": "2026-11-16",
+      "date_to": "2026-11-18",
+      "http_status": 200,
+      "screening_status": "completed",
+      "response_error": null,
+      "profile": "inconclusive",
+      "decision_eligible": false,
+      "profile_reason": "classification_uncertain",
+      "processing_reasons": [
+        "classification_incomplete"
+      ],
+      "unresolved_results": 2,
+      "bucket_counts": {
+        "adverse_media": 0,
+        "general_news_mentions": 2,
+        "no_impact_media": 6
+      },
+      "coverage_complete": true,
+      "coverage_reasons": [],
+      "source_status": [
+        {
+          "source": "current_news",
+          "status": "complete"
+        },
+        {
+          "source": "open_web",
+          "status": "complete"
+        },
+        {
+          "source": "publisher_search",
+          "status": "complete"
+        },
+        {
+          "source": "archive",
+          "status": "complete"
+        },
+        {
+          "source": "official_records",
+          "status": "not_requested"
+        }
+      ],
+      "archive_origin": "local_index",
+      "archive_reason": null,
+      "archive_scan": {
+        "rows_scanned": 0,
+        "rows_returned": 0,
+        "names_requested": 1,
+        "names_queried": 1,
+        "lookups": 2,
+        "elapsed_ms": 20,
+        "truncated": false
+      },
+      "archive_public_windows": [],
+      "search_plus_publishers_completed": 6,
+      "result_count": 0,
+      "adverse_count": 0,
+      "findings": [],
+      "pdf": {
+        "bytes": 1268706,
+        "sha256": "4d91aa0623a576fbdcc77c9c83e133f84eba288f3c5672478ca05dc43d59606b",
+        "valid_header": true
+      },
+      "elapsed_ms": 9581,
+      "response_sha256": "2a5dadbadfca832a8507796a29b9dbe71b9657c2e9c8e6da4d8e08a86ba99a0b",
+      "provider_metrics": {
+        "route": "search_plus",
+        "total_ms": 9505,
+        "archive_rows": 0,
+        "archive_scan_ms": 20,
+        "brave": 10,
+        "gemini": 2,
+        "hosted": 0,
+        "cost": 0.053496,
+        "source_status": {
+          "global_news": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "open_web": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "publisher_search": {
+            "attempted": 6,
+            "completed": 6,
+            "partial": 0,
+            "failed": 0
+          },
+          "global_news_archive": {
+            "attempted": 1,
+            "completed": 1,
+            "partial": 0,
+            "failed": 0
+          },
+          "official_regulatory": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          }
+        },
+        "classification": "partial"
+      }
+    },
+    {
+      "event": "adverse_live_qa_case",
+      "case_number": 4,
+      "sequence": 4,
+      "started_at": "2026-11-20T07:31:14.713Z",
+      "subject": "Etihad Airways",
+      "route": "adverse_media",
+      "date_from": "2026-11-16",
+      "date_to": "2026-11-18",
+      "http_status": 200,
+      "screening_status": "completed",
+      "response_error": null,
+      "profile": "safe",
+      "decision_eligible": true,
+      "profile_reason": "no_confirmed_adverse",
+      "processing_reasons": [],
+      "unresolved_results": 0,
+      "bucket_counts": {
+        "adverse_media": 0,
+        "general_news_mentions": 3,
+        "no_impact_media": 4
+      },
+      "coverage_complete": true,
+      "coverage_reasons": [],
+      "source_status": [
+        {
+          "source": "current_news",
+          "status": "complete"
+        },
+        {
+          "source": "open_web",
+          "status": "complete"
+        },
+        {
+          "source": "archive",
+          "status": "complete"
+        },
+        {
+          "source": "official_records",
+          "status": "not_requested"
+        }
+      ],
+      "archive_origin": "local_index",
+      "archive_reason": null,
+      "archive_scan": {
+        "rows_scanned": 33,
+        "rows_returned": 33,
+        "names_requested": 1,
+        "names_queried": 1,
+        "lookups": 2,
+        "elapsed_ms": 37,
+        "truncated": false
+      },
+      "archive_public_windows": [],
+      "search_plus_publishers_completed": 0,
+      "result_count": 0,
+      "adverse_count": 0,
+      "findings": [],
+      "pdf": {
+        "bytes": 1261469,
+        "sha256": "9ecf416ac7a9c4388b750d8bc330737e15606028a67c0874633a0a1eda441968",
+        "valid_header": true
+      },
+      "elapsed_ms": 16217,
+      "response_sha256": "49f96c86c924374ae8b0e1fb5e54c724c415cfd9432131e07540b9a6903ca797",
+      "provider_metrics": {
+        "route": "standard",
+        "total_ms": 16203,
+        "archive_rows": 33,
+        "archive_scan_ms": 37,
+        "brave": 4,
+        "gemini": 1,
+        "hosted": 0,
+        "cost": 0.023119,
+        "source_status": {
+          "global_news": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "open_web": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "publisher_search": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          },
+          "global_news_archive": {
+            "attempted": 1,
+            "completed": 1,
+            "partial": 0,
+            "failed": 0
+          },
+          "official_regulatory": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          }
+        },
+        "classification": "completed"
+      }
+    },
+    {
+      "event": "adverse_live_qa_case",
+      "case_number": 5,
+      "sequence": 5,
+      "started_at": "2026-11-20T07:31:30.930Z",
+      "subject": "Emaar Properties",
+      "route": "adverse_media",
+      "date_from": "2026-11-16",
+      "date_to": "2026-11-18",
+      "http_status": 200,
+      "screening_status": "completed",
+      "response_error": null,
+      "profile": "safe",
+      "decision_eligible": true,
+      "profile_reason": "no_confirmed_adverse",
+      "processing_reasons": [],
+      "unresolved_results": 0,
+      "bucket_counts": {
+        "adverse_media": 0,
+        "general_news_mentions": 0,
+        "no_impact_media": 3
+      },
+      "coverage_complete": true,
+      "coverage_reasons": [],
+      "source_status": [
+        {
+          "source": "current_news",
+          "status": "complete"
+        },
+        {
+          "source": "open_web",
+          "status": "complete"
+        },
+        {
+          "source": "archive",
+          "status": "complete"
+        },
+        {
+          "source": "official_records",
+          "status": "not_requested"
+        }
+      ],
+      "archive_origin": "local_index",
+      "archive_reason": null,
+      "archive_scan": {
+        "rows_scanned": 3,
+        "rows_returned": 3,
+        "names_requested": 1,
+        "names_queried": 1,
+        "lookups": 2,
+        "elapsed_ms": 89,
+        "truncated": false
+      },
+      "archive_public_windows": [],
+      "search_plus_publishers_completed": 0,
+      "result_count": 0,
+      "adverse_count": 0,
+      "findings": [],
+      "pdf": {
+        "bytes": 1254690,
+        "sha256": "c59222c66dd8404dba2d57ee754c4c7895c053e2096b124720fe114a3d327144",
+        "valid_header": true
+      },
+      "elapsed_ms": 4584,
+      "response_sha256": "ce57986bb5b184175854c860353d8b00dd0a4d1d62963dc589948524b6ceb89a",
+      "provider_metrics": {
+        "route": "standard",
+        "total_ms": 4429,
+        "archive_rows": 3,
+        "archive_scan_ms": 89,
+        "brave": 4,
+        "gemini": 1,
+        "hosted": 0,
+        "cost": 0.021467,
+        "source_status": {
+          "global_news": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "open_web": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "publisher_search": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          },
+          "global_news_archive": {
+            "attempted": 1,
+            "completed": 1,
+            "partial": 0,
+            "failed": 0
+          },
+          "official_regulatory": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          }
+        },
+        "classification": "completed"
+      }
+    },
+    {
+      "event": "adverse_live_qa_case",
+      "case_number": 6,
+      "sequence": 6,
+      "started_at": "2026-11-20T07:31:35.515Z",
+      "subject": "Microsoft",
+      "route": "adverse_media",
+      "date_from": null,
+      "date_to": null,
+      "http_status": 200,
+      "screening_status": "completed",
+      "response_error": null,
+      "profile": "unsafe",
+      "decision_eligible": false,
+      "profile_reason": "confirmed_adverse_incomplete_coverage",
+      "processing_reasons": [
+        "classification_uncertain"
+      ],
+      "unresolved_results": 17,
+      "bucket_counts": {
+        "adverse_media": 2,
+        "general_news_mentions": 34,
+        "no_impact_media": 14
+      },
+      "coverage_complete": true,
+      "coverage_reasons": [],
+      "source_status": [
+        {
+          "source": "current_news",
+          "status": "complete"
+        },
+        {
+          "source": "open_web",
+          "status": "complete"
+        },
+        {
+          "source": "archive",
+          "status": "complete"
+        },
+        {
+          "source": "official_records",
+          "status": "not_requested"
+        }
+      ],
+      "archive_origin": "local_index",
+      "archive_reason": null,
+      "archive_scan": {
+        "rows_scanned": 29960,
+        "rows_returned": 29960,
+        "names_requested": 1,
+        "names_queried": 1,
+        "lookups": 2,
+        "elapsed_ms": 5500,
+        "truncated": false
+      },
+      "archive_public_windows": [],
+      "search_plus_publishers_completed": 0,
+      "result_count": 2,
+      "adverse_count": 2,
+      "findings": [
+        {
+          "title": "Microsoft licensing corruption scandal - Wikipedia",
+          "url": "https://en.wikipedia.org/wiki/Microsoft_licensing_corruption_scandal",
+          "subject_role": "direct_actor",
+          "media_bucket": "adverse_media"
+        },
+        {
+          "title": "Microsoft Data Breach in 2026 | Breachsense",
+          "url": "https://www.breachsense.com/breaches/microsoft-data-breach",
+          "subject_role": "direct_actor",
+          "media_bucket": "adverse_media"
+        }
+      ],
+      "pdf": {
+        "bytes": 1353977,
+        "sha256": "b75775a1e91fd9ed18ada5705bc3e58325770b2f22324c3a74f4afea19d80a5d",
+        "valid_header": true
+      },
+      "elapsed_ms": 119702,
+      "response_sha256": "bdb2b40eb0dc70ecf479801d78b25f6614e7217a437e68b905826f49dc6e71a9",
+      "provider_metrics": {
+        "route": "standard",
+        "total_ms": 119603,
+        "archive_rows": 29960,
+        "archive_scan_ms": 5500,
+        "brave": 4,
+        "gemini": 5,
+        "hosted": 0,
+        "cost": 0.043232,
+        "source_status": {
+          "global_news": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "open_web": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "publisher_search": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          },
+          "global_news_archive": {
+            "attempted": 1,
+            "completed": 1,
+            "partial": 0,
+            "failed": 0
+          },
+          "official_regulatory": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          }
+        },
+        "classification": "completed"
+      }
+    },
+    {
+      "event": "adverse_live_qa_case",
+      "case_number": 7,
+      "sequence": 7,
+      "started_at": "2026-11-20T07:33:35.218Z",
+      "subject": "Donald Trump",
+      "route": "adverse_media",
+      "date_from": null,
+      "date_to": null,
+      "http_status": 200,
+      "screening_status": "partial",
+      "response_error": null,
+      "profile": "unsafe",
+      "decision_eligible": false,
+      "profile_reason": "confirmed_adverse_incomplete_coverage",
+      "processing_reasons": [
+        "classification_uncertain"
+      ],
+      "unresolved_results": 4,
+      "bucket_counts": {
+        "adverse_media": 2,
+        "general_news_mentions": 48,
+        "no_impact_media": 0
+      },
+      "coverage_complete": false,
+      "coverage_reasons": [
+        "archive_partial"
+      ],
+      "source_status": [
+        {
+          "source": "current_news",
+          "status": "complete"
+        },
+        {
+          "source": "open_web",
+          "status": "complete"
+        },
+        {
+          "source": "archive",
+          "status": "partial"
+        },
+        {
+          "source": "official_records",
+          "status": "not_requested"
+        }
+      ],
+      "archive_origin": "local_index_partial",
+      "archive_reason": "scan_time_limit_exceeded",
+      "archive_scan": {
+        "rows_scanned": 67562,
+        "rows_returned": 67562,
+        "names_requested": 1,
+        "names_queried": 1,
+        "lookups": 1,
+        "elapsed_ms": 15014,
+        "truncated": true
+      },
+      "archive_public_windows": [],
+      "search_plus_publishers_completed": 0,
+      "result_count": 2,
+      "adverse_count": 2,
+      "findings": [
+        {
+          "title": "Trump pardons wipe nearly $2 billion in victim repayment and taxpayer recovery for Medicare and tax fraud, and more | Governor of California",
+          "url": "https://www.gov.ca.gov/2026/03/05/trumpcriminals3",
+          "subject_role": "direct_actor",
+          "media_bucket": "adverse_media"
+        },
+        {
+          "title": "What's behind Trump's pardons of people convicted of public corruption? : NPR",
+          "url": "https://www.npr.org/2026/05/08/nx-s1-5815216/whats-behind-trumps-pardons-of-people-convicted-of-public-corruption",
+          "subject_role": "direct_actor",
+          "media_bucket": "adverse_media"
+        }
+      ],
+      "pdf": {
+        "bytes": 1359878,
+        "sha256": "dbacd5478fd1f842ce92908ac7cfd28a51deb05f98d379e4721a019dfce72cd1",
+        "valid_header": true
+      },
+      "elapsed_ms": 253814,
+      "response_sha256": "42a45ce47c8975614752c420c7441ff70e6d3ab05249592428e6e91ed6ef1d0e",
+      "provider_metrics": {
+        "route": "standard",
+        "total_ms": 253801,
+        "archive_rows": 67562,
+        "archive_scan_ms": 15014,
+        "brave": 4,
+        "gemini": 5,
+        "hosted": 0,
+        "cost": 0.043936,
+        "source_status": {
+          "global_news": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "open_web": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "publisher_search": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          },
+          "global_news_archive": {
+            "attempted": 1,
+            "completed": 0,
+            "partial": 1,
+            "failed": 0
+          },
+          "official_regulatory": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          }
+        },
+        "classification": "completed"
+      }
+    },
+    {
+      "event": "adverse_live_qa_case",
+      "case_number": 8,
+      "sequence": 8,
+      "started_at": "2026-11-20T07:37:49.032Z",
+      "subject": "DP World",
+      "route": "adverse_media",
+      "date_from": "2026-10-21",
+      "date_to": "2026-10-23",
+      "http_status": 200,
+      "screening_status": "partial",
+      "response_error": null,
+      "profile": "inconclusive",
+      "decision_eligible": false,
+      "profile_reason": "incomplete_coverage",
+      "processing_reasons": [],
+      "unresolved_results": 0,
+      "bucket_counts": {
+        "adverse_media": 0,
+        "general_news_mentions": 0,
+        "no_impact_media": 0
+      },
+      "coverage_complete": false,
+      "coverage_reasons": [
+        "archive_partial"
+      ],
+      "source_status": [
+        {
+          "source": "current_news",
+          "status": "complete"
+        },
+        {
+          "source": "open_web",
+          "status": "complete"
+        },
+        {
+          "source": "archive",
+          "status": "partial"
+        },
+        {
+          "source": "official_records",
+          "status": "not_requested"
+        }
+      ],
+      "archive_origin": "local_index_partial",
+      "archive_reason": "public_archive_incomplete",
+      "archive_scan": {
+        "rows_scanned": 0,
+        "rows_returned": 0,
+        "names_requested": 1,
+        "names_queried": 1,
+        "lookups": 2,
+        "elapsed_ms": 81,
+        "truncated": false
+      },
+      "archive_public_windows": [
+        {
+          "date_from": "2026-10-21T00:00:00.000Z",
+          "date_to": "2026-10-22T21:15:00.000Z",
+          "attempts": 3,
+          "http_statuses": [
+            429,
+            429,
+            429
+          ],
+          "attempt_failures": [
+            "archive_search_failed_429",
+            "archive_search_failed_429",
+            "archive_search_failed_429"
+          ],
+          "status": "archive_search_failed_429"
+        }
+      ],
+      "search_plus_publishers_completed": 0,
+      "result_count": 0,
+      "adverse_count": 0,
+      "findings": [],
+      "pdf": {
+        "bytes": 1250851,
+        "sha256": "93c3cd08a2c6d391cdad512a8f3492181a2db5750d0fc948e3412b51773db7dc",
+        "valid_header": true
+      },
+      "elapsed_ms": 57665,
+      "response_sha256": "261fa745c1cfe217ef269eebaddcd145b7931ea8e603fe1e0c5a8461c17d0bd6",
+      "provider_metrics": {
+        "route": "standard",
+        "total_ms": 57590,
+        "archive_rows": 0,
+        "archive_scan_ms": 81,
+        "brave": 4,
+        "gemini": 0,
+        "hosted": 3,
+        "cost": 0.02,
+        "source_status": {
+          "global_news": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "open_web": {
+            "attempted": 2,
+            "completed": 2,
+            "partial": 0,
+            "failed": 0
+          },
+          "publisher_search": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          },
+          "global_news_archive": {
+            "attempted": 1,
+            "completed": 0,
+            "partial": 1,
+            "failed": 0
+          },
+          "official_regulatory": {
+            "attempted": 0,
+            "completed": 0,
+            "partial": 0,
+            "failed": 0
+          }
+        },
+        "classification": "not_needed"
+      }
+    }
+  ]
+}

@@ -7,17 +7,25 @@ This plan applies to the unreleased adverse-media candidate merged with current 
 | File | Change |
 | --- | --- |
 | `lib/gdelt-summary-v2.mjs` (new) | Deterministic interval manifests, bounded per-entity summaries, idempotent conditional updates, contiguous V2 watermark, point-read search. |
-| `scripts/gdelt-ingest.mjs` | Dual-write V2 after V1 batch success; publish an interval only after every summary update succeeds. Preserve source ZIP hash. |
+| `scripts/gdelt-ingest.mjs` | Dual-write V2 after V1 batch success; publish an interval only after every summary update succeeds. Preserve source ZIP hash. Bound the optional V2 write concurrency at 64. |
 | `scripts/gdelt-backfill.mjs` | Pass V2 clients to the same interval processor; keep the two-hour UAE schedule and V1 checkpoint behavior. |
-| `scripts/gdelt-index-v2-rebuild.mjs` (new) | Replay stored immutable ZIPs from the V1 watermark range with bounded resume; no public GDELT re-download. |
-| `scripts/gdelt-index-v2-verify.mjs` (new) | Independently check every manifest, ZIP digest, parsed count, and summary interval bit before cutover. |
-| `lib/gdelt-local-index.mjs` | Feature-flagged V2 point reads; V1 remains the fallback before a verified contiguous V2 snapshot. |
-| `lib/adverse-media.mjs` | Separate date gaps from retrieval/evidence limits; propagate unreviewed archive evidence into the locked Inconclusive decision. |
+| `scripts/gdelt-index-v2-rebuild.mjs` (new) | Replay stored immutable ZIPs from the V1 watermark range with bounded resume; no public GDELT re-download. Track both ends of a contiguous cursor, handle newly backfilled older history, reject legacy high-only cursors, and keep explicit repair runs from changing the normal cursor. |
+| `scripts/gdelt-index-v2-verify.mjs` (new) | Independently check every manifest, ZIP digest, parsed count, and summary interval bit before cutover. Allow an explicit historical segment to be audited before the full V2 watermark is contiguous. |
+| `lib/gdelt-local-index.mjs` | Feature-flagged V2 point reads; V1 remains the fallback before a verified contiguous V2 snapshot. Read a fresh source/V2 watermark signature for cache invalidation. |
+| `lib/adverse-media.mjs` | Separate date gaps from retrieval/evidence limits; propagate unreviewed archive evidence into the locked Inconclusive decision. Invalidate the 12-hour completed-result cache when archive coverage changes and expose unresolved classification reason codes. |
+| `server.mjs` | Start the listener only when executed as the program entry point, permitting an isolated HTTP QA runner to import the production handler without also binding port 8080. |
+| `scripts/adverse-candidate-live-qa.mjs` (new) | Guarded internal-only real-provider HTTP runner with ephemeral billing/report stores, subject cohort and PDF validation. |
+| `scripts/gdelt-v2-live-probe.mjs` (new) | Read-only managed-identity point-read probe that reports counts and latency without leaking raw article references. |
 | `infrastructure/api-gdelt-platform.bicep` | Add the V2 summary and manifest tables in the existing account; identities already have scoped Table roles. |
+| `infrastructure/api-gdelt-v2-tables.bicep` (new) | Deploy only the two V2 tables against the existing account. The full platform template's what-if also proposed unrelated Blob and role-assignment modifications, so it is not the safe table-creation path. |
+| `.github/workflows/deploy-gdelt-backfill.yml` | Bind the new V2 runtime files to the reviewed image SHA, retain the dual-write setting on job redeploy, and check that both tables exist before enabling it. |
+| `.github/workflows/deploy-api.yml` | Pass the V2 read environment setting into both API preview and deployment; avoid silently resetting a later canary on redeploy. |
 | `infrastructure/api-gdelt-job.bicep`, `infrastructure/api-gdelt-backfill-job.bicep` | Supply V2 table names and dual-write flag to ingestion jobs. |
 | `infrastructure/api.bicep` | Supply V2 read flag and table names to API; start disabled. Set undated Azure-only policy on; explicit historical date gaps retain public DOC fallback. |
 | `test/gdelt-summary-v2.test.mjs` (new) | Idempotence, retry, watermark gaps, popular-name bounds, exact-name lookup, and unreviewed-evidence behavior. |
+| `test/adverse-media-profile-decision.test.mjs` | Preserve an explicit uncertainty reason when a completed Gemini call still leaves unresolved evidence. |
 | `test/adverse-media-public-coverage.test.mjs` | Direct public DOC retry tests use explicit historical dates; undated Azure-only behavior is checked in the V2 test file. Existing V1 ingestion and local-index tests run unchanged. |
+| `docs/gdelt-v2-live-validation-2026-11-20.md`, `docs/gdelt-v2-live-results-2026-11-20.json`, `docs/gdelt-v2-masdar-live-2026-11-20.json`, `docs/gdelt-v2-point-probe-2026-11-20.json` (new) | Record the isolated Azure job evidence, nine real-provider API outcomes, point-read metrics and open release gates. |
 
 The second review found that the existing locked profile unit test also encoded the superseded “one confirmed adverse plus partial coverage is Inconclusive” rule. `lib/adverse-media-profile-decision.mjs`, `test/adverse-media-profile-decision.test.mjs`, and one assertion in `test/adverse-media.test.mjs` are therefore in scope: any confirmed direct adverse article remains Unsafe, with the coverage gap still reported.
 
@@ -33,13 +41,13 @@ No HTML, Flo, billing, or customer data files are involved. A full-evidence revi
 
 ### Operator sequence
 
-1. Deploy `api-gdelt-platform.bicep` to create only the two additional tables. Confirm table creation and identity access with a read/write probe in the GDELT job identity. No existing archive table or ZIP is replaced.
+1. Deploy `api-gdelt-v2-tables.bicep` only after its what-if shows exactly two `Create` changes and no modifications. Confirm table creation and identity access with a read/write probe in the GDELT job identity. Do not apply the full platform template for this step: its live what-if on 20 November also proposed unrelated Blob and role-assignment modifications.
 2. Deploy the daily and weekend jobs with `v2DualWrite=true` and the same reviewed digest. The API remains at `gdeltV2ReadEnabled=false`. Confirm the daily job writes `verified=true` manifests and advances `state/v2-watermark.json`; a source or verifier failure must leave the V1 and V2 watermarks at their last committed intervals.
 3. Start a **manual execution** of the existing ingestion job with its command overridden to `node scripts/gdelt-index-v2-rebuild.mjs`. It reads stored ZIPs only. The resumable cursor is `state/v2-rebuild.json`; each run processes at most `GDELT_V2_REBUILD_MAX_INTERVALS` (default 400). Repeat until `more=false`. Pause this manual task around the scheduled daily/weekend runs if storage throughput is constrained. An explicit `GDELT_V2_REBUILD_FROM` replays an earlier range after repair.
 4. Start a manual execution with command `node scripts/gdelt-index-v2-verify.mjs` and a bounded `GDELT_V2_VERIFY_FROM`/`GDELT_V2_VERIFY_TO` range. The command exits 2 and returns `next_interval` when more intervals remain; advance the range until every V1 interval is checked. Treat any digest, count, V1 sample, manifest, or summary-bit disagreement as a failed release gate.
 5. Only when V2 start/end covers the **fresh** V1 watermark, compare V2 and paged V1 results for at least 50 controlled names including common names. Enable `gdeltV2ReadEnabled=true` for a canary only after parity, p50/p95/p99 and fail-closed profile checks. Disable that parameter for immediate rollback.
 
-The two manual commands use the existing digest-pinned image and ingestion identity. `az containerapp job start` supports `--command`; pass the reviewed job name/resource group and preserve its configured environment. Do not use the older localhost prototype or change the live API flag during rebuild. This plan does not claim that an all-article review can finish in milliseconds.
+The two manual commands use a digest-pinned candidate image and the existing ingestion identity. `az containerapp job start` supports `--command`, `--image`, and execution-only `--env-vars`; when overriding environment variables, pass the storage URL, archive container, V1 table and managed-identity client ID explicitly. Do not use the older localhost prototype or change the live API flag during rebuild. This plan does not claim that an all-article review can finish in milliseconds. The [20 November live validation](gdelt-v2-live-validation-2026-11-20.md) records the currently verified segment and the remaining gates.
 
 ## Review 1: data and migration
 

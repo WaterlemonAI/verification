@@ -38,7 +38,9 @@ jobs:
           git merge-base --is-ancestor "${PUBLISHED_IMAGE_SHA}" HEAD
           git diff --quiet "${PUBLISHED_IMAGE_SHA}" HEAD -- \
             Dockerfile.api package.json package-lock.json \
-            scripts/gdelt-ingest.mjs scripts/gdelt-backfill.mjs lib/azure-managed-identity.mjs
+            scripts/gdelt-ingest.mjs scripts/gdelt-backfill.mjs \
+            scripts/gdelt-index-v2-rebuild.mjs scripts/gdelt-index-v2-verify.mjs \
+            lib/gdelt-summary-v2.mjs lib/azure-managed-identity.mjs
 
       - name: Sign in to Azure with workload identity
         uses: azure/login@v2
@@ -73,6 +75,14 @@ jobs:
             {name:"GDELT_INDEX_TABLE",value:"GdeltEntityMentions"}
           ] | all(.[]; . as $expected | $env | any(.name == $expected.name and .value == $expected.value))' \
             <<< "${job}" > /dev/null
+          if [[ "${{ vars.GDELT_V2_DUAL_WRITE }}" == 'true' ]]; then
+            storage_id="$(az storage account show --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --name stai7uaegdeltuaen001 --query id --output tsv)"
+            for table in GdeltEntitySummaryV2 GdeltIntervalManifestV2; do
+              az resource show --ids "${storage_id}/tableServices/default/tables/${table}" \
+                --api-version 2023-05-01 --query id --output tsv > /dev/null
+            done
+          fi
           environment_id="$(jq -r .properties.environmentId <<< "${job}")"
           identity_id="$(az identity show --resource-group "${AZURE_RESOURCE_GROUP}" --name id-ai7uae-gdelt-ingest --query id --output tsv)"
           identity_client="$(az identity show --resource-group "${AZURE_RESOURCE_GROUP}" --name id-ai7uae-gdelt-ingest --query clientId --output tsv)"
@@ -108,7 +118,7 @@ jobs:
             changes="$(az deployment group what-if --resource-group "${AZURE_RESOURCE_GROUP}" --template-file "${template}" \
               --parameters image="${IMAGE}" environmentId="${CONTAINERAPPS_ENVIRONMENT_ID}" \
                 ingestionIdentityResourceId="${IDENTITY_ID}" ingestionIdentityClientId="${IDENTITY_CLIENT}" \
-                acrLoginServer="${ACR_LOGIN_SERVER}" \
+                acrLoginServer="${ACR_LOGIN_SERVER}" v2DualWrite="${{ vars.GDELT_V2_DUAL_WRITE == 'true' && 'true' || 'false' }}" \
               --no-pretty-print --query "changes[?changeType!='Ignore'].{type:changeType,id:resourceId}" --output json)"
             jq -e --arg expected "${expected}" \
               'length == 1 and all(.[]; . as $change | ($change.id | endswith("/Microsoft.App/jobs/" + $expected)) and (["NoChange", "Create", "Modify"] | index($change.type) != null))' \
@@ -132,7 +142,7 @@ jobs:
             --template-file infrastructure/api-gdelt-job.bicep \
             --parameters image="${IMAGE}" environmentId="${CONTAINERAPPS_ENVIRONMENT_ID}" \
               ingestionIdentityResourceId="${IDENTITY_ID}" ingestionIdentityClientId="${IDENTITY_CLIENT}" \
-              acrLoginServer="${ACR_LOGIN_SERVER}" --output none
+              acrLoginServer="${ACR_LOGIN_SERVER}" v2DualWrite="${{ vars.GDELT_V2_DUAL_WRITE == 'true' && 'true' || 'false' }}" --output none
           deployed="$(az containerapp job show --resource-group "${AZURE_RESOURCE_GROUP}" --name caj-ai7uae-gdelt-ingest --query 'properties.template.containers[0].image' --output tsv)"
           test "${deployed}" = "${IMAGE}"
 
@@ -152,7 +162,7 @@ jobs:
             --template-file infrastructure/api-gdelt-backfill-job.bicep \
             --parameters image="${IMAGE}" environmentId="${CONTAINERAPPS_ENVIRONMENT_ID}" \
               ingestionIdentityResourceId="${IDENTITY_ID}" ingestionIdentityClientId="${IDENTITY_CLIENT}" \
-              acrLoginServer="${ACR_LOGIN_SERVER}" --output none
+              acrLoginServer="${ACR_LOGIN_SERVER}" v2DualWrite="${{ vars.GDELT_V2_DUAL_WRITE == 'true' && 'true' || 'false' }}" --output none
           schedule="$(az containerapp job show --resource-group "${AZURE_RESOURCE_GROUP}" --name caj-ai7uae-gdelt-backfill --query 'properties.configuration.scheduleTriggerConfig.cronExpression' --output tsv)"
           deployed="$(az containerapp job show --resource-group "${AZURE_RESOURCE_GROUP}" --name caj-ai7uae-gdelt-backfill --query 'properties.template.containers[0].image' --output tsv)"
           test "${schedule}" = '0 18 * * 6'

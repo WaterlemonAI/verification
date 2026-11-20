@@ -250,8 +250,12 @@ export async function processGdeltInterval({ timestamp, container, table, v2 = n
   const parsed = entityRows((await entry.buffer()).toString('utf8'));
   await writeBatches(table, parsed.byPartition, signal);
   if (v2) {
+    const concurrency = Number(process.env.GDELT_V2_WRITE_CONCURRENCY || 24);
+    if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 64) {
+      throw new Error('invalid_v2_write_concurrency');
+    }
     await publishV2Interval({ timestamp, zip, parsed, summaryTable: v2.summaryTable,
-      manifestTable: v2.manifestTable, signal });
+      manifestTable: v2.manifestTable, signal, concurrency });
     const { verifyV2Interval } = await import('./gdelt-index-v2-verify.mjs');
     await verifyV2Interval(timestamp, { ...v2, v1Table: table });
     await advanceV2Watermark(v2.container, v2.manifestTable, timestamp, signal);

@@ -104,6 +104,7 @@ test('external attack and historical compilation require corroboration before Un
     assert.equal(result.coverage.complete, true);
     assert.equal(result.summary.profile_status, 'inconclusive');
     assert.equal(result.summary.decision_eligible, false);
+    assert.ok(result.summary.processing_reason_codes.includes('classification_uncertain'));
     assert.equal(result.results.length, 0);
     assert.match(result.media_buckets.general_news_mentions[0].evidence_assessment, /corroboration/);
   }

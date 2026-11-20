@@ -1,0 +1,84 @@
+{
+  "event": "gdelt_v2_live_probe",
+  "source_window": [
+    "2026-10-22T21:15:00.000Z",
+    "2026-11-20T01:30:00.000Z"
+  ],
+  "v2_window": [
+    "20261120013000",
+    "20261120013000"
+  ],
+  "results": [
+    {
+      "name": "DP World",
+      "elapsed_ms": 47,
+      "point_reads": 2,
+      "matches": []
+    },
+    {
+      "name": "Emirates NBD",
+      "elapsed_ms": 9,
+      "point_reads": 2,
+      "matches": []
+    },
+    {
+      "name": "Etihad Airways",
+      "elapsed_ms": 11,
+      "point_reads": 2,
+      "matches": [
+        {
+          "kind": "organization",
+          "mention_count": 2,
+          "unreviewed_count": 2,
+          "first_interval": "20261023011500",
+          "last_interval": "20261023011500",
+          "sample_refs": 2
+        }
+      ]
+    },
+    {
+      "name": "Emaar Properties",
+      "elapsed_ms": 8,
+      "point_reads": 2,
+      "matches": []
+    },
+    {
+      "name": "Microsoft",
+      "elapsed_ms": 8,
+      "point_reads": 2,
+      "matches": [
+        {
+          "kind": "organization",
+          "mention_count": 83,
+          "unreviewed_count": 83,
+          "first_interval": "20261022211500",
+          "last_interval": "20261120013000",
+          "sample_refs": 20
+        }
+      ]
+    },
+    {
+      "name": "Donald Trump",
+      "elapsed_ms": 9,
+      "point_reads": 2,
+      "matches": [
+        {
+          "kind": "person",
+          "mention_count": 1643,
+          "unreviewed_count": 1643,
+          "first_interval": "20261022211500",
+          "last_interval": "20261120013000",
+          "sample_refs": 20
+        }
+      ]
+    },
+    {
+      "name": "Masdar",
+      "elapsed_ms": 7,
+      "point_reads": 2,
+      "matches": []
+    }
+  ],
+  "execution": "caj-ai7uae-gdelt-ingest-i8mvc6v",
+  "recorded_at": "2026-11-20T08:24:55.2258267Z"
+}

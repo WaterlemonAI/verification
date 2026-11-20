@@ -9,6 +9,7 @@ import { searchLocalGdeltIndex } from '../lib/gdelt-local-index.mjs';
 import { entityRows, processGdeltInterval } from '../scripts/gdelt-ingest.mjs';
 import { verifyV2Interval, verifyV2Range } from '../scripts/gdelt-index-v2-verify.mjs';
 import { rebuildStoredV2 } from '../scripts/gdelt-index-v2-rebuild.mjs';
+import { probeV2Names } from '../scripts/gdelt-v2-live-probe.mjs';
 
 class MemoryTable {
   rows = new Map();
@@ -191,6 +192,47 @@ test('stored rebuild accepts compact UTC interval boundaries and checkpoints eac
   assert.deepEqual(processed, [timestamp]);
   assert.equal(result.more, false);
   assert.equal(result.last_completed_interval, '2026-11-20T01:30:00.000Z');
+  assert.equal(container.blobs.has('state/v2-rebuild.json'), false);
+});
+
+test('stored rebuild resumes forward and incorporates newly backfilled older intervals', async () => {
+  const container = new MemoryContainer();
+  const processed = [];
+  const processInterval = async ({ timestamp }) => processed.push(timestamp);
+  const initial = { coverage_start: '2026-11-20T01:00:00.000Z', coverage_end: '2026-11-20T01:30:00.000Z' };
+  const input = { container, table: new MemoryTable(), v2: {}, processInterval };
+  let result = await rebuildStoredV2({ ...input, sourceState: initial, maxIntervals: 2 });
+  assert.equal(result.more, true);
+  result = await rebuildStoredV2({ ...input, sourceState: initial, maxIntervals: 2 });
+  assert.equal(result.more, false);
+  assert.deepEqual(processed, ['20261120010000', '20261120011500', '20261120013000']);
+  const expanded = { coverage_start: '2026-11-20T00:30:00.000Z', coverage_end: '2026-11-20T01:45:00.000Z' };
+  result = await rebuildStoredV2({ ...input, sourceState: expanded, maxIntervals: 2 });
+  assert.equal(result.more, true);
+  result = await rebuildStoredV2({ ...input, sourceState: expanded, maxIntervals: 2 });
+  assert.equal(result.more, false);
+  assert.deepEqual(processed.slice(3), ['20261120004500', '20261120003000', '20261120014500']);
+  assert.equal(result.first_completed_interval, '2026-11-20T00:30:00.000Z');
+  assert.equal(result.last_completed_interval, '2026-11-20T01:45:00.000Z');
+  await rebuildStoredV2({ ...input, sourceState: expanded, from: '20261120004500',
+    to: '20261120004500' });
+  const cursor = JSON.parse(container.blobs.get('state/v2-rebuild.json').bytes.toString());
+  assert.equal(cursor.first_completed_interval, result.first_completed_interval);
+  assert.equal(cursor.last_completed_interval, result.last_completed_interval);
+});
+
+test('legacy high-water cursor cannot certify unprocessed history', async () => {
+  const container = new MemoryContainer();
+  container.blobs.set('state/v2-rebuild.json', { etag: '1', bytes: Buffer.from(JSON.stringify({
+    index_version: 2, last_completed_interval: '2026-11-20T01:30:00.000Z' })) });
+  const processed = [];
+  const result = await rebuildStoredV2({ container, table: new MemoryTable(), v2: {}, maxIntervals: 2,
+    sourceState: { coverage_start: '2026-10-22T21:15:00.000Z', coverage_end: '2026-11-20T01:30:00.000Z' },
+    processInterval: async ({ timestamp }) => processed.push(timestamp) });
+  assert.deepEqual(processed, ['20261022211500', '20261022213000']);
+  assert.equal(result.more, true);
+  assert.equal(result.last_completed_interval, '2026-10-22T21:30:00.000Z');
+  assert.equal(JSON.parse(container.blobs.get('state/v2-rebuild.json').bytes.toString()).cursor_version, 2);
 });
 
 test('V2 watermark cannot jump a missing interval and extends only across verified manifests', async () => {
@@ -208,6 +250,18 @@ test('V2 watermark cannot jump a missing interval and extends only across verifi
   state = await advanceV2Watermark(container, manifestTable, '20261120013000');
   assert.equal(state.coverage_end, '20261120014500');
   assert.equal(state.committed_intervals, 4);
+});
+
+test('explicit verifier range can audit a committed segment before full V2 coverage', async () => {
+  const timestamp = '20261120010000';
+  const sourceState = { coverage_start: '2026-11-20T01:00:00.000Z',
+    coverage_end: '2026-11-20T01:30:00.000Z' };
+  const container = { getBlobClient: () => { throw new Error('verifier_reached_raw_zip'); } };
+  await assert.rejects(() => verifyV2Range({ container, summaryTable: {}, manifestTable: {},
+    sourceState, v2State: { coverage_start: '20261120013000', coverage_end: '20261120013000' },
+    from: timestamp, to: timestamp, maxIntervals: 1 }), /verifier_reached_raw_zip/);
+  await assert.rejects(() => verifyV2Range({ container, summaryTable: {}, manifestTable: {},
+    sourceState, v2State: null, maxIntervals: 1 }), /v2_watermark_required/);
 });
 
 test('ready V2 lookup uses only point reads and exposes unreviewed evidence', async () => {
@@ -229,6 +283,19 @@ test('ready V2 lookup uses only point reads and exposes unreviewed evidence', as
   assert.equal(result.scan.unreviewed_count, 200);
   assert.equal(result.results.length, 20);
   assert.equal(result.evidencePending, true);
+});
+
+test('live V2 probe reports only aggregate counts from two point reads per name', async () => {
+  const summaryTable = new MemoryTable();
+  await summaryTable.createEntity({ ...summaryKey('organization', 'Example Holdings'),
+    indexVersion: 2, mentionCount: 3, unreviewedCount: 3,
+    firstInterval: '20261120010000', lastInterval: '20261120013000',
+    sampleRefs: JSON.stringify([{ url: 'https://example.test/private-path' }]) });
+  const [result] = await probeV2Names(['Example Holdings'], { clients: { summaryTable } });
+  assert.equal(result.point_reads, 2);
+  assert.equal(result.matches[0].mention_count, 3);
+  assert.equal(result.matches[0].sample_refs, 1);
+  assert.equal(JSON.stringify(result).includes('private-path'), false);
 });
 
 test('V2 cannot clear older V1 history while its own watermark is still recent', async () => {
@@ -299,4 +366,28 @@ test('complete source coverage with unreviewed archive mentions cannot produce S
   assert.equal(response.summary.profile_status, 'inconclusive');
   assert.equal(response.summary.decision_eligible, false);
   assert.ok(response.coverage.reason_codes.includes('archive_evidence_unreviewed'));
+});
+
+test('a new archive watermark invalidates an otherwise reusable twelve-hour Safe cache', async () => {
+  const request = validateAdverseMediaRequest({ entity_type: 'business', name: 'Archive Cache Marker Ltd',
+    languages: ['en'] });
+  let signature = 'archive-interval-a';
+  let archiveCalls = 0;
+  const options = { request, apiKey: 'test', cacheSignature: async () => signature,
+    aiClassifier: async (results) => ({ status: 'not_needed', results, candidates: 0,
+      inputTokens: 0, outputTokens: 0, cost: 0 }),
+    fetchImpl: async (input) => Response.json(new URL(input).pathname.includes('/news/')
+      ? { results: [] } : { web: { results: [] } }),
+    archiveSearch: async () => { archiveCalls += 1; return { results: [], complete: true,
+      origin: 'local', hostedAttempts: 0, state: { coverage_start: '2026-10-01T00:00:00Z',
+        coverage_end: '2026-11-20T01:30:00Z' } }; } };
+  const first = await screenAdverseMedia(options);
+  assert.equal(first.usage.cache_hit, false);
+  const second = await screenAdverseMedia(options);
+  assert.equal(second.usage.cache_hit, true);
+  assert.equal(archiveCalls, 1);
+  signature = 'archive-interval-b';
+  const third = await screenAdverseMedia(options);
+  assert.equal(third.usage.cache_hit, false);
+  assert.equal(archiveCalls, 2);
 });
