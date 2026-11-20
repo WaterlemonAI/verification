@@ -1,6 +1,25 @@
 # Adverse Media V2: shorter go-live path
 
-**Source reviewed:** `codex/gdelt-versioned-summary`, 20 November 2026. This is a source and GitHub configuration review, not a fresh Azure readback. No deployment or cloud configuration change was made. Refresh the [last retained Azure validation](gdelt-v2-live-validation-2026-11-20.md) before promotion.
+## Current development review — 21 November 2026
+
+Reviewed `codex/gdelt-versioned-summary` at `69e76f5` (draft PR #156), its green hosted test check, the current `main` SHA, and the latest production API and GDELT workflow runs visible in GitHub. Fifty-five focused local tests passed. This is **source and workflow evidence**, not a fresh Azure resource readback. The last retained Azure validation below remains dated 20 November. PR #156 is not deployed; its Event Registry adapter has one live extraction-contract check, not a completed subject-level screening.
+
+The article adapter, guarded Gemini article review, paged V1 worker, owner-scoped review ledger, evidence route, PDF/callback integration and separate flags are **built in source**. Release work should concentrate on the following three gaps and the live gates, not rewrite those components:
+
+1. **Match review scope for individuals.** The queue reviews the original request before Brave association discovery, but `screenAdverseMedia` can add discovered associations before its V2 lookup (`lib/adverse-media.mjs`). This can make the final V2 posting count differ from the saved review and leave a fully reviewed individual Inconclusive. Resolve association scope once and reuse that exact frozen request for V1 paging, V2 count, review ID and final screening; add a three-part individual-name regression. Keep any mismatch fail-closed.
+2. **Make the review budget honest.** The source admits up to 200 postings by default, while Event Registry alone is reserved at USD 0.001 per extraction and the whole screening shares a USD 0.14 provider ceiling with Brave and Gemini. Two hundred distinct articles cannot complete within that ceiling even before AI. Measure actual deduplicated article count and costs in the controlled cohort, then set a supported posting limit or an approved price/budget change. Budget exhaustion remains Inconclusive.
+3. **Exercise the actual asynchronous path.** `scripts/adverse-candidate-live-qa.mjs` starts the server with `startWorker: false` and sends only synchronous requests. It cannot establish queue durability, Event Registry and Gemini review, JSON/PDF finalization or signed callback delivery. Extend the isolated candidate harness or use a controlled candidate app with a real worker, private report store and callback receiver; retain sanitized result hashes, evidence counts and costs. Do not use the trial credential for customer traffic. [Event Registry says its trial is for evaluation, not production](https://help.newsapi.ai/how-does-the-free-trial-work/).
+
+### Refined critical path
+
+1. Fix the individual association-scope mismatch and add its focused regression. Decide the supported review-size/budget envelope from a short internal trial. Keep PR #156 draft and both API flags off while doing this.
+2. Review and merge the finished PR with flags off. Confirm the deployed immutable image digest and configuration; enable GDELT V2 dual-write for the existing jobs. Rebuild all stored V1 intervals using the resumable job, then independently verify the entire contiguous range and run the 50-subject V1/V2 parity gate with zero mismatches. Recheck the current Azure watermarks before claiming completion.
+3. On the internal-only candidate, run a **real async** trial cohort through standard and Search+, including prior failures, zero and high-volume names, English/Arabic, direct adverse, namesake, ambiguous and inaccessible articles. Verify every final JSON, PDF, owner-scoped evidence page and signed callback, including retry/rollback; label expected outcomes. Record cold/warm p50/p90/p95/p99, provider calls, tokens and cost. Any missing plausible article remains Inconclusive.
+4. Activate V2 reads first, with archive review off, after parity and a controlled production smoke. Then move to a paid Event Registry plan, put its key in Key Vault, confirm external processing and publisher-content handling, and activate opt-in archive review for controlled customers only after the async gate passes. Monitor source coverage, Safe/Unsafe/Inconclusive shifts, queue age, budget denials, PDF/callback success and cost. Roll back the review flag first, then V2 reads if parity or lookup correctness regresses; preserve indexed data and settled reports.
+
+The existing API, queue, GDELT tables and report store can be reused. No additional production storage service is on this path. A source merge, successful CI or fast V2 point read alone is not permission to return Safe on unreviewed archive evidence.
+
+**Retained Azure evidence:** the last [live validation](gdelt-v2-live-validation-2026-11-20.md) is dated 20 November 2026. Refresh it before promotion. This review made no cloud configuration change.
 
 ## Execution and two review passes
 
@@ -19,7 +38,7 @@ The second pass checked the evidence required to activate V2 reads. The old poin
 | **M1 — V2 archive lookup** | Fast point lookup replaces the slow V1 scan for undated searches. Standard and Search+ keep Brave and the dated public-GDELT fallback. A nonempty archive without article review stays **Inconclusive**; a confirmed direct adverse finding from another source stays **Unsafe**. | Complete and verify the V2 rebuild over the **current stored V1 range**, prove V1/V2 parity and no false Safe, and measure customer-visible profile changes. No article-text provider is needed. |
 | **M2 — full article review** | Explicitly opted-in asynchronous requests page all stored V1 mentions, resolve articles, and return a final profile, PDF, signed callback and owner-scoped evidence pages. | Approved article-text source and rights, Gemini adjudication, budget/concurrency limits, queued-job kill switch and real-article end-to-end proof. Keep `GDELT_ARCHIVE_REVIEW_ENABLED=false` until then. |
 
-**Last retained state:** only 20 historical V2 intervals plus one current interval were independently verified out of 2,706; V2 reads were off. V1 began 22 October 2026, about four weeks before the retained 20 November readback. This is not today's Azure state. The production server currently supplies no `adverseArticleResolver`; the updated readiness guard rejects M2 requests even if its flag is turned on.
+**Last retained state:** only 20 historical V2 intervals plus one current interval were independently verified out of 2,706; V2 reads were off. V1 began 22 October 2026, about four weeks before the retained 20 November readback. This is not today's Azure state. The adapter is wired in PR #156 but is not in the last deployed production API image; the branch's readiness guard rejects M2 requests when its resolver or V2 read path is unavailable.
 
 ## Gaps in the original sequence
 
