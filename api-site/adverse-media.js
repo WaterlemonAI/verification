@@ -69,6 +69,8 @@ const copyResponse = byId('copy-response');
 const sendButton = byId('send-request');
 const formError = byId('form-error');
 const deepResearch = byId('deep-research');
+const archiveReview = byId('archive-review');
+const archiveReviewField = byId('archive-review-field');
 const callbackField = byId('callback-field');
 const callbackUrl = byId('callback-url');
 const callbackAccessKeyField = byId('callback-access-key-field');
@@ -78,7 +80,8 @@ const downloadReport = byId('download-report');
 let latestReportUrl = '';
 let archiveReviewEnabled = false;
 fetch('/service/adverse_media/config').then((response) => response.ok ? response.json() : null)
-  .then((config) => { archiveReviewEnabled = config?.archive_review_enabled === true; })
+  .then((config) => { archiveReviewEnabled = config?.archive_review_enabled === true;
+    archiveReviewField.hidden = !archiveReviewEnabled; })
   .catch(() => {});
 
 const regionPresets = {
@@ -191,6 +194,7 @@ function requestBody() {
     search_plus: byId('search-plus').checked,
     max_results: maxResults,
     deep_research: deepResearch.checked,
+    archive_review: archiveReviewEnabled && archiveReview.checked,
     callback_url: deepResearch.checked ? callbackUrl.value.trim() : '',
     callback_access_key: deepResearch.checked ? callbackAccessKey.value : '',
     customer_logo_url: customerLogoUrl.value.trim()
@@ -204,6 +208,7 @@ deepResearch.addEventListener('change', () => {
   callbackUrl.disabled = !deepResearch.checked;
   callbackAccessKey.disabled = !deepResearch.checked;
   if (!deepResearch.checked) { callbackUrl.value = ''; callbackAccessKey.value = ''; }
+  if (!deepResearch.checked) archiveReview.checked = false;
 });
 
 byId('regions').addEventListener('change', (event) => {
@@ -251,8 +256,12 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
   let body;
   try { body = requestBody(); }
   catch (error) { formError.textContent = error.message; return; }
-  if (body.search_plus && body.deep_research && !archiveReviewEnabled) {
-    formError.textContent = 'Deep research callbacks are not enabled for Search+ yet.';
+  if (body.archive_review && (!body.deep_research || !body.callback_url || body.date_from || body.date_to)) {
+    formError.textContent = 'Archive article review requires deep research, a callback URL and no date filters.';
+    return;
+  }
+  if (body.search_plus && body.deep_research && !body.archive_review) {
+    formError.textContent = 'Search+ deep research callbacks require an available, explicitly selected archive review.';
     return;
   }
 

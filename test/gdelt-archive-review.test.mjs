@@ -127,3 +127,21 @@ test('a complete archive review reaches the locked profile without relying on th
   assert.equal(stale.summary.profile_status, 'inconclusive');
   assert.equal(stale.coverage.archive_review, null);
 });
+
+test('an explicitly requested review cannot become Safe after the review switch is disabled', async () => {
+  const request = validateAdverseMediaRequest({ entity_type: 'business', name,
+    languages: ['en'], deep_research: true, archive_review: true,
+    callback_url: 'https://example.com/webhook' });
+  const result = presentAdverseMediaResponse(await screenAdverseMedia({ request, apiKey: 'fixture',
+    aiClassifier: async (items) => ({ status: 'not_needed', results: items, candidates: 0,
+      inputTokens: 0, outputTokens: 0, cost: 0 }),
+    archiveSearch: async () => ({ origin: 'local', complete: true, evidencePending: false,
+      results: [], state: snapshot, scan: { mode: 'v2_point_summary', mentions_indexed: 0, unreviewed_count: 0 } }),
+    archiveReview: { status: 'inconclusive', reason: 'archive_review_disabled', unresolved: 1 },
+    fetchImpl: async (input) => Response.json(new URL(input).pathname.includes('/news/')
+      ? { results: [] } : { web: { results: [] } }), cacheSignature: async () => 'review-disabled' }));
+  assert.equal(result.status, 'completed');
+  assert.equal(result.coverage.archive_review.reason, 'archive_review_disabled');
+  assert.equal(result.summary.profile_status, 'inconclusive');
+  assert.equal(result.summary.decision_eligible, false);
+});

@@ -157,6 +157,33 @@ test('archive review releases bounded pages and screens once after the review se
   assert.equal(finalReview.status, 'completed');
 });
 
+test('disabled archive review settles queued work as inconclusive without resolving articles', async () => {
+  const job = makeDeepResearchJob({ ...request, archive_all_stored: true, archive_review: true },
+    { owner_id: 'synthetic-owner' });
+  job.archive_review_enabled = true;
+  let controller;
+  let reviewCalls = 0;
+  let screened;
+  let delivered;
+  const done = new Promise((resolve) => {
+    const queue = { receive: async () => messageFor(job),
+      complete: async () => { controller.stop(); resolve(); } };
+    controller = startDeepResearchWorker({ queue, resultStore: new MemoryAdverseMediaReportStore(),
+      store: { getMasterKey: async () => 'configured' }, archiveReviewEnabled: () => false,
+      archiveReviewStep: async () => { reviewCalls += 1; return { status: 'completed' }; },
+      screen: async (input) => { screened = input;
+        return { status: 'completed', coverage: { complete: true }, summary: { profile_status: 'inconclusive', decision_eligible: false } }; },
+      finalize: async ({ response }) => response,
+      deliver: async (_job, result) => { delivered = result; }
+    });
+  });
+  await done;
+  assert.equal(reviewCalls, 0);
+  assert.equal(screened.request.archive_review, true);
+  assert.equal(screened.archiveReview.reason, 'archive_review_disabled');
+  assert.equal(delivered.summary.profile_status, 'inconclusive');
+});
+
 test('failed callbacks reuse the saved screening and make zero additional Brave calls', async () => {
   const job = makeDeepResearchJob(request, { owner_id: 'synthetic-owner' });
   const resultStore = new MemoryAdverseMediaReportStore();

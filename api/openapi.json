@@ -460,7 +460,7 @@
     "/service/adverse_media_search_plus": {
       "post": {
         "summary": "Adverse Media (Search+) — parallel screening",
-        "description": "Runs additive Search+ publisher and general-source retrieval with source-fact classification. The endpoint is separately enabled. When archive review is enabled, deep_research may queue a full stored-archive evidence review and signed callback; otherwise this endpoint remains synchronous and rejects callbacks. A nonempty archive cannot be cleared as Safe without article-level evidence. search_plus is forced true. Every final result includes a permanent PDF report.",
+        "description": "Runs additive Search+ publisher and general-source retrieval with source-fact classification. The endpoint is separately enabled. Deep research callbacks require explicit archive_review=true and an available article-review integration; otherwise this endpoint remains synchronous. A nonempty archive cannot be cleared as Safe without article-level evidence. search_plus is forced true. Every final result includes a permanent PDF report.",
         "operationId": "screenAdverseMediaSearchPlus",
         "security": [{ "ApiKey": [] }],
         "requestBody": {
@@ -3237,7 +3237,8 @@
           "risk_threshold": { "type": "number", "minimum": 0, "maximum": 1, "deprecated": true, "description": "Backward-compatible decimal alias for review_threshold_percent. review_threshold_percent takes precedence when both are supplied." },
           "search_plus": { "type": "boolean", "default": false, "description": "Reserves bounded query capacity for explicit site-restricted searches across selected high-value publishers, prioritising requested countries, and consolidates those results with standard evidence. coverage.search_plus lists successfully screened and incomplete publisher batches. The search is provider-index based, not a direct publisher crawl." },
           "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 },
-          "deep_research": { "type": "boolean", "default": false, "description": "Enables asynchronous screening and optional signed callback delivery. With the archive-review feature enabled and an undated request, the worker pages through all stored Azure archive postings; incomplete article adjudication stays Inconclusive." },
+          "deep_research": { "type": "boolean", "default": false, "description": "Enables asynchronous screening and optional signed callback delivery. Existing deep-research requests do not run stored-archive article review unless archive_review=true is also supplied." },
+          "archive_review": { "type": "boolean", "default": false, "description": "Explicitly opts into stored-archive article review. Requires deep_research=true, callback_url, no date_from/date_to, and an enabled article-review integration. If that integration is unavailable the API rejects the request; unresolved evidence never clears the profile as Safe." },
           "callback_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS callback URL. Accepted only when deep_research is true. Receives the final completed or explicitly partial result." },
           "callback_access_key": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z0-9._~+/-]+=*$", "description": "Optional Bearer token sent only in the callback POST Authorization header. Requires callback_url and deep_research=true; it is not returned in responses or reports." },
           "customer_logo_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS PNG or JPEG used on the automatically generated PDF report." }

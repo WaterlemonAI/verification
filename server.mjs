@@ -605,7 +605,7 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
 }
 
 async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
-  variant = 'legacy', archiveSearch = null) {
+  variant = 'legacy', archiveSearch = null, archiveReviewAvailable = false) {
   const dedicatedSearchPlus = variant === 'search_plus';
   const startedAt = Date.now();
   let screeningResult;
@@ -661,14 +661,17 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     if (Buffer.byteLength(JSON.stringify(input)) > 32 * 1024) {
       return json(res, 413, { status: 'Error', error: 'Adverse-media input must be 32 KiB or smaller.' });
     }
-    if (dedicatedSearchPlus && (input.deep_research === true || input.callback_url || input.callback_access_key)
-      && process.env.GDELT_ARCHIVE_REVIEW_ENABLED !== 'true') {
-      return json(res, 400, { status: 'Error', error: 'Deep research callbacks are not available for Adverse Media (Search+).' });
-    }
     if (!dedicatedSearchPlus && input.search_plus === true) {
       return json(res, 400, { status: 'Error', error: 'Use /service/adverse_media_search_plus for Search+ screening.' });
     }
     const request = validateAdverseMediaRequest(dedicatedSearchPlus ? { ...input, search_plus: true } : input);
+    if (request.archive_review && !archiveReviewAvailable) {
+      return json(res, 503, { status: 'Error', error: 'Stored-archive article review is not available.' });
+    }
+    if (dedicatedSearchPlus && (request.deep_research || request.callback_url || input.callback_access_key)
+      && !request.archive_review) {
+      return json(res, 400, { status: 'Error', error: 'Search+ callbacks require an available, explicitly requested archive review.' });
+    }
     const callbackAccessKey = validateCallbackAccessKey(input.callback_access_key, request.callback_url);
     if (request.deep_research && request.callback_url) {
       if (!deepResearchQueue) return json(res, 503, { status: 'Error', error: 'Deep research callback processing is temporarily unavailable.' });
@@ -677,8 +680,7 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       const job = makeDeepResearchJob(request, { owner_id: reportOwnerId(token), request_origin: requestOrigin(req),
         callback_access_key: callbackAccessKey, input_payload: safeInput,
         transaction_id: res.getHeader('x-ai7-transaction-id') });
-      job.archive_review_enabled = process.env.GDELT_ARCHIVE_REVIEW_ENABLED === 'true'
-        && request.archive_all_stored === true;
+      job.archive_review_enabled = archiveReviewAvailable && request.archive_review === true;
       if (req.ai7Case) {
         job.case_id = req.ai7Case.id;
         job.case_workspace_id = req.ai7Client.id;
@@ -2844,6 +2846,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   floCallbackQueue = createFloCallbackQueue(),
   merchantScreener = configuredMerchantScreener, requestCapacity = createRequestCapacity(),
   startWorker = process.env.NODE_ENV !== 'test' } = {}) {
+  const archiveReviewAvailable = () => process.env.GDELT_ARCHIVE_REVIEW_ENABLED === 'true'
+    && process.env.ADVERSE_MEDIA_WORKER_ENABLED !== 'false' && Boolean(deepResearchQueue)
+    && (typeof adverseArchiveReviewStep === 'function'
+      || (typeof adverseArticleResolver === 'function' && process.env.GDELT_V2_READ_ENABLED === 'true'
+        && Boolean(process.env.GDELT_STORAGE_ACCOUNT_URL)));
   const loginThrottle = createLoginThrottle();
   const portalLoginThrottle = createLoginThrottle();
   const resetThrottle = createLoginThrottle();
@@ -2934,6 +2941,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       archiveReviewStep: adverseArchiveReviewStep || ((job) => processArchiveReviewPage({
         ownerId: job.owner_id, request: job.request, store: reportStore,
         ...(adverseArticleResolver ? { resolveArticle: adverseArticleResolver } : {}) })),
+      archiveReviewEnabled: archiveReviewAvailable,
       fetchImpl,
       onFinal: async (job, response) => {
         if (process.env.CASE_MANAGER_ENABLED !== 'true' || !caseStore || !job.case_id || !job.case_workspace_id) return;
@@ -3134,10 +3142,10 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return await createEntitySearchReport(req, res, store, reportStore);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media')
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
-          'legacy', adverseArchiveSearch);
+          'legacy', adverseArchiveSearch, archiveReviewAvailable());
       if (req.method === 'POST' && url.pathname === '/service/adverse_media_search_plus')
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
-          'search_plus', adverseArchiveSearch);
+          'search_plus', adverseArchiveSearch, archiveReviewAvailable());
       const archiveEvidenceMatch = /^\/service\/adverse_media\/reviews\/([a-f0-9]{32})\/evidence$/i.exec(url.pathname);
       if (req.method === 'GET' && archiveEvidenceMatch) {
         const token = bearerToken(req);
@@ -3197,7 +3205,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
         return json(res, 200, {
           supported_languages: adverseMediaConfig.supportedLanguages,
-          archive_review_enabled: process.env.GDELT_ARCHIVE_REVIEW_ENABLED === 'true',
+          archive_review_enabled: archiveReviewAvailable(),
           regions: adverseMediaConfig.regions,
           maximum_languages: adverseMediaConfig.maxLanguages,
           maximum_paid_queries: adverseMediaConfig.maxPaidQueries,
@@ -3206,7 +3214,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           default_review_threshold_percent: adverseMediaConfig.defaultReviewThresholdPercent,
           default_high_risk_threshold_percent: adverseMediaConfig.defaultHighRiskThresholdPercent,
           cost_guardrail_usd: adverseMediaConfig.costGuardrailUsd
-        }, { 'cache-control': 'public, max-age=3600' });
+        }, { 'cache-control': 'no-store' });
       }
       if (req.method === 'GET' && ['app.kycprobe.com', 'localhost', '127.0.0.1'].includes(host)) {
         if (url.pathname === '/flo-sortable.min.js')

@@ -685,6 +685,8 @@ test('deep research queues an optional signed HTTPS callback without exposing cr
     assert.equal(jobs[0].callback_secret, body.callback.signing_secret);
     assert.equal(jobs[0].callback_access_key, 'callback-token-123');
     assert.equal(jobs[0].request.callback_url, '');
+    assert.equal(jobs[0].request.archive_review, false);
+    assert.equal(jobs[0].archive_review_enabled, false);
     assert.equal(JSON.stringify(jobs[0].request).includes('callback-token-123'), false);
     assert.equal(JSON.stringify(jobs[0].input_payload).includes('callback-token-123'), false);
     assert.equal(JSON.stringify(body).includes('callback-token-123'), false);
@@ -705,6 +707,44 @@ test('deep research queues an optional signed HTTPS callback without exposing cr
   } finally {
     await new Promise((resolve) => queuedApp.close(resolve));
   }
+});
+
+test('archive article review requires explicit opt-in, an undated callback and a ready resolver', async (t) => {
+  const base = { entity_type: 'business', name: 'Example LLC', deep_research: true,
+    callback_url: 'https://example.com/ai7-webhook', archive_review: true };
+  assert.throws(() => validateAdverseMediaRequest({ ...base, archive_review: 'true' }), /archive_review must be a boolean/);
+  assert.throws(() => validateAdverseMediaRequest({ ...base, callback_url: '' }), /archive_review requires/);
+  assert.throws(() => validateAdverseMediaRequest({ ...base, date_from: '2026-01-01' }), /undated/);
+
+  const prior = process.env.GDELT_ARCHIVE_REVIEW_ENABLED;
+  t.after(() => { if (prior === undefined) delete process.env.GDELT_ARCHIVE_REVIEW_ENABLED;
+    else process.env.GDELT_ARCHIVE_REVIEW_ENABLED = prior; });
+  process.env.GDELT_ARCHIVE_REVIEW_ENABLED = 'true';
+  const jobs = [];
+  const queue = { enqueue: async (job) => jobs.push(job) };
+  const unavailable = createAppServer({ store, deepResearchQueue: queue, startWorker: false });
+  await new Promise((resolve) => unavailable.listen(0, '127.0.0.1', resolve));
+  t.after(() => unavailable.close());
+  const unavailableUrl = `http://127.0.0.1:${unavailable.address().port}`;
+  assert.equal((await (await fetch(`${unavailableUrl}/service/adverse_media/config`)).json()).archive_review_enabled, false);
+  const headers = { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' };
+  const rejected = await fetch(`${unavailableUrl}/service/adverse_media`, {
+    method: 'POST', headers, body: JSON.stringify(base) });
+  assert.equal(rejected.status, 503);
+  assert.equal(jobs.length, 0);
+
+  const ready = createAppServer({ store, deepResearchQueue: queue, startWorker: false,
+    adverseArchiveReviewStep: async () => ({ status: 'completed' }) });
+  await new Promise((resolve) => ready.listen(0, '127.0.0.1', resolve));
+  t.after(() => ready.close());
+  const readyUrl = `http://127.0.0.1:${ready.address().port}`;
+  assert.equal((await (await fetch(`${readyUrl}/service/adverse_media/config`)).json()).archive_review_enabled, true);
+  const accepted = await fetch(`${readyUrl}/service/adverse_media`, {
+    method: 'POST', headers, body: JSON.stringify(base) });
+  assert.equal(accepted.status, 202);
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].request.archive_review, true);
+  assert.equal(jobs[0].archive_review_enabled, true);
 });
 
 test('all-source outage fails closed with a customer-safe reason and transaction ID', async () => {
@@ -747,7 +787,7 @@ test('public documentation exposes the complete route without provider or key de
   const specText = await (await fetch(`${appUrl}/openapi.json`)).text();
   const spec = JSON.parse(specText);
   assert.ok(Object.hasOwn(spec.paths, '/service/adverse_media'));
-  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'high_risk_threshold_percent', 'review_threshold_percent', 'search_plus', 'max_results', 'deep_research', 'callback_url']) {
+  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'high_risk_threshold_percent', 'review_threshold_percent', 'search_plus', 'max_results', 'deep_research', 'archive_review', 'callback_url']) {
     assert.ok(Object.hasOwn(spec.components.schemas.AdverseMediaRequest.properties, field));
     assert.ok(html.includes(field));
   }
