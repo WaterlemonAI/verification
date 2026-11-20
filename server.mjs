@@ -21,10 +21,11 @@ import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/a
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
 import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs';
 import { processArchiveReviewPage } from './lib/gdelt-archive-review.mjs';
+import { createEventRegistryArticleResolver } from './lib/gdelt-article-evidence-provider.mjs';
 import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
-import { createGeminiAdverseClassifier } from './lib/ai7uae-gemini-adverse-api.mjs';
+import { createGeminiAdverseClassifier, createGeminiArchiveArticleReviewer } from './lib/ai7uae-gemini-adverse-api.mjs';
 import { publicFormDefinition, resolveFormServiceInput, validateFormDefinition, validateFormSubmission } from './lib/forms.mjs';
 import { createFormsQueue, makeFormsJob, startFormsWorker, validateFormsCallbackUrl } from './lib/forms-queue.mjs';
 import { createFormsSubmissionStore, formSubmissionFingerprint, publicFormQueueReceipt } from './lib/forms-submission-store.mjs';
@@ -2849,7 +2850,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   const archiveReviewAvailable = () => process.env.GDELT_ARCHIVE_REVIEW_ENABLED === 'true'
     && process.env.ADVERSE_MEDIA_WORKER_ENABLED !== 'false' && Boolean(deepResearchQueue)
     && (typeof adverseArchiveReviewStep === 'function'
-      || (typeof adverseArticleResolver === 'function' && process.env.GDELT_V2_READ_ENABLED === 'true'
+      || ((typeof adverseArticleResolver === 'function' || Boolean(process.env.EVENT_REGISTRY_API_KEY))
+        && process.env.GDELT_V2_READ_ENABLED === 'true'
         && Boolean(process.env.GDELT_STORAGE_ACCOUNT_URL)));
   const loginThrottle = createLoginThrottle();
   const portalLoginThrottle = createLoginThrottle();
@@ -2938,9 +2940,17 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         inputPayload: job.input_payload || job.request, transactionId: job.transaction_id || null,
         variant: job.request.search_plus ? 'search_plus' : 'legacy'
       }),
-      archiveReviewStep: adverseArchiveReviewStep || ((job) => processArchiveReviewPage({
-        ownerId: job.owner_id, request: job.request, store: reportStore,
-        ...(adverseArticleResolver ? { resolveArticle: adverseArticleResolver } : {}) })),
+      archiveReviewStep: adverseArchiveReviewStep || ((job, { costGuard } = {}) => {
+        const meteredFetch = costGuard?.fetch || fetchImpl;
+        const reviewArticle = createGeminiArchiveArticleReviewer({
+          getApiKey: () => store.getMasterKey('adverse-media-ai'), fetchImpl: meteredFetch });
+        const resolveArticle = adverseArticleResolver || createEventRegistryArticleResolver({
+          getApiKey: async () => process.env.EVENT_REGISTRY_API_KEY || '', reviewArticle,
+          fetchImpl: meteredFetch });
+        return processArchiveReviewPage({ ownerId: job.owner_id, request: job.request,
+          store: reportStore, resolveArticle, pageSize: 4,
+          maxPostings: Math.min(1000, Math.max(1, Number(process.env.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS) || 200)) });
+      }),
       archiveReviewEnabled: archiveReviewAvailable,
       fetchImpl,
       onFinal: async (job, response) => {

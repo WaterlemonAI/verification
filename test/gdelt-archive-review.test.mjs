@@ -70,6 +70,7 @@ test('a direct adverse decision requires quoted article evidence and a confirmed
   assert.equal(result.adverse, 1);
   assert.equal(result.unresolved, 0);
   assert.equal(result.adverse_sample[0].quote, 'Example Holdings was fined');
+  assert.equal(Object.hasOwn(result.adverse_sample[0], 'text'), false);
 });
 
 test('unsupported quote and count mismatch remain inconclusive', async () => {
@@ -91,6 +92,18 @@ test('unverified V2 lookup cannot start review', async () => {
     store: new MemoryAdverseMediaReportStore(), snapshotResult: { complete: false,
       state: snapshot, scan: { mode: 'v2_point_summary', mentions_indexed: 1 } }, table: table([row(1)]) });
   assert.deepEqual(result, { status: 'unavailable', reason: 'verified_v2_snapshot_required' });
+});
+
+test('a review above its posting budget stays Inconclusive without calling a provider', async () => {
+  let called = 0;
+  const result = await processArchiveReviewPage({ ownerId: 'owner-1', request,
+    store: new MemoryAdverseMediaReportStore(), snapshotResult: baseline(201),
+    table: table([row(1)]), maxPostings: 200,
+    resolveArticle: async () => { called += 1; return null; } });
+  assert.equal(result.status, 'inconclusive');
+  assert.equal(result.reason, 'archive_review_posting_budget');
+  assert.equal(result.expected_postings, 201);
+  assert.equal(called, 0);
 });
 
 test('a complete archive review reaches the locked profile without relying on the V2 sample', async () => {

@@ -15,6 +15,16 @@ test('each paid search attempt, including retries, is admitted before dialing', 
   assert.equal(Math.round((MAX_SCREENING_COST_USD - MAX_PROVIDER_COST_USD) * 100), 1);
 });
 
+test('Event Registry article calls reserve their token cost before dialing', async () => {
+  let dialed = 0;
+  const guard = createScreeningCostGuard(async () => { dialed += 1; return Response.json({}); });
+  const url = 'https://analytics.eventregistry.org/api/v1/extractArticleInfo';
+  await guard.fetch(url, { method: 'POST', body: '{}' });
+  assert.equal(guard.providerCalls.event_registry_article, 1);
+  assert.equal(guard.reservedProviderCostUsd, 0.001);
+  assert.equal(dialed, 1);
+});
+
 test('a restarted job cannot reset its lifetime provider allowance', async () => {
   const resultStore = new MemoryAdverseMediaReportStore();
   const job = { ownerId: 'synthetic-owner', screeningId: 'synthetic-screening' };
