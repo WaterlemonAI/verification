@@ -1,5 +1,7 @@
 # Adverse Media V2: production go-live plan
 
+**Critical-path review:** The [shorter two-milestone plan](adverse-media-v2-fast-go-live.md) supersedes the sequencing below. It allows verified V2 lookup to launch before article-text integration, while keeping unreviewed archive evidence Inconclusive. The sections below remain the fuller release evidence checklist for archive review.
+
 **Source reviewed:** `codex/gdelt-versioned-summary` at `6a337d6`, 20 November 2026. This is a source-based release plan. No fresh production readback, deployment, provider purchase, or configuration change was performed to prepare it. The [last retained Azure validation](gdelt-v2-live-validation-2026-11-20.md) is historical evidence and must be refreshed before promotion.
 
 ## Release decision today
