@@ -20,6 +20,7 @@ import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, 
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
 import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs';
+import { processArchiveReviewPage } from './lib/gdelt-archive-review.mjs';
 import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
@@ -660,7 +661,8 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     if (Buffer.byteLength(JSON.stringify(input)) > 32 * 1024) {
       return json(res, 413, { status: 'Error', error: 'Adverse-media input must be 32 KiB or smaller.' });
     }
-    if (dedicatedSearchPlus && (input.deep_research === true || input.callback_url || input.callback_access_key)) {
+    if (dedicatedSearchPlus && (input.deep_research === true || input.callback_url || input.callback_access_key)
+      && process.env.GDELT_ARCHIVE_REVIEW_ENABLED !== 'true') {
       return json(res, 400, { status: 'Error', error: 'Deep research callbacks are not available for Adverse Media (Search+).' });
     }
     if (!dedicatedSearchPlus && input.search_plus === true) {
@@ -675,6 +677,8 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       const job = makeDeepResearchJob(request, { owner_id: reportOwnerId(token), request_origin: requestOrigin(req),
         callback_access_key: callbackAccessKey, input_payload: safeInput,
         transaction_id: res.getHeader('x-ai7-transaction-id') });
+      job.archive_review_enabled = process.env.GDELT_ARCHIVE_REVIEW_ENABLED === 'true'
+        && request.archive_all_stored === true;
       if (req.ai7Case) {
         job.case_id = req.ai7Case.id;
         job.case_workspace_id = req.ai7Client.id;
@@ -2823,6 +2827,8 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
 
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
   adverseArchiveSearch = null,
+  adverseArchiveReviewStep = null,
+  adverseArticleResolver = null,
   peppolLookup = searchPeppolIndex,
   peppolGlobalLookup = searchPeppolGlobal, peppolCountryList = peppolGlobalCountries,
   otpStore = createLoginOtpStore(),
@@ -2921,9 +2927,13 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       present: presentAdverseMediaResponse,
       finalize: async ({ job, response, aiApiKey, costGuard }) => finalizeAdverseMediaReport({
         request: job.request, response, ownerId: job.owner_id, origin: job.request_origin,
-        aiApiKey, fetchImpl: costGuard.fetch, reportStore, jsonStore, reportId: job.report_id,
-        inputPayload: job.input_payload || job.request, transactionId: job.transaction_id || null
+        aiApiKey: job.request.search_plus ? '' : aiApiKey, fetchImpl: costGuard.fetch, reportStore, jsonStore, reportId: job.report_id,
+        inputPayload: job.input_payload || job.request, transactionId: job.transaction_id || null,
+        variant: job.request.search_plus ? 'search_plus' : 'legacy'
       }),
+      archiveReviewStep: adverseArchiveReviewStep || ((job) => processArchiveReviewPage({
+        ownerId: job.owner_id, request: job.request, store: reportStore,
+        ...(adverseArticleResolver ? { resolveArticle: adverseArticleResolver } : {}) })),
       fetchImpl,
       onFinal: async (job, response) => {
         if (process.env.CASE_MANAGER_ENABLED !== 'true' || !caseStore || !job.case_id || !job.case_workspace_id) return;
@@ -3128,6 +3138,37 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'POST' && url.pathname === '/service/adverse_media_search_plus')
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
           'search_plus', adverseArchiveSearch);
+      const archiveEvidenceMatch = /^\/service\/adverse_media\/reviews\/([a-f0-9]{32})\/evidence$/i.exec(url.pathname);
+      if (req.method === 'GET' && archiveEvidenceMatch) {
+        const token = bearerToken(req);
+        if (!req.ai7Client && !(await store.isClientKey(token))) {
+          return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+        }
+        const ownerId = reportOwnerId(token);
+        const reviewId = archiveEvidenceMatch[1].toLowerCase();
+        let review;
+        try { review = await reportStore.getArchiveReview({ ownerId, reviewId }); }
+        catch { return json(res, 503, { status: 'Error', error: 'Evidence service is temporarily unavailable.' }); }
+        if (!review) return json(res, 404, { status: 'Error', error: 'Review was not found.' });
+        try {
+          const cursor = url.searchParams.get('cursor') || null;
+          if (cursor && (cursor.length > 2048 || !/^[\x21-\x7e]+$/.test(cursor))) {
+            return json(res, 400, { status: 'Error', error: 'Invalid evidence cursor.' });
+          }
+          const page = await reportStore.listArchiveReviewItems({ ownerId, reviewId, cursor, pageSize: 100 });
+          return json(res, 200, { review_id: reviewId, status: review.state.status,
+            snapshot: review.state.snapshot, counts: {
+              expected_postings: review.state.expected_postings,
+              postings_scanned: review.state.postings_scanned,
+              unique_articles: review.state.unique_articles || 0,
+              adverse: review.state.adverse || 0,
+              unresolved: review.state.unresolved || 0
+            }, items: page.items, next_cursor: page.nextCursor }, { 'cache-control': 'private, no-store' });
+        } catch (error) {
+          return json(res, error.statusCode === 400 ? 400 : 503, { status: 'Error',
+            error: error.statusCode === 400 ? 'Invalid evidence cursor.' : 'Evidence service is temporarily unavailable.' });
+        }
+      }
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/dubai_ejari_verification' || url.pathname.startsWith('/service/dubai_ejari_verification/'))
         return await handleEjari(req, res, url, store, ejariStore, usageStore);
@@ -3156,6 +3197,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'GET' && url.pathname === '/service/adverse_media/config') {
         return json(res, 200, {
           supported_languages: adverseMediaConfig.supportedLanguages,
+          archive_review_enabled: process.env.GDELT_ARCHIVE_REVIEW_ENABLED === 'true',
           regions: adverseMediaConfig.regions,
           maximum_languages: adverseMediaConfig.maxLanguages,
           maximum_paid_queries: adverseMediaConfig.maxPaidQueries,

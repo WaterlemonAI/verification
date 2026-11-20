@@ -76,6 +76,10 @@ const callbackAccessKey = byId('callback-access-key');
 const customerLogoUrl = byId('customer-logo-url');
 const downloadReport = byId('download-report');
 let latestReportUrl = '';
+let archiveReviewEnabled = false;
+fetch('/service/adverse_media/config').then((response) => response.ok ? response.json() : null)
+  .then((config) => { archiveReviewEnabled = config?.archive_review_enabled === true; })
+  .catch(() => {});
 
 const regionPresets = {
   gulf: { countries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'], languages: ['en', 'ar'] },
@@ -247,8 +251,8 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
   let body;
   try { body = requestBody(); }
   catch (error) { formError.textContent = error.message; return; }
-  if (body.search_plus && body.deep_research) {
-    formError.textContent = 'Search+ cannot be combined with deep research callbacks.';
+  if (body.search_plus && body.deep_research && !archiveReviewEnabled) {
+    formError.textContent = 'Deep research callbacks are not enabled for Search+ yet.';
     return;
   }
 

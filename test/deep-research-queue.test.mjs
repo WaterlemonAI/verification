@@ -111,6 +111,52 @@ test('deep research worker delivers and removes a completed decision-eligible sc
   assert.equal(deliveredResult.usage, undefined);
 });
 
+test('archive review releases bounded pages and screens once after the review settles', async () => {
+  const job = makeDeepResearchJob({ ...request, archive_all_stored: true, search_plus: true },
+    { owner_id: 'synthetic-owner' });
+  job.archive_review_enabled = true;
+  const message = messageFor(job);
+  let available = true;
+  let releases = 0;
+  let steps = 0;
+  let screenCalls = 0;
+  let finalReview;
+  let controller;
+  const done = new Promise((resolve) => {
+    const queue = {
+      receive: async () => {
+        if (!available) return null;
+        available = false;
+        return message;
+      },
+      release: async (_message, nextJob) => {
+        releases += 1;
+        message.messageText = JSON.stringify(nextJob);
+        available = true;
+      },
+      complete: async () => { controller.stop(); resolve(); }
+    };
+    controller = startDeepResearchWorker({ queue, resultStore: new MemoryAdverseMediaReportStore(),
+      store: { getMasterKey: async () => 'configured' },
+      archiveReviewStep: async () => (++steps < 3 ? { status: 'processing' }
+        : { review_id: 'a'.repeat(32), status: 'completed', adverse: 0, unresolved: 0 }),
+      screen: async ({ archiveReview, aiClassifier }) => {
+        screenCalls += 1;
+        finalReview = archiveReview;
+        assert.equal(typeof aiClassifier, 'function');
+        return { status: 'completed', coverage: { complete: true }, summary: { decision_eligible: true } };
+      },
+      finalize: async ({ response }) => response,
+      deliver: async () => {}
+    });
+  });
+  await done;
+  assert.equal(steps, 3);
+  assert.equal(releases, 2);
+  assert.equal(screenCalls, 1);
+  assert.equal(finalReview.status, 'completed');
+});
+
 test('failed callbacks reuse the saved screening and make zero additional Brave calls', async () => {
   const job = makeDeepResearchJob(request, { owner_id: 'synthetic-owner' });
   const resultStore = new MemoryAdverseMediaReportStore();
