@@ -2940,14 +2940,15 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         inputPayload: job.input_payload || job.request, transactionId: job.transaction_id || null,
         variant: job.request.search_plus ? 'search_plus' : 'legacy'
       }),
-      archiveReviewStep: adverseArchiveReviewStep || ((job, { costGuard } = {}) => {
+      archiveReviewStep: adverseArchiveReviewStep || ((job, { costGuard, preparedArchiveScope } = {}) => {
         const meteredFetch = costGuard?.fetch || fetchImpl;
         const reviewArticle = createGeminiArchiveArticleReviewer({
           getApiKey: () => store.getMasterKey('adverse-media-ai'), fetchImpl: meteredFetch });
         const resolveArticle = adverseArticleResolver || createEventRegistryArticleResolver({
           getApiKey: async () => process.env.EVENT_REGISTRY_API_KEY || '', reviewArticle,
           fetchImpl: meteredFetch });
-        return processArchiveReviewPage({ ownerId: job.owner_id, request: job.request,
+        return processArchiveReviewPage({ ownerId: job.owner_id,
+          request: { ...job.request, associations: preparedArchiveScope?.associations || [] },
           store: reportStore, resolveArticle, pageSize: 4,
           maxPostings: Math.min(1000, Math.max(1, Number(process.env.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS) || 200)) });
       }),

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { processArchiveReviewPage, archiveReviewId } from '../lib/gdelt-archive-review.mjs';
 import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
-import { presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from '../lib/adverse-media.mjs';
+import { presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest,
+  prepareArchiveReviewScope } from '../lib/adverse-media.mjs';
 
 const name = 'Example Holdings';
 const nameHash = createHash('sha256').update('example holdings').digest('hex');
@@ -71,6 +72,37 @@ test('a direct adverse decision requires quoted article evidence and a confirmed
   assert.equal(result.unresolved, 0);
   assert.equal(result.adverse_sample[0].quote, 'Example Holdings was fined');
   assert.equal(Object.hasOwn(result.adverse_sample[0], 'text'), false);
+});
+
+test('a crash after article extraction never purchases the same article again', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const saveItem = store.saveArchiveReviewItem.bind(store);
+  let writes = 0;
+  store.saveArchiveReviewItem = async (input) => {
+    if (++writes === 1) throw new Error('controlled_write_interruption');
+    return saveItem(input);
+  };
+  let providerCalls = 0;
+  const resolveArticle = async (item) => {
+    providerCalls += 1;
+    return { status: 'general', url: item.url, text: `${name} was mentioned in a routine story.`,
+      quote: `${name} was mentioned`, subject_role: 'context_only', entity_match: 'confirmed' };
+  };
+  resolveArticle.version = 'controlled-fixture-v1';
+  const input = { ownerId: 'owner-crash', request, store, snapshotResult: baseline(1),
+    table: table([row(1)]), resolveArticle, pageSize: 1 };
+  await assert.rejects(processArchiveReviewPage({ ...input, clock: () => 0 }), /controlled_write_interruption/);
+  let result;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    result = await processArchiveReviewPage({ ...input, clock: () => 600_001 });
+    if (result.status !== 'processing') break;
+  }
+  assert.equal(providerCalls, 1);
+  assert.equal(result.status, 'inconclusive');
+  assert.equal(result.reason, 'archive_evidence_unresolved');
+  assert.equal(result.unresolved, 1);
+  const evidence = await store.listArchiveReviewItems({ ownerId: 'owner-crash', reviewId: result.review_id });
+  assert.equal(evidence.items[0].reason, 'article_review_interrupted');
 });
 
 test('unsupported quote and count mismatch remain inconclusive', async () => {
@@ -157,4 +189,42 @@ test('an explicitly requested review cannot become Safe after the review switch 
   assert.equal(result.coverage.archive_review.reason, 'archive_review_disabled');
   assert.equal(result.summary.profile_status, 'inconclusive');
   assert.equal(result.summary.decision_eligible, false);
+});
+
+test('final individual V2 lookup uses the exact associations reviewed by the worker', async () => {
+  const individual = validateAdverseMediaRequest({ entity_type: 'individual',
+    name: 'Mohammad Arbaz Uddin', languages: ['en'], deep_research: true,
+    archive_review: true, callback_url: 'https://example.com/webhook' });
+  let discoveryCalls = 0;
+  const prepared = await prepareArchiveReviewScope({ request: { ...individual, callback_url: '' }, apiKey: 'fixture',
+    fetchImpl: async () => { discoveryCalls += 1; return Response.json({ web: { results: [{
+      title: 'Mohammad Arbaz Uddin founder of Acme Holdings',
+      description: 'Mohammad Arbaz Uddin is founder of Acme Holdings.'
+    }] } }); } });
+  assert.deepEqual(prepared.associations, [{ value: 'Acme Holdings', type: 'organization' }]);
+  let archiveLookups = 0;
+  const reviewedRequest = { ...individual, callback_url: '', associations: prepared.associations };
+  const review = { review_id: archiveReviewId('individual-owner', reviewedRequest, snapshot, 'fixture-v1'),
+    status: 'completed', snapshot, expected_postings: 1, postings_scanned: 1,
+    unique_articles: 1, adverse: 0, unresolved: 0, general: 1 };
+  const input = { request: { ...individual, callback_url: '' }, apiKey: 'fixture',
+    preparedArchiveScope: prepared, archiveReview: review,
+    aiClassifier: async (items) => ({ status: 'not_needed', results: items, candidates: 0,
+      inputTokens: 0, outputTokens: 0, cost: 0 }),
+    archiveSearch: async (scoped) => {
+      archiveLookups += 1;
+      assert.deepEqual(scoped.associations, prepared.associations);
+      return { origin: 'local', complete: true, evidencePending: true, results: [], state: snapshot,
+        scan: { mode: 'v2_point_summary', mentions_indexed: 1, unreviewed_count: 1 } };
+    },
+    fetchImpl: async (url) => Response.json(new URL(url).pathname.includes('/news/')
+      ? { results: [] } : { web: { results: [] } }),
+    cacheSignature: async () => 'individual-scope-fixture' };
+  const result = presentAdverseMediaResponse(await screenAdverseMedia(input));
+  assert.equal(result.coverage.archive_review.status, 'completed');
+  assert.equal(result.summary.profile_status, 'safe');
+  assert.equal(discoveryCalls, 1);
+  assert.equal(archiveLookups, 1);
+  await assert.rejects(screenAdverseMedia({ ...input,
+    preparedArchiveScope: { ...prepared, associations: [] } }), /archive_review_scope_mismatch/);
 });
