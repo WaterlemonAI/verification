@@ -3210,8 +3210,8 @@
               "enum": ["ar", "de", "en", "es", "fa", "fr", "hi", "it", "nl", "pl", "pt", "ru", "tr", "uk", "ur", "zh"]
             }
           },
-          "date_from": { "type": "string", "format": "date" },
-          "date_to": { "type": "string", "format": "date" },
+          "date_from": { "type": "string", "format": "date", "description": "Defaults to one calendar year before date_to, or one calendar year before today when both dates are omitted." },
+          "date_to": { "type": "string", "format": "date", "description": "Defaults to today's UTC date when omitted. Historical archive coverage is reported separately." },
           "high_risk_threshold_percent": { "type": "number", "exclusiveMinimum": 0, "maximum": 100, "default": 90, "description": "Results at or above this percentage are assigned to the High Risk band. This value must not be lower than review_threshold_percent." },
           "review_threshold_percent": { "type": "number", "minimum": 0, "maximum": 100, "default": 65, "description": "Results from this percentage up to the High Risk boundary require Review. Lower scores are assigned to the Safe band. This value must not exceed high_risk_threshold_percent." },
           "risk_threshold": { "type": "number", "minimum": 0, "maximum": 1, "deprecated": true, "description": "Backward-compatible decimal alias for review_threshold_percent. review_threshold_percent takes precedence when both are supplied." },

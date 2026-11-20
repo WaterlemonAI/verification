@@ -9,6 +9,7 @@ process.env.AI7_API_KEY_HASHES = createHash('sha256').update(apiKey).digest('hex
 
 const { createAppServer } = await import('../server.mjs');
 const { EnvironmentStore } = await import('../lib/api-store.mjs');
+const { validateAdverseMediaRequest } = await import('../lib/adverse-media.mjs');
 
 const store = new EnvironmentStore();
 await store.setMasterKey('adverse-media', 'private-search-key');
@@ -264,6 +265,27 @@ before(async () => {
 });
 
 after(async () => new Promise((resolve) => app.close(resolve)));
+
+test('adverse media defaults to a disclosed one-year UTC window', () => {
+  const yearEndingOnDate = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd',
+    date_to: '2026-11-18' });
+  assert.equal(yearEndingOnDate.date_from, '2025-11-18');
+  assert.equal(yearEndingOnDate.date_to, '2026-11-18');
+  assert.equal(yearEndingOnDate.archive_all_stored, false);
+
+  const leapYear = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd',
+    date_to: '2024-02-29' });
+  assert.equal(leapYear.date_from, '2023-02-28');
+
+  const today = new Date().toISOString().slice(0, 10);
+  const current = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd' });
+  assert.equal(current.archive_all_stored, true);
+  assert.equal(current.date_to, today);
+  assert.equal(current.date_from, validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd',
+    date_to: today }).date_from);
+  assert.throws(() => validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd',
+    date_from: '2099-01-01' }), /date_from must not be after date_to/);
+});
 
 test('adverse media endpoint returns a customer-safe evidence response', async () => {
   const response = await fetch(`${appUrl}/service/adverse_media`, {

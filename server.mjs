@@ -604,7 +604,7 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
 }
 
 async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
-  variant = 'legacy') {
+  variant = 'legacy', archiveSearch = null) {
   const dedicatedSearchPlus = variant === 'search_plus';
   const startedAt = Date.now();
   let screeningResult;
@@ -629,6 +629,12 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
       failed_free_search_queries: usage.failed_free_search_queries || 0,
       hosted_archive_attempts: usage.hosted_archive_attempts || 0,
       hosted_archive_retries: usage.hosted_archive_retries || 0,
+      archive_origin: screeningResult.coverage?.archive_origin,
+      archive_reason_code: screeningResult.coverage?.archive_reason_code || null,
+      archive_rows_scanned: screeningResult.coverage?.archive_scan?.rows_scanned ?? null,
+      archive_scan_ms: screeningResult.coverage?.archive_scan?.elapsed_ms ?? null,
+      archive_scan_truncated: screeningResult.coverage?.archive_scan?.truncated ?? null,
+      archive_scan_reused: usage.cache_hit === true,
       provider_calls: costGuard?.providerCalls || { brave: 0, gemini: 0 },
       reserved_provider_cost_usd: costGuard?.reservedProviderCostUsd || 0,
       source_status: screeningResult.coverage?.source_status,
@@ -694,6 +700,7 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     const aiClassifier = dedicatedSearchPlus ? createGeminiAdverseClassifier(aiApiKey) : null;
     costGuard = createScreeningCostGuard(fetchImpl);
     const result = await screenAdverseMedia({ request, apiKey: providerKey, aiApiKey, aiClassifier, fetchImpl, costGuard,
+      ...(archiveSearch ? { archiveSearch } : {}),
       deferAiUntilSourcesComplete: dedicatedSearchPlus, sourceAttemptsExhausted: !dedicatedSearchPlus });
     screeningResult = result;
     screeningFinishedAt = Date.now();
@@ -2821,6 +2828,7 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
 }
 
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
+  adverseArchiveSearch = null,
   peppolLookup = searchPeppolIndex,
   peppolGlobalLookup = searchPeppolGlobal, peppolCountryList = peppolGlobalCountries,
   otpStore = createLoginOtpStore(),
@@ -3121,9 +3129,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       }
       if (req.method === 'POST' && url.pathname === '/reports/entity-search.pdf') return await createEntitySearchReport(req, res, store, reportStore);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media')
-        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore);
+        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
+          'legacy', adverseArchiveSearch);
       if (req.method === 'POST' && url.pathname === '/service/adverse_media_search_plus')
-        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore, 'search_plus');
+        return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
+          'search_plus', adverseArchiveSearch);
       if (req.method === 'POST' && url.pathname === '/service/merchant_screening') return await createMerchantScreening(req, res, store, merchantScreener, reportStore);
       if (url.pathname === '/service/dubai_ejari_verification' || url.pathname.startsWith('/service/dubai_ejari_verification/'))
         return await handleEjari(req, res, url, store, ejariStore, usageStore);
