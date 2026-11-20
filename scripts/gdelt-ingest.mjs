@@ -6,6 +6,7 @@ import { BlobServiceClient } from '@azure/storage-blob';
 import { TableClient } from '@azure/data-tables';
 import unzipper from 'unzipper';
 import { ContainerAppsManagedIdentityCredential } from '../lib/azure-managed-identity.mjs';
+import { advanceV2Watermark, publishV2Interval, v2Clients } from '../lib/gdelt-summary-v2.mjs';
 
 const SOURCE_ORIGIN = 'https://data.gdeltproject.org';
 const TABLE_NAME = process.env.GDELT_INDEX_TABLE || 'GdeltEntityMentions';
@@ -206,10 +207,12 @@ export function archiveClients() {
   const blobService = new BlobServiceClient(accountUrl, credential);
   const container = blobService.getContainerClient(CONTAINER_NAME);
   const table = new TableClient(tableUrl, TABLE_NAME, credential);
-  return { container, table };
+  return { container, table,
+    v2: process.env.GDELT_V2_DUAL_WRITE === 'true' ? v2Clients(accountUrl, credential) : null };
 }
 
-export async function processGdeltInterval({ timestamp, container, table, signal, fetchImpl = fetch, fetchAttempts = 4 }) {
+export async function processGdeltInterval({ timestamp, container, table, v2 = null, signal, fetchImpl = fetch,
+  fetchAttempts = 4, storedOnly = false }) {
   const sourceUrl = `${SOURCE_ORIGIN}/gdeltv2/${timestamp}.gkg.csv.zip`;
   const rawName = `raw/gkg/${timestamp.slice(0, 4)}/${timestamp.slice(4, 6)}/${timestamp.slice(6, 8)}/${timestamp}.gkg.csv.zip`;
   const raw = container.getBlockBlobClient(rawName);
@@ -227,6 +230,7 @@ export async function processGdeltInterval({ timestamp, container, table, signal
       throw new Error(`gdelt_stored_zip_hash_mismatch_${timestamp}`);
     }
   } else {
+    if (storedOnly) throw new Error(`gdelt_stored_zip_missing_${timestamp}`);
     const response = await retryingFetch(sourceUrl, fetchAttempts, signal, fetchImpl);
     if (!response.ok) throw new Error(response.status === 404
       ? `gdelt_source_missing_${timestamp}` : `gdelt_source_http_${response.status}_${timestamp}`);
@@ -245,11 +249,18 @@ export async function processGdeltInterval({ timestamp, container, table, signal
   if (Number(entry.vars?.uncompressedSize || 0) > MAX_UNCOMPRESSED_FILE_BYTES) throw new Error(`gdelt_entry_too_large_${timestamp}`);
   const parsed = entityRows((await entry.buffer()).toString('utf8'));
   await writeBatches(table, parsed.byPartition, signal);
+  if (v2) {
+    await publishV2Interval({ timestamp, zip, parsed, summaryTable: v2.summaryTable,
+      manifestTable: v2.manifestTable, signal });
+    const { verifyV2Interval } = await import('./gdelt-index-v2-verify.mjs');
+    await verifyV2Interval(timestamp, { ...v2, v1Table: table });
+    await advanceV2Watermark(v2.container, v2.manifestTable, timestamp, signal);
+  }
   return { records: parsed.records, mentions: parsed.mentions };
 }
 
 export async function main() {
-  const { container, table } = archiveClients();
+  const { container, table, v2 } = archiveClients();
   const { state: previous, etag } = await loadArchiveState(container);
   const latest = await latestTimestamp();
   const end = parseTimestamp(latest);
@@ -264,7 +275,7 @@ export async function main() {
   let entityMentions = 0;
   let lastProcessed = previous?.coverage_end ? new Date(previous.coverage_end) : new Date(start.getTime() - INTERVAL_MS);
   for (const timestamp of targets) {
-    const parsed = await processGdeltInterval({ timestamp, container, table });
+    const parsed = await processGdeltInterval({ timestamp, container, table, v2 });
     filesProcessed += 1;
     sourceRecords += parsed.records;
     entityMentions += parsed.mentions;

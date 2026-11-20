@@ -41,6 +41,9 @@ param enableTaedTradeLicense bool = false
 @description('Enable the separate GPT-backed Adverse Media (Search+) API only after its privacy, cost, and quality gates pass.')
 param enableAdverseMediaSearchPlusGpt bool = false
 
+@description('Use verified V2 GDELT summaries for undated Azure archive searches after parity checks.')
+param gdeltV2ReadEnabled bool = false
+
 @description('Start the isolated document OCR worker before customer routes are enabled for queue and malware-gate smoke tests.')
 param enableDocumentOcrWorker bool = false
 
@@ -840,6 +843,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
             { name: 'GDELT_INDEX_TABLE', value: 'GdeltEntityMentions' }
             { name: 'GDELT_PUBLIC_FALLBACK_ENABLED', value: 'true' }
+            { name: 'GDELT_UNDATED_AZURE_ONLY', value: 'true' }
+            { name: 'GDELT_V2_SUMMARY_TABLE', value: 'GdeltEntitySummaryV2' }
+            { name: 'GDELT_V2_MANIFEST_TABLE', value: 'GdeltIntervalManifestV2' }
+            { name: 'GDELT_V2_READ_ENABLED', value: gdeltV2ReadEnabled ? 'true' : 'false' }
             { name: 'ADVERSE_MEDIA_REPORT_BLOB_URL', value: 'https://${reportStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_CONTAINER', value: 'adverse-media-reports' }

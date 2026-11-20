@@ -72,7 +72,8 @@ test('public fallback requests only the gap after Azure and preserves indexed ev
 });
 
 test('third direct DOC attempt succeeds before final archive result', async () => {
-  const request = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Group' });
+  const request = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Group',
+    date_from: '2026-10-01', date_to: '2026-11-18' });
   let calls = 0;
   const result = await globalArchiveSearch(request, async (input) => {
     calls += 1;
@@ -89,7 +90,8 @@ test('third direct DOC attempt succeeds before final archive result', async () =
 });
 
 test('public result cap cannot claim complete archive coverage', async () => {
-  const result = await globalArchiveSearch(validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Group' }), async () => Response.json({
+  const result = await globalArchiveSearch(validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Group',
+    date_from: '2026-10-01', date_to: '2026-11-18' }), async () => Response.json({
     articles: Array.from({ length: 250 }, (_, index) => ({ title: `Article ${index}`, url: `https://example.org/${index}`,
       seendate: '20261118T010000Z' }))
   }), async () => null);

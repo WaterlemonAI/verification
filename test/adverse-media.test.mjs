@@ -587,7 +587,7 @@ test('retries transient provider failures and reports partial coverage instead o
   assert.equal(paidCalls.length, 8);
   assert.equal(body.status, 'partial');
   assert.equal(body.coverage.complete, false);
-  assert.equal(body.summary.outcome, 'inconclusive');
+  assert.equal(body.summary.outcome, 'unsafe');
   assert.equal(body.summary.risk_level, 'indeterminate');
   assert.deepEqual(body.coverage.sources, [
     { source: 'current_news', status: 'unavailable' },

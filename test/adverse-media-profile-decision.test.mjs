@@ -12,8 +12,8 @@ for (const [name, input, expected] of [
     adverseCount: 2, unresolvedCount: 0 }, 'unsafe'],
   ['three confirmed adverse remain unsafe with missing coverage', { coverageComplete: false, classificationComplete: true,
     adverseCount: 3, unresolvedCount: 0 }, 'unsafe'],
-  ['one adverse with missing coverage remains inconclusive', { coverageComplete: false, classificationComplete: true,
-    adverseCount: 1, unresolvedCount: 0 }, 'inconclusive'],
+  ['one confirmed adverse remains unsafe with missing coverage', { coverageComplete: false, classificationComplete: true,
+    adverseCount: 1, unresolvedCount: 0 }, 'unsafe'],
   ['missing coverage cannot be safe', { coverageComplete: false, classificationComplete: true,
     adverseCount: 0, unresolvedCount: 0 }, 'inconclusive'],
   ['ambiguous evidence cannot be safe', { coverageComplete: true, classificationComplete: true,
@@ -67,7 +67,7 @@ test('syndicated copy does not create a third adverse article', async () => {
         legal_stage: 'regulatory_action', summary: 'Fined by regulator.'
       } })) }),
     archiveSearch: async () => ({ results: [], complete: false, origin: 'local_partial', hostedAttempts: 3 }) }));
-  assert.equal(result.summary.profile_status, 'inconclusive');
+  assert.equal(result.summary.profile_status, 'unsafe');
   assert.equal(result.summary.media_bucket_counts.adverse_media, 3);
   assert.equal(result.summary.confirmed_distinct_adverse_articles, 2);
 });
