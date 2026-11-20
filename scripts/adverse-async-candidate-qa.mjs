@@ -3,6 +3,8 @@
 // This in-process queue proves worker behavior; Azure Queue durability is a separate gate.
 import { createHash, randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 if (!process.argv.includes('--isolated-candidate') || !process.argv.includes('--async-trial')
   || process.env.NODE_ENV === 'production' || process.env.FLO_ENABLED !== 'false'
@@ -108,7 +110,14 @@ try {
     ? await reportStore.listArchiveReviewItems({ ownerId,
       reviewId: final.coverage.archive_review.review_id, pageSize: 100 }) : null;
   const pdfHash = report?.bytes ? createHash('sha256').update(report.bytes).digest('hex') : null;
-  status = state?.stage === 'delivered' && final && pdfHash === final.report.sha256
+  if (process.env.ADVERSE_QA_ARTIFACT_DIR && final) {
+    const directory = process.env.ADVERSE_QA_ARTIFACT_DIR;
+    if (directory !== '/tmp/adverse-qa-artifacts') throw new Error('invalid_qa_artifact_directory');
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await writeFile(join(directory, `${receipt.screening_id}.json`), `${JSON.stringify(final, null, 2)}\n`, { mode: 0o600 });
+    if (report?.bytes) await writeFile(join(directory, `${receipt.screening_id}.pdf`), report.bytes, { mode: 0o600 });
+  }
+  status = state?.stage === 'delivered' && final && pdfHash === final.report?.sha256
     && evidence?.items?.length === final.coverage.archive_review.unique_articles ? 'verified' : 'incomplete';
   process.stdout.write(`${JSON.stringify({ event: 'adverse_async_candidate_qa', status,
     route, subject_sha256: createHash('sha256').update(subject).digest('hex'),
@@ -125,6 +134,7 @@ try {
       unresolved: final.coverage.archive_review.unresolved || 0
     } : null,
     evidence_items: evidence?.items?.length || 0,
+    artifacts_retained: Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && final),
     json_sha256: final ? createHash('sha256').update(JSON.stringify(final)).digest('hex') : null,
     pdf_sha256: pdfHash, provider_calls: usage.providerCalls,
     reserved_provider_usd: usage.reservedMicroUsd / 1_000_000,
