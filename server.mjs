@@ -572,7 +572,7 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
       });
     }
     const report = await createAdverseMediaAuditPdf({ request, response, narrative, origin,
-      ...(reportId ? { reportId } : {}), ...logo });
+      ...(reportId ? { reportId } : {}), ...logo, variant });
     const reportPath = `${reportBase}/reports/${report.reportId}.pdf`;
     const metadata = {
       report_id: report.reportId,
