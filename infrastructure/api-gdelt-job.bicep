@@ -27,6 +27,9 @@ param cronExpression string = '30 1 * * *'
 @description('Name of the scheduled Container Apps job.')
 param jobName string = 'caj-ai7uae-gdelt-ingest'
 
+@description('Enable V2 manifest and summary dual writes after V2 tables exist.')
+param v2DualWrite bool = false
+
 resource ingestionJob 'Microsoft.App/jobs@2024-03-01' = {
   name: jobName
   location: location
@@ -66,6 +69,9 @@ resource ingestionJob 'Microsoft.App/jobs@2024-03-01' = {
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${storageAccountName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
             { name: 'GDELT_INDEX_TABLE', value: 'GdeltEntityMentions' }
+            { name: 'GDELT_V2_SUMMARY_TABLE', value: 'GdeltEntitySummaryV2' }
+            { name: 'GDELT_V2_MANIFEST_TABLE', value: 'GdeltIntervalManifestV2' }
+            { name: 'GDELT_V2_DUAL_WRITE', value: v2DualWrite ? 'true' : 'false' }
             { name: 'GDELT_INITIAL_LOOKBACK_HOURS', value: '72' }
             { name: 'GDELT_INCREMENTAL_OVERLAP_HOURS', value: '36' }
             { name: 'GDELT_MAX_FILES_PER_RUN', value: '400' }

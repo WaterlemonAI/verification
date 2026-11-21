@@ -1,0 +1,134 @@
+{
+  "run_date_utc": "2026-11-20",
+  "candidate_image_digest": "sha256:c722f6955cde43dc36f4df9c5ae522a8ee911f04f7c9f02f39eff540478cb7c4",
+  "case": {
+    "event": "adverse_live_qa_case",
+    "case_number": 9,
+    "sequence": 1,
+    "started_at": "2026-11-20T09:11:30.149Z",
+    "subject": "Masdar",
+    "route": "adverse_media",
+    "date_from": "2026-11-16",
+    "date_to": "2026-11-18",
+    "http_status": 200,
+    "screening_status": "completed",
+    "response_error": null,
+    "profile": "safe",
+    "decision_eligible": true,
+    "profile_reason": "no_confirmed_adverse",
+    "processing_reasons": [],
+    "unresolved_results": 0,
+    "bucket_counts": {
+      "adverse_media": 0,
+      "general_news_mentions": 0,
+      "no_impact_media": 0
+    },
+    "coverage_complete": true,
+    "coverage_reasons": [],
+    "source_status": [
+      {
+        "source": "current_news",
+        "status": "complete"
+      },
+      {
+        "source": "open_web",
+        "status": "complete"
+      },
+      {
+        "source": "archive",
+        "status": "complete"
+      },
+      {
+        "source": "official_records",
+        "status": "not_requested"
+      }
+    ],
+    "archive_origin": "local_index",
+    "archive_reason": null,
+    "archive_scan": {
+      "rows_scanned": 0,
+      "rows_returned": 0,
+      "names_requested": 1,
+      "names_queried": 1,
+      "lookups": 2,
+      "elapsed_ms": 97,
+      "truncated": false
+    },
+    "archive_public_windows": [],
+    "search_plus_publishers_completed": 0,
+    "result_count": 0,
+    "adverse_count": 0,
+    "findings": [],
+    "pdf": {
+      "bytes": 1250560,
+      "sha256": "4afd8469bd69bc1f2455a81ea99a636cb61dff134c4efcb33c39cc7db35f4248",
+      "valid_header": true
+    },
+    "elapsed_ms": 3676,
+    "response_sha256": "e06d70513abc7805c27475229e857f2150e1b04cf8d852005cb61b3644b33826"
+  },
+  "provider_metrics": {
+    "transaction_id": "4eee6002-1750-4d61-b041-87fc3bf109d4",
+    "screening_id": "f64d54d4-16a8-4ae2-aba4-46b98c0a4556",
+    "status": "completed",
+    "report_status": "completed",
+    "screening_ms": 1632,
+    "report_ms": 1871,
+    "total_ms": 3503,
+    "search_queries": 4,
+    "search_attempts": 4,
+    "search_retries": 0,
+    "failed_search_queries": 0,
+    "free_search_queries": 1,
+    "failed_free_search_queries": 0,
+    "hosted_archive_attempts": 0,
+    "hosted_archive_retries": 0,
+    "archive_origin": "local_index",
+    "archive_reason_code": null,
+    "archive_rows_scanned": 0,
+    "archive_scan_ms": 97,
+    "archive_scan_truncated": false,
+    "archive_scan_reused": false,
+    "provider_calls": {
+      "brave": 4,
+      "gemini": 0
+    },
+    "reserved_provider_cost_usd": 0.02,
+    "source_status": {
+      "global_news": {
+        "attempted": 2,
+        "completed": 2,
+        "partial": 0,
+        "failed": 0
+      },
+      "open_web": {
+        "attempted": 2,
+        "completed": 2,
+        "partial": 0,
+        "failed": 0
+      },
+      "publisher_search": {
+        "attempted": 0,
+        "completed": 0,
+        "partial": 0,
+        "failed": 0
+      },
+      "global_news_archive": {
+        "attempted": 1,
+        "completed": 1,
+        "partial": 0,
+        "failed": 0
+      },
+      "official_regulatory": {
+        "attempted": 0,
+        "completed": 0,
+        "partial": 0,
+        "failed": 0
+      }
+    },
+    "classification_status": "not_needed",
+    "classification_candidates": 0,
+    "estimated_variable_cost_usd": 0.02,
+    "cache_hit": false
+  }
+}

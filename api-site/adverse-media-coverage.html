@@ -70,8 +70,8 @@
                 <tr><th scope="row">Current news</th><td>Worldwide indexed news; name, alias and adverse-event terms in requested languages.</td><td>Up to 50 returned items per Search+ query; 20 for the standard route.</td><td>Indexed news available at search time; optional publication-date filter.</td></tr>
                 <tr><th scope="row">Open web</th><td>Worldwide indexed public pages, including configured official-domain searches.</td><td>Up to 20 returned items per query.</td><td>Indexed pages available at search time; optional publication-date filter.</td></tr>
                 <tr><th scope="row">Publisher-targeted Search+</th><td>Site-restricted index queries for selected approved editorial domains.</td><td>At most six batches of up to ten domains; up to 20 returned items per batch query.</td><td>Indexed articles available at search time; optional publication-date filter.</td></tr>
-                <tr><th scope="row">Local historical index</th><td>Locally stored, entity-indexed public-news records matched by supplied names, aliases and resolved associations.</td><td>Up to 12 normalized names and 250 rows per name and entity type; not a full archive crawl.</td><td>Actual start/end watermark and freshness shown on each run.</td></tr>
-                <tr><th scope="row">Historical fallback</th><td>Public-news archive query when the local index does not cover the requested period.</td><td>Up to 50 newest matching items returned before date and identity filtering.</td><td>Up to one year of archive search; older history is not assured.</td></tr>
+                <tr><th scope="row">Local historical index</th><td>Locally stored, entity-indexed public-news records matched by supplied names, aliases and resolved associations.</td><td>Up to 12 normalized names, 100,000 scanned rows and 15 seconds. Reaching any limit makes the archive incomplete rather than silently truncating it.</td><td>All stored history for an undated request; explicit dates use indexed RowKey bounds. Actual watermark and scan statistics appear on each run.</td></tr>
+                <tr><th scope="row">Historical fallback</th><td>No public archive fallback in the Azure-only deployment.</td><td>No public archive calls.</td><td>An unavailable or stale local archive makes the screening partial.</td></tr>
                 <tr><th scope="row">Applicable official records</th><td>Focused official-domain web queries and a dedicated warning-list check where the relevant regional pack applies.</td><td>Web queries share the 12-query budget; the dedicated check is separate.</td><td>Depends on the official record source.</td></tr>
               </tbody>
             </table></div>
@@ -81,16 +81,15 @@
           <article id="history">
             <p class="label">LOOKBACK AND CONTINUITY</p>
             <h2>Historical coverage is recorded, not assumed</h2>
-            <p>Without dates, the local-index coverage check uses a rolling 72-hour requested window. It is treated as complete only when its watermark spans the requested period and its latest indexed time is within the 36-hour freshness allowance. A requested earlier period, a stale or missing watermark, or an incomplete local read triggers the hosted historical fallback.</p>
+            <p>Without dates, the Azure index searches all stored history, while live search indexes use the preceding year. Checks through today require a watermark within the 36-hour freshness allowance. A closed historical range can complete when its dates are fully indexed, even if the current ingest is late. A missing watermark, an uncovered range, or a safety stop makes the archive partial; none triggers a public archive call.</p>
             <div class="coverage-table-wrap"><table class="coverage-table">
               <thead><tr><th>Local index</th><th>Historical fallback</th><th>Reported outcome</th></tr></thead>
               <tbody>
-                <tr><td>Covers the requested window and is fresh</td><td>Not needed</td><td>Local archive can complete; response reports its exact watermark.</td></tr>
-                <tr><td>Incomplete, stale or unavailable</td><td>Completes</td><td>Historical channel can complete through fallback; response identifies the fallback path.</td></tr>
-                <tr><td>Incomplete, stale or unavailable</td><td>Fails after retries</td><td>Historical coverage is incomplete. The API cannot issue a clean completed screening.</td></tr>
+                <tr><td>Required dates covered; fresh when checking through today</td><td>Disabled</td><td>Local archive can complete; response reports its exact watermark and scan statistics.</td></tr>
+                <tr><td>Uncovered, stale for a current check, unavailable, or scan stopped</td><td>Disabled</td><td>Historical coverage is incomplete. The API cannot issue a clean completed screening.</td></tr>
               </tbody>
             </table></div>
-            <p>The fallback searches up to one year and returns no more than 50 newest matching records. A date filter does not turn this into exhaustive one-year retrieval: older matching records can be displaced by newer matches before filtering. Requests older than one year have no historical completeness claim. The exact archive origin, watermark and source status in the response supersede any static description here.</p>
+            <p>The index begins at its reported <code>coverage_start</code>; an undated request does not imply that data predating that point is available. The response records <code>archive_scope</code>, <code>archive_origin</code>, the watermark, and source status. Public-news discovery still depends on the indexed names and available source data.</p>
           </article>
 
           <article id="languages">
@@ -197,12 +196,12 @@
               <thead><tr><th>Condition after retries</th><th>Standard Adverse Media route</th><th>Dedicated Search+ route</th></tr></thead>
               <tbody>
                 <tr><td>Required searches and classification complete</td><td>Completed result; risk outcome follows classified adverse evidence.</td><td>Completed result; risk outcome follows classified adverse evidence.</td></tr>
-                <tr><td>Historical fallback fails while local index does not cover the requested window</td><td>Partial, decision-ineligible result; no clean conclusion.</td><td>HTTP 503 <code>SEARCH_INCOMPLETE</code>; no screening report issued.</td></tr>
+                <tr><td>Azure archive is stale, unavailable, or does not cover explicit dates</td><td>Partial, decision-ineligible result; no clean conclusion.</td><td>HTTP 503 <code>SEARCH_INCOMPLETE</code>; no screening report issued.</td></tr>
                 <tr><td>Another required search or requested language is missing</td><td>Partial, decision-ineligible result, or an error when all search channels fail.</td><td>HTTP 503 <code>SEARCH_INCOMPLETE</code>; no screening report issued.</td></tr>
                 <tr><td>Search completes but classification is unavailable or uncertain</td><td>Partial, inconclusive profile; evidence remains visible where possible.</td><td>Unavailable classification returns HTTP 503; uncertain classification can return a partial, review-required result.</td></tr>
               </tbody>
             </table></div>
-            <p>The one-year historical fallback is a bounded search path, not a guarantee that a full year remains available if it fails. If both historical paths cannot establish the requested coverage, the API reports that gap explicitly. A completed run with neutral or positive general-news mentions and no confirmed adverse evidence can return <strong>No Adverse Media Found</strong>; a partial run cannot.</p>
+            <p>The Azure index covers only its recorded retention period and depends on a fresh ingest. If that archive cannot establish coverage, the API reports the gap explicitly. A completed run with neutral or positive general-news mentions and no confirmed adverse evidence can return <strong>No Adverse Media Found</strong>; a partial run cannot.</p>
           </article>
 
           <article id="audit">

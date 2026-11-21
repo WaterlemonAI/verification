@@ -176,7 +176,7 @@ test('Search+ unresolved allegation remains inconclusive', async () => {
   });
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.status, 'partial');
+  assert.equal(body.status, 'completed');
   assert.equal(body.summary.outcome, 'inconclusive');
   assert.equal(body.summary.decision_eligible, false);
   assert.equal(body.coverage.complete, true);
@@ -185,19 +185,21 @@ test('Search+ unresolved allegation remains inconclusive', async () => {
   assert.equal(body.summary.threshold_status, 'classification_uncertain');
 });
 
-test('Search+ fails closed when a required search source is partial', async () => {
+test('Search+ retains a partial report when a required search source fails', async () => {
   const callsBefore = geminiCalls;
   const response = await fetch(`${appUrl}/service/adverse_media_search_plus`, {
     method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({ entity_type: 'business', name: 'Coverage Failure Example',
       countries: ['AE'], languages: ['en'], max_results: 5 })
   });
-  assert.equal(response.status, 503);
+  assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.reason_code, 'SEARCH_INCOMPLETE');
-  assert.deepEqual(body.reason_codes, ['current_news_partial']);
-  assert.equal(body.report, undefined);
-  assert.equal(geminiCalls, callsBefore);
+  assert.equal(body.status, 'partial');
+  assert.equal(body.summary.profile_status, 'inconclusive');
+  assert.equal(body.summary.decision_eligible, false);
+  assert.deepEqual(body.coverage.reason_codes, ['current_news_partial']);
+  assert.ok(body.report);
+  assert.ok(geminiCalls > callsBefore);
 });
 
 test('Search+ rejects async deep research callbacks', async () => {
@@ -208,7 +210,7 @@ test('Search+ rejects async deep research callbacks', async () => {
   assert.equal(response.status, 400);
 });
 
-test('Search+ does not return a model-free screening when Gemini is unavailable', async () => {
+test('Search+ returns a recorded inconclusive screening when Gemini fails after retrieval', async () => {
   failGemini = true;
   try {
     const response = await fetch(`${appUrl}/service/adverse_media_search_plus`, {
@@ -216,7 +218,11 @@ test('Search+ does not return a model-free screening when Gemini is unavailable'
       body: JSON.stringify({ entity_type: 'business', name: 'Gemini Failure Example',
         countries: ['AE'], languages: ['en'], max_results: 5 })
     });
-    assert.equal(response.status, 503);
-    assert.match((await response.json()).error, /classification is temporarily unavailable/);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.status, 'completed');
+    assert.equal(body.summary.profile_status, 'inconclusive');
+    assert.equal(body.summary.decision_eligible, false);
+    assert.ok(body.report);
   } finally { failGemini = false; }
 });

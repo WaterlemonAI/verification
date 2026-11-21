@@ -206,7 +206,8 @@ test('Signzy data-leak coverage targets MediaNama and retains the exact cyber in
   const articleUrl = 'https://www.medianama.com/2024/12/223-signzy-customer-data-leak-exposes-growing-cybersecurity-gaps-in-india/';
   const queries = [];
   const request = validateAdverseMediaRequest({
-    entity_type: 'business', name: 'Signzy', countries: ['IN'], languages: ['en', 'hi'], search_plus: true, max_results: 50
+    entity_type: 'business', name: 'Signzy', countries: ['IN'], languages: ['en', 'hi'],
+    date_from: '2024-01-01', search_plus: true, max_results: 50
   });
   const fetchImpl = async (input) => {
     const url = new URL(input);
@@ -241,7 +242,8 @@ test('Signzy data-leak coverage targets MediaNama and retains the exact cyber in
 test('standard screening searches the open web for older Signzy data-leak articles', async () => {
   const articleUrl = 'https://www.medianama.com/2024/12/223-signzy-customer-data-leak-exposes-growing-cybersecurity-gaps-in-india/';
   const request = validateAdverseMediaRequest({
-    entity_type: 'business', name: 'Signzy', countries: ['IN'], languages: ['en'], search_plus: false
+    entity_type: 'business', name: 'Signzy', countries: ['IN'], languages: ['en'],
+    date_from: '2024-01-01', search_plus: false
   });
   let broadWebQuery = '';
   const fetchImpl = async (input) => {
@@ -346,7 +348,8 @@ test('publisher coverage separates completed batches from batches that exhaust r
 
 test('identity scoring separates expanded full names from typo-like near matches', async () => {
   const run = async (evidenceName) => {
-    const request = validateAdverseMediaRequest({ entity_type: 'individual', name: 'Arbaz Uddin', languages: ['en'] });
+    const request = validateAdverseMediaRequest({ entity_type: 'individual', name: 'Arbaz Uddin', languages: ['en'],
+      max_results: evidenceName.startsWith('Arban') ? 16 : 15 });
     const fetchImpl = async (input) => {
       const url = new URL(input);
       if (url.hostname === 'api.search.brave.com') {

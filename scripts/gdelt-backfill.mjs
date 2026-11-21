@@ -100,7 +100,7 @@ export async function main() {
   const window = weekendWindow(new Date());
   if (!window) throw new Error('backfill_outside_saturday_22_00_to_midnight_uae');
   const targetDays = Number(process.env.GDELT_BACKFILL_TARGET_DAYS || DEFAULT_TARGET_DAYS);
-  const { container, table } = archiveClients();
+  const { container, table, v2 } = archiveClients();
   const loaded = await loadArchiveState(container);
   let etag = loaded.etag;
   const controller = new AbortController();
@@ -108,7 +108,7 @@ export async function main() {
     Math.max(0, window.deadline - ABORT_RESERVE_MS - Date.now()));
   try {
     const result = await runBackfill({ state: loaded.state, targetDays, signal: controller.signal,
-      processInterval: (timestamp, signal) => processGdeltInterval({ timestamp, container, table, signal }),
+      processInterval: (timestamp, signal) => processGdeltInterval({ timestamp, container, table, v2, signal }),
       saveState: async (state, signal) => { etag = await saveArchiveState(container, state, etag, signal); } });
     process.stdout.write(`${JSON.stringify({ event: 'gdelt_backfill_completed', ...result })}\n`);
   } finally {

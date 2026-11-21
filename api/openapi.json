@@ -460,7 +460,7 @@
     "/service/adverse_media_search_plus": {
       "post": {
         "summary": "Adverse Media (Search+) — parallel screening",
-        "description": "Runs the existing bounded Search+ publisher and general-source retrieval with source-fact classification. The endpoint is separately enabled, synchronous only, and always returns a review-required partial result. It does not replace the existing Adverse Media API or make a final compliance decision. search_plus is forced true; deep_research and callbacks are unavailable. Every result includes a permanent PDF report.",
+        "description": "Runs additive Search+ publisher and general-source retrieval with source-fact classification. The endpoint is separately enabled. Deep research callbacks require explicit archive_review=true and an available article-review integration; otherwise this endpoint remains synchronous. A nonempty archive cannot be cleared as Safe without article-level evidence. search_plus is forced true. Every final result includes a permanent PDF report.",
         "operationId": "screenAdverseMediaSearchPlus",
         "security": [{ "ApiKey": [] }],
         "requestBody": {
@@ -469,12 +469,32 @@
         },
         "responses": {
           "200": { "description": "Source-bound screening completed for mandatory human review.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdverseMediaResponse" } } } },
-          "400": { "description": "The request is invalid or asks for asynchronous callbacks." },
+          "202": { "description": "Deep research was queued when archive review is enabled.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdverseMediaQueuedResponse" } } } },
+          "400": { "description": "The request is invalid or asks for asynchronous callbacks while archive review is disabled." },
           "401": { "description": "The AI7 API key is missing or invalid." },
           "403": { "description": "The Search+ module lacks explicit workspace entitlement or an Adverse Media rate." },
           "429": { "description": "Request capacity or usage policy limit was reached." },
           "502": { "description": "The media search service is unavailable." },
           "503": { "description": "The parallel API is disabled or a required service is unavailable." }
+        }
+      }
+    },
+    "/service/adverse_media/reviews/{reviewId}/evidence": {
+      "get": {
+        "summary": "Page through owner-scoped stored-archive article decisions",
+        "description": "Returns bounded article decisions for a stored-archive review. A review ID is returned in coverage.archive_review on a final adverse-media result. The caller must use the API key that owns the review. Unavailable article evidence remains unresolved; this route does not fetch article text.",
+        "operationId": "getAdverseMediaArchiveEvidence",
+        "security": [{ "ApiKey": [] }],
+        "parameters": [
+          { "name": "reviewId", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[a-f0-9]{32}$" } },
+          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string", "maxLength": 2048 } }
+        ],
+        "responses": {
+          "200": { "description": "Review state and up to 100 article decisions, with next_cursor when another page exists.", "content": { "application/json": { "schema": { "type": "object", "required": ["review_id", "status", "items", "next_cursor"], "properties": { "review_id": { "type": "string" }, "status": { "type": "string" }, "counts": { "type": "object", "additionalProperties": true }, "items": { "type": "array", "items": { "type": "object", "additionalProperties": true } }, "next_cursor": { "type": ["string", "null"] } }, "additionalProperties": true } } } },
+          "400": { "description": "Invalid cursor or review ID." },
+          "401": { "description": "API key is missing or invalid." },
+          "404": { "description": "Review does not exist for this API key." },
+          "503": { "description": "Review storage is unavailable." }
         }
       }
     },
@@ -3210,14 +3230,15 @@
               "enum": ["ar", "de", "en", "es", "fa", "fr", "hi", "it", "nl", "pl", "pt", "ru", "tr", "uk", "ur", "zh"]
             }
           },
-          "date_from": { "type": "string", "format": "date" },
-          "date_to": { "type": "string", "format": "date" },
+          "date_from": { "type": "string", "format": "date", "description": "Defaults to one calendar year before date_to, or one calendar year before today when both dates are omitted." },
+          "date_to": { "type": "string", "format": "date", "description": "Defaults to today's UTC date when omitted. Historical archive coverage is reported separately." },
           "high_risk_threshold_percent": { "type": "number", "exclusiveMinimum": 0, "maximum": 100, "default": 90, "description": "Results at or above this percentage are assigned to the High Risk band. This value must not be lower than review_threshold_percent." },
           "review_threshold_percent": { "type": "number", "minimum": 0, "maximum": 100, "default": 65, "description": "Results from this percentage up to the High Risk boundary require Review. Lower scores are assigned to the Safe band. This value must not exceed high_risk_threshold_percent." },
           "risk_threshold": { "type": "number", "minimum": 0, "maximum": 1, "deprecated": true, "description": "Backward-compatible decimal alias for review_threshold_percent. review_threshold_percent takes precedence when both are supplied." },
           "search_plus": { "type": "boolean", "default": false, "description": "Reserves bounded query capacity for explicit site-restricted searches across selected high-value publishers, prioritising requested countries, and consolidates those results with standard evidence. coverage.search_plus lists successfully screened and incomplete publisher batches. The search is provider-index based, not a direct publisher crawl." },
           "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 },
-          "deep_research": { "type": "boolean", "default": false, "description": "Enables asynchronous screening and optional signed callback delivery." },
+          "deep_research": { "type": "boolean", "default": false, "description": "Enables asynchronous screening and optional signed callback delivery. Existing deep-research requests do not run stored-archive article review unless archive_review=true is also supplied." },
+          "archive_review": { "type": "boolean", "default": false, "description": "Explicitly opts into stored-archive article review. Requires deep_research=true, callback_url, no date_from/date_to, and an enabled article-review integration. If that integration is unavailable the API rejects the request; unresolved evidence never clears the profile as Safe." },
           "callback_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS callback URL. Accepted only when deep_research is true. Receives the final completed or explicitly partial result." },
           "callback_access_key": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z0-9._~+/-]+=*$", "description": "Optional Bearer token sent only in the callback POST Authorization header. Requires callback_url and deep_research=true; it is not returned in responses or reports." },
           "customer_logo_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS PNG or JPEG used on the automatically generated PDF report." }
@@ -3268,7 +3289,7 @@
           "completed_at": { "type": "string", "format": "date-time" },
           "entity": { "type": "object", "description": "Screened entity and submitted aliases/identifiers. Exact attributes depend on the request and entity type.", "additionalProperties": true },
           "summary": { "type": "object", "description": "Outcome, score bands, media-bucket counts, and decision eligibility. A partial run is inconclusive regardless of its observed results.", "additionalProperties": true },
-          "coverage": { "type": "object", "description": "Search sources, requested and completed language/country coverage, archive dates, and safe diagnostic reasons. Values depend on the sources that completed.", "additionalProperties": true },
+          "coverage": { "type": "object", "description": "Search sources, requested and completed language/country coverage, archive dates, and diagnostic reasons. archive_review includes review ID, posting and article counts, adjudication status and unresolved reason when an asynchronous stored-archive review ran. Ten distinct confirmed adverse stories stop further historical review with status sufficient_adverse_media_found; the profile is Unsafe and unscanned_postings is reported. Fewer than ten confirmed adverse stories are also Unsafe. Safe requires complete required coverage and resolved evidence.", "additionalProperties": true },
           "results": {
             "type": "array",
             "description": "Adverse Media bucket only; retained for existing consumers.",

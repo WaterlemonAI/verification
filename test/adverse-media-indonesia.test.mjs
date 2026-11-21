@@ -79,7 +79,7 @@ test('a named Indonesian issuer in an OJK enforcement notice is retained for rev
     apiKey: 'test-search-key', aiApiKey: 'test-ai-key', fetchImpl
   }));
   assert.ok(queries.slice(beforeSearchPlus).some((query) => query.includes('site:ojk.go.id')));
-  assert.ok(queries.length - beforeSearchPlus <= 12);
+  assert.ok(queries.length - beforeSearchPlus <= 20);
   assert.equal(searchPlus.summary.threshold_status, 'safe');
   assert.equal(searchPlus.media_buckets.general_news_mentions.length, 1);
   assert.equal(searchPlus.coverage.sources.find((source) => source.source === 'open_web').status, 'complete');

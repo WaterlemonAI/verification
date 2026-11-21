@@ -41,6 +41,20 @@ param enableTaedTradeLicense bool = false
 @description('Enable the separate GPT-backed Adverse Media (Search+) API only after its privacy, cost, and quality gates pass.')
 param enableAdverseMediaSearchPlusGpt bool = false
 
+@description('Use verified V2 GDELT summaries for undated Azure archive searches after parity checks.')
+param gdeltV2ReadEnabled bool = false
+
+@description('Enable the owner-scoped GDELT archive evidence review on deep-research jobs only after V2 parity and article-evidence gates pass.')
+param gdeltArchiveReviewEnabled bool = false
+
+@description('Use Event Registry paged full-body search before per-URL extraction for archive evidence review. Off until overlap, pricing and latency gates pass.')
+param gdeltArchiveBulkSearchEnabled bool = false
+
+@minValue(1)
+@maxValue(1000)
+@description('Maximum indexed postings scanned by one paid archive evidence review before an inconclusive budget result, unless ten distinct adverse stories end the review earlier.')
+param gdeltArchiveReviewMaxPostings int = 200
+
 @description('Start the isolated document OCR worker before customer routes are enabled for queue and malware-gate smoke tests.')
 param enableDocumentOcrWorker bool = false
 
@@ -802,6 +816,8 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'flo-session-hash-key-v1', keyVaultUrl: '${keyVaultUri}secrets/flo-session-hash-key-v1', identity: runtimeIdentityResourceId }
         { name: 'flo-callback-signing-key-v1', keyVaultUrl: '${keyVaultUri}secrets/flo-callback-signing-key-v1', identity: runtimeIdentityResourceId }
         { name: 'flo-gemini-api-key', keyVaultUrl: '${keyVaultUri}secrets/flo-gemini-api-key', identity: runtimeIdentityResourceId }
+      ] : [], gdeltArchiveReviewEnabled ? [
+        { name: 'event-registry-api-key', keyVaultUrl: '${keyVaultUri}secrets/event-registry-api-key', identity: runtimeIdentityResourceId }
       ] : [], !parallelDeployment && enableEjari ? [
         { name: 'ejari-data-key-v1', keyVaultUrl: '${keyVaultUri}secrets/ejari-data-key-v1', identity: runtimeIdentityResourceId }
       ] : [])
@@ -839,6 +855,13 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
             { name: 'GDELT_INDEX_TABLE', value: 'GdeltEntityMentions' }
+            { name: 'GDELT_PUBLIC_FALLBACK_ENABLED', value: 'true' }
+            { name: 'GDELT_UNDATED_AZURE_ONLY', value: 'true' }
+            { name: 'GDELT_V2_SUMMARY_TABLE', value: 'GdeltEntitySummaryV2' }
+            { name: 'GDELT_V2_MANIFEST_TABLE', value: 'GdeltIntervalManifestV2' }
+            { name: 'GDELT_V2_READ_ENABLED', value: gdeltV2ReadEnabled ? 'true' : 'false' }
+            { name: 'GDELT_ARCHIVE_REVIEW_ENABLED', value: gdeltArchiveReviewEnabled ? 'true' : 'false' }
+            { name: 'GDELT_ARCHIVE_BULK_SEARCH_ENABLED', value: gdeltArchiveReviewEnabled && gdeltArchiveBulkSearchEnabled ? 'true' : 'false' }
             { name: 'ADVERSE_MEDIA_REPORT_BLOB_URL', value: 'https://${reportStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_CONTAINER', value: 'adverse-media-reports' }
@@ -903,6 +926,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'FLO_GEMINI_API_KEY', secretRef: 'flo-gemini-api-key' }
             { name: 'FLO_GEMINI_MODEL', value: 'gemini-3.5-flash-lite' }
             { name: 'FLO_CLAMD_HOST', value: '127.0.0.1' }
+          ] : [], gdeltArchiveReviewEnabled ? [
+            { name: 'EVENT_REGISTRY_API_KEY', secretRef: 'event-registry-api-key' }
+            { name: 'GDELT_ARCHIVE_REVIEW_MAX_POSTINGS', value: string(gdeltArchiveReviewMaxPostings) }
           ] : [], !parallelDeployment && enableEjari ? [
             { name: 'EJARI_STORAGE_BLOB_URL', value: 'https://${ejariStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'EJARI_DATA_ROOT_KEY_HEX', secretRef: 'ejari-data-key-v1' }

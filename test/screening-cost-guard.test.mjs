@@ -15,6 +15,53 @@ test('each paid search attempt, including retries, is admitted before dialing', 
   assert.equal(Math.round((MAX_SCREENING_COST_USD - MAX_PROVIDER_COST_USD) * 100), 1);
 });
 
+test('Event Registry article calls reserve their token cost before dialing', async () => {
+  let dialed = 0;
+  const guard = createScreeningCostGuard(async () => { dialed += 1; return Response.json({}); });
+  const url = 'https://analytics.eventregistry.org/api/v1/extractArticleInfo';
+  await guard.fetch(url, { method: 'POST', body: '{}' });
+  assert.equal(guard.providerCalls.event_registry_article, 1);
+  assert.equal(guard.reservedProviderCostUsd, 0.001);
+  assert.equal(dialed, 1);
+});
+
+test('archive-specific ceiling leaves provider allowance for final checks', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const scope = { ownerId: 'archive-budget-owner', screeningId: 'archive-budget-screening' };
+  const reserve = ({ costMicroUsd, provider, maxMicroUsd }) =>
+    store.reserveDeepResearchCost({ ...scope, costMicroUsd, provider, maxMicroUsd });
+  const source = createScreeningCostGuard(async () => Response.json({}), { reserve });
+  const archive = createScreeningCostGuard(async () => Response.json({}), {
+    reserve, maxMicroUsd: 100_000 });
+  const brave = 'https://api.search.brave.com/res/v1/news/search?q=example';
+  const article = 'https://analytics.eventregistry.org/api/v1/extractArticleInfo';
+  for (let i = 0; i < 4; i += 1) await source.fetch(brave);
+  for (let i = 0; i < 80; i += 1) await archive.fetch(article);
+  await assert.rejects(archive.fetch(article), /screening_cost_limit/);
+  const usage = await store.getDeepResearchUsage(scope);
+  assert.equal(usage.reservedMicroUsd, 100_000);
+  await source.fetch(brave);
+  assert.equal((await store.getDeepResearchUsage(scope)).reservedMicroUsd, 105_000);
+});
+
+test('bulk article search reserves each page and refuses unaffordable historical requests', async () => {
+  let dialed = 0;
+  const guard = createScreeningCostGuard(async () => { dialed += 1; return Response.json({}); });
+  const url = 'https://eventregistry.org/api/v1/article/getArticles';
+  const today = new Date();
+  const recentStart = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const dateEnd = today.toISOString().slice(0, 10);
+  const body = (dateStart, end) => JSON.stringify({ query: { $query: { $and: [
+    { keyword: 'Example Holdings' }, { dateStart, dateEnd: end }
+  ] } }, articlesPage: 1, articlesCount: 100 });
+  await guard.fetch(url, { method: 'POST', body: body(recentStart, dateEnd) });
+  assert.equal(guard.providerCalls.event_registry_search, 1);
+  assert.equal(guard.reservedProviderCostUsd, 0.02);
+  await assert.rejects(guard.fetch(url, { method: 'POST', body: body('2024-01-01', dateEnd) }),
+    /screening_cost_limit/);
+  assert.equal(dialed, 1);
+});
+
 test('a restarted job cannot reset its lifetime provider allowance', async () => {
   const resultStore = new MemoryAdverseMediaReportStore();
   const job = { ownerId: 'synthetic-owner', screeningId: 'synthetic-screening' };
