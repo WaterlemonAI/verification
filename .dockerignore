@@ -13,4 +13,5 @@ node_modules
 test
 docs
 infrastructure
+output
 *.log
