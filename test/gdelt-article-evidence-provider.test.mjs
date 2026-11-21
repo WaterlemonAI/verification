@@ -156,7 +156,8 @@ test('a Gemini fact about another party cannot be promoted to a direct adverse a
 test('a quoted victim or account institution is not promoted to a direct adverse actor', async () => {
   for (const quote of [
     'Example Holdings was attacked by fraudsters after the security breach.',
-    'The fraudulent account at Example Holdings was controlled by another company.'
+    'The fraudulent account at Example Holdings was controlled by another company.',
+    'The money trail included accounts tied to another party, including funds at Example Holdings.'
   ]) {
     const review = createGeminiArchiveArticleReviewer({ getApiKey: async () => 'gemini-secret',
       fetchImpl: async () => Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ facts: [{
