@@ -37,6 +37,21 @@ test('undated requests cover all stored Azure history while explicit dates remai
     date_from: '2025-10-26', date_to: '2026-10-26' }, now), false);
 });
 
+test('a required V2 lookup never silently falls back to a V1 scan', async () => {
+  const previous = process.env.GDELT_V2_READ_ENABLED;
+  process.env.GDELT_V2_READ_ENABLED = 'false';
+  try {
+    const result = await searchLocalGdeltIndex({ name: 'Example Group', entity_type: 'business',
+      archive_all_stored: true }, { requireV2: true,
+      clients: { table: { listEntities() { throw new Error('v1_scan_must_not_run'); } } } });
+    assert.equal(result.complete, false);
+    assert.equal(result.scan.mode, 'v2_unavailable');
+  } finally {
+    if (previous === undefined) delete process.env.GDELT_V2_READ_ENABLED;
+    else process.env.GDELT_V2_READ_ENABLED = previous;
+  }
+});
+
 test('local archive streams beyond the former 250-row cutoff and includes older stored records', async () => {
   const current = Date.now();
   const state = {

@@ -24,6 +24,7 @@ import { createAdvanceAdmissionStore } from './lib/adverse-media-advance-store.m
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
 import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs';
 import { processArchiveReviewPage } from './lib/gdelt-archive-review.mjs';
+import { searchLocalGdeltIndex } from './lib/gdelt-local-index.mjs';
 import { createEventRegistryArticleResolver, createEventRegistryBulkArticleResolver } from './lib/gdelt-article-evidence-provider.mjs';
 import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
@@ -234,7 +235,7 @@ function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, trans
 }
 
 async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, advanceAdmissionStore,
-  deepResearchQueue, archiveReviewAvailable, caseStore, transactionId) {
+  deepResearchQueue, archiveReviewAvailable, archivePreflight, caseStore, transactionId) {
   const route = await classifyCustomerApi(req, url, store);
   if (!route) return true;
   const token = bearerToken(req);
@@ -327,6 +328,15 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
         error: claim.status === 'conflict' ? 'This Idempotency-Key was used with different input.'
           : 'Submission admission is pending reconciliation. No additional check was queued or charged.' },
       claim.status === 'in_progress' ? { 'retry-after': '2' } : {});
+      return false;
+    }
+    let archive;
+    try { archive = await archivePreflight(prepared.validation.searchRequest, { requireV2: true }); }
+    catch { /* The customer is not charged for an unavailable index. */ }
+    if (archive?.complete !== true || archive.scan?.mode !== 'v2_point_summary') {
+      await advanceAdmissionStore.abandon(claim.row);
+      await usageStore.record(workspaceId, details, 503);
+      json(res, 503, { status: 'Error', error: 'The stored media index is temporarily unavailable.' });
       return false;
     }
     prepared.claim = claim.row;
@@ -2969,6 +2979,7 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
 
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
   adverseArchiveSearch = null,
+  advanceArchivePreflight = searchLocalGdeltIndex,
   adverseArchiveReviewStep = null,
   adverseArticleResolver = null,
   peppolLookup = searchPeppolIndex,
@@ -3246,7 +3257,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         && process.env.ADVERSE_MEDIA_ADVANCE_ENABLED !== 'true')
         return json(res, 503, { status: 'Error', error: 'Adverse Media Advance is not enabled.' });
       if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore,
-        advanceAdmissionStore, deepResearchQueue, archiveReviewAvailable, caseStore, transactionId))) return;
+        advanceAdmissionStore, deepResearchQueue, archiveReviewAvailable, advanceArchivePreflight,
+        caseStore, transactionId))) return;
       if (req.ai7CapacityLane) {
         const queuedAt = Date.now();
         const cancelled = new AbortController();

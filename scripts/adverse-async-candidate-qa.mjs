@@ -45,7 +45,7 @@ const [{ createStore, EnvironmentStore }, { createAppServer },
   import('../lib/customer-usage.mjs'), import('../lib/gdelt-local-index.mjs')
 ]);
 const preflight = await searchLocalGdeltIndex({ entity_type: entityType, name: subject,
-  aliases: [], transliterations: {}, associations: [], archive_all_stored: true });
+  aliases: [], transliterations: {}, associations: [], archive_all_stored: true }, { requireV2: true });
 if (!preflight?.complete || preflight.scan?.mode !== 'v2_point_summary') {
   throw new Error('candidate_v2_snapshot_unavailable');
 }

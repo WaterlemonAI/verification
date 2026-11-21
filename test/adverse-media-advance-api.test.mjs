@@ -18,6 +18,7 @@ const admissionStore = new MemoryAdvanceAdmissionStore();
 const reportStore = new MemoryAdverseMediaReportStore();
 const jsonStore = new MemoryAdverseMediaJsonStore();
 const jobs = [];
+let archiveReady = true;
 let issued;
 let app;
 let base;
@@ -32,6 +33,9 @@ before(async () => {
   app = createAppServer({ store, usageStore, advanceAdmissionStore: admissionStore,
     reportStore, jsonStore,
     deepResearchQueue: { async enqueue(job) { jobs.push(job); } },
+    advanceArchivePreflight: async () => archiveReady
+      ? { complete: true, scan: { mode: 'v2_point_summary' } }
+      : { complete: false, scan: { mode: 'v2_unavailable' } },
     adverseArchiveReviewStep: async () => ({ status: 'completed' }), startWorker: false });
   await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${app.address().port}`;
@@ -74,6 +78,14 @@ test('Advance admission queues one Search+ archive job and replays without a sec
   assert.equal(replayReceipt.callback.signing_secret, undefined);
   assert.equal(jobs.length, 1);
   assert.equal((await usageStore.account(issued.client.id)).charged_calls, 1);
+  archiveReady = false;
+  try {
+    const replayWhileStale = await fetch(`${base}/service/adverse_media_advance`, {
+      method: 'POST', headers: headers(key), body: JSON.stringify(input) });
+    assert.equal(replayWhileStale.status, 202);
+    assert.equal((await replayWhileStale.json()).screening_id, receipt.screening_id);
+    assert.equal((await usageStore.account(issued.client.id)).charged_calls, 1);
+  } finally { archiveReady = true; }
 
   const ownerId = `workspace-${issued.client.id}`;
   const result = { screening_id: receipt.screening_id, status: 'completed',
@@ -112,4 +124,18 @@ test('Advance rejects caller provider controls and missing idempotency without q
     body: JSON.stringify(input) });
   assert.equal(missingKey.status, 400);
   assert.equal(jobs.length, 1);
+});
+
+test('Advance refuses a stale V2 index before queueing or charging', async () => {
+  const queuedBefore = jobs.length;
+  archiveReady = false;
+  try {
+    const denied = await fetch(`${base}/service/adverse_media_advance`, {
+      method: 'POST', headers: headers('advance-api-stale-v2-0001'), body: JSON.stringify(input)
+    });
+    assert.equal(denied.status, 503);
+    assert.match((await denied.json()).error, /stored media index/i);
+    assert.equal(jobs.length, queuedBefore);
+    assert.equal((await usageStore.account(issued.client.id)).charged_calls, 1);
+  } finally { archiveReady = true; }
 });
