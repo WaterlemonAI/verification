@@ -157,7 +157,8 @@ test('a quoted victim or account institution is not promoted to a direct adverse
   for (const quote of [
     'Example Holdings was attacked by fraudsters after the security breach.',
     'The fraudulent account at Example Holdings was controlled by another company.',
-    'The money trail included accounts tied to another party, including funds at Example Holdings.'
+    'The money trail included accounts tied to another party, including funds at Example Holdings.',
+    'Roughly $750 million at Example Holdings, where another person was a signatory on an account owned by a charity.'
   ]) {
     const review = createGeminiArchiveArticleReviewer({ getApiKey: async () => 'gemini-secret',
       fetchImpl: async () => Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ facts: [{
