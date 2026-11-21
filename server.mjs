@@ -20,6 +20,7 @@ import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, 
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
 import { validateAdvanceRequest, advanceRequestDigest } from './lib/adverse-media-advance-request.mjs';
 import { assessAdvanceScreening, withAdvanceAssessment } from './lib/adverse-media-advance-classifier.mjs';
+import { ADVANCE_POLICY_CATALOG_VERSION, listAdvancePolicies } from './lib/adverse-media-advance-policy-catalog.mjs';
 import { createAdvanceAdmissionStore } from './lib/adverse-media-advance-store.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
 import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs';
@@ -185,6 +186,9 @@ async function classifyCustomerApi(req, url, store) {
   };
   if (path === '/service/health') return { moduleIds: [], method: 'GET', billable: false };
   if (path === '/service/peppol_check/countries') return { moduleIds: ['peppol-directory'], method: 'GET', billable: false };
+  if (path === '/service/adverse_media_advance/policies') {
+    return { moduleIds: ['adverse-media-advance'], method: 'GET', billable: false };
+  }
   if (path === '/service/keys/self/rotate') return { moduleIds: [], method: 'POST', billable: false };
   if (/^\/service\/adverse_media_advance\/jobs\/[0-9a-f-]{36}$/i.test(path)) {
     return { moduleIds: ['adverse-media-advance'], method: 'GET', billable: false };
@@ -3253,6 +3257,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       }
       if (await handleFloRequest(req, res, url, floDependencies)) return;
       if ((url.pathname === '/service/adverse_media_advance'
+        || url.pathname === '/service/adverse_media_advance/policies'
         || url.pathname.startsWith('/service/adverse_media_advance/jobs/'))
         && process.env.ADVERSE_MEDIA_ADVANCE_ENABLED !== 'true')
         return json(res, 503, { status: 'Error', error: 'Adverse Media Advance is not enabled.' });
@@ -3336,6 +3341,10 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           'search_plus', adverseArchiveSearch, archiveReviewAvailable());
       if (req.method === 'POST' && url.pathname === '/service/adverse_media_advance')
         return await queueAdvanceScreening(req, res, deepResearchQueue, advanceAdmissionStore);
+      if (req.method === 'GET' && url.pathname === '/service/adverse_media_advance/policies') {
+        return json(res, 200, { catalog_version: ADVANCE_POLICY_CATALOG_VERSION,
+          default_selection: 'all', policies: listAdvancePolicies() });
+      }
       const advanceJobMatch = /^\/service\/adverse_media_advance\/jobs\/([0-9a-f-]{36})$/i.exec(url.pathname);
       if (req.method === 'GET' && advanceJobMatch)
         return await getAdvanceScreening(req, res, advanceJobMatch[1].toLowerCase(),

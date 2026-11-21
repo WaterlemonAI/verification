@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { after, before, test } from 'node:test';
 import { EnvironmentStore } from '../lib/api-store.mjs';
 import { MemoryCustomerUsageStore, validateUsagePolicy } from '../lib/customer-usage.mjs';
@@ -124,6 +125,37 @@ test('Advance rejects caller provider controls and missing idempotency without q
     body: JSON.stringify(input) });
   assert.equal(missingKey.status, 400);
   assert.equal(jobs.length, 1);
+});
+
+test('entitled workspaces can read the versioned policy catalog without a charge', async () => {
+  const before = (await usageStore.account(issued.client.id)).charged_calls;
+  const response = await fetch(`${base}/service/adverse_media_advance/policies`, {
+    headers: { authorization: `Bearer ${issued.apiKey}` }
+  });
+  assert.equal(response.status, 200);
+  const catalog = await response.json();
+  assert.equal(catalog.default_selection, 'all');
+  assert.equal(catalog.policies.length, 64);
+  assert.match(catalog.catalog_version, /^\d{4}-\d{2}-\d{2}\.\d+$/);
+  assert.equal((await usageStore.account(issued.client.id)).charged_calls, before);
+});
+
+test('public Advance API contract documents admission, policies, polling and PDF routes', () => {
+  const spec = JSON.parse(readFileSync(new URL('../api/openapi.json', import.meta.url), 'utf8'));
+  const route = '/service/adverse_media_advance';
+  assert.ok(spec.paths[route].post);
+  assert.ok(spec.paths[`${route}/policies`].get);
+  assert.ok(spec.paths[`${route}/jobs/{screeningId}`].get);
+  assert.ok(spec.paths[`${route}/reports/{reportId}.pdf`].get);
+  assert.equal(spec.components.schemas.AdverseMediaAdvanceRequest.additionalProperties, false);
+  assert.equal(spec.components.schemas.AdverseMediaAdvanceRequest.properties.policy_selection.const, 'all');
+  for (const path of Object.values(spec.paths)) {
+    for (const operation of Object.values(path)) {
+      if (!operation || typeof operation !== 'object' || !operation.operationId) continue;
+      const refs = JSON.stringify(operation).matchAll(/"\$ref":"#\/components\/schemas\/([^\"]+)"/g);
+      for (const match of refs) assert.ok(spec.components.schemas[match[1]], `missing schema ${match[1]}`);
+    }
+  }
 });
 
 test('Advance refuses a stale V2 index before queueing or charging', async () => {

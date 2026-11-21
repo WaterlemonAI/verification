@@ -24,7 +24,7 @@ The request and PDF contain no account-plan information. Additional registration
 ## Catalog and selection
 
 - `lib/adverse-media-advance-policy-catalog.mjs` contains 64 stable policy IDs: eight each in financial crime (`FIN`), regulatory/governance (`REG`), employee/leadership (`EMP`), health/safety (`HSE`), cyber/privacy (`CYB`), environment (`ENV`), financial stability (`STB`), and human rights/security (`HUM`).
-- `listAdvancePolicies()` is the source for a future API reference and policy editor. Changing a rule's meaning requires a new catalog version rather than silently reusing its ID.
+- `GET /service/adverse_media_advance/policies` exposes the current catalog to entitled workspaces without a screening charge. Changing a rule's meaning requires a new catalog version rather than silently reusing its ID.
 - `policy_selection: "all"` selects all 64 IDs. Omitting both selection fields has the same default. Supplying `policy_ids` selects a narrower list; sending both forms is rejected. The UI should present "All policies · Gemini classification" as the default option.
 - `compileAdvancePolicySet()` sorts IDs, rejects duplicates and unknown IDs, and produces a versioned SHA-256 snapshot recording `selection_mode`. The hash is an audit identifier, **not** an authorization signature.
 - The public request should contain the All option or policy IDs, plus an approved policy-set ID where applicable. Rule actions and matrices must come from trusted, versioned workspace configuration. Free-form prompts and action overrides from the screening request must not reach the evaluator.
