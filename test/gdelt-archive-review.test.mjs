@@ -246,6 +246,17 @@ test('a complete archive review reaches the locked profile without relying on th
       reason: 'archive_evidence_unresolved', updated_at: '2026-11-20T02:02:00Z' } }));
   assert.equal(inconclusive.summary.profile_status, 'inconclusive');
   assert.equal(inconclusive.coverage.archive_review.reason, 'archive_evidence_unresolved');
+  const budgeted = presentAdverseMediaResponse(await screenAdverseMedia({ ...base,
+    archiveReview: { ...review, status: 'inconclusive', reason: 'archive_review_posting_budget',
+      expected_postings: 13, postings_scanned: 2, unique_articles: 2, unresolved: 1,
+      unscanned_postings: 11 },
+    archiveSearch: async () => ({ origin: 'local', complete: true, evidencePending: true,
+      results: [], state: snapshot,
+      scan: { mode: 'v2_point_summary', mentions_indexed: 13, unreviewed_count: 13 } }) }));
+  assert.equal(budgeted.summary.profile_status, 'inconclusive');
+  assert.equal(budgeted.coverage.archive_review.expected_postings, 13);
+  assert.equal(budgeted.coverage.archive_review.postings_scanned, 2);
+  assert.equal(budgeted.coverage.archive_review.unscanned_postings, 11);
   const stale = presentAdverseMediaResponse(await screenAdverseMedia({ ...base,
     archiveReview: { ...review, expected_postings: 2, postings_scanned: 2,
       updated_at: '2026-11-20T02:03:00Z' } }));

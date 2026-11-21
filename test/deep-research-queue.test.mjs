@@ -111,7 +111,7 @@ test('deep research worker delivers and removes a completed decision-eligible sc
   assert.equal(deliveredResult.usage, undefined);
 });
 
-test('archive review releases bounded pages and screens once after the review settles', async () => {
+test('archive review checkpoints sources first and screens again after bounded pages settle', async () => {
   const job = makeDeepResearchJob({ ...request, archive_all_stored: true, search_plus: true },
     { owner_id: 'synthetic-owner' });
   job.archive_review_enabled = true;
@@ -143,7 +143,10 @@ test('archive review releases bounded pages and screens once after the review se
       screen: async ({ archiveReview, aiClassifier }) => {
         screenCalls += 1;
         finalReview = archiveReview;
-        assert.equal(typeof aiClassifier, 'function');
+        if (screenCalls === 1) {
+          assert.equal(archiveReview.reason, 'archive_review_pending');
+          assert.equal(aiClassifier, undefined);
+        } else assert.equal(typeof aiClassifier, 'function');
         return { status: 'completed', coverage: { complete: true }, summary: { decision_eligible: true } };
       },
       finalize: async ({ response }) => response,
@@ -153,7 +156,7 @@ test('archive review releases bounded pages and screens once after the review se
   await done;
   assert.equal(steps, 3);
   assert.equal(releases, 2);
-  assert.equal(screenCalls, 1);
+  assert.equal(screenCalls, 2);
   assert.equal(finalReview.status, 'completed');
 });
 
@@ -213,7 +216,7 @@ test('individual association discovery is frozen across archive pages and final 
   assert.deepEqual(screenedAssociations, reviewedAssociations);
   assert.equal(braveCalls, 1);
   assert.equal(reviewSteps, 2);
-  assert.equal(screenCalls, 1);
+  assert.equal(screenCalls, 2);
 });
 
 test('disabled archive review settles queued work as inconclusive without resolving articles', async () => {
