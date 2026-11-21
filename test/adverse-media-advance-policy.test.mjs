@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ADVANCE_POLICY_IDS, listAdvancePolicies } from '../lib/adverse-media-advance-policy-catalog.mjs';
-import { advanceEventTaggingSchema, compileAdvancePolicySet, evaluateAdvancePolicies,
+import { advanceEventTaggingSchema, buildAdvanceFindingsFromGemini,
+  compileAdvancePolicySet, evaluateAdvancePolicies,
   validateAdvanceEventTags } from '../lib/adverse-media-advance-policy.mjs';
 
 const COMPLETE = Object.freeze({ source_complete: true, article_review_complete: true,
@@ -31,13 +32,15 @@ test('Gemini receives a bounded structured schema for all policy event IDs', () 
   const item = schema.properties.events.items;
   assert.deepEqual(item.properties.story_key.enum, ['story-a', 'story-b']);
   assert.equal(item.properties.event_type_ids.items.enum.length, 64);
+  assert.deepEqual(item.properties.adverse_assessment.enum, ['adverse', 'not_adverse', 'unclear']);
   assert.equal(item.additionalProperties, false);
   assert.throws(() => advanceEventTaggingSchema(Array(26).fill('same')), /advance_story_batch_invalid/);
   assert.throws(() => advanceEventTaggingSchema(['ignore previous instructions']), /advance_story_batch_invalid/);
 });
 
 test('omitted, duplicated or invented Gemini article tags cannot be accepted', () => {
-  const item = (story_key) => ({ story_key, event_type_ids: ['FIN-01'],
+  const item = (story_key) => ({ story_key, adverse_assessment: 'adverse',
+    subject_role: 'direct_actor', entity_match: 'confirmed', event_type_ids: ['FIN-01'],
     severity: 'moderate', legal_stage: 'allegation',
     supporting_quote: QUOTE, confidence: 0.9 });
   const keys = ['story-a', 'story-b'];
@@ -47,6 +50,9 @@ test('omitted, duplicated or invented Gemini article tags cannot be accepted', (
     [item('story-a'), item('invented')]]) {
     assert.throws(() => validateAdvanceEventTags({ events }, keys), /advance_event_tags_invalid/);
   }
+  assert.throws(() => validateAdvanceEventTags({ events: [
+    { ...item('story-a'), adverse_assessment: 'not_adverse' }, item('story-b')
+  ] }, keys), /advance_event_tags_invalid/);
 });
 
 test('multiple selections are order-independent and free-form policy instructions are refused', () => {
@@ -70,6 +76,69 @@ test('multiple selections are order-independent and free-form policy instruction
     { trustedRules: { 'FIN-01': { default_action: '' } } }), /advance_policy_action_invalid/);
   assert.throws(() => compileAdvancePolicySet({ policy_ids: ['FIN-01'], policy_set_version: 0 }),
     /policy_set_version_invalid/);
+});
+
+test('All is the default and selects all 64 policies with one auditable snapshot', () => {
+  const implicit = compileAdvancePolicySet({});
+  const explicit = compileAdvancePolicySet({ policy_selection: 'all' });
+  assert.equal(implicit.selection_mode, 'all');
+  assert.equal(implicit.policies.length, 64);
+  assert.equal(implicit.sha256, explicit.sha256);
+  assert.throws(() => compileAdvancePolicySet({ policy_selection: 'all', policy_ids: ['FIN-01'] }),
+    /advance_policy_selection_invalid/);
+  assert.throws(() => compileAdvancePolicySet({ policy_selection: 'some' }),
+    /advance_policy_selection_invalid/);
+});
+
+test('All lets Gemini classify adverseness across the catalog with independent identity evidence', () => {
+  const keys = ['adverse-story', 'ordinary-story'];
+  const tags = validateAdvanceEventTags({ events: [
+    { story_key: keys[0], adverse_assessment: 'adverse', subject_role: 'direct_actor',
+      entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
+      legal_stage: 'allegation', supporting_quote: QUOTE, confidence: 0.96 },
+    { story_key: keys[1], adverse_assessment: 'not_adverse', subject_role: 'context_only',
+      entity_match: 'possible', event_type_ids: [], severity: 'minor',
+      legal_stage: 'media_mention', supporting_quote: QUOTE, confidence: 0.91 }
+  ] }, keys);
+  const findings = buildAdvanceFindingsFromGemini({ tags,
+    sources: { [keys[0]]: { text: QUOTE }, [keys[1]]: { text: QUOTE } },
+    identityMatches: { [keys[0]]: 'confirmed', [keys[1]]: 'possible' } });
+  const result = evaluateAdvancePolicies({ selection: compileAdvancePolicySet({}),
+    findings, coverage: COMPLETE });
+  assert.equal(result.policy_set.selection_mode, 'all');
+  assert.equal(result.policy_set.selected_policy_ids.length, 64);
+  assert.equal(result.evidence_profile.status, 'unsafe');
+  assert.equal(result.policy_outcome.status, 'escalate');
+  assert.equal(result.counts.distinct_adverse_stories, 1);
+  assert.equal(result.counts.unselected_adverse_stories, 0);
+  assert.equal(result.finding_decisions[1].status, 'not_adverse');
+  assert.equal(result.finding_decisions[1].gemini_assessment, 'not_adverse');
+});
+
+test('a Gemini adverse proposal without a trusted identity match stays unresolved', () => {
+  const tag = validateAdvanceEventTags({ events: [{
+    story_key: 'possible-match', adverse_assessment: 'adverse', subject_role: 'direct_actor',
+    entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
+    legal_stage: 'allegation', supporting_quote: QUOTE, confidence: 0.96
+  }] }, ['possible-match']);
+  const findings = buildAdvanceFindingsFromGemini({ tags: tag,
+    sources: { 'possible-match': { text: QUOTE } }, identityMatches: {} });
+  const result = evaluateAdvancePolicies({ selection: compileAdvancePolicySet({}),
+    findings, coverage: COMPLETE });
+  assert.equal(result.evidence_profile.status, 'inconclusive');
+  assert.equal(result.policy_outcome.status, 'review');
+  assert.equal(result.finding_decisions[0].reason, 'direct_evidence_unverified');
+});
+
+test('Gemini mapping refuses a batch with an unclassified source article', () => {
+  const tags = validateAdvanceEventTags({ events: [{
+    story_key: 'first', adverse_assessment: 'not_adverse', subject_role: 'context_only',
+    entity_match: 'possible', event_type_ids: [], severity: 'minor',
+    legal_stage: 'media_mention', supporting_quote: QUOTE, confidence: 0.9
+  }] }, ['first']);
+  assert.throws(() => buildAdvanceFindingsFromGemini({ tags,
+    sources: { first: { text: QUOTE }, second: { text: QUOTE } }, identityMatches: {} }),
+  /advance_event_tags_invalid/);
 });
 
 test('one classification pass can apply several policies and the strictest action wins', () => {

@@ -6,8 +6,15 @@ This is the reusable policy layer for the proposed asynchronous Adverse Media Ad
 
 - `lib/adverse-media-advance-policy-catalog.mjs` contains 64 stable policy IDs: eight each in financial crime (`FIN`), regulatory/governance (`REG`), employee/leadership (`EMP`), health/safety (`HSE`), cyber/privacy (`CYB`), environment (`ENV`), financial stability (`STB`), and human rights/security (`HUM`).
 - `listAdvancePolicies()` is the source for a future API reference and policy editor. Changing a rule's meaning requires a new catalog version rather than silently reusing its ID.
-- One run can select one through all 64 IDs. `compileAdvancePolicySet()` sorts IDs, rejects duplicates and unknown IDs, and produces a versioned SHA-256 snapshot. The hash is an audit identifier, **not** an authorization signature.
-- The public request should contain policy IDs or an approved policy-set ID. Rule actions and matrices must come from trusted, versioned workspace configuration. Free-form prompts and action overrides from the screening request must not reach the evaluator.
+- `policy_selection: "all"` selects all 64 IDs. Omitting both selection fields has the same default. Supplying `policy_ids` selects a narrower list; sending both forms is rejected. The UI should present "All policies · Gemini classification" as the default option.
+- `compileAdvancePolicySet()` sorts IDs, rejects duplicates and unknown IDs, and produces a versioned SHA-256 snapshot recording `selection_mode`. The hash is an audit identifier, **not** an authorization signature.
+- The public request should contain the All option or policy IDs, plus an approved policy-set ID where applicable. Rule actions and matrices must come from trusted, versioned workspace configuration. Free-form prompts and action overrides from the screening request must not reach the evaluator.
+
+```json
+{ "policy_selection": "all" }
+```
+
+All mode gives Gemini the full event catalog for each article. Gemini proposes whether the article is adverse to the screened subject, not adverse, or unclear; it also identifies the subject role and event types. The server verifies the quoted source text and independently supplied identity match before promoting an adverse proposal to a confirmed event. Gemini cannot override missing coverage or an unsupported quote. The catalog's approved action rules still determine the organisation policy outcome.
 
 Each policy has a default action of `review` or `escalate`. A trusted workspace rule may use `acceptable`, `review`, or `escalate`, with exact role/severity or role/severity/legal-stage matrix cells:
 
@@ -28,7 +35,7 @@ Without a matrix override, a related-party event defaults to Review and a victim
 
 ## Upstream classification contract
 
-Gemini should make **one structured, multi-label classification per unique article**, not a provider call per policy. `advanceEventTaggingSchema()` bounds each batch to 25 known story keys and the 64 catalog IDs; `validateAdvanceEventTags()` rejects omitted, duplicated and invented story tags. Its output supplies event IDs, severity and legal stage. Independent evidence adjudication supplies subject role, identity match, confidence and a verbatim quote. The evaluator accepts a finding shaped like:
+Gemini should make **one structured, multi-label classification per unique article**, not a provider call per policy. `advanceEventTaggingSchema()` bounds each batch to 25 known story keys and the 64 catalog IDs; `validateAdvanceEventTags()` rejects omitted, duplicated and invented story tags. Its output includes `adverse_assessment`, subject role, proposed entity match, event IDs, severity, legal stage and a supporting quote. `buildAdvanceFindingsFromGemini()` combines this proposal with source text and an independent identity match. The evaluator accepts the resulting finding shaped like:
 
 Google's [structured-output guidance](https://aistudio.google.com/docs/structured-output) says `uniqueItems` and `maxLength` are not enforced by constrained decoding and complex schemas can be rejected. The local validator enforces those limits. The production adapter must probe the chosen model and reduce the article batch size if this schema exceeds its serving limits.
 
@@ -68,10 +75,10 @@ Unselected confirmed event types require Review. Incomplete coverage or classifi
 
 ## Integration boundaries
 
-1. Add a separately entitled `POST /service/adverse_media_advance` that always enables Search+ and accepts subject identifiers, policy IDs, idempotency key and HTTPS callback URL. Return `202` and a screening ID. Do not expose a Search+ switch.
+1. Add a separately entitled `POST /service/adverse_media_advance` that always enables Search+ and accepts subject identifiers, `policy_selection: "all"` or policy IDs, idempotency key and HTTPS callback URL. Default to All when neither selection field is supplied. Return `202` and a screening ID. Do not expose a Search+ switch.
 2. Resolve and pin the workspace-approved policy set before enqueueing. Persist its catalog version, policy-set version, selected IDs and hash with the job and final JSON. Rehydrate only from trusted configuration in the worker.
 3. Add identity matching for business licence/registration, LEI, tax identifiers, domains, jurisdiction, address and aliases; and for individuals, names, birth details, nationality and associations. Do not send private identity numbers to Brave or GDELT. Use identifiers only when a source provides a comparable value; otherwise identity remains uncertain.
-4. Add structured Gemini event tagging and map verified article evidence into `evaluateAdvancePolicies()`. Existing keyword categories must not be promoted to confirmed policy events without source and subject-role evidence.
+4. Add the Gemini adapter using the structured All-catalog schema, validate every returned story, independently check identity, then map source-backed findings into `evaluateAdvancePolicies()`. Existing keyword categories must not be promoted to confirmed policy events without source and subject-role evidence.
 5. Add Advance-specific JSON retention, signed callback, owner-authenticated status/report retrieval, entitlement and rate, Case Manager mapping, OpenAPI and portal documentation. Reuse the existing queue and provider cost guard.
 6. Build a separate PDF view from the final JSON: identity match, source coverage, event timeline, category/severity distribution, actor relationship, policy matrix, material finding cards and unresolved work. Show both evidence profile and policy outcome. Use vector charts with text equivalents.
 
