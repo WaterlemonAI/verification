@@ -85,6 +85,17 @@ test('report narrative refuses model text that exposes internal review state', a
   assert.match(narrative.summary, /media buckets/i);
 });
 
+test('customer narrative refuses provider account details in any model field', async () => {
+  const narrative = await createAdverseMediaNarrative({ response, apiKey: 'private', fetchImpl: async () =>
+    Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+      summary: 'The profile is Inconclusive on the collected articles.',
+      findings: ['The article provider account is on a free trial.'],
+      recommendations: ['Review the cited articles.']
+    }) }] } }] }) });
+  assert.doesNotMatch(JSON.stringify(narrative), /free trial|provider account/i);
+  assert.match(narrative.summary, /media buckets/i);
+});
+
 test('Advance report carries its own title and filename without changing existing report types', async () => {
   const report = await createAdverseMediaAuditPdf({ request, response: {
     ...response, summary: { ...response.summary, profile_status: 'inconclusive' },
