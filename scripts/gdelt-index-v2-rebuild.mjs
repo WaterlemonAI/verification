@@ -17,7 +17,7 @@ async function readCursor(container) {
 }
 
 export async function rebuildStoredV2({ container, table, v2, sourceState, maxIntervals = 400, from, to,
-  concurrency = 1, processInterval = processGdeltInterval }) {
+  concurrency = 1, processInterval = processGdeltInterval, onProgress = null }) {
   if (!v2) throw new Error('gdelt_v2_clients_required');
   if (!sourceState?.coverage_start || !sourceState?.coverage_end) throw new Error('v1_watermark_required');
   if (!Number.isInteger(maxIntervals) || maxIntervals < 1 || maxIntervals > 2000) throw new Error('invalid_rebuild_limit');
@@ -75,6 +75,7 @@ export async function rebuildStoredV2({ container, table, v2, sourceState, maxIn
       cursor.value = next;
     }
     processed += size;
+    if (onProgress) onProgress({ processed, last_completed_interval: lastProcessed });
   }
   const trusted = cursor.value?.cursor_version === 2 ? cursor.value : null;
   const knownFirst = trusted?.first_completed_interval && new Date(trusted.first_completed_interval);
@@ -89,10 +90,17 @@ export async function main() {
   const { container, table } = archiveClients();
   const v2 = v2Clients();
   const { state } = await loadArchiveState(container);
+  let nextLog = 25;
   const result = await rebuildStoredV2({ container, table, v2, sourceState: state,
     maxIntervals: Number(process.env.GDELT_V2_REBUILD_MAX_INTERVALS || 400),
     concurrency: Number(process.env.GDELT_V2_REBUILD_CONCURRENCY || 1),
-    from: process.env.GDELT_V2_REBUILD_FROM, to: process.env.GDELT_V2_REBUILD_TO });
+    from: process.env.GDELT_V2_REBUILD_FROM, to: process.env.GDELT_V2_REBUILD_TO,
+    onProgress: ({ processed, last_completed_interval }) => {
+      if (processed < nextLog) return;
+      process.stdout.write(`${JSON.stringify({ event: 'gdelt_v2_rebuild_progress',
+        processed, last_completed_interval })}\n`);
+      nextLog += 25;
+    } });
   process.stdout.write(`${JSON.stringify({ event: 'gdelt_v2_rebuild', ...result })}\n`);
 }
 

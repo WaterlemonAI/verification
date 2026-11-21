@@ -12,6 +12,7 @@ The candidate Advance harness stopped at its Azure archive preflight, before any
 
 - Execution `caj-ai7uae-gdelt-ingest-rsxea7q` used the immutable candidate digest, stored ZIPs only, at most 100 intervals, and concurrency 2. It succeeded, processing 4 October 08:15 through 5 October 09:00 UTC. Its output reported `processed: 100` and `more: true`.
 - A second bounded execution, `caj-ai7uae-gdelt-ingest-6h266ce`, started at 19:44:45 UTC for 5 October 09:15 through 9 October 13:00 UTC, capped at 400 intervals and concurrency 4. Its result must be checked before the next chunk.
+- Azure's one-off job override assigned that execution 0.5 CPU and 1 GiB, while the scheduled job defines 1 CPU and 2 GiB. Live metrics showed the 0.5 CPU allocation saturated while the job continued to transfer data. Specify `--cpu 1 --memory 2Gi` for later bounded executions and read back each execution template; do not infer resources from the parent job.
 - The remaining stored gap must be rebuilt from immutable ZIPs, verified against V1, and measured for V1/V2 subject parity before the candidate Advance run. Enable V2 dual-write on both daily and weekly GDELT jobs through the reviewed main-branch deployment path before customer activation; otherwise a future backfill can make V2 stale again.
 
 ## Still required
