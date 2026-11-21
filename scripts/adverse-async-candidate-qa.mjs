@@ -17,19 +17,20 @@ if (!process.argv.includes('--isolated-candidate') || !process.argv.includes('--
   || !process.env.ADVERSE_QA_SUBJECT) {
   throw new Error('isolated_async_trial_configuration_required');
 }
-if (!['adverse_media', 'adverse_media_search_plus'].includes(process.env.ADVERSE_QA_ROUTE || 'adverse_media')) {
+if (!['adverse_media', 'adverse_media_search_plus', 'adverse_media_advance'].includes(process.env.ADVERSE_QA_ROUTE || 'adverse_media')) {
   throw new Error('invalid_qa_route');
 }
 const subject = process.env.ADVERSE_QA_SUBJECT.trim();
 if (subject.length < 3 || subject.length > 160) throw new Error('invalid_qa_subject');
 const route = process.env.ADVERSE_QA_ROUTE || 'adverse_media';
+if (route === 'adverse_media_advance') process.env.ADVERSE_MEDIA_ADVANCE_ENABLED = 'true';
 const entityType = process.env.ADVERSE_QA_ENTITY_TYPE === 'individual' ? 'individual' : 'business';
 const token = randomBytes(32).toString('hex');
 process.env.AI7_API_KEY_HASHES = createHash('sha256').update(token).digest('hex');
 process.env.API_HOSTS = 'localhost,127.0.0.1';
-// The default trial is small. An explicit candidate-only override can exercise
-// the runtime's 200-posting default; the shared worker still reserves every
-// external request under its USD 0.14 provider ceiling.
+// The default candidate run is small. An explicit override can exercise the
+// runtime's 200-posting default; every external request remains reserved under
+// the route-specific provider ceiling.
 const qaMaxPostings = Number(process.env.ADVERSE_QA_MAX_POSTINGS || '20');
 if (!Number.isInteger(qaMaxPostings) || qaMaxPostings < 1 || qaMaxPostings > 200) {
   throw new Error('invalid_qa_max_postings');
@@ -44,7 +45,7 @@ const [{ createStore, EnvironmentStore }, { createAppServer },
   import('../lib/customer-usage.mjs'), import('../lib/gdelt-local-index.mjs')
 ]);
 const preflight = await searchLocalGdeltIndex({ entity_type: entityType, name: subject,
-  aliases: [], transliterations: {}, associations: [], archive_all_stored: true });
+  aliases: [], transliterations: {}, associations: [], archive_all_stored: true }, { requireV2: true });
 if (!preflight?.complete || preflight.scan?.mode !== 'v2_point_summary') {
   throw new Error('candidate_v2_snapshot_unavailable');
 }
@@ -60,10 +61,11 @@ const jsonStore = new MemoryAdverseMediaJsonStore();
 const usageStore = new MemoryCustomerUsageStore();
 const client = await store.getClientForKey(token);
 await usageStore.configure(client.id, validateUsagePolicy({ mode: 'postpay', currency: 'USD',
-  allowed_modules: ['adverse-media', 'adverse-media-search-plus'], rates: {
+  allowed_modules: ['adverse-media', 'adverse-media-search-plus', 'adverse-media-advance'], rates: {
     'adverse-media': [{ up_to: null, price: '0.20' }],
-    'adverse-media-search-plus': [{ up_to: null, price: '0.20' }]
-  } }, new Set(['adverse-media', 'adverse-media-search-plus'])));
+    'adverse-media-search-plus': [{ up_to: null, price: '0.20' }],
+    'adverse-media-advance': [{ up_to: null, price: '0.75' }]
+  } }, new Set(['adverse-media', 'adverse-media-search-plus', 'adverse-media-advance'])));
 
 let pending = null;
 let availableAt = 0;
@@ -91,13 +93,16 @@ const started = performance.now();
 let status = 'error';
 try {
   const response = await fetch(`${base}/service/${route}`, { method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
+      ...(route === 'adverse_media_advance'
+        ? { 'idempotency-key': `candidate-advance-${randomBytes(8).toString('hex')}` } : {}) },
     body: JSON.stringify({ entity_type: entityType, name: subject, languages: ['en'], max_results: 15,
-    deep_research: true, archive_review: true,
-    callback_url: process.env.ADVERSE_QA_CALLBACK_URL }) });
+      ...(route === 'adverse_media_advance'
+        ? { policy_selection: 'all' } : { deep_research: true, archive_review: true }),
+      callback_url: process.env.ADVERSE_QA_CALLBACK_URL }) });
   const receipt = await response.json();
   if (response.status !== 202) throw new Error(`candidate_submission_http_${response.status}:${receipt.error || 'unknown'}`);
-  const ownerId = reportOwnerId(token);
+  const ownerId = route === 'adverse_media_advance' ? `workspace-${client.id}` : reportOwnerId(token);
   const deadline = Date.now() + 10 * 60_000;
   let state;
   while (Date.now() < deadline) {
@@ -123,6 +128,14 @@ try {
     } while (cursor);
   }
   const pdfHash = report?.bytes ? createHash('sha256').update(report.bytes).digest('hex') : null;
+  if (route === 'adverse_media_advance' && final) {
+    const lookup = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`,
+      { headers: { authorization: `Bearer ${token}` } });
+    const lookupBody = await lookup.json();
+    if (lookup.status !== 200 || lookupBody.result?.screening_id !== receipt.screening_id) {
+      throw new Error('candidate_advance_result_lookup_failed');
+    }
+  }
   if (process.env.ADVERSE_QA_ARTIFACT_DIR && final) {
     const directory = process.env.ADVERSE_QA_ARTIFACT_DIR;
     if (directory !== '/tmp/adverse-qa-artifacts') throw new Error('invalid_qa_artifact_directory');
@@ -130,12 +143,15 @@ try {
     await writeFile(join(directory, `${receipt.screening_id}.json`), `${JSON.stringify(final, null, 2)}\n`, { mode: 0o600 });
     if (report?.bytes) await writeFile(join(directory, `${receipt.screening_id}.pdf`), report.bytes, { mode: 0o600 });
   }
+  const expectedEvidence = final?.coverage?.archive_review?.unique_articles;
   status = state?.stage === 'delivered' && final && pdfHash === final.report?.sha256
-    && evidenceItems.length === final.coverage.archive_review.unique_articles ? 'verified' : 'incomplete';
+    && (expectedEvidence === undefined || evidenceItems.length === expectedEvidence)
+    ? 'verified' : 'incomplete';
   process.stdout.write(`${JSON.stringify({ event: 'adverse_async_candidate_qa', status,
     route, subject_sha256: createHash('sha256').update(subject).digest('hex'),
     screening_id: receipt.screening_id, worker_stage: state?.stage || null,
     profile: final?.summary?.profile_status || null,
+    policy_outcome: final?.advance_assessment?.policy_outcome?.status || null,
     decision_eligible: final?.summary?.decision_eligible ?? null,
     coverage_complete: final?.coverage?.complete ?? null,
     archive_review: final?.coverage?.archive_review ? {

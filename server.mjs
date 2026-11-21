@@ -18,9 +18,14 @@ import { createEntitySearchAuditPdf } from './lib/entity-search-report.mjs';
 import { adverseMediaConfig, presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest } from './lib/adverse-media.mjs';
 import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, validatePublicCallbackUrl } from './lib/deep-research-queue.mjs';
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
+import { validateAdvanceRequest, advanceRequestDigest } from './lib/adverse-media-advance-request.mjs';
+import { assessAdvanceScreening, withAdvanceAssessment } from './lib/adverse-media-advance-classifier.mjs';
+import { ADVANCE_POLICY_CATALOG_VERSION, listAdvancePolicies } from './lib/adverse-media-advance-policy-catalog.mjs';
+import { createAdvanceAdmissionStore } from './lib/adverse-media-advance-store.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
 import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs';
 import { processArchiveReviewPage } from './lib/gdelt-archive-review.mjs';
+import { searchLocalGdeltIndex } from './lib/gdelt-local-index.mjs';
 import { createEventRegistryArticleResolver, createEventRegistryBulkArticleResolver } from './lib/gdelt-article-evidence-provider.mjs';
 import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
@@ -101,6 +106,46 @@ function validateCallbackAccessKey(value, callbackUrl) {
   return value;
 }
 
+function advanceQueueReceipt(row, initialSecret = '') {
+  return { screening_id: row.screeningId, status: 'queued',
+    callback: { configured: true, event: 'adverse_media.advance.completed',
+      signature_header: 'x-ai7-signature',
+      ...(initialSecret ? { signing_secret: initialSecret } : {}) },
+    message: initialSecret
+      ? 'The completed screening and PDF link will be posted to the callback URL. Store the signing secret now; it is not shown again.'
+      : 'This screening was already accepted. Its original callback signing secret is not shown again.' };
+}
+
+async function prepareAdvanceSubmission(req, transactionId, queue, admissionStore, archiveReviewAvailable) {
+  if (!queue || !admissionStore || !archiveReviewAvailable()) {
+    return { status: 503, error: 'Adverse Media Advance is temporarily unavailable.' };
+  }
+  try {
+    const input = await readJson(req, 32 * 1024);
+    const validation = validateAdvanceRequest(input);
+    const callbackAccessKey = validateCallbackAccessKey(input.callback_access_key, validation.searchRequest.callback_url);
+    await validatePublicCallbackUrl(validation.searchRequest.callback_url);
+    const { callback_access_key: _callbackKey, ...safeInput } = input;
+    const job = makeDeepResearchJob(validation.searchRequest, {
+      owner_id: `workspace-${req.ai7Client.id}`, request_origin: requestOrigin(req),
+      callback_access_key: callbackAccessKey, input_payload: safeInput,
+      transaction_id: transactionId });
+    job.archive_review_enabled = true;
+    job.advance = { policy_set: validation.policySet, identifiers: validation.identifiers };
+    if (Buffer.byteLength(JSON.stringify(job)) > 44 * 1024) {
+      return { status: 413, error: 'The Advance request is too large for asynchronous processing.' };
+    }
+    return { validation, callbackAccessKey, job };
+  } catch (error) {
+    const code = String(error.message || '');
+    if (code === 'callback_url_required') return { status: 400, error: 'A public HTTPS callback_url is required.' };
+    if (code.startsWith('callback_url_')) return { status: 400, error: 'callback_url must be a public HTTPS URL.' };
+    if (code === 'invalid_callback_access_key') return { status: 400,
+      error: 'callback_access_key requires callback_url and must be a 1–512 character Bearer token without whitespace.' };
+    return { status: 400, error: code || 'Invalid Adverse Media Advance request.' };
+  }
+}
+
 function json(res, status, body, extraHeaders = {}) {
   const payload = Buffer.from(JSON.stringify(body));
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': payload.length, 'cache-control': 'no-store', ...extraHeaders });
@@ -132,6 +177,7 @@ async function classifyCustomerApi(req, url, store) {
   const fixed = {
     '/service/adverse_media': 'adverse-media',
     '/service/adverse_media_search_plus': 'adverse-media-search-plus',
+    '/service/adverse_media_advance': 'adverse-media-advance',
     '/service/merchant_screening': 'merchant-screening',
     '/service/bank_statement_analysis': 'bank-statement-analysis',
     '/service/dubai_ejari_verification': 'ejari-verification',
@@ -140,7 +186,13 @@ async function classifyCustomerApi(req, url, store) {
   };
   if (path === '/service/health') return { moduleIds: [], method: 'GET', billable: false };
   if (path === '/service/peppol_check/countries') return { moduleIds: ['peppol-directory'], method: 'GET', billable: false };
+  if (path === '/service/adverse_media_advance/policies') {
+    return { moduleIds: ['adverse-media-advance'], method: 'GET', billable: false };
+  }
   if (path === '/service/keys/self/rotate') return { moduleIds: [], method: 'POST', billable: false };
+  if (/^\/service\/adverse_media_advance\/jobs\/[0-9a-f-]{36}$/i.test(path)) {
+    return { moduleIds: ['adverse-media-advance'], method: 'GET', billable: false };
+  }
   const documentOcr = DOCUMENT_OCR_BY_PATH.get(path);
   if (documentOcr) return { moduleIds: [documentOcr.id], method: 'POST', billable: true };
   const documentOcrJob = /^\/service\/([a-z_]+)\/(?:jobs\/)?(ocr_[0-9a-f-]{36})(?:\/(?:result|artifacts\/(?:photo|signature)))?$/.exec(path);
@@ -149,7 +201,7 @@ async function classifyCustomerApi(req, url, store) {
     if (definition) return { moduleIds: [definition.id], method: 'GET', billable: false };
   }
   if (fixed[path]) return { moduleIds: [fixed[path]], method: 'POST', billable: true };
-  if (path === '/service/adverse_media/config' || /\/service\/(?:adverse_media|adverse_media_search_plus|merchant_screening|forms)\/reports\//.test(path)
+  if (path === '/service/adverse_media/config' || /\/service\/(?:adverse_media|adverse_media_search_plus|adverse_media_advance|merchant_screening|forms)\/reports\//.test(path)
     || /\/service\/merchant_screening\/screenshots\//.test(path)) return null;
   if (path.startsWith('/service/bank_statement_analysis/')) return { moduleIds: ['bank-statement-analysis'], method: 'GET', billable: false };
   if (path.startsWith('/service/dubai_ejari_verification/jobs/')) return { moduleIds: ['ejari-verification'], method: 'GET', billable: false };
@@ -186,7 +238,8 @@ function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, trans
   };
 }
 
-async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, caseStore, transactionId) {
+async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, advanceAdmissionStore,
+  deepResearchQueue, archiveReviewAvailable, archivePreflight, caseStore, transactionId) {
   const route = await classifyCustomerApi(req, url, store);
   if (!route) return true;
   const token = bearerToken(req);
@@ -236,6 +289,16 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
       return false;
     }
   }
+  if (route.moduleIds.includes('adverse-media-advance')) {
+    const account = await usageStore.account(workspaceId, managed);
+    if (!account.allowed_modules.includes('adverse-media-advance')
+      || !Array.isArray(account.rates['adverse-media-advance'])
+      || account.rates['adverse-media-advance'].length === 0) {
+      await usageStore.record(workspaceId, details, 403);
+      json(res, 403, { status: 'Error', error: 'Adverse Media Advance requires explicit workspace access and a configured rate.' });
+      return false;
+    }
+  }
   if (req.method !== route.method) {
     await usageStore.record(workspaceId, details, 405);
     const body = { status: 'Error', error: `Method must be ${route.method}.` };
@@ -244,6 +307,45 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
     return false;
   }
   const formMatch = /^\/forms\/([a-z0-9-]+)\/submissions$/.exec(url.pathname);
+  if (url.pathname === '/service/adverse_media_advance' && route.billable) {
+    const prepared = await prepareAdvanceSubmission(req, transactionId, deepResearchQueue,
+      advanceAdmissionStore, archiveReviewAvailable);
+    if (prepared.status) {
+      await usageStore.record(workspaceId, details, prepared.status);
+      json(res, prepared.status, { status: 'Error', error: prepared.error });
+      return false;
+    }
+    const idempotencyKey = String(req.headers['idempotency-key'] || '').trim();
+    if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) {
+      await usageStore.record(workspaceId, details, 400);
+      json(res, 400, { status: 'Error', error: 'Idempotency-Key must contain 16–128 letters, digits, dots, underscores, colons or hyphens.' });
+      return false;
+    }
+    const claim = await advanceAdmissionStore.claim({ workspaceId, idempotencyKey,
+      payloadHash: advanceRequestDigest(prepared.validation, prepared.callbackAccessKey), job: prepared.job });
+    if (claim.status !== 'new') {
+      const status = claim.status === 'replayed' ? 202 : claim.status === 'conflict' ? 409 : 503;
+      await usageStore.record(workspaceId, details, status);
+      if (claim.status === 'replayed') json(res, 202, advanceQueueReceipt(claim.row));
+      else json(res, status, { status: 'Error',
+        reasonCode: claim.status === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'SUBMISSION_PENDING',
+        error: claim.status === 'conflict' ? 'This Idempotency-Key was used with different input.'
+          : 'Submission admission is pending reconciliation. No additional check was queued or charged.' },
+      claim.status === 'in_progress' ? { 'retry-after': '2' } : {});
+      return false;
+    }
+    let archive;
+    try { archive = await archivePreflight(prepared.validation.searchRequest, { requireV2: true }); }
+    catch { /* The customer is not charged for an unavailable index. */ }
+    if (archive?.complete !== true || archive.scan?.mode !== 'v2_point_summary') {
+      await advanceAdmissionStore.abandon(claim.row);
+      await usageStore.record(workspaceId, details, 503);
+      json(res, 503, { status: 'Error', error: 'The stored media index is temporarily unavailable.' });
+      return false;
+    }
+    prepared.claim = claim.row;
+    req.ai7PreparedAdvance = prepared;
+  }
   if (formMatch && route.billable) {
     const prepared = await prepareFormSubmission(req, formMatch[1], store, formsQueue, transactionId);
     if (prepared.status) {
@@ -293,10 +395,12 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
     try { admission = await usageStore.admit(workspaceId, details, managed); }
     catch (error) {
       if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
+      if (req.ai7PreparedAdvance?.claim) await advanceAdmissionStore.abandon(req.ai7PreparedAdvance.claim);
       throw error;
     }
     if (!admission.allowed) {
       if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
+      if (req.ai7PreparedAdvance?.claim) await advanceAdmissionStore.abandon(req.ai7PreparedAdvance.claim);
       const body = { status: 'Error', error: admission.reason };
       await captureRejectedAttempt(admission.statusCode, body, admission.casePolicy);
       json(res, admission.statusCode, body);
@@ -310,6 +414,7 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
         if (!caseStore) {
           await usageStore.complete(workspaceId, admission.logKey, 503, 'case_manager_unavailable');
           if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
+          if (req.ai7PreparedAdvance?.claim) await advanceAdmissionStore.abandon(req.ai7PreparedAdvance.claim);
           json(res, 503, { status: 'Error', error: 'Case Manager is temporarily unavailable.' });
           return false;
         }
@@ -323,10 +428,15 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
             logicalKey: (reconciledCaseServices.has(caseRoute.service) || caseRoute.service === 'forms')
               && req.headers['idempotency-key'] ? `${url.pathname}:${String(req.headers['idempotency-key'])}` : '' });
           if (req.ai7PreparedForm) req.ai7PreparedForm.job.case_id = req.ai7Case.id;
+          if (req.ai7PreparedAdvance) {
+            req.ai7PreparedAdvance.job.case_id = req.ai7Case.id;
+            req.ai7PreparedAdvance.job.case_workspace_id = workspaceId;
+          }
         } catch {
           console.warn('case_manager_intent_failed', JSON.stringify({ transaction_id: transactionId }));
           await usageStore.complete(workspaceId, admission.logKey, 503, 'case_manager_intent_failed');
           if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
+          if (req.ai7PreparedAdvance?.claim) await advanceAdmissionStore.abandon(req.ai7PreparedAdvance.claim);
           json(res, 503, { status: 'Error', error: 'Case Manager is temporarily unavailable.' });
           return false;
         }
@@ -541,8 +651,10 @@ async function createEntitySearchReport(req, res, store, reportStore) {
 export async function finalizeAdverseMediaReport({ request, response, ownerId, origin, aiApiKey, fetchImpl, reportStore,
   jsonStore = createAdverseMediaJsonStore(), inputPayload = request, transactionId = null, reportId = null,
   variant = 'legacy' }) {
-  const reportBase = variant === 'search_plus' ? '/service/adverse_media_search_plus' : '/service/adverse_media';
-  const reportType = variant === 'search_plus' ? 'adverse_media_search_plus' : 'adverse_media';
+  const reportBase = variant === 'advance' ? '/service/adverse_media_advance'
+    : variant === 'search_plus' ? '/service/adverse_media_search_plus' : '/service/adverse_media';
+  const reportType = variant === 'advance' ? 'adverse_media_advance'
+    : variant === 'search_plus' ? 'adverse_media_search_plus' : 'adverse_media';
   try {
     if (reportId) {
       const existing = await reportStore.get({ ownerId, reportId });
@@ -572,7 +684,7 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
       });
     }
     const report = await createAdverseMediaAuditPdf({ request, response, narrative, origin,
-      ...(reportId ? { reportId } : {}), ...logo });
+      ...(reportId ? { reportId } : {}), ...logo, variant });
     const reportPath = `${reportBase}/reports/${report.reportId}.pdf`;
     const metadata = {
       report_id: report.reportId,
@@ -761,6 +873,47 @@ async function createAdverseMediaScreening(req, res, store, fetchImpl, deepResea
     }
     return json(res, 502, { status: 'Error', reason_code: 'SEARCH_SOURCES_UNAVAILABLE',
       error: 'The media search service is temporarily unavailable. Please try again shortly.' });
+  }
+}
+
+async function queueAdvanceScreening(req, res, queue, admissionStore) {
+  const prepared = req.ai7PreparedAdvance;
+  if (!prepared) return json(res, 503, { status: 'Error', error: 'Adverse Media Advance is temporarily unavailable.' });
+  try { await queue.enqueue(prepared.job); }
+  catch {
+    await admissionStore.abandon(prepared.claim).catch(() => {});
+    res.ai7BillingReason = 'advance_queue_failed';
+    return json(res, 503, { status: 'Error', error: 'Adverse Media Advance is temporarily unavailable.' });
+  }
+  try { await admissionStore.accept(prepared.claim); }
+  catch { console.warn('advance_admission_accept_repair_needed', JSON.stringify({ screening_id: prepared.job.screening_id })); }
+  return json(res, 202, advanceQueueReceipt(prepared.claim, prepared.job.callback_secret));
+}
+
+async function getAdvanceScreening(req, res, screeningId, admissionStore, reportStore, jsonStore) {
+  if (!req.ai7Client) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  if (!admissionStore?.find) {
+    return json(res, 503, { status: 'Error', error: 'Adverse Media Advance is temporarily unavailable.' });
+  }
+  try {
+    const workspaceId = req.ai7Client.id;
+    const admission = await admissionStore.find({ workspaceId, screeningId });
+    if (!admission) return json(res, 404, { status: 'Error', error: 'Screening was not found.' });
+    const ownerId = `workspace-${workspaceId}`;
+    const state = await reportStore.getDeepResearchState({ ownerId, screeningId });
+    if (!state || ['screening_partial', 'screened'].includes(state.stage)) {
+      return json(res, 200, { screening_id: screeningId,
+        status: state ? 'processing' : 'queued' });
+    }
+    const record = await jsonStore.get({ ownerId, screeningId });
+    if (!record?.response) {
+      return json(res, 503, { status: 'Error', error: 'The screening record is temporarily unavailable.' });
+    }
+    return json(res, 200, { screening_id: screeningId, status: 'completed',
+      callback_delivery: state.stage === 'delivered' ? 'delivered' : 'not_confirmed',
+      result: record.response });
+  } catch {
+    return json(res, 503, { status: 'Error', error: 'The screening record is temporarily unavailable.' });
   }
 }
 
@@ -2830,6 +2983,7 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
 
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
   adverseArchiveSearch = null,
+  advanceArchivePreflight = searchLocalGdeltIndex,
   adverseArchiveReviewStep = null,
   adverseArticleResolver = null,
   peppolLookup = searchPeppolIndex,
@@ -2837,6 +2991,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   otpStore = createLoginOtpStore(),
   deepResearchQueue = process.env.ADVERSE_MEDIA_WORKER_ENABLED === 'false' ? null : createDeepResearchQueue(),
   formsQueue = createFormsQueue(), formSubmissionStore = createFormsSubmissionStore(),
+  advanceAdmissionStore = createAdvanceAdmissionStore(),
   reportStore = createAdverseMediaReportStore(), jsonStore = createAdverseMediaJsonStore(),
   documentOcrStore = createDocumentOcrStore(),
   ejariStore = createEjariStore(),
@@ -2934,12 +3089,27 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       resultStore: reportStore,
       screen: screenAdverseMedia,
       present: presentAdverseMediaResponse,
-      finalize: async ({ job, response, aiApiKey, costGuard }) => finalizeAdverseMediaReport({
-        request: job.request, response, ownerId: job.owner_id, origin: job.request_origin,
-        aiApiKey: job.request.search_plus ? '' : aiApiKey, fetchImpl: costGuard.fetch, reportStore, jsonStore, reportId: job.report_id,
-        inputPayload: job.input_payload || job.request, transactionId: job.transaction_id || null,
-        variant: job.request.search_plus ? 'search_plus' : 'legacy'
-      }),
+      finalize: async ({ job, response, aiApiKey, costGuard }) => {
+        let finalResponse = response;
+        if (job.advance) {
+          let assessment = await reportStore.getDeepResearchComponent({ ownerId: job.owner_id,
+            screeningId: job.screening_id, componentKey: 'advance-assessment' });
+          if (!assessment) {
+            assessment = await assessAdvanceScreening({ response, policySet: job.advance.policy_set,
+              identifiers: job.advance.identifiers, apiKey: aiApiKey, fetchImpl: costGuard.fetch });
+            await reportStore.saveDeepResearchComponent({ ownerId: job.owner_id,
+              screeningId: job.screening_id, componentKey: 'advance-assessment', value: assessment });
+          }
+          finalResponse = withAdvanceAssessment(response, assessment);
+        }
+        return finalizeAdverseMediaReport({
+          request: job.request, response: finalResponse, ownerId: job.owner_id, origin: job.request_origin,
+          aiApiKey: job.request.search_plus ? '' : aiApiKey, fetchImpl: costGuard.fetch, reportStore, jsonStore,
+          reportId: job.report_id, inputPayload: job.input_payload || job.request,
+          transactionId: job.transaction_id || null,
+          variant: job.advance ? 'advance' : job.request.search_plus ? 'search_plus' : 'legacy'
+        });
+      },
       archiveReviewStep: adverseArchiveReviewStep || ((job, { costGuard, preparedArchiveScope } = {}) => {
         const meteredFetch = costGuard?.fetch || fetchImpl;
         const reviewArticle = createGeminiArchiveArticleReviewer({
@@ -2959,12 +3129,13 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       fetchImpl,
       onFinal: async (job, response) => {
         if (process.env.CASE_MANAGER_ENABLED !== 'true' || !caseStore || !job.case_id || !job.case_workspace_id) return;
-        const mapping = caseOutcome('adverse-media', response, { httpStatus: 200 });
+        const mapping = caseOutcome(job.advance ? 'adverse-media-advance' : 'adverse-media', response, { httpStatus: 200 });
         try {
           await caseStore.captureFinal(job.case_workspace_id, job.case_id, { response, contentType: 'application/json',
             httpStatus: 200, outcome: mapping.outcome, reasonCodes: mapping.reasonCodes,
             originalArtifactOwner: job.owner_id,
-            artifactRefs: response.report?.report_id ? [{ type: 'adverse_media', report_id: response.report.report_id }] : [] });
+            artifactRefs: response.report?.report_id ? [{ type: job.advance ? 'adverse_media_advance' : 'adverse_media',
+              report_id: response.report.report_id }] : [] });
         } catch {
           await caseStore.markIncomplete(job.case_workspace_id, job.case_id).catch(() => {});
           console.warn('case_manager_capture_failed', JSON.stringify({ case_id: job.case_id }));
@@ -3085,7 +3256,14 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return json(res, 404, { error: 'Route not found.' });
       }
       if (await handleFloRequest(req, res, url, floDependencies)) return;
-      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, caseStore, transactionId))) return;
+      if ((url.pathname === '/service/adverse_media_advance'
+        || url.pathname === '/service/adverse_media_advance/policies'
+        || url.pathname.startsWith('/service/adverse_media_advance/jobs/'))
+        && process.env.ADVERSE_MEDIA_ADVANCE_ENABLED !== 'true')
+        return json(res, 503, { status: 'Error', error: 'Adverse Media Advance is not enabled.' });
+      if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore,
+        advanceAdmissionStore, deepResearchQueue, archiveReviewAvailable, advanceArchivePreflight,
+        caseStore, transactionId))) return;
       if (req.ai7CapacityLane) {
         const queuedAt = Date.now();
         const cancelled = new AbortController();
@@ -3098,6 +3276,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           res.off('close', onClose);
           if (error instanceof CapacityError) {
             if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
+            if (req.ai7PreparedAdvance?.claim) await advanceAdmissionStore.abandon(req.ai7PreparedAdvance.claim);
             console.warn('api_capacity_rejected', JSON.stringify({ transaction_id: transactionId,
               lane: req.ai7CapacityLane, reason: error.reason,
               waiting_ms: Date.now() - queuedAt, capacity: requestCapacity.snapshot?.() || null }));
@@ -3160,6 +3339,16 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'POST' && url.pathname === '/service/adverse_media_search_plus')
         return await createAdverseMediaScreening(req, res, store, fetchImpl, deepResearchQueue, reportStore, jsonStore,
           'search_plus', adverseArchiveSearch, archiveReviewAvailable());
+      if (req.method === 'POST' && url.pathname === '/service/adverse_media_advance')
+        return await queueAdvanceScreening(req, res, deepResearchQueue, advanceAdmissionStore);
+      if (req.method === 'GET' && url.pathname === '/service/adverse_media_advance/policies') {
+        return json(res, 200, { catalog_version: ADVANCE_POLICY_CATALOG_VERSION,
+          default_selection: 'all', policies: listAdvancePolicies() });
+      }
+      const advanceJobMatch = /^\/service\/adverse_media_advance\/jobs\/([0-9a-f-]{36})$/i.exec(url.pathname);
+      if (req.method === 'GET' && advanceJobMatch)
+        return await getAdvanceScreening(req, res, advanceJobMatch[1].toLowerCase(),
+          advanceAdmissionStore, reportStore, jsonStore);
       const archiveEvidenceMatch = /^\/service\/adverse_media\/reviews\/([a-f0-9]{32})\/evidence$/i.exec(url.pathname);
       if (req.method === 'GET' && archiveEvidenceMatch) {
         const token = bearerToken(req);
@@ -3212,6 +3401,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'GET' && adverseReportMatch) return downloadPublicScreeningReport(res, reportStore, adverseReportMatch[1], 'adverse_media');
       const searchPlusReportMatch = /^\/service\/adverse_media_search_plus\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
       if (req.method === 'GET' && searchPlusReportMatch) return downloadPublicScreeningReport(res, reportStore, searchPlusReportMatch[1], 'adverse_media_search_plus');
+      const advanceReportMatch = /^\/service\/adverse_media_advance\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
+      if (req.method === 'GET' && advanceReportMatch) return downloadPublicScreeningReport(res, reportStore, advanceReportMatch[1], 'adverse_media_advance');
       const merchantReportMatch = /^\/service\/merchant_screening\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
       if (req.method === 'GET' && merchantReportMatch) return downloadPublicScreeningReport(res, reportStore, merchantReportMatch[1], 'merchant_screening');
       const formsReportMatch = /^\/service\/forms\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
