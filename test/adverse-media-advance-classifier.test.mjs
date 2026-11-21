@@ -92,11 +92,14 @@ test('a supported archive direct-actor finding remains Unsafe and is visible in 
   assert.equal(evidence.length, 1);
   assert.equal(evidence[0].url, archiveItem.url);
   assert.match(evidence[0].excerpt, /fined Example Trading LLC/);
-  const final = withAdvanceAssessment(response, assessment);
+  const final = withAdvanceAssessment({ ...response, usage: { cost_guardrail_usd: 0.15,
+    reserved_provider_cost_upper_bound_usd: 0.12 } }, assessment);
   assert.equal(final.summary.profile_status, 'unsafe');
   assert.equal(final.summary.outcome, 'unsafe');
   assert.equal(final.media_buckets.adverse_media.length, 1);
   assert.equal(final.summary.media_bucket_counts.adverse_media, 1);
+  assert.equal(final.usage.reserved_provider_cost_upper_bound_usd, 0.12);
+  assert.equal(Object.hasOwn(final.usage, 'cost_guardrail_usd'), false);
 });
 
 test('a reviewed archive fact using the subject alias cannot be cleared as Safe', async () => {

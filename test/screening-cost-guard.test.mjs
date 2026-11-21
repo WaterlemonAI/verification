@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createScreeningCostGuard, MAX_PROVIDER_COST_USD, MAX_SCREENING_COST_USD } from '../lib/screening-cost-guard.mjs';
+import { createScreeningCostGuard, MAX_ADVANCE_PROVIDER_MICRO_USD,
+  MAX_PROVIDER_COST_USD, MAX_SCREENING_COST_USD } from '../lib/screening-cost-guard.mjs';
 import { createAdverseMediaNarrative } from '../lib/adverse-media-report.mjs';
 import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 
@@ -42,6 +43,24 @@ test('archive-specific ceiling leaves provider allowance for final checks', asyn
   assert.equal(usage.reservedMicroUsd, 100_000);
   await source.fetch(brave);
   assert.equal((await store.getDeepResearchUsage(scope)).reservedMicroUsd, 105_000);
+});
+
+test('Advance has a separate bounded lifetime allowance and leaves room after archive review', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const scope = { ownerId: 'advance-budget-owner', screeningId: 'advance-budget-screening' };
+  const reserve = ({ costMicroUsd, provider, maxMicroUsd }) =>
+    store.reserveDeepResearchCost({ ...scope, costMicroUsd, provider, maxMicroUsd });
+  const fetchImpl = async () => Response.json({});
+  const source = createScreeningCostGuard(fetchImpl, { reserve, maxMicroUsd: MAX_ADVANCE_PROVIDER_MICRO_USD });
+  const archive = createScreeningCostGuard(fetchImpl, { reserve, maxMicroUsd: 170_000 });
+  const brave = 'https://api.search.brave.com/res/v1/news/search?q=example';
+  const article = 'https://analytics.eventregistry.org/api/v1/extractArticleInfo';
+  for (let i = 0; i < 10; i += 1) await source.fetch(brave);
+  for (let i = 0; i < 120; i += 1) await archive.fetch(article);
+  await assert.rejects(archive.fetch(article), /screening_cost_limit/);
+  for (let i = 0; i < 16; i += 1) await source.fetch(brave);
+  assert.equal((await store.getDeepResearchUsage(scope)).reservedMicroUsd, 250_000);
+  await assert.rejects(source.fetch(brave), /screening_cost_limit/);
 });
 
 test('bulk article search reserves each page and refuses unaffordable historical requests', async () => {
