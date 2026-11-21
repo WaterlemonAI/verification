@@ -3289,7 +3289,7 @@
           "completed_at": { "type": "string", "format": "date-time" },
           "entity": { "type": "object", "description": "Screened entity and submitted aliases/identifiers. Exact attributes depend on the request and entity type.", "additionalProperties": true },
           "summary": { "type": "object", "description": "Outcome, score bands, media-bucket counts, and decision eligibility. A partial run is inconclusive regardless of its observed results.", "additionalProperties": true },
-          "coverage": { "type": "object", "description": "Search sources, requested and completed language/country coverage, archive dates, and safe diagnostic reasons. archive_review includes review ID, posting and article counts, adjudication status and unresolved reason when an asynchronous stored-archive review ran.", "additionalProperties": true },
+          "coverage": { "type": "object", "description": "Search sources, requested and completed language/country coverage, archive dates, and diagnostic reasons. archive_review includes review ID, posting and article counts, adjudication status and unresolved reason when an asynchronous stored-archive review ran. Ten distinct confirmed adverse stories stop further historical review with status sufficient_adverse_media_found; the profile is Unsafe and unscanned_postings is reported. Fewer than ten confirmed adverse stories are also Unsafe. Safe requires complete required coverage and resolved evidence.", "additionalProperties": true },
           "results": {
             "type": "array",
             "description": "Adverse Media bucket only; retained for existing consumers.",

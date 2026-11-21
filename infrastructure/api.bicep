@@ -47,9 +47,12 @@ param gdeltV2ReadEnabled bool = false
 @description('Enable the owner-scoped GDELT archive evidence review on deep-research jobs only after V2 parity and article-evidence gates pass.')
 param gdeltArchiveReviewEnabled bool = false
 
+@description('Use Event Registry paged full-body search before per-URL extraction for archive evidence review. Off until overlap, pricing and latency gates pass.')
+param gdeltArchiveBulkSearchEnabled bool = false
+
 @minValue(1)
 @maxValue(1000)
-@description('Maximum indexed postings admitted to one paid archive evidence review.')
+@description('Maximum indexed postings scanned by one paid archive evidence review before an inconclusive budget result, unless ten distinct adverse stories end the review earlier.')
 param gdeltArchiveReviewMaxPostings int = 200
 
 @description('Start the isolated document OCR worker before customer routes are enabled for queue and malware-gate smoke tests.')
@@ -858,6 +861,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GDELT_V2_MANIFEST_TABLE', value: 'GdeltIntervalManifestV2' }
             { name: 'GDELT_V2_READ_ENABLED', value: gdeltV2ReadEnabled ? 'true' : 'false' }
             { name: 'GDELT_ARCHIVE_REVIEW_ENABLED', value: gdeltArchiveReviewEnabled ? 'true' : 'false' }
+            { name: 'GDELT_ARCHIVE_BULK_SEARCH_ENABLED', value: gdeltArchiveReviewEnabled && gdeltArchiveBulkSearchEnabled ? 'true' : 'false' }
             { name: 'ADVERSE_MEDIA_REPORT_BLOB_URL', value: 'https://${reportStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_TABLE_URL', value: 'https://${reportStorageName}.table.${environment().suffixes.storage}' }
             { name: 'ADVERSE_MEDIA_REPORT_CONTAINER', value: 'adverse-media-reports' }

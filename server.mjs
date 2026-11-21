@@ -21,7 +21,7 @@ import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/a
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
 import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs';
 import { processArchiveReviewPage } from './lib/gdelt-archive-review.mjs';
-import { createEventRegistryArticleResolver } from './lib/gdelt-article-evidence-provider.mjs';
+import { createEventRegistryArticleResolver, createEventRegistryBulkArticleResolver } from './lib/gdelt-article-evidence-provider.mjs';
 import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
@@ -2944,9 +2944,12 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         const meteredFetch = costGuard?.fetch || fetchImpl;
         const reviewArticle = createGeminiArchiveArticleReviewer({
           getApiKey: () => store.getMasterKey('adverse-media-ai'), fetchImpl: meteredFetch });
-        const resolveArticle = adverseArticleResolver || createEventRegistryArticleResolver({
-          getApiKey: async () => process.env.EVENT_REGISTRY_API_KEY || '', reviewArticle,
+        const getApiKey = async () => process.env.EVENT_REGISTRY_API_KEY || '';
+        const fallback = createEventRegistryArticleResolver({ getApiKey, reviewArticle,
           fetchImpl: meteredFetch });
+        const resolveArticle = adverseArticleResolver || (process.env.GDELT_ARCHIVE_BULK_SEARCH_ENABLED === 'true'
+          ? createEventRegistryBulkArticleResolver({ getApiKey, reviewArticle, fallback,
+            fetchImpl: meteredFetch }) : fallback);
         return processArchiveReviewPage({ ownerId: job.owner_id,
           request: { ...job.request, associations: preparedArchiveScope?.associations || [] },
           store: reportStore, resolveArticle, pageSize: 4,

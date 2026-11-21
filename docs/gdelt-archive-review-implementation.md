@@ -24,6 +24,14 @@ Keep these existing behaviors: Search+ adds publisher searches; it does not repl
 
 The source configuration grants the API identity **read** access to GDELT storage and uses a separate writable adverse-media report store. The worker runs in that API app. Confirm both permissions and private data paths in the target deployment before enabling the feature. Do not grant the API write access to the GDELT account.
 
+## Ten-story early stop (implemented, off by default)
+
+The worker pages the stored GDELT postings and obtains article bodies from Event Registry. For a snapshot wholly inside the last 30 days, it searches at most two 100-article pages; an exact URL and matching title sends the body to the guarded Gemini reviewer. Historical snapshots, absent matches and truncated bodies use the existing per-URL extraction. This prevents historical bulk-search token charges from crowding out the normal sources and Gemini under the current USD 0.14 allowance. Provider requests remain under the durable per-screening cost reservation. The new bulk search path requires `GDELT_ARCHIVE_BULK_SEARCH_ENABLED=true` in addition to the archive-review flag.
+
+Each directly attributed adverse article is stored before the next posting is examined. Event Registry event IDs, or normalized headline keys when no event ID exists, group syndicated copies. At **ten distinct confirmed adverse stories**, historical review stops and returns `sufficient_adverse_media_found`; the profile is Unsafe and the final JSON/PDF shows how many postings were not scanned. A single confirmed adverse story is also Unsafe, including when other coverage is incomplete. Ten is an optimization threshold, not a minimum for Unsafe. If no adverse story is found, Safe still requires every required source and all relevant archived articles to be resolved. A posting limit, inaccessible body, failed source or unsupported Gemini fact remains Inconclusive.
+
+The bulk adapter has not yet passed a direct authenticated contract and cost reconciliation against the production Event Registry plan. Keep both review and bulk flags off for customer traffic until that gate, the controlled callback/PDF run, and the existing V2 parity gates pass. The configured 200-posting and USD 0.14 provider ceilings remain in force; a high-volume subject can still end Inconclusive before reaching ten findings.
+
 ## Review record and correctness rule
 
 Issue an opaque server-generated `review_id` and calculate a separate reusable fingerprint. That fingerprint must include the owner, entity type, normalized name and aliases/transliterations, relevant associations, archived interval start/end or snapshot identifier, review-policy version and article-evidence adapter version. Search+ status belongs to the **screening** fingerprint; the Azure archive review may be reused across standard/Search+ only when the archive subject and snapshot keys are identical.

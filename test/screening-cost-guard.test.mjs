@@ -25,6 +25,24 @@ test('Event Registry article calls reserve their token cost before dialing', asy
   assert.equal(dialed, 1);
 });
 
+test('bulk article search reserves each page and refuses unaffordable historical requests', async () => {
+  let dialed = 0;
+  const guard = createScreeningCostGuard(async () => { dialed += 1; return Response.json({}); });
+  const url = 'https://eventregistry.org/api/v1/article/getArticles';
+  const today = new Date();
+  const recentStart = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const dateEnd = today.toISOString().slice(0, 10);
+  const body = (dateStart, end) => JSON.stringify({ query: { $query: { $and: [
+    { keyword: 'Example Holdings' }, { dateStart, dateEnd: end }
+  ] } }, articlesPage: 1, articlesCount: 100 });
+  await guard.fetch(url, { method: 'POST', body: body(recentStart, dateEnd) });
+  assert.equal(guard.providerCalls.event_registry_search, 1);
+  assert.equal(guard.reservedProviderCostUsd, 0.02);
+  await assert.rejects(guard.fetch(url, { method: 'POST', body: body('2024-01-01', dateEnd) }),
+    /screening_cost_limit/);
+  assert.equal(dialed, 1);
+});
+
 test('a restarted job cannot reset its lifetime provider allowance', async () => {
   const resultStore = new MemoryAdverseMediaReportStore();
   const job = { ownerId: 'synthetic-owner', screeningId: 'synthetic-screening' };

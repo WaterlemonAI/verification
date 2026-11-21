@@ -490,6 +490,7 @@ jobs:
               enableAdverseMediaSearchPlusGpt="${{ vars.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltV2ReadEnabled="${{ vars.GDELT_V2_READ_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltArchiveReviewEnabled="${{ vars.GDELT_ARCHIVE_REVIEW_ENABLED == 'true' && 'true' || 'false' }}" \
+              gdeltArchiveBulkSearchEnabled="${{ vars.GDELT_ARCHIVE_BULK_SEARCH_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltArchiveReviewMaxPostings="${{ vars.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS || '200' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \
@@ -537,6 +538,7 @@ jobs:
               enableAdverseMediaSearchPlusGpt="${{ vars.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltV2ReadEnabled="${{ vars.GDELT_V2_READ_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltArchiveReviewEnabled="${{ vars.GDELT_ARCHIVE_REVIEW_ENABLED == 'true' && 'true' || 'false' }}" \
+              gdeltArchiveBulkSearchEnabled="${{ vars.GDELT_ARCHIVE_BULK_SEARCH_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltArchiveReviewMaxPostings="${{ vars.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS || '200' }}" \
               enableDocumentOcrWorker="${{ vars.DOCUMENT_OCR_WORKER_ENABLED == 'true' && 'true' || 'false' }}" \
               enableCaseManager="${{ steps.case_manager_state.outputs.enabled }}" \

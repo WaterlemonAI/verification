@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createEventRegistryArticleResolver } from '../lib/gdelt-article-evidence-provider.mjs';
+import { createEventRegistryArticleResolver, createEventRegistryBulkArticleResolver } from '../lib/gdelt-article-evidence-provider.mjs';
 import { createGeminiArchiveArticleReviewer } from '../lib/ai7uae-gemini-adverse-api.mjs';
 
 const quote = 'Example Holdings was charged by the regulator for fraud.';
@@ -36,6 +36,60 @@ test('Event Registry extraction and guarded Gemini fact resolve a directly suppo
   assert.equal(result.provider_calls, 1);
   assert.equal(result.provider_tokens, 0.05);
   assert.equal(calls, 2);
+});
+
+test('paged Event Registry search reuses full text for an exact archive URL and falls back for misses', async () => {
+  let searches = 0;
+  let fallbacks = 0;
+  const subject = { ...request, name: 'Bulk QA Holdings' };
+  const archived = { ...row, title: 'Bulk QA Holdings charged by regulator' };
+  const recentDate = new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString().slice(0, 10);
+  const snapshot = { coverage_start: `${recentDate}T00:00:00Z`,
+    coverage_end: `${recentDate}T23:45:00Z` };
+  const resolve = createEventRegistryBulkArticleResolver({
+    getApiKey: async () => 'provider-secret',
+    reviewArticle: async () => ({ status: 'adverse', quote: 'Bulk QA Holdings was charged',
+      subject_role: 'direct_actor', entity_match: 'confirmed' }),
+    fallback: async () => { fallbacks += 1; return { reason: 'fallback_used' }; },
+    fetchImpl: async (url, options) => {
+      searches += 1;
+      assert.equal(url, 'https://eventregistry.org/api/v1/article/getArticles');
+      const sent = JSON.parse(options.body);
+      assert.equal(sent.query.$query.$and[0].keyword, subject.name);
+      assert.equal(sent.query.$query.$and[0].keywordLoc, 'title,body');
+      assert.equal(sent.query.$query.$and[1].dateStart, recentDate);
+      assert.equal(sent.articleBodyLen, 32_000);
+      return Response.json({ articles: { pages: 1, results: [{
+        url: 'https://news.publisher.com/article/123', title: archived.title,
+        body: 'Bulk QA Holdings was charged by the regulator. '.repeat(10),
+        eventUri: 'event-123'
+      }] } });
+    }
+  });
+  const found = await resolve(archived, subject, snapshot);
+  assert.equal(found.status, 'adverse');
+  assert.equal(found.story_key, 'event-123');
+  assert.equal(found.provider_calls, 0);
+  assert.equal((await resolve({ ...archived, url: 'https://news.publisher.com/absent' },
+    subject, snapshot)).reason, 'fallback_used');
+  assert.equal(searches, 1);
+  assert.equal(fallbacks, 1);
+});
+
+test('historical snapshots use per-URL extraction without a costly bulk search', async () => {
+  let bulkCalls = 0;
+  let fallbacks = 0;
+  const resolve = createEventRegistryBulkArticleResolver({
+    getApiKey: async () => 'provider-secret', reviewArticle: async () => ({ status: 'general' }),
+    fallback: async () => { fallbacks += 1; return { reason: 'historical_fallback' }; },
+    fetchImpl: async () => { bulkCalls += 1; throw new Error('bulk_should_not_run'); }
+  });
+  const result = await resolve(row, { ...request, name: 'Historical QA Holdings' }, {
+    coverage_start: '2025-01-01T00:00:00Z', coverage_end: '2026-11-20T00:00:00Z'
+  });
+  assert.equal(result.reason, 'historical_fallback');
+  assert.equal(bulkCalls, 0);
+  assert.equal(fallbacks, 1);
 });
 
 test('invalid URLs, wrong articles, and homepage canonicals cannot clear archive evidence', async () => {
@@ -97,6 +151,22 @@ test('a Gemini fact about another party cannot be promoted to a direct adverse a
     }] }) }] } }] }) });
   assert.equal((await review({ row, request, text: article, extractedTitle: row.title })).reason,
     'article_gemini_fact_unresolved');
+});
+
+test('a quoted victim or account institution is not promoted to a direct adverse actor', async () => {
+  for (const quote of [
+    'Example Holdings was attacked by fraudsters after the security breach.',
+    'The fraudulent account at Example Holdings was controlled by another company.'
+  ]) {
+    const review = createGeminiArchiveArticleReviewer({ getApiKey: async () => 'gemini-secret',
+      fetchImpl: async () => Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ facts: [{
+        result_id: 'article', party_relation: 'screened_subject', acted_party: 'Example Holdings',
+        event_kind: 'legal_action', reported_stage: 'charged', supporting_quote: quote
+      }] }) }] } }] }) });
+    const result = await review({ row, request, text: `${quote} ${article}`,
+      extractedTitle: row.title });
+    assert.notEqual(result.status, 'adverse');
+  }
 });
 
 test('ordinary coverage needs a quote that actually names the screened subject', async () => {

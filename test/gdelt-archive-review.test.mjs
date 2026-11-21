@@ -74,6 +74,70 @@ test('a direct adverse decision requires quoted article evidence and a confirmed
   assert.equal(Object.hasOwn(result.adverse_sample[0], 'text'), false);
 });
 
+test('ten distinct adverse stories stop the historical review without buying more articles', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  let providerCalls = 0;
+  const resolveArticle = async (item) => {
+    providerCalls += 1;
+    return { status: 'adverse', url: item.url,
+      text: `${name} was fined by the regulator for event ${item.recordId}.`,
+      quote: `${name} was fined by the regulator`, subject_role: 'direct_actor',
+      entity_match: 'confirmed', legal_stage: 'regulatory_action' };
+  };
+  resolveArticle.version = 'threshold-fixture-v1';
+  const result = await finish({ ownerId: 'owner-threshold', request, store,
+    snapshotResult: baseline(13), table: table(Array.from({ length: 13 }, (_, i) => row(i + 1))),
+    resolveArticle, pageSize: 4, maxPostings: 10 });
+  assert.equal(result.status, 'sufficient_adverse_media_found');
+  assert.equal(result.reason, 'ten_distinct_adverse_articles');
+  assert.equal(result.adverse, 10);
+  assert.equal(result.postings_scanned, 10);
+  assert.equal(result.unscanned_postings, 3);
+  assert.equal(providerCalls, 10);
+  const evidence = await store.listArchiveReviewItems({ ownerId: 'owner-threshold', reviewId: result.review_id });
+  assert.equal(evidence.items.length, 10);
+  const replay = await processArchiveReviewPage({ ownerId: 'owner-threshold', request, store,
+    snapshotResult: baseline(13), table: table(Array.from({ length: 13 }, (_, i) => row(i + 1))),
+    resolveArticle, pageSize: 4 });
+  assert.equal(replay.status, 'sufficient_adverse_media_found');
+  assert.equal(providerCalls, 10);
+});
+
+test('no adverse findings completes after all postings without waiting for ten', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const resolveArticle = async (item) => ({ status: 'general', url: item.url,
+    text: `${name} opened a new office.`, quote: `${name} opened a new office`,
+    subject_role: 'context_only', entity_match: 'confirmed' });
+  resolveArticle.version = 'neutral-fixture-v1';
+  const result = await finish({ ownerId: 'owner-neutral', request, store,
+    snapshotResult: baseline(3), table: table([row(1), row(2), row(3)]),
+    resolveArticle, pageSize: 2 });
+  assert.equal(result.status, 'completed');
+  assert.equal(result.adverse, 0);
+  assert.equal(result.postings_scanned, 3);
+  assert.equal(result.unresolved, 0);
+});
+
+test('syndicated articles with one headline cannot fill the ten-finding threshold', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  let providerCalls = 0;
+  const resolveArticle = async (item) => {
+    providerCalls += 1;
+    return { status: 'adverse', url: item.url,
+      text: `${name} was fined by the regulator.`, quote: `${name} was fined`,
+      subject_role: 'direct_actor', entity_match: 'confirmed' };
+  };
+  resolveArticle.version = 'syndication-fixture-v1';
+  const rows = Array.from({ length: 12 }, (_, i) => ({ ...row(i + 1),
+    title: 'Example Holdings faced the same regulatory action' }));
+  const result = await finish({ ownerId: 'owner-syndication', request, store,
+    snapshotResult: baseline(12), table: table(rows), resolveArticle, pageSize: 4 });
+  assert.equal(result.status, 'completed');
+  assert.equal(result.adverse, 1);
+  assert.equal(result.adverse_articles, 12);
+  assert.equal(providerCalls, 12);
+});
+
 test('a crash after article extraction never purchases the same article again', async () => {
   const store = new MemoryAdverseMediaReportStore();
   const saveItem = store.saveArchiveReviewItem.bind(store);
@@ -126,16 +190,19 @@ test('unverified V2 lookup cannot start review', async () => {
   assert.deepEqual(result, { status: 'unavailable', reason: 'verified_v2_snapshot_required' });
 });
 
-test('a review above its posting budget stays Inconclusive without calling a provider', async () => {
+test('a high-volume review scans up to its posting limit before settling Inconclusive', async () => {
   let called = 0;
-  const result = await processArchiveReviewPage({ ownerId: 'owner-1', request,
-    store: new MemoryAdverseMediaReportStore(), snapshotResult: baseline(201),
-    table: table([row(1)]), maxPostings: 200,
+  const result = await finish({ ownerId: 'owner-budget', request,
+    store: new MemoryAdverseMediaReportStore(), snapshotResult: baseline(13),
+    table: table(Array.from({ length: 13 }, (_, i) => row(i + 1))),
+    maxPostings: 2, pageSize: 4,
     resolveArticle: async () => { called += 1; return null; } });
   assert.equal(result.status, 'inconclusive');
   assert.equal(result.reason, 'archive_review_posting_budget');
-  assert.equal(result.expected_postings, 201);
-  assert.equal(called, 0);
+  assert.equal(result.expected_postings, 13);
+  assert.equal(result.postings_scanned, 2);
+  assert.equal(result.unscanned_postings, 11);
+  assert.equal(called, 2);
 });
 
 test('a complete archive review reaches the locked profile without relying on the V2 sample', async () => {
@@ -161,6 +228,19 @@ test('a complete archive review reaches the locked profile without relying on th
     archiveReview: { ...review, adverse: 1, updated_at: '2026-11-20T02:01:00Z' } }));
   assert.equal(unsafe.summary.profile_status, 'unsafe');
   assert.equal(unsafe.summary.outcome, 'unsafe');
+  const sufficient = presentAdverseMediaResponse(await screenAdverseMedia({ ...base,
+    archiveReview: { ...review, status: 'sufficient_adverse_media_found',
+      expected_postings: 13, postings_scanned: 10, adverse: 10,
+      unscanned_postings: 3, updated_at: '2026-11-20T02:01:30Z' },
+    archiveSearch: async () => ({ origin: 'local', complete: true, evidencePending: true,
+      results: [], state: snapshot,
+      scan: { mode: 'v2_point_summary', mentions_indexed: 13, unreviewed_count: 13 } }) }));
+  assert.equal(sufficient.summary.profile_status, 'unsafe');
+  assert.equal(sufficient.summary.profile_reason, 'sufficient_adverse_media_found');
+  assert.equal(sufficient.coverage.archive_review.coverage_label, 'Sufficient adverse media found');
+  assert.equal(sufficient.coverage.archive_review.unscanned_postings, 3);
+  assert.ok(sufficient.coverage.reason_codes.includes('sufficient_adverse_media_found'));
+  assert.ok(!sufficient.coverage.reason_codes.includes('archive_evidence_unreviewed'));
   const inconclusive = presentAdverseMediaResponse(await screenAdverseMedia({ ...base,
     archiveReview: { ...review, status: 'inconclusive', unresolved: 1,
       reason: 'archive_evidence_unresolved', updated_at: '2026-11-20T02:02:00Z' } }));
