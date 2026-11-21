@@ -97,12 +97,12 @@ test('All lets Gemini classify adverseness across the catalog with independent i
       entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
       legal_stage: 'allegation', supporting_quote: QUOTE, confidence: 0.96 },
     { story_key: keys[1], adverse_assessment: 'not_adverse', subject_role: 'context_only',
-      entity_match: 'possible', event_type_ids: [], severity: 'minor',
+      entity_match: 'unlikely', event_type_ids: [], severity: 'minor',
       legal_stage: 'media_mention', supporting_quote: QUOTE, confidence: 0.91 }
   ] }, keys);
   const findings = buildAdvanceFindingsFromGemini({ tags,
     sources: { [keys[0]]: { text: QUOTE }, [keys[1]]: { text: QUOTE } },
-    identityMatches: { [keys[0]]: 'confirmed', [keys[1]]: 'possible' } });
+    identityMatches: { [keys[0]]: 'confirmed', [keys[1]]: 'unlikely' } });
   const result = evaluateAdvancePolicies({ selection: compileAdvancePolicySet({}),
     findings, coverage: COMPLETE });
   assert.equal(result.policy_set.selection_mode, 'all');
@@ -190,6 +190,17 @@ test('non-adverse classification without a supported quote remains unresolved', 
   const result = evaluateAdvancePolicies({ selection, coverage: COMPLETE, findings: [finding] });
   assert.equal(result.evidence_profile.status, 'inconclusive');
   assert.equal(result.policy_outcome.status, 'review');
+  assert.equal(result.finding_decisions[0].reason, 'non_adverse_evidence_unverified');
+});
+
+test('a possible identity match cannot clear a source as non-adverse', () => {
+  const selection = compileAdvancePolicySet({ policy_ids: ['FIN-01'] });
+  const finding = event('ordinary-news', [], { role: 'context_only' });
+  finding.adjudication.status = 'not_adverse';
+  finding.adjudication.entity_match = 'possible';
+  finding.adjudication.supporting_quote = QUOTE;
+  const result = evaluateAdvancePolicies({ selection, coverage: COMPLETE, findings: [finding] });
+  assert.equal(result.evidence_profile.status, 'inconclusive');
   assert.equal(result.finding_decisions[0].reason, 'non_adverse_evidence_unverified');
 });
 

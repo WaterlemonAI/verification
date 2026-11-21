@@ -87,7 +87,10 @@ test('report narrative refuses model text that exposes internal review state', a
 
 test('Advance report carries its own title and filename without changing existing report types', async () => {
   const report = await createAdverseMediaAuditPdf({ request, response: {
-    ...response, summary: { ...response.summary, profile_status: 'inconclusive' }
+    ...response, summary: { ...response.summary, profile_status: 'inconclusive' },
+    advance_assessment: { policy_set: { selection_mode: 'all', selected_policy_ids: ['FIN-01', 'HSE-03'] },
+      policy_outcome: { status: 'review' },
+      policy_results: [{ policy_id: 'FIN-01', status: 'triggered' }] }
   }, narrative: { summary: 'Coverage or classification is incomplete. Review source failures.' },
   variant: 'advance' });
   const parsed = await PDFDocument.load(report.bytes);
@@ -241,7 +244,8 @@ test('Azure JSON retention writes only private JSON under an owner-scoped path',
   });
   let uploaded;
   store.container = { getBlockBlobClient: (name) => ({
-    uploadData: async (bytes, options) => { uploaded = { name, bytes: Buffer.from(bytes), options }; }
+    uploadData: async (bytes, options) => { uploaded = { name, bytes: Buffer.from(bytes), options }; },
+    download: async () => ({ readableStreamBody: Readable.from([uploaded.bytes]) })
   }) };
   await store.save({ ownerId: 'customer-a', screeningId: response.screening_id,
     transactionId: 'transaction-1', input: request, response });
@@ -253,6 +257,7 @@ test('Azure JSON retention writes only private JSON under an owner-scoped path',
   assert.deepEqual(saved.response, response);
   assert.equal(saved.transaction_id, 'transaction-1');
   assert.ok(!('bytes' in saved));
+  assert.deepEqual((await store.get({ ownerId: 'customer-a', screeningId: response.screening_id })).response, response);
 });
 
 test('a quota-failed classification cannot trigger another Gemini call for the PDF', async () => {

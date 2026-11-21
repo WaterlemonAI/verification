@@ -41,6 +41,9 @@ param enableTaedTradeLicense bool = false
 @description('Enable the separate GPT-backed Adverse Media (Search+) API only after its privacy, cost, and quality gates pass.')
 param enableAdverseMediaSearchPlusGpt bool = false
 
+@description('Enable Adverse Media Advance only after provider, archive, policy and callback release gates pass.')
+param enableAdverseMediaAdvance bool = false
+
 @description('Use verified V2 GDELT summaries for undated Azure archive searches after parity checks.')
 param gdeltV2ReadEnabled bool = false
 
@@ -851,6 +854,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'KEY_VAULT_URI', value: keyVaultUri }
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
             { name: 'ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED', value: enableAdverseMediaSearchPlusGpt ? '1' : '0' }
+            { name: 'ADVERSE_MEDIA_ADVANCE_ENABLED', value: enableAdverseMediaAdvance && gdeltV2ReadEnabled && gdeltArchiveReviewEnabled && enableDeepResearchWorker && !parallelDeployment ? 'true' : 'false' }
             { name: 'ADVERSE_MEDIA_WORKER_ENABLED', value: !parallelDeployment && enableDeepResearchWorker ? 'true' : 'false' }
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }

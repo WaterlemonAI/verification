@@ -1,6 +1,23 @@
 # Adverse Media Advance policy framework
 
-This is the reusable policy layer for the proposed asynchronous Adverse Media Advance API. The customer-facing PDF layout is implemented in the shared report generator and can render an Advance variant, but the Advance endpoint and worker are **not** registered. The policy framework does not yet perform live Gemini event tagging, change billing, or enable a live product. Existing Adverse Media and Search+ API routes remain unchanged.
+This is the implementation guide for the gated asynchronous Adverse Media Advance API. The separate `/service/adverse_media_advance` route, signed callback event, workspace entitlement and rate gate, policy classifier, archive evidence mapping, and Advance PDF variant are wired in the isolated branch. `ADVERSE_MEDIA_ADVANCE_ENABLED` defaults off. Existing Adverse Media and Search+ routes retain their contracts.
+
+The internal candidate must pass controlled full-journey validation before the flag is enabled for customer traffic. No production deployment or workspace entitlement is implied by this code.
+
+## API journey
+
+1. An entitled workspace sends `POST /service/adverse_media_advance` with a 16–128 character `Idempotency-Key`, a public HTTPS `callback_url`, subject identity fields, and either `policy_selection: "all"` or selected `policy_ids`. The request cannot choose Search+, disable archive review, or supply a free-form policy instruction.
+2. The server validates the request and callback target, claims the workspace-scoped idempotency key, checks the Advance rate, and queues one version-pinned job. The 202 receipt contains the screening ID and a callback signing secret shown once. An exact replay returns the same screening ID without a new provider run or charge; a changed payload returns 409.
+3. The existing deep-research worker performs Search+, searches the stored Azure archive, and reviews archived articles within the shared provider cost ceiling. It checkpoints provider work, then Gemini tags each bounded article batch against the 64-event catalog once. Server-side quote, identity, coverage, and policy rules determine the three-state profile and policy outcome.
+4. The worker stores the JSON result and Advance PDF, then posts `adverse_media.advance.completed` to the callback URL with `x-ai7-signature`. Callback retries reuse the saved report and do not repeat searches. `GET /service/adverse_media_advance/jobs/{screening_id}` provides the final result to the owning workspace when callback delivery cannot be confirmed. The PDF link is under `/service/adverse_media_advance/reports/{report_id}.pdf`.
+
+The request and PDF contain no account-plan information. Additional registration, tax, address and birth-date identifiers used solely for matching stay out of Brave and Gemini prompts; they remain in the private job and retained request record.
+
+### Internal release gates
+
+- Verify a complete controlled end-to-end job with the real providers, stored PDF, Case Manager capture, and signed callback. Test model schema acceptance on English and Arabic articles and confirm the provider cost reservation ledger.
+- Replay the ten earlier problematic subjects plus ten independent subjects and review false positives, namesakes, archive findings, p50/p90/p95, and per-provider spend. Do not enable the customer route while the policy assessment or archive evidence is unverified.
+- Confirm the article-text provider account permits production use and set an explicit Advance workspace rate and entitlement. Enable the flag only through the reviewed production deployment path after those gates pass.
 
 ## Catalog and selection
 
@@ -73,13 +90,11 @@ The response contains:
 
 Unselected confirmed event types require Review. Incomplete coverage or classification cannot yield Acceptable. Ten distinct confirmed direct adverse stories can support early Unsafe/Escalate if the worker marks `sufficient_adverse`. The same early stop cannot support Acceptable because unreviewed articles could trigger a stricter policy.
 
-## Integration boundaries
+## Implemented boundary and remaining work
 
-1. Add a separately entitled `POST /service/adverse_media_advance` that always enables Search+ and accepts subject identifiers, `policy_selection: "all"` or policy IDs, idempotency key and HTTPS callback URL. Default to All when neither selection field is supplied. Return `202` and a screening ID. Do not expose a Search+ switch.
-2. Resolve and pin the workspace-approved policy set before enqueueing. Persist its catalog version, policy-set version, selected IDs and hash with the job and final JSON. Rehydrate only from trusted configuration in the worker.
-3. Add identity matching for business licence/registration, LEI, tax identifiers, domains, jurisdiction, address and aliases; and for individuals, names, birth details, nationality and associations. Do not send private identity numbers to Brave or GDELT. Use identifiers only when a source provides a comparable value; otherwise identity remains uncertain.
-4. Add the Gemini adapter using the structured All-catalog schema, validate every returned story, independently check identity, then map source-backed findings into `evaluateAdvancePolicies()`. Existing keyword categories must not be promoted to confirmed policy events without source and subject-role evidence.
-5. Add Advance-specific JSON retention, signed callback, owner-authenticated status/report retrieval, entitlement and rate, Case Manager mapping, OpenAPI and portal documentation. Reuse the existing queue and provider cost guard.
-6. The report renderer now opens with profile definitions, a news overview, media buckets, evidence-linked findings and a status-based next step. It keeps coverage separate, labels the archive as `kycProbe Entity Map`, shows the number of additional Search+ publishers, and omits internal archive counters and policy implementation fields. The Advance route still needs to pass its final policy evaluation to an additional customer-facing policy section; do not publish the API with only the base report.
-
-Focused tests cover catalog integrity, multi-policy precedence, role/severity exceptions, unsupported quotes, unselected event types, incomplete coverage, early stopping and syndicated-story deduplication. Report tests cover the rendered variant and multilingual evidence. These are not live classification-quality evidence. The previously failing ten subjects and a manually labelled holdout must pass attribution and article-review gates before Advance is published. The Event Registry trial is for evaluation only; production article retrieval requires an active paid NewsAPI.ai plan.
+- The route is async only, forces Search+ and stored-archive review, and accepts the All option or multiple catalog IDs. The idempotency claim, separate entitlement/rate, cost guard, signed callback, private JSON retention, Case Manager mapping, and Advance PDF are wired. The deployment parameter remains false by default.
+- The submitted policy IDs and catalog hash are pinned in the job. Rule overrides and workspace policy-set selection are not yet exposed through a trusted admin configuration. The API uses the catalog defaults. Registration, licence, tax and domain numbers, LEI, and date of birth can confirm article identity when the article contains the same value. Address, nationality and association inputs are retained but not yet used as strong matches.
+- A one-article live Gemini call accepted the All-catalog schema. This proves model compatibility for that bounded case, not classification quality or a multi-article batch. Search+ article bucketing and Advance policy tagging currently make separate Gemini passes, both under the same provider budget.
+- The callback is the primary result-delivery mechanism. The owner-authenticated job status/result route is implemented; a public API reference page remains to be built before general release.
+- The archive reviewer still has a bounded posting limit and can return Inconclusive for large subject histories. The full-journey QA must establish acceptable Safe/Unsafe/Inconclusive rates before customer enablement. A supported direct archive hit remains Unsafe and is shown in the PDF even when the ordinary media buckets omit it.
+- The article-text provider account must allow production use. The earlier problematic subjects and an independent holdout must pass attribution, coverage, latency and spend gates before the Advance flag is enabled.
