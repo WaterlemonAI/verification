@@ -56,6 +56,20 @@ test('omitted, duplicated or invented Gemini article tags cannot be accepted', (
   ] }, keys), /advance_event_tags_invalid/);
 });
 
+test('validated batches can be aggregated up to the 50-article screening ceiling', () => {
+  const keys = Array.from({ length: 33 }, (_, index) => `story-${index}`);
+  const events = keys.map((story_key) => ({ story_key, adverse_assessment: 'unclear',
+    subject_role: 'unclear', entity_match: 'possible', event_type_ids: [], severity: 'minor',
+    legal_stage: 'media_mention', supporting_quote: '', confidence: 0 }));
+  assert.equal(validateAdvanceEventTags({ events }, keys).length, 33);
+  assert.equal(buildAdvanceFindingsFromGemini({ tags: events,
+    sources: Object.fromEntries(keys.map((key) => [key, { text: 'No conclusion.' }])),
+    identityMatches: {} }).length, 33);
+  assert.throws(() => advanceEventTaggingSchema(keys), /advance_story_batch_invalid/);
+  assert.throws(() => validateAdvanceEventTags({ events: [...events, ...events] },
+    [...keys, ...keys]), /advance_story_batch_invalid/);
+});
+
 test('multiple selections are order-independent and free-form policy instructions are refused', () => {
   const first = compileAdvancePolicySet({ policy_ids: ['HSE-03', 'FIN-06', 'EMP-01'],
     policy_set_id: 'supplier-policy', policy_set_version: '1.0.0' });
