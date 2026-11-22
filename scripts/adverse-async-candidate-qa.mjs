@@ -25,6 +25,13 @@ if (subject.length < 3 || subject.length > 160) throw new Error('invalid_qa_subj
 const route = process.env.ADVERSE_QA_ROUTE || 'adverse_media';
 if (route === 'adverse_media_advance') process.env.ADVERSE_MEDIA_ADVANCE_ENABLED = 'true';
 const entityType = process.env.ADVERSE_QA_ENTITY_TYPE === 'individual' ? 'individual' : 'business';
+const qaIdentifiers = process.env.ADVERSE_QA_IDENTIFIERS_JSON
+  ? JSON.parse(process.env.ADVERSE_QA_IDENTIFIERS_JSON) : undefined;
+if (qaIdentifiers !== undefined && (route !== 'adverse_media_advance'
+  || !qaIdentifiers || typeof qaIdentifiers !== 'object' || Array.isArray(qaIdentifiers)
+  || Buffer.byteLength(process.env.ADVERSE_QA_IDENTIFIERS_JSON) > 4096)) {
+  throw new Error('invalid_qa_identifiers');
+}
 const token = randomBytes(32).toString('hex');
 process.env.AI7_API_KEY_HASHES = createHash('sha256').update(token).digest('hex');
 process.env.API_HOSTS = 'localhost,127.0.0.1';
@@ -98,7 +105,8 @@ try {
         ? { 'idempotency-key': `candidate-advance-${randomBytes(8).toString('hex')}` } : {}) },
     body: JSON.stringify({ entity_type: entityType, name: subject, languages: ['en'], max_results: 15,
       ...(route === 'adverse_media_advance'
-        ? { policy_selection: 'all' } : { deep_research: true, archive_review: true }),
+        ? { policy_selection: 'all', ...(qaIdentifiers ? { identifiers: qaIdentifiers } : {}) }
+        : { deep_research: true, archive_review: true }),
       callback_url: process.env.ADVERSE_QA_CALLBACK_URL }) });
   const receipt = await response.json();
   if (response.status !== 202) throw new Error(`candidate_submission_http_${response.status}:${receipt.error || 'unknown'}`);

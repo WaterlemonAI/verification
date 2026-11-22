@@ -120,6 +120,19 @@ test('a quote about another convicted actor cannot implicate the named business'
   assert.equal(linkedResult.counts.distinct_adverse_stories, 0);
 });
 
+test('an individual name plus supplied organisation supports attribution', async () => {
+  const personQuote = 'The regulator charged Bernard Madoff with securities fraud.';
+  const response = { ...base, entity: { name: 'Bernard Madoff', entity_type: 'individual' },
+    media_buckets: { ...base.media_buckets, adverse_media: [{ ...article,
+      title: 'Bernard Madoff case', excerpt: `${personQuote} Madoff Securities was involved.` }] } };
+  const fetchImpl = tagFetch({}, () => {}, personQuote);
+  assert.equal((await assessAdvanceScreening({ response, policySet,
+    identifiers: { associated_organisations: ['Madoff Securities'] }, apiKey: 'test-key', fetchImpl }))
+    .evidence_profile.status, 'unsafe');
+  assert.equal((await assessAdvanceScreening({ response, policySet, apiKey: 'test-key', fetchImpl }))
+    .evidence_profile.status, 'inconclusive');
+});
+
 test('Advance can resolve legacy article uncertainty without inheriting stale unresolved counts', async () => {
   const benignQuote = 'Example Trading LLC, registration 12345, opened a new office.';
   const response = { ...base, summary: { unresolved_results: 7 },
