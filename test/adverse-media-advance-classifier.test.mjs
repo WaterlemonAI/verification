@@ -49,6 +49,23 @@ test('a directly supported adverse article with a matching registration is Unsaf
   assert.equal(result.policy_outcome.status, 'escalate');
 });
 
+test('AI7 EDD places a supported namesake article in No Impact', async () => {
+  const namesakeQuote = 'A different Example Trading LLC in another country announced a merger.';
+  const namesake = { ...article, result_id: 'namesake-1', excerpt: namesakeQuote,
+    title: 'Namesake company merger' };
+  const response = { ...base, media_buckets: { adverse_media: [namesake],
+    general_news_mentions: [], no_impact_media: [] } };
+  const assessment = await assessAdvanceScreening({ response, policySet, apiKey: 'test-key',
+    fetchImpl: tagFetch({ adverse_assessment: 'not_adverse', subject_role: 'namesake',
+      entity_match: 'unlikely', event_type_ids: [], severity: 'minor',
+      legal_stage: 'media_mention', supporting_quote: namesakeQuote, confidence: 0.95 },
+    () => {}, namesakeQuote) });
+  const final = withAdvanceAssessment(response, assessment);
+  assert.equal(final.media_buckets.adverse_media.length, 0);
+  assert.equal(final.media_buckets.no_impact_media.length, 1);
+  assert.equal(final.results, undefined);
+});
+
 test('a full legal business name with an independent exact-name match can support Unsafe', async () => {
   const legalQuote = 'The regulator found that Wirecard AG committed accounting fraud.';
   const legalArticle = { ...article, title: 'Wirecard AG accounting case', excerpt: legalQuote,
