@@ -179,6 +179,12 @@ try {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await writeFile(join(directory, `${receipt.screening_id}.json`), `${JSON.stringify(final, null, 2)}\n`, { mode: 0o600 });
     if (report?.bytes) await writeFile(join(directory, `${receipt.screening_id}.pdf`), report.bytes, { mode: 0o600 });
+    if (process.env.ADVERSE_QA_EXPORT_EVIDENCE === 'true') {
+      await writeFile(join(directory, `${receipt.screening_id}.evidence.json`),
+        `${JSON.stringify({ screening_id: receipt.screening_id, subject,
+          archive_review: final.coverage?.archive_review || null, items: evidenceItems }, null, 2)}\n`,
+        { mode: 0o600 });
+    }
   }
   const expectedEvidence = final?.coverage?.archive_review?.unique_articles;
   const callbackSignatureVerified = process.env.ADVERSE_QA_VERIFY_CALLBACK === 'true'
@@ -204,6 +210,8 @@ try {
       unresolved: final.coverage.archive_review.unresolved || 0
     } : null,
     evidence_items: evidenceItems.length,
+    evidence_retained: process.env.ADVERSE_QA_EXPORT_EVIDENCE === 'true'
+      && Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && final),
     callback_signature_verified: callbackSignatureVerified,
     artifacts_retained: Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && final),
     json_sha256: final ? createHash('sha256').update(JSON.stringify(final)).digest('hex') : null,
