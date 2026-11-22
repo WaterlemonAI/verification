@@ -68,6 +68,39 @@ await store.setMasterKey('adverse-media-ai', gemini);
 const reportStore = new MemoryAdverseMediaReportStore();
 const jsonStore = new MemoryAdverseMediaJsonStore();
 const usageStore = new MemoryCustomerUsageStore();
+const providerExchange = [];
+const secretKey = /^(?:key|api[_-]?key|token|access[_-]?token|refresh[_-]?token|.*[_-]secret|secret|authorization|password|credential)$/i;
+function redact(value) {
+  if (Array.isArray(value)) return value.map(redact);
+  if (value && typeof value === 'object') return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [key, secretKey.test(key) ? '[redacted]' : redact(entry)]));
+  return value;
+}
+function parseExchangeBody(value) {
+  if (value == null) return null;
+  const body = Buffer.isBuffer(value) ? value.toString('utf8') : String(value);
+  try { return redact(JSON.parse(body)); } catch { return body; }
+}
+async function recordingFetch(input, init = {}) {
+  const url = new URL(input instanceof Request ? input.url : String(input));
+  const startedAt = performance.now();
+  const query = Object.fromEntries([...url.searchParams].map(([key, value]) =>
+    [key, secretKey.test(key) ? '[redacted]' : value]));
+  const exchange = { method: init.method || (input instanceof Request ? input.method : 'GET'),
+    host: url.hostname, path: url.pathname, query,
+    request_body: parseExchangeBody(init.body) };
+  try {
+    const response = await fetch(input, init);
+    const body = await response.clone().text();
+    providerExchange.push({ ...exchange, status: response.status,
+      elapsed_ms: Math.round(performance.now() - startedAt), response_body: parseExchangeBody(body) });
+    return response;
+  } catch (error) {
+    providerExchange.push({ ...exchange, elapsed_ms: Math.round(performance.now() - startedAt),
+      error: error?.message || 'provider_request_failed' });
+    throw error;
+  }
+}
 const client = await store.getClientForKey(token);
 await usageStore.configure(client.id, validateUsagePolicy({ mode: 'postpay', currency: 'USD',
   allowed_modules: ['adverse-media', 'adverse-media-search-plus', 'adverse-media-advance'], rates: {
@@ -95,7 +128,8 @@ const queue = {
 };
 
 const app = createAppServer({ store, startWorker: true, deepResearchQueue: queue,
-  formsQueue: null, floStore: null, caseStore: null, reportStore, jsonStore, usageStore });
+  formsQueue: null, floStore: null, caseStore: null, reportStore, jsonStore, usageStore,
+  fetchImpl: recordingFetch });
 await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${app.address().port}`;
 const started = performance.now();
@@ -197,6 +231,10 @@ try {
       `${JSON.stringify({ provider_calls: usage.providerCalls,
         reserved_provider_usd: usage.reservedMicroUsd / 1_000_000,
         result_usage: final.usage || null }, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(join(directory, `${receipt.screening_id}.provider-exchanges.json`),
+      `${JSON.stringify({ screening_id: receipt.screening_id,
+        note: 'Credential fields redacted; Azure SDK calls and signed callback transport are logged separately.',
+        exchanges: providerExchange }, null, 2)}\n`, { mode: 0o600 });
     if (report?.bytes) await writeFile(join(directory, `${receipt.screening_id}.pdf`), report.bytes, { mode: 0o600 });
     if (process.env.ADVERSE_QA_EXPORT_EVIDENCE === 'true') {
       await writeFile(join(directory, `${receipt.screening_id}.evidence.json`),
