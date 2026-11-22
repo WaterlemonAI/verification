@@ -46,6 +46,7 @@ test('a directly supported adverse article with a matching registration is Unsaf
     identifiers: { registration_numbers: ['12345'] }, apiKey: 'test-key',
     fetchImpl: tagFetch({}, (body) => {
       assert.match(body.systemInstruction.parts[0].text, /untrusted data/);
+      assert.match(body.systemInstruction.parts[0].text, /one continuous 12 to 180 character span/);
       assert.doesNotMatch(JSON.stringify(body.contents), /test-key|registration_numbers/);
       const input = JSON.parse(body.contents[0].parts[0].text);
       assert.equal(input.policy_catalog.length, 64);
