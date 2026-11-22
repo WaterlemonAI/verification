@@ -80,6 +80,52 @@ test('model failure remains Inconclusive with no second provider attempt', async
   assert.equal(result.classification_completed, false);
 });
 
+test('a contradictory model tag stays unresolved without erasing a supported adverse finding', async () => {
+  const second = { ...article, result_id: 'article-2', url: 'https://publisher.example/second' };
+  const response = { ...base, media_buckets: { ...base.media_buckets,
+    adverse_media: [article, second] } };
+  const result = await assessAdvanceScreening({ response, policySet,
+    identifiers: { registration_numbers: ['12345'] }, apiKey: 'test-key',
+    fetchImpl: async (_url, options) => {
+      const keys = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text)
+        .articles.map((item) => item.story_key);
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events: [
+        { story_key: keys[0], adverse_assessment: 'adverse', subject_role: 'direct_actor',
+          entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
+          legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95 },
+        { story_key: keys[1], adverse_assessment: 'adverse', subject_role: 'context_only',
+          entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
+          legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95 }
+      ] }) }] } }] });
+    } });
+  assert.equal(result.evidence_profile.status, 'unsafe');
+  assert.equal(result.classification_completed, false);
+  assert.equal(result.counts.unresolved_stories, 1);
+  assert.equal(result.counts.distinct_adverse_stories, 1);
+});
+
+test('a later model outage preserves earlier supported adverse decisions', async () => {
+  const items = Array.from({ length: 11 }, (_, index) => ({ ...article,
+    result_id: `article-${index}`, url: `https://publisher.example/story-${index}` }));
+  const response = { ...base, media_buckets: { ...base.media_buckets, adverse_media: items } };
+  let calls = 0;
+  const result = await assessAdvanceScreening({ response, policySet,
+    identifiers: { registration_numbers: ['12345'] }, apiKey: 'test-key',
+    fetchImpl: async (_url, options) => {
+      if (++calls === 2) return new Response('', { status: 503 });
+      const keys = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text)
+        .articles.map((item) => item.story_key);
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events: keys.map(
+        (story_key) => ({ story_key, adverse_assessment: 'adverse', subject_role: 'direct_actor',
+          entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
+          legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95 })) }) }] } }] });
+    } });
+  assert.equal(calls, 2);
+  assert.equal(result.evidence_profile.status, 'unsafe');
+  assert.equal(result.classification_completed, false);
+  assert.ok(result.counts.unresolved_stories >= 1);
+});
+
 test('a supported archive direct-actor finding remains Unsafe and is visible in the report evidence', async () => {
   const archiveItem = { record_id: 'archive-1', title: 'Regulator action concerning Example Trading LLC',
     url: 'https://publisher.example/archive-1', publisher: 'Publisher',
