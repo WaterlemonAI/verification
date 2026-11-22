@@ -3266,12 +3266,12 @@
       },
       "AdverseMediaAdvanceRequest": {
         "type": "object",
-        "required": ["entity_type", "name", "callback_url"],
+        "required": ["entity_type", "name", "countries", "callback_url"],
         "properties": {
           "entity_type": { "type": "string", "enum": ["individual", "business"] },
           "name": { "type": "string", "minLength": 2, "maxLength": 200 },
           "aliases": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 200 } },
-          "countries": { "type": "array", "maxItems": 20, "description": "Selected countries prioritize Search+ publishers and automatically append their supported local language to the requested languages, subject to the five-language ceiling.", "items": { "type": "string", "pattern": "^[A-Za-z]{2}$" } },
+          "countries": { "type": "array", "maxItems": 20, "description": "Required geography. Use [] for global coverage or ISO country codes for specific geographies. Selected countries prioritize Search+ publishers and automatically append their supported local language, subject to the five-language ceiling.", "items": { "type": "string", "pattern": "^[A-Za-z]{2}$" } },
           "languages": { "type": "array", "maxItems": 5, "default": ["en", "ar"], "items": { "type": "string", "enum": ["ar", "de", "en", "es", "fa", "fr", "hi", "id", "it", "nl", "pl", "pt", "ru", "tr", "uk", "ur", "zh"] } },
           "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 },
           "callback_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Public HTTPS URL that receives the completed result and report link." },

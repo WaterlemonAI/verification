@@ -134,7 +134,7 @@ try {
         ? { 'idempotency-key': `candidate-advance-${randomBytes(8).toString('hex')}` } : {}) },
     body: JSON.stringify({ entity_type: entityType, name: subject, languages: ['en'], max_results: 15,
       ...(route === 'adverse_media_advance'
-        ? { policy_selection: 'all', ...(qaIdentifiers ? { identifiers: qaIdentifiers } : {}) }
+        ? { countries: [], policy_selection: 'all', ...(qaIdentifiers ? { identifiers: qaIdentifiers } : {}) }
         : { deep_research: true, archive_review: true }),
       callback_url: process.env.ADVERSE_QA_CALLBACK_URL }) });
   const receipt = await response.json();

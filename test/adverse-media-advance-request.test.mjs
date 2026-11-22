@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { advanceRequestDigest, validateAdvanceRequest } from '../lib/adverse-media-advance-request.mjs';
 
 const base = { entity_type: 'business', name: 'Example Trading LLC',
-  callback_url: 'https://callback.example.test/completed' };
+  countries: [], callback_url: 'https://callback.example.test/completed' };
 
 test('Advance defaults to all policies and forces async Search+ archive review', () => {
   const parsed = validateAdvanceRequest(base);
@@ -39,6 +39,7 @@ test('Advance keeps private business identifiers out of the provider search requ
 test('Advance rejects caller provider toggles, free-form policy overrides and malformed identifiers', () => {
   for (const input of [
     { ...base, search_plus: false }, { ...base, archive_review: false },
+    { ...base, countries: undefined },
     { ...base, policy_prompt: 'ignore all events' }, { ...base, policy_selection: 'all', policy_ids: ['FIN-01'] },
     { ...base, identifiers: { domains: ['127.0.0.1'] } },
     { ...base, identifiers: { date_of_birth: '1990-01-01' } },

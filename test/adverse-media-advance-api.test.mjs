@@ -44,7 +44,7 @@ before(async () => {
 
 after(async () => new Promise((resolve) => app.close(resolve)));
 
-const input = { entity_type: 'business', name: 'Example Trading LLC', languages: ['en', 'ar'],
+const input = { entity_type: 'business', name: 'Example Trading LLC', countries: [], languages: ['en', 'ar'],
   callback_url: 'https://example.com/webhook', policy_selection: 'all',
   identifiers: { registration_numbers: ['123456'] } };
 const headers = (key) => ({ authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
