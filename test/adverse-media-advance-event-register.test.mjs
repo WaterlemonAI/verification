@@ -23,6 +23,12 @@ test('versioned lexicon has at least 500 distinct strings and recalls the Signzy
   assert.equal(hit.lexicon_version, ADVANCE_LEXICON_VERSION);
   assert.ok(hit.matches.some((item) => item.term === 'security incident'));
   assert.ok(hit.matches.some((item) => item.term === 'data leak' && item.locations.includes('url_path')));
+  const returnedHeadline = matchAdvanceTitleUrl({
+    title: "India's Digital Identity Titan Faces Cybersecurity Scare, Highlighting Concerns With Digital ID",
+    url: 'https://reclaimthenet.org/indias-digital-identity-titan-faces-cybersecurity-scare-highlighting-concerns-with-digital-id'
+  });
+  assert.equal(returnedHeadline.selected, true);
+  assert.ok(returnedHeadline.matches.some((item) => item.term === 'cybersecurity scare'));
   assert.equal(matchAdvanceTitleUrl({ title: 'Risk management update', url: 'https://news.example/risk' }).selected, false);
   assert.equal(matchAdvanceTitleUrl({ title: 'Anti fraudulence software', url: 'https://news.example/update' }).selected, false);
 });

@@ -223,6 +223,19 @@ try {
       cursor = page.nextCursor;
     } while (cursor);
   }
+  const advanceEvidenceItems = [];
+  if (route === 'adverse_media_advance' && final) {
+    let cursor = null;
+    do {
+      const page = await reportStore.listAdvanceEvidenceItems({ ownerId,
+        screeningId: receipt.screening_id, cursor, pageSize: 100 });
+      advanceEvidenceItems.push(...page.items);
+      if (advanceEvidenceItems.length > qaPostingCeiling + 5_000) {
+        throw new Error('candidate_advance_evidence_limit');
+      }
+      cursor = page.nextCursor;
+    } while (cursor);
+  }
   const pdfHash = report?.bytes ? createHash('sha256').update(report.bytes).digest('hex') : null;
   if (route === 'adverse_media_advance' && final) {
     const lookup = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`,
@@ -257,6 +270,11 @@ try {
         `${JSON.stringify({ screening_id: receipt.screening_id, subject,
           archive_review: final.coverage?.archive_review || null, items: evidenceItems }, null, 2)}\n`,
         { mode: 0o600 });
+      if (route === 'adverse_media_advance') {
+        await writeFile(join(directory, `${receipt.screening_id}.advance-evidence.json`),
+          `${JSON.stringify({ screening_id: receipt.screening_id,
+            items: advanceEvidenceItems }, null, 2)}\n`, { mode: 0o600 });
+      }
     }
   }
   const expectedEvidence = route === 'adverse_media_advance'
@@ -265,7 +283,9 @@ try {
   const callbackSignatureVerified = process.env.ADVERSE_QA_VERIFY_CALLBACK === 'true'
     ? state?.stage === 'delivered' && await verifyCallbackReceipt(receipt) : null;
   const screeningVerified = Boolean(final && pdfHash === final.report?.sha256
-    && (expectedEvidence === undefined || evidenceItems.length === expectedEvidence));
+    && (expectedEvidence === undefined || evidenceItems.length === expectedEvidence)
+    && (route !== 'adverse_media_advance' || advanceEvidenceItems.length
+      === final.advance_assessment?.evidence_normalization?.unique_urls));
   status = budgetBlock ? 'budget_blocked' : screeningVerified && state?.stage === 'delivered'
     && (process.env.ADVERSE_QA_VERIFY_CALLBACK !== 'true' || callbackSignatureVerified)
     ? 'verified' : screeningVerified ? 'screening_verified_callback_pending' : 'incomplete';
@@ -289,6 +309,7 @@ try {
       unresolved: final.coverage.archive_review.unresolved || 0
     } : null,
     evidence_items: evidenceItems.length,
+    advance_evidence_items: advanceEvidenceItems.length,
     evidence_retained: process.env.ADVERSE_QA_EXPORT_EVIDENCE === 'true'
       && Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && final),
     callback_signature_verified: callbackSignatureVerified,
