@@ -5,6 +5,8 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { performance } from 'node:perf_hooks';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { ADVANCE_PLAN_VERSION } from '../lib/adverse-media-advance-plan.mjs';
+import { ADVANCE_TITLE_URL_FILTER_VERSION } from '../lib/gdelt-archive-candidate.mjs';
 
 if (!process.argv.includes('--isolated-candidate') || !process.argv.includes('--async-trial')
   || process.env.NODE_ENV === 'production' || process.env.FLO_ENABLED !== 'false'
@@ -128,23 +130,30 @@ async function verifyCallbackReceipt(receipt) {
   return false;
 }
 try {
+  const idempotencyKey = route === 'adverse_media_advance'
+    ? `candidate-advance-${randomBytes(8).toString('hex')}` : null;
+  const inputPayload = { entity_type: entityType, name: subject,
+    languages: ['en'], max_results: 15,
+    ...(route === 'adverse_media_advance'
+      ? { countries: [], policy_selection: 'all', ...(qaIdentifiers ? { identifiers: qaIdentifiers } : {}) }
+      : { deep_research: true, archive_review: true }),
+    callback_url: process.env.ADVERSE_QA_CALLBACK_URL };
   const response = await fetch(`${base}/service/${route}`, { method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
-      ...(route === 'adverse_media_advance'
-        ? { 'idempotency-key': `candidate-advance-${randomBytes(8).toString('hex')}` } : {}) },
-    body: JSON.stringify({ entity_type: entityType, name: subject, languages: ['en'], max_results: 15,
-      ...(route === 'adverse_media_advance'
-        ? { countries: [], policy_selection: 'all', ...(qaIdentifiers ? { identifiers: qaIdentifiers } : {}) }
-        : { deep_research: true, archive_review: true }),
-      callback_url: process.env.ADVERSE_QA_CALLBACK_URL }) });
+      ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}) },
+    body: JSON.stringify(inputPayload) });
   const receipt = await response.json();
   if (response.status !== 202) throw new Error(`candidate_submission_http_${response.status}:${receipt.error || 'unknown'}`);
   const ownerId = route === 'adverse_media_advance' ? `workspace-${client.id}` : reportOwnerId(token);
   const deadline = Date.now() + 10 * 60_000;
+  let finalizedAt = null;
   let state;
   while (Date.now() < deadline) {
     state = await reportStore.getDeepResearchState({ ownerId, screeningId: receipt.screening_id });
     if (state?.stage === 'delivered') break;
+    if (['finalized', 'callback'].includes(state?.stage)) finalizedAt ||= Date.now();
+    if (process.env.ADVERSE_QA_ALLOW_CALLBACK_PENDING === 'true'
+      && finalizedAt && Date.now() - finalizedAt >= 20_000) break;
     if (!pending && state?.stage !== 'finalized') break;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -178,6 +187,16 @@ try {
     if (directory !== '/tmp/adverse-qa-artifacts') throw new Error('invalid_qa_artifact_directory');
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await writeFile(join(directory, `${receipt.screening_id}.json`), `${JSON.stringify(final, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(join(directory, `${receipt.screening_id}.request.json`),
+      `${JSON.stringify({ method: 'POST', path: `/service/${route}`, idempotency_key: idempotencyKey,
+        payload: inputPayload, source_sha: process.env.ADVERSE_QA_SOURCE_SHA || null,
+        image_digest: process.env.ADVERSE_QA_IMAGE_DIGEST || null,
+        algorithm_versions: { query_plan: ADVANCE_PLAN_VERSION,
+          title_url_filter: ADVANCE_TITLE_URL_FILTER_VERSION } }, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(join(directory, `${receipt.screening_id}.cost.json`),
+      `${JSON.stringify({ provider_calls: usage.providerCalls,
+        reserved_provider_usd: usage.reservedMicroUsd / 1_000_000,
+        result_usage: final.usage || null }, null, 2)}\n`, { mode: 0o600 });
     if (report?.bytes) await writeFile(join(directory, `${receipt.screening_id}.pdf`), report.bytes, { mode: 0o600 });
     if (process.env.ADVERSE_QA_EXPORT_EVIDENCE === 'true') {
       await writeFile(join(directory, `${receipt.screening_id}.evidence.json`),
@@ -189,10 +208,11 @@ try {
   const expectedEvidence = final?.coverage?.archive_review?.unique_articles;
   const callbackSignatureVerified = process.env.ADVERSE_QA_VERIFY_CALLBACK === 'true'
     ? state?.stage === 'delivered' && await verifyCallbackReceipt(receipt) : null;
-  status = state?.stage === 'delivered' && final && pdfHash === final.report?.sha256
-    && (expectedEvidence === undefined || evidenceItems.length === expectedEvidence)
+  const screeningVerified = Boolean(final && pdfHash === final.report?.sha256
+    && (expectedEvidence === undefined || evidenceItems.length === expectedEvidence));
+  status = screeningVerified && state?.stage === 'delivered'
     && (process.env.ADVERSE_QA_VERIFY_CALLBACK !== 'true' || callbackSignatureVerified)
-    ? 'verified' : 'incomplete';
+    ? 'verified' : screeningVerified ? 'screening_verified_callback_pending' : 'incomplete';
   process.stdout.write(`${JSON.stringify({ event: 'adverse_async_candidate_qa', status,
     route, subject_sha256: createHash('sha256').update(subject).digest('hex'),
     screening_id: receipt.screening_id, worker_stage: state?.stage || null,
@@ -213,6 +233,7 @@ try {
     evidence_retained: process.env.ADVERSE_QA_EXPORT_EVIDENCE === 'true'
       && Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && final),
     callback_signature_verified: callbackSignatureVerified,
+    callback_delivery_stage: state?.stage || null,
     artifacts_retained: Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && final),
     json_sha256: final ? createHash('sha256').update(JSON.stringify(final)).digest('hex') : null,
     pdf_sha256: pdfHash, provider_calls: usage.providerCalls,
