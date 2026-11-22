@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { processArchiveReviewPage, archiveReviewId } from '../lib/gdelt-archive-review.mjs';
 import { advanceTitleUrlCandidate } from '../lib/gdelt-archive-candidate.mjs';
+import { assessAdvanceScreening } from '../lib/adverse-media-advance-classifier.mjs';
+import { compileAdvancePolicySet } from '../lib/adverse-media-advance-policy.mjs';
 import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest,
   prepareArchiveReviewScope } from '../lib/adverse-media.mjs';
@@ -74,6 +76,56 @@ test('Advance skips Event Registry for body-only mentions and records metadata e
   assert.equal(result.metadata_excluded, 1);
   const evidence = await store.listArchiveReviewItems({ ownerId: 'owner-filter', reviewId: result.review_id });
   assert.equal(evidence.items[0].status, 'metadata_excluded');
+});
+
+test('Advance defers selected archive URLs to one merged extraction and model review', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const adverse = { ...row(1), title: 'Example Holdings fraud investigation',
+    url: 'https://publisher.example/example-holdings-fraud' };
+  let archiveProviderCalls = 0;
+  const state = await finish({ ownerId: 'advance-deferred-owner', request, store,
+    snapshotResult: baseline(1), table: table([adverse]),
+    candidateFilter: advanceTitleUrlCandidate, deferSelected: true,
+    resolveArticle: async () => { archiveProviderCalls += 1; throw new Error('must_not_call'); } });
+  assert.equal(state.status, 'completed');
+  assert.equal(state.deferred, 1);
+  assert.equal(archiveProviderCalls, 0);
+  const archiveItems = (await store.listArchiveReviewItems({
+    ownerId: 'advance-deferred-owner', reviewId: state.review_id })).items;
+  const quote = 'The regulator fined Example Holdings for fraud.';
+  const response = { entity: { name, entity_type: 'business' },
+    advance_source_results: [{ result_id: 'brave-overlap', title: adverse.title,
+      url: adverse.url, excerpt: quote, source_type: 'brave_search' }],
+    coverage: { complete: true, archive_review: state }, summary: {},
+    media_buckets: { adverse_media: [], general_news_mentions: [], no_impact_media: [] } };
+  const saved = new Map();
+  const checkpoint = { get: async (key) => saved.get(key) || null,
+    save: async (key, value) => { saved.set(key, value); } };
+  let extractionCalls = 0;
+  let modelCalls = 0;
+  const options = { response, archiveItems, policySet: compileAdvancePolicySet({ policy_ids: ['FIN-01'] }),
+    apiKey: 'test', checkpoint,
+    extractArticle: async () => { extractionCalls += 1;
+      return { text: `Verified article body. ${quote} Additional context.` }; },
+    fetchImpl: async (_url, init) => {
+      modelCalls += 1;
+      const articles = JSON.parse(JSON.parse(init.body).contents[0].parts[0].text).articles;
+      assert.equal(articles.length, 1);
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events: [{
+        story_key: articles[0].story_key, adverse_assessment: 'adverse',
+        subject_role: 'direct_actor', subject_relationship: 'direct', entity_match: 'confirmed',
+        event_type_ids: ['FIN-01'], severity: 'serious', legal_stage: 'regulatory_action',
+        supporting_quote: quote, confidence: 0.95, report_priority: 90
+      }] }) }] } }] });
+    } };
+  const assessment = await assessAdvanceScreening(options);
+  assert.equal(assessment.articles_considered, 1);
+  assert.equal(assessment.evidence_profile.status, 'unsafe');
+  assert.equal(extractionCalls, 1);
+  assert.equal(modelCalls, 1);
+  await assessAdvanceScreening(options);
+  assert.equal(extractionCalls, 1);
+  assert.equal(modelCalls, 1);
 });
 
 test('Advance records more than 1,000 archive postings without the legacy scan ceiling', async () => {

@@ -3247,6 +3247,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           expectedSnapshot: job.advance?.archive_snapshot || null,
           budgetRevision: process.env.ADVERSE_MEDIA_ADVANCE_BUDGET_REVISION || '1',
           candidateFilter: job.advance ? advanceTitleUrlCandidate : null,
+          deferSelected: Boolean(job.advance),
           pageSize: job.advance ? 20 : 4,
           maxPostings: job.advance ? Number.MAX_SAFE_INTEGER
             : Math.min(1000, Math.max(1, Number(process.env.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS) || 200)) });
