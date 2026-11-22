@@ -39,6 +39,10 @@ test('a directly supported adverse article with a matching registration is Unsaf
     fetchImpl: tagFetch({}, (body) => {
       assert.match(body.systemInstruction.parts[0].text, /untrusted data/);
       assert.doesNotMatch(JSON.stringify(body.contents), /test-key|registration_numbers/);
+      const input = JSON.parse(body.contents[0].parts[0].text);
+      assert.equal(input.policy_catalog.length, 64);
+      assert.deepEqual(input.policy_catalog[0], { id: 'FIN-01', label: 'Fraud' });
+      assert.equal(body.generationConfig.responseJsonSchema.properties.events.items.properties.event_type_ids.items.enum, undefined);
     }) });
   assert.equal(result.evidence_profile.status, 'unsafe');
   assert.equal(result.policy_outcome.status, 'escalate');

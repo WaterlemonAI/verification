@@ -27,11 +27,12 @@ test('the built-in policy catalog has 64 unique versioned rules across eight fam
     && item.catalog_version));
 });
 
-test('Gemini receives a bounded structured schema for all policy event IDs', () => {
+test('Gemini receives a lightweight schema; exact keys and policy IDs are validated locally', () => {
   const schema = advanceEventTaggingSchema(['story-a', 'story-b']);
   const item = schema.properties.events.items;
-  assert.deepEqual(item.properties.story_key.enum, ['story-a', 'story-b']);
-  assert.equal(item.properties.event_type_ids.items.enum.length, 64);
+  assert.equal(item.properties.story_key.enum, undefined);
+  assert.equal(item.properties.event_type_ids.items.enum, undefined);
+  assert.equal(schema.properties.events.minItems, undefined);
   assert.deepEqual(item.properties.adverse_assessment.enum, ['adverse', 'not_adverse', 'unclear']);
   assert.equal(item.additionalProperties, false);
   assert.throws(() => advanceEventTaggingSchema(Array(26).fill('same')), /advance_story_batch_invalid/);
