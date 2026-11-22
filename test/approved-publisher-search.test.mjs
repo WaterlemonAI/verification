@@ -199,6 +199,12 @@ test('results found only by a publisher-targeted query retain their publisher-se
   assert.equal(classifiedResults(response).length, 1);
   assert.equal(classifiedResults(response)[0].source_type, 'publisher_search');
   assert.equal(classifiedResults(response)[0].publisher, 'The New York Times');
+  const batch = response.coverage.search_plus.publisher_query_batches
+    .find((item) => item.publisher_domains.includes('nytimes.com'));
+  assert.equal(batch.status, 'completed');
+  assert.equal(batch.raw_result_count, 1);
+  assert.equal(batch.retained_result_count, 1);
+  assert.ok(classifiedResults(response)[0].search_call_ids.includes(batch.search_call_id));
   assert.ok(response.coverage.search_plus.matched_publishers.some((publisher) => publisher.domain === 'nytimes.com'));
 });
 

@@ -37,6 +37,8 @@ test('Archive title or URL selection excludes body-only names before article ext
 
 test('Brave and Entity Map articles merge by canonical URL before AI7 EDD review', () => {
   const response = { results: [{ result_id: 'brave-1', title: 'Example Group fined',
+    source_type: 'publisher_search', source_types: ['publisher_search', 'news_index'],
+    search_call_ids: ['search-03', 'search-06'],
     excerpt: 'Example Group LLC was fined.', url: 'https://news.example/story?utm_source=brave' }] };
   const archive = [{ record_id: 'gdelt-1', title: 'Example Group fined',
     quote: 'Example Group LLC was fined.', status: 'adverse', subject_role: 'direct_actor',
@@ -44,7 +46,69 @@ test('Brave and Entity Map articles merge by canonical URL before AI7 EDD review
   const merged = normalizeAdvanceEvidence(response, archive);
   assert.equal(merged.counts.unique_urls, 1);
   assert.equal(merged.counts.overlap_urls, 1);
-  assert.deepEqual(merged.items[0].sources.sort(), ['brave_search', 'kycprobe_entity_map']);
+  assert.deepEqual(merged.items[0].sources.sort(), ['kycprobe_entity_map', 'news_index', 'publisher_search']);
+  assert.deepEqual(merged.items[0].search_call_ids, ['search-03', 'search-06']);
+});
+
+test('AI7 EDD receives normalized Brave and archive evidence in one bounded review', async () => {
+  const response = { entity: { name: 'Example Group LLC', entity_type: 'business' },
+    summary: {}, coverage: { complete: true,
+      archive_review: { status: 'completed', expected_postings: 1, unresolved: 0 } },
+    results: [], media_buckets: { adverse_media: [], general_news_mentions: [{
+      result_id: 'brave-1', title: 'Example Group investigated',
+      excerpt: 'Example Group LLC is under investigation.', url: 'https://news.example/investigation',
+      publisher: 'Example News', source_type: 'publisher_search',
+      search_call_ids: ['search-05'] }], no_impact_media: [] } };
+  const archiveItems = [{ record_id: 'archive-1', title: 'Example Group opens a branch',
+    quote: 'Example Group LLC opened a branch in Dubai.', status: 'general',
+    subject_role: 'direct_actor', url: 'https://archive.example/branch' }];
+  let submitted;
+  const assessment = await assessAdvanceScreening({ response, archiveItems,
+    policySet: compileAdvancePolicySet({ policy_ids: ['FIN-01'] }), apiKey: 'test-key',
+    fetchImpl: async (_url, options) => {
+      submitted = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text).articles;
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events:
+        submitted.map((item) => ({ story_key: item.story_key, adverse_assessment: 'not_adverse',
+          subject_role: 'direct_actor', entity_match: 'confirmed', event_type_ids: [],
+          severity: 'minor', legal_stage: 'media_mention', supporting_quote: item.text.split('\n')[1],
+          confidence: 0.95 })) }) }] } }] });
+    } });
+  assert.equal(submitted.length, 2);
+  assert.ok(submitted.some((item) => item.sources.includes('publisher_search')
+    && item.search_call_ids.includes('search-05')));
+  assert.ok(submitted.some((item) => item.sources.includes('kycprobe_entity_map')));
+  assert.equal(assessment.evidence_register.length, 2);
+  assert.ok(assessment.evidence_register.every((item) => item.ai7_edd_review_status === 'reviewed'));
+});
+
+test('Advance keeps both Brave and archive candidates in the 50-article review budget', async () => {
+  const news = Array.from({ length: 51 }, (_, index) => ({ result_id: `brave-${index}`,
+    title: `Example Group update ${index}`, excerpt: 'Example Group LLC published an update.',
+    url: `https://news.example/update-${index}`, source_type: 'news_index' }));
+  const response = { entity: { name: 'Example Group LLC', entity_type: 'business' }, summary: {},
+    coverage: { complete: true, archive_review: { status: 'completed', expected_postings: 1, unresolved: 0 } },
+    results: [], media_buckets: { adverse_media: [], general_news_mentions: news, no_impact_media: [] } };
+  const archiveItems = [{ record_id: 'archive-1', title: 'Example Group branch',
+    quote: 'Example Group LLC opened a branch.', status: 'general', subject_role: 'direct_actor',
+    url: 'https://archive.example/branch' }];
+  const received = [];
+  const assessment = await assessAdvanceScreening({ response, archiveItems,
+    policySet: compileAdvancePolicySet({ policy_ids: ['FIN-01'] }), apiKey: 'test-key',
+    fetchImpl: async (_url, options) => {
+      const articles = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text).articles;
+      received.push(...articles);
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events:
+        articles.map((item) => ({ story_key: item.story_key, adverse_assessment: 'not_adverse',
+          subject_role: 'direct_actor', entity_match: 'confirmed', event_type_ids: [],
+          severity: 'minor', legal_stage: 'media_mention', supporting_quote: item.text.split('\n')[1],
+          confidence: 0.95 })) }) }] } }] });
+    } });
+  assert.equal(received.length, 50);
+  assert.ok(received.some((item) => item.sources.includes('kycprobe_entity_map')));
+  assert.ok(received.some((item) => item.sources.includes('news_index')));
+  assert.equal(assessment.evidence_register.length, 52);
+  assert.equal(assessment.evidence_register.filter((item) => item.ai7_edd_review_status === 'not_selected_ai_budget').length, 2);
+  assert.equal(assessment.evidence_profile.status, 'inconclusive');
 });
 
 test('Reviewed archive general articles appear in the final media buckets', async () => {
