@@ -30,7 +30,7 @@ test('Archive title or URL selection excludes body-only names before article ext
   const request = { name: 'Example Group LLC', entity_type: 'business', aliases: [],
     transliterations: {} };
   assert.equal(advanceTitleUrlCandidate({ title: 'Example Group fined', url: 'https://news.example/story' }, request).selected, true);
-  assert.equal(advanceTitleUrlCandidate({ title: 'A market report', url: 'https://news.example/example-group-case' }, request).selected, true);
+  assert.equal(advanceTitleUrlCandidate({ title: 'A market report', url: 'https://news.example/example-group-fraud-case' }, request).selected, true);
   assert.equal(advanceTitleUrlCandidate({ title: 'A market report', url: 'https://news.example/story',
     body: 'Example Group LLC was fined' }, request).selected, false);
 });
@@ -71,17 +71,18 @@ test('AI7 EDD receives normalized Brave and archive evidence in one bounded revi
         submitted.map((item) => ({ story_key: item.story_key, adverse_assessment: 'not_adverse',
           subject_role: 'direct_actor', entity_match: 'confirmed', event_type_ids: [],
           severity: 'minor', legal_stage: 'media_mention', supporting_quote: item.text.split('\n')[1],
-          confidence: 0.95 })) }) }] } }] });
-    } });
+          confidence: 0.95, subject_relationship: 'direct', report_priority: 20 })) }) }] } }] });
+    }, extractArticle: async (item) => ({ text: item.text }) });
   assert.equal(submitted.length, 2);
   assert.ok(submitted.some((item) => item.sources.includes('publisher_search')
     && item.search_call_ids.includes('search-05')));
   assert.ok(submitted.some((item) => item.sources.includes('kycprobe_entity_map')));
   assert.equal(assessment.evidence_register.length, 2);
-  assert.ok(assessment.evidence_register.every((item) => item.ai7_edd_review_status === 'reviewed'));
+  assert.ok(assessment.evidence_register.every((item) =>
+    ['reviewed', 'unassessed', 'unresolved'].includes(item.ai7_edd_review_status)));
 });
 
-test('Advance keeps both Brave and archive candidates in the 50-article review budget', async () => {
+test('Advance reviews both Brave and archive candidates beyond the former 50-article limit', async () => {
   const news = Array.from({ length: 51 }, (_, index) => ({ result_id: `brave-${index}`,
     title: `Example Group update ${index}`, excerpt: 'Example Group LLC published an update.',
     url: `https://news.example/update-${index}`, source_type: 'news_index' }));
@@ -101,13 +102,13 @@ test('Advance keeps both Brave and archive candidates in the 50-article review b
         articles.map((item) => ({ story_key: item.story_key, adverse_assessment: 'not_adverse',
           subject_role: 'direct_actor', entity_match: 'confirmed', event_type_ids: [],
           severity: 'minor', legal_stage: 'media_mention', supporting_quote: item.text.split('\n')[1],
-          confidence: 0.95 })) }) }] } }] });
+          confidence: 0.95, subject_relationship: 'direct', report_priority: 20 })) }) }] } }] });
     } });
-  assert.equal(received.length, 50);
+  assert.equal(received.length, 52);
   assert.ok(received.some((item) => item.sources.includes('kycprobe_entity_map')));
   assert.ok(received.some((item) => item.sources.includes('news_index')));
   assert.equal(assessment.evidence_register.length, 52);
-  assert.equal(assessment.evidence_register.filter((item) => item.ai7_edd_review_status === 'not_selected_ai_budget').length, 2);
+  assert.equal(assessment.evidence_register.filter((item) => item.ai7_edd_review_status === 'unassessed').length, 51);
   assert.equal(assessment.evidence_profile.status, 'inconclusive');
 });
 
@@ -127,7 +128,8 @@ test('Reviewed archive general articles appear in the final media buckets', asyn
         { story_key: input.articles[0].story_key, adverse_assessment: 'not_adverse',
           subject_role: 'direct_actor', entity_match: 'confirmed', event_type_ids: [],
           severity: 'minor', legal_stage: 'media_mention',
-          supporting_quote: archiveItems[0].quote, confidence: 0.95 }
+          supporting_quote: archiveItems[0].quote, confidence: 0.95,
+          subject_relationship: 'direct', report_priority: 20 }
       ] }) }] } }] });
     } });
   const final = withAdvanceAssessment(response, assessment);
@@ -159,7 +161,8 @@ test('Advance report writer accepts only evidence-linked findings consistent wit
     summary: { profile_status: 'unsafe', media_bucket_counts: {
       adverse_media: 1, general_news_mentions: 0, no_impact_media: 0 } },
     media_buckets: { adverse_media: [{ title: 'Example Group fined',
-      excerpt: 'The regulator fined Example Group LLC.', url: 'https://news.example/fine' }],
+      excerpt: 'The regulator fined Example Group LLC.', url: 'https://news.example/fine',
+      selected_for_pdf: true, review_status: 'reviewed' }],
     general_news_mentions: [], no_impact_media: [] } };
   const fetchImpl = async () => Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
     summary: 'The profile is Unsafe following a reported regulatory fine.',

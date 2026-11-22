@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { advanceArchiveMediaItems, assessAdvanceScreening, withAdvanceAssessment } from '../lib/adverse-media-advance-classifier.mjs';
+import { advanceArchiveMediaItems, assessAdvanceScreening as assessScreening, withAdvanceAssessment } from '../lib/adverse-media-advance-classifier.mjs';
 import { compileAdvancePolicySet } from '../lib/adverse-media-advance-policy.mjs';
 import { createAdverseMediaNarrative } from '../lib/adverse-media-report.mjs';
 
@@ -13,6 +13,11 @@ const article = { result_id: 'article-1', title: 'Regulator action concerning Ex
   excerpt: quote, url: 'https://publisher.example/story' };
 const policySet = compileAdvancePolicySet({ policy_ids: ['FIN-01'] });
 
+// Test only: emulate a verified article body containing the quoted source text.
+function assessAdvanceScreening(options) {
+  return assessScreening({ extractArticle: async (item) => ({ text: item.text }), ...options });
+}
+
 function tagFetch(tag, inspect = () => {}, sourceQuote = quote) {
   return async (_url, options) => {
     inspect(JSON.parse(options.body));
@@ -21,7 +26,9 @@ function tagFetch(tag, inspect = () => {}, sourceQuote = quote) {
     return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events: [
       { story_key: storyKey, adverse_assessment: 'adverse', subject_role: 'direct_actor',
         entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
-        legal_stage: 'regulatory_action', supporting_quote: sourceQuote, confidence: 0.95, ...tag }
+        legal_stage: 'regulatory_action', supporting_quote: sourceQuote, confidence: 0.95,
+        subject_relationship: tag.subject_role === 'namesake' ? 'indirect' : 'direct',
+        report_priority: 80, ...tag }
     ] }) }] } }] });
   };
 }
@@ -63,7 +70,7 @@ test('AI7 EDD places a supported namesake article in No Impact', async () => {
   const final = withAdvanceAssessment(response, assessment);
   assert.equal(final.media_buckets.adverse_media.length, 0);
   assert.equal(final.media_buckets.no_impact_media.length, 1);
-  assert.equal(final.results, undefined);
+  assert.equal(final.results.length, 0);
 });
 
 test('a full legal business name with an independent exact-name match can support Unsafe', async () => {
@@ -96,10 +103,12 @@ test('Advance report buckets follow confirmed article decisions', async () => {
       const events = articles.map(({ story_key, title }) => title === confirmed.title
         ? { story_key, adverse_assessment: 'adverse', subject_role: 'direct_actor',
           entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
-          legal_stage: 'regulatory_action', supporting_quote: legalQuote, confidence: 0.95 }
+          legal_stage: 'regulatory_action', supporting_quote: legalQuote, confidence: 0.95,
+          subject_relationship: 'direct', report_priority: 80 }
         : { story_key, adverse_assessment: 'unclear', subject_role: 'unclear',
           entity_match: 'possible', event_type_ids: [], severity: 'minor',
-          legal_stage: 'media_mention', supporting_quote: '', confidence: 0 });
+          legal_stage: 'media_mention', supporting_quote: '', confidence: 0,
+          subject_relationship: 'indirect', report_priority: 0 });
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events }) }] } }] });
     } });
   const final = withAdvanceAssessment(response, assessment);
@@ -180,7 +189,7 @@ test('a name-only match and missing archive evidence cannot be declared Safe or 
   const response = { ...base, coverage: { ...base.coverage,
     archive_review: { status: 'completed', expected_postings: 1, adverse: 1 } },
   media_buckets: { ...base.media_buckets, adverse_media: [article] } };
-  const result = await assessAdvanceScreening({ response, policySet, apiKey: 'test-key',
+  const result = await assessScreening({ response, policySet, apiKey: 'test-key',
     fetchImpl: tagFetch({}) });
   assert.equal(result.evidence_profile.status, 'inconclusive');
   assert.equal(result.policy_outcome.status, 'review');
@@ -209,10 +218,12 @@ test('a contradictory model tag stays unresolved without erasing a supported adv
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events: [
         { story_key: keys[0], adverse_assessment: 'adverse', subject_role: 'direct_actor',
           entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
-          legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95 },
+          legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95,
+          subject_relationship: 'direct', report_priority: 80 },
         { story_key: keys[1], adverse_assessment: 'adverse', subject_role: 'context_only',
           entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
-          legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95 }
+          legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95,
+          subject_relationship: 'no_association', report_priority: 0 }
       ] }) }] } }] });
     } });
   assert.equal(result.evidence_profile.status, 'unsafe');
@@ -235,7 +246,8 @@ test('a later model outage preserves earlier supported adverse decisions', async
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events: keys.map(
         (story_key) => ({ story_key, adverse_assessment: 'adverse', subject_role: 'direct_actor',
           entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
-          legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95 })) }) }] } }] });
+          legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95,
+          subject_relationship: 'direct', report_priority: 80 })) }) }] } }] });
     } });
   assert.equal(calls, 2);
   assert.equal(result.evidence_profile.status, 'unsafe');

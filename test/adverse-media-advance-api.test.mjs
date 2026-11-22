@@ -89,6 +89,13 @@ test('Advance admission queues one Search+ archive job and replays without a sec
   } finally { archiveReady = true; }
 
   const ownerId = `workspace-${issued.client.id}`;
+  await reportStore.saveDeepResearchState({ ownerId, screeningId: receipt.screening_id,
+    state: { stage: 'screened' } });
+  await reportStore.saveDeepResearchComponent({ ownerId, screeningId: receipt.screening_id,
+    componentKey: 'advance-budget-status:1', value: { pending_count: 3 } });
+  const blockedPoll = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`,
+    { headers: { authorization: `Bearer ${issued.apiKey}` } });
+  assert.equal((await blockedPoll.json()).status, 'budget_blocked');
   const result = { screening_id: receipt.screening_id, status: 'completed',
     summary: { profile_status: 'inconclusive' }, report: { report_id: jobs[0].report_id } };
   await jsonStore.save({ ownerId, screeningId: receipt.screening_id, response: result,
@@ -102,10 +109,28 @@ test('Advance admission queues one Search+ archive job and replays without a sec
   assert.equal(completedBody.status, 'completed');
   assert.equal(completedBody.callback_delivery, 'not_confirmed');
   assert.deepEqual(completedBody.result, result);
+  for (let index = 0; index < 101; index++) {
+    await reportStore.saveAdvanceEvidenceItem({ ownerId, screeningId: receipt.screening_id,
+      item: { result_id: `item-${String(index).padStart(3, '0')}`,
+        selection_status: 'not_selected', ai7_edd_review_status: 'metadata_excluded',
+        subject_relationship: null } });
+  }
+  const firstPage = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}/evidence`,
+    { headers: { authorization: `Bearer ${issued.apiKey}` } });
+  assert.equal(firstPage.status, 200);
+  const firstEvidence = await firstPage.json();
+  assert.equal(firstEvidence.items.length, 100);
+  assert.ok(firstEvidence.next_cursor);
+  const secondPage = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}/evidence?cursor=${encodeURIComponent(firstEvidence.next_cursor)}`,
+    { headers: { authorization: `Bearer ${issued.apiKey}` } });
+  assert.equal((await secondPage.json()).items.length, 1);
   const stranger = await store.createClient('Separate workspace');
   const isolated = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`,
     { headers: { authorization: `Bearer ${stranger.apiKey}` } });
   assert.equal(isolated.status, 403);
+  const isolatedEvidence = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}/evidence`,
+    { headers: { authorization: `Bearer ${stranger.apiKey}` } });
+  assert.equal(isolatedEvidence.status, 403);
   const unauthenticated = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`);
   assert.equal(unauthenticated.status, 401);
 
@@ -146,6 +171,7 @@ test('public Advance API contract documents admission, policies, polling and PDF
   assert.ok(spec.paths[route].post);
   assert.ok(spec.paths[`${route}/policies`].get);
   assert.ok(spec.paths[`${route}/jobs/{screeningId}`].get);
+  assert.ok(spec.paths[`${route}/jobs/{screeningId}/evidence`].get);
   assert.ok(spec.paths[`${route}/reports/{reportId}.pdf`].get);
   assert.equal(spec.components.schemas.AdverseMediaAdvanceRequest.additionalProperties, false);
   assert.equal(spec.components.schemas.AdverseMediaAdvanceRequest.properties.policy_selection.const, 'all');

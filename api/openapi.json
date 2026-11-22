@@ -482,7 +482,7 @@
     "/service/adverse_media_advance": {
       "post": {
         "summary": "Queue Adverse Media Advance",
-        "description": "Runs region-prioritized Search+ publisher searches and stored-history article review with a versioned selection from 64 event policies. A selected country adds its supported local search language. AI7 EDD proposes bounded name variants and search terms; the archive uses exact names and variants, while indexed web searches use the terms. Only archive URLs with a subject name in the title or URL path are sent for article extraction. Excluded or unresolved archive mentions cannot produce a Safe profile. Indexed web and Entity Map evidence is normalized before AI7 EDD classification and the Advance PDF. This endpoint is asynchronous and requires an entitled workspace, a configured Advance rate, an Idempotency-Key and a public HTTPS callback. A current stored-history point summary is required before a new job is charged or queued.",
+        "description": "Runs Search+ publisher searches and verified stored-history review using 64 versioned event policies. A versioned lexicon of at least 500 strings selects potentially adverse returned indexed-news and subject-matched archive title/URL hits. All selected candidates enter resumable AI7 EDD article review, and the PDF displays at most 20 ranked items. The complete owner-scoped register is available through the paged evidence route. This asynchronous endpoint requires an entitled workspace, a configured rate, an Idempotency-Key, a public HTTPS callback and a current archive point summary.",
         "operationId": "queueAdverseMediaAdvance",
         "security": [{ "ApiKey": [] }],
         "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true,
@@ -528,6 +528,31 @@
           "403": { "description": "The workspace lacks Advance entitlement or a configured rate." },
           "404": { "description": "No screening with this ID belongs to the workspace." },
           "503": { "description": "Advance or its record store is unavailable." }
+        }
+      }
+    },
+    "/service/adverse_media_advance/jobs/{screeningId}/evidence": {
+      "get": {
+        "summary": "Page through the full Advance evidence register",
+        "description": "Returns up to 100 owner-scoped metadata and article-review decisions per page. Metadata exclusions and unassessed candidates remain visible. The register may grow while the job is processing. Reading it is not billed.",
+        "operationId": "getAdverseMediaAdvanceEvidence",
+        "security": [{ "ApiKey": [] }],
+        "parameters": [
+          { "name": "screeningId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "A page of evidence and an optional next_cursor.", "content": { "application/json": { "schema": { "type": "object", "required": ["screening_id", "status", "items", "next_cursor"], "properties": {
+            "screening_id": { "type": "string", "format": "uuid" },
+            "status": { "type": "string", "enum": ["processing", "completed"] },
+            "items": { "type": "array", "maxItems": 100, "items": { "$ref": "#/components/schemas/AdverseMediaAdvanceEvidenceItem" } },
+            "next_cursor": { "type": ["string", "null"] }
+          }, "additionalProperties": false } } } },
+          "400": { "description": "Invalid cursor." },
+          "401": { "description": "Missing or invalid API key." },
+          "403": { "description": "Workspace lacks Advance entitlement." },
+          "404": { "description": "Screening does not belong to this workspace." },
+          "503": { "description": "Evidence store is unavailable." }
         }
       }
     },
@@ -3311,10 +3336,29 @@
         "type": "object", "required": ["screening_id", "status"],
         "properties": {
           "screening_id": { "type": "string", "format": "uuid" },
-          "status": { "type": "string", "enum": ["queued", "processing", "completed"] },
+          "status": { "type": "string", "enum": ["queued", "processing", "budget_blocked", "completed"] },
+          "profile_status": { "type": "string", "const": "inconclusive", "description": "Present while budget_blocked." },
+          "pending_count": { "type": "integer", "minimum": 1, "description": "Candidates still awaiting review while budget_blocked." },
           "callback_delivery": { "type": "string", "enum": ["delivered", "not_confirmed"], "description": "Present when the screening completed." },
-          "result": { "type": "object", "description": "Stored screening result, including AI7 EDD assessment, normalized evidence register, report narrative and PDF report link, present when completed.", "additionalProperties": true }
+          "result": { "type": "object", "description": "Stored screening result with aggregate counts, at most 20 PDF evidence items, a paged evidence_export_url, narrative and PDF link.", "additionalProperties": true }
         }, "additionalProperties": false
+      },
+      "AdverseMediaAdvanceEvidenceItem": {
+        "type": "object", "required": ["result_id", "selection_status", "ai7_edd_review_status", "subject_relationship"],
+        "properties": {
+          "result_id": { "type": "string" }, "story_key": { "type": "string" },
+          "url": { "type": "string" }, "title": { "type": "string" },
+          "sources": { "type": "array", "items": { "type": "string" } },
+          "selection_status": { "type": "string", "enum": ["selected", "not_selected"] },
+          "lexicon_version": { "type": "string" },
+          "matched_term_ids": { "type": "array", "items": { "type": "string" } },
+          "matched_categories": { "type": "array", "items": { "type": "string" } },
+          "ai7_edd_review_status": { "type": "string", "enum": ["reviewed", "unassessed", "unresolved", "metadata_excluded"] },
+          "subject_relationship": { "type": ["string", "null"], "enum": ["direct", "indirect", "no_association", null] },
+          "report_priority": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+          "finding_status": { "type": ["string", "null"] },
+          "evidence_grade": { "type": "string" }
+        }, "additionalProperties": true
       },
       "AdverseMediaRequest": {
         "type": "object",

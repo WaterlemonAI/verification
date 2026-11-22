@@ -43,7 +43,8 @@ test('omitted, duplicated or invented Gemini article tags cannot be accepted', (
   const item = (story_key) => ({ story_key, adverse_assessment: 'adverse',
     subject_role: 'direct_actor', entity_match: 'confirmed', event_type_ids: ['FIN-01'],
     severity: 'moderate', legal_stage: 'allegation',
-    supporting_quote: QUOTE, confidence: 0.9 });
+    supporting_quote: QUOTE, confidence: 0.9,
+    subject_relationship: 'direct', report_priority: 80 });
   const keys = ['story-a', 'story-b'];
   assert.equal(validateAdvanceEventTags({ events: [item('story-b'), item('story-a')] }, keys)[0].story_key,
     'story-a');
@@ -60,7 +61,8 @@ test('validated batches can be aggregated up to the 50-article screening ceiling
   const keys = Array.from({ length: 33 }, (_, index) => `story-${index}`);
   const events = keys.map((story_key) => ({ story_key, adverse_assessment: 'unclear',
     subject_role: 'unclear', entity_match: 'possible', event_type_ids: [], severity: 'minor',
-    legal_stage: 'media_mention', supporting_quote: '', confidence: 0 }));
+    legal_stage: 'media_mention', supporting_quote: '', confidence: 0,
+    subject_relationship: 'indirect', report_priority: 0 }));
   assert.equal(validateAdvanceEventTags({ events }, keys).length, 33);
   assert.equal(buildAdvanceFindingsFromGemini({ tags: events,
     sources: Object.fromEntries(keys.map((key) => [key, { text: 'No conclusion.' }])),
@@ -110,13 +112,16 @@ test('All lets Gemini classify adverseness across the catalog with independent i
   const tags = validateAdvanceEventTags({ events: [
     { story_key: keys[0], adverse_assessment: 'adverse', subject_role: 'direct_actor',
       entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
-      legal_stage: 'allegation', supporting_quote: QUOTE, confidence: 0.96 },
+      legal_stage: 'allegation', supporting_quote: QUOTE, confidence: 0.96,
+      subject_relationship: 'direct', report_priority: 80 },
     { story_key: keys[1], adverse_assessment: 'not_adverse', subject_role: 'context_only',
       entity_match: 'unlikely', event_type_ids: [], severity: 'minor',
-      legal_stage: 'media_mention', supporting_quote: QUOTE, confidence: 0.91 }
+      legal_stage: 'media_mention', supporting_quote: QUOTE, confidence: 0.91,
+      subject_relationship: 'no_association', report_priority: 0 }
   ] }, keys);
   const findings = buildAdvanceFindingsFromGemini({ tags,
-    sources: { [keys[0]]: { text: QUOTE }, [keys[1]]: { text: QUOTE } },
+    sources: { [keys[0]]: { text: QUOTE, evidence_grade: 'verified_article_body' },
+      [keys[1]]: { text: QUOTE, evidence_grade: 'verified_article_body' } },
     identityMatches: { [keys[0]]: 'confirmed', [keys[1]]: 'unlikely' } });
   const result = evaluateAdvancePolicies({ selection: compileAdvancePolicySet({}),
     findings, coverage: COMPLETE });
@@ -134,7 +139,8 @@ test('a Gemini adverse proposal without a trusted identity match stays unresolve
   const tag = validateAdvanceEventTags({ events: [{
     story_key: 'possible-match', adverse_assessment: 'adverse', subject_role: 'direct_actor',
     entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
-    legal_stage: 'allegation', supporting_quote: QUOTE, confidence: 0.96
+    legal_stage: 'allegation', supporting_quote: QUOTE, confidence: 0.96,
+    subject_relationship: 'direct', report_priority: 80
   }] }, ['possible-match']);
   const findings = buildAdvanceFindingsFromGemini({ tags: tag,
     sources: { 'possible-match': { text: QUOTE } }, identityMatches: {} });
@@ -149,7 +155,8 @@ test('Gemini mapping refuses a batch with an unclassified source article', () =>
   const tags = validateAdvanceEventTags({ events: [{
     story_key: 'first', adverse_assessment: 'not_adverse', subject_role: 'context_only',
     entity_match: 'possible', event_type_ids: [], severity: 'minor',
-    legal_stage: 'media_mention', supporting_quote: QUOTE, confidence: 0.9
+    legal_stage: 'media_mention', supporting_quote: QUOTE, confidence: 0.9,
+    subject_relationship: 'no_association', report_priority: 0
   }] }, ['first']);
   assert.throws(() => buildAdvanceFindingsFromGemini({ tags,
     sources: { first: { text: QUOTE }, second: { text: QUOTE } }, identityMatches: {} }),

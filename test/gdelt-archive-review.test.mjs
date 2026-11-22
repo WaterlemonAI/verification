@@ -59,7 +59,7 @@ test('complete V1 paging retains all mentions, deduplicates URLs and does not cl
   assert.equal((await store.listArchiveReviewItems({ ownerId: 'owner-2', reviewId: result.review_id })).items.length, 0);
 });
 
-test('Advance skips Event Registry for body-only mentions and records incomplete evidence', async () => {
+test('Advance skips Event Registry for body-only mentions and records metadata exclusions', async () => {
   const store = new MemoryAdverseMediaReportStore();
   const unrelated = { ...row(1), title: 'Market report',
     url: 'https://publisher.example/market-report' };
@@ -69,10 +69,66 @@ test('Advance skips Event Registry for body-only mentions and records incomplete
     candidateFilter: advanceTitleUrlCandidate,
     resolveArticle: async () => { calls += 1; throw new Error('must_not_call'); } });
   assert.equal(calls, 0);
-  assert.equal(result.status, 'inconclusive');
+  assert.equal(result.status, 'completed');
   assert.equal(result.not_selected_articles, 1);
+  assert.equal(result.metadata_excluded, 1);
   const evidence = await store.listArchiveReviewItems({ ownerId: 'owner-filter', reviewId: result.review_id });
-  assert.equal(evidence.items[0].reason, 'article_not_selected_by_title_url');
+  assert.equal(evidence.items[0].status, 'metadata_excluded');
+});
+
+test('Advance records more than 1,000 archive postings without the legacy scan ceiling', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const postings = Array.from({ length: 1005 }, (_, index) => ({ ...row(index),
+    title: `Neutral market update ${index}` }));
+  let state;
+  for (let index = 0; index < 12; index++) {
+    state = await processArchiveReviewPage({ ownerId: 'advance-large-owner', request, store,
+      snapshotResult: baseline(postings.length), table: table(postings),
+      candidateFilter: advanceTitleUrlCandidate, pageSize: 100,
+      maxPostings: Number.MAX_SAFE_INTEGER });
+    if (state.status !== 'processing') break;
+  }
+  assert.equal(state.status, 'completed');
+  assert.equal(state.postings_scanned, 1005);
+  assert.equal(state.metadata_excluded, 1005);
+  assert.equal(state.unscanned_postings || 0, 0);
+});
+
+test('Advance archive review pauses at its cost ceiling and resumes after a budget revision', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const adverse = { ...row(1), title: 'Example Holdings fined for fraud' };
+  let calls = 0;
+  const input = { ownerId: 'advance-budget-owner', request, store,
+    snapshotResult: baseline(1), table: table([adverse]),
+    candidateFilter: advanceTitleUrlCandidate, pageSize: 1,
+    maxPostings: Number.MAX_SAFE_INTEGER,
+    resolveArticle: async () => {
+      calls += 1;
+      const text = 'The regulator fined Example Holdings for fraudulent accounting.';
+      return calls === 1 ? { reason: 'article_cost_limit' }
+        : { status: 'adverse', url: adverse.url, text, quote: text,
+          subject_role: 'direct_actor', entity_match: 'confirmed',
+          reason: 'article_party_fact_supported' };
+    } };
+  const blocked = await processArchiveReviewPage({ ...input, budgetRevision: '1' });
+  assert.equal(blocked.status, 'budget_blocked');
+  assert.equal(blocked.pending_count, 1);
+  assert.equal((await processArchiveReviewPage({ ...input, budgetRevision: '1' })).status,
+    'budget_blocked');
+  assert.equal(calls, 1);
+  const resumed = await finish({ ...input, budgetRevision: '2' });
+  assert.equal(resumed.status, 'completed');
+  assert.equal(resumed.adverse, 1);
+  assert.equal(calls, 2);
+});
+
+test('Advance refuses an archive snapshot that changed after admission', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  await assert.rejects(processArchiveReviewPage({ ownerId: 'snapshot-owner', request, store,
+    snapshotResult: baseline(1), table: table([row(1)]),
+    candidateFilter: advanceTitleUrlCandidate,
+    expectedSnapshot: { ...snapshot, coverage_end: '2026-11-21T01:30:00.000Z' } }),
+  /archive_review_snapshot_changed/);
 });
 
 test('a direct adverse decision requires quoted article evidence and a confirmed subject match', async () => {

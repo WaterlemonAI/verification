@@ -29,6 +29,8 @@ import { processArchiveReviewPage } from './lib/gdelt-archive-review.mjs';
 import { searchLocalGdeltIndex } from './lib/gdelt-local-index.mjs';
 import { createEventRegistryArticleResolver, createEventRegistryBulkArticleResolver } from './lib/gdelt-article-evidence-provider.mjs';
 import { advanceTitleUrlCandidate } from './lib/gdelt-archive-candidate.mjs';
+import { ADVANCE_LEXICON_VERSION } from './lib/adverse-media-advance-lexicon.mjs';
+import { ADVANCE_REVIEW_SCHEMA_VERSION } from './lib/adverse-media-advance-policy.mjs';
 import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
@@ -133,7 +135,10 @@ async function prepareAdvanceSubmission(req, transactionId, queue, admissionStor
       callback_access_key: callbackAccessKey, input_payload: safeInput,
       transaction_id: transactionId });
     job.archive_review_enabled = true;
-    job.advance = { policy_set: validation.policySet, identifiers: validation.identifiers };
+    job.advance = { policy_set: validation.policySet, identifiers: validation.identifiers,
+      lexicon_version: ADVANCE_LEXICON_VERSION,
+      selector_version: advanceTitleUrlCandidate.version,
+      review_schema_version: ADVANCE_REVIEW_SCHEMA_VERSION };
     if (Buffer.byteLength(JSON.stringify(job)) > 44 * 1024) {
       return { status: 413, error: 'The Advance request is too large for asynchronous processing.' };
     }
@@ -192,7 +197,7 @@ async function classifyCustomerApi(req, url, store) {
     return { moduleIds: ['adverse-media-advance'], method: 'GET', billable: false };
   }
   if (path === '/service/keys/self/rotate') return { moduleIds: [], method: 'POST', billable: false };
-  if (/^\/service\/adverse_media_advance\/jobs\/[0-9a-f-]{36}$/i.test(path)) {
+  if (/^\/service\/adverse_media_advance\/jobs\/[0-9a-f-]{36}(?:\/evidence)?$/i.test(path)) {
     return { moduleIds: ['adverse-media-advance'], method: 'GET', billable: false };
   }
   const documentOcr = DOCUMENT_OCR_BY_PATH.get(path);
@@ -345,6 +350,11 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
       json(res, 503, { status: 'Error', error: 'The stored media index is temporarily unavailable.' });
       return false;
     }
+    if (archive.state) prepared.job.advance.archive_snapshot = {
+      coverage_start: archive.state.coverage_start,
+      coverage_end: archive.state.coverage_end,
+      index_version: archive.state.index_version,
+      committed_intervals: archive.state.committed_intervals };
     prepared.claim = claim.row;
     req.ai7PreparedAdvance = prepared;
   }
@@ -911,6 +921,15 @@ async function getAdvanceScreening(req, res, screeningId, admissionStore, report
     const ownerId = `workspace-${workspaceId}`;
     const state = await reportStore.getDeepResearchState({ ownerId, screeningId });
     if (!state || ['screening_partial', 'screened'].includes(state.stage)) {
+      const blocked = await reportStore.getDeepResearchComponent({
+        ownerId, screeningId,
+        componentKey: `advance-budget-status:${process.env.ADVERSE_MEDIA_ADVANCE_BUDGET_REVISION || '1'}` });
+      if (blocked) return json(res, 200, { screening_id: screeningId, status: 'budget_blocked',
+        profile_status: 'inconclusive', pending_count: blocked.pending_count,
+        assessment: { evidence_profile: { status: 'inconclusive', decision_eligible: false,
+          reason: 'provider_budget_blocked' }, candidates_total: blocked.candidates_total,
+        evidence_counts: blocked.evidence_counts },
+        reason: 'The approved provider cost ceiling was reached before all candidates were reviewed.' });
       return json(res, 200, { screening_id: screeningId,
         status: state ? 'processing' : 'queued' });
     }
@@ -923,6 +942,29 @@ async function getAdvanceScreening(req, res, screeningId, admissionStore, report
       result: record.response });
   } catch {
     return json(res, 503, { status: 'Error', error: 'The screening record is temporarily unavailable.' });
+  }
+}
+
+async function getAdvanceEvidence(req, res, screeningId, cursor, admissionStore, reportStore) {
+  if (!req.ai7Client) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
+  if (!admissionStore?.find || !reportStore?.listAdvanceEvidenceItems) {
+    return json(res, 503, { status: 'Error', error: 'Advance evidence is temporarily unavailable.' });
+  }
+  if (cursor && (cursor.length > 4096 || /[^\x20-\x7e]/.test(cursor))) {
+    return json(res, 400, { status: 'Error', error: 'Invalid evidence cursor.' });
+  }
+  try {
+    const workspaceId = req.ai7Client.id;
+    const admission = await admissionStore.find({ workspaceId, screeningId });
+    if (!admission) return json(res, 404, { status: 'Error', error: 'Screening was not found.' });
+    const page = await reportStore.listAdvanceEvidenceItems({ ownerId: `workspace-${workspaceId}`,
+      screeningId, cursor: cursor || null, pageSize: 100 });
+    const state = await reportStore.getDeepResearchState({ ownerId: `workspace-${workspaceId}`, screeningId });
+    return json(res, 200, { screening_id: screeningId,
+      status: ['finalized', 'delivered'].includes(state?.stage) ? 'completed' : 'processing',
+      items: page.items, next_cursor: page.nextCursor });
+  } catch {
+    return json(res, 503, { status: 'Error', error: 'Advance evidence is temporarily unavailable.' });
   }
 }
 
@@ -3115,19 +3157,70 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
                     reviewId, cursor, pageSize: 100 });
                   archiveItems.push(...page.items);
                   cursor = page.nextCursor;
-                } while (cursor && archiveItems.length <= 1000);
+                } while (cursor);
                 ledgerComplete = !cursor;
               } catch { ledgerComplete = false; }
             }
             const reviewResponse = ledgerComplete ? response : { ...response,
               coverage: { ...response.coverage, complete: false } };
+            const reviewCheckpoint = {
+              get: (componentKey) => reportStore.getDeepResearchComponent({ ownerId: job.owner_id,
+                screeningId: job.screening_id, componentKey }),
+              save: (componentKey, value) => reportStore.saveDeepResearchComponent({ ownerId: job.owner_id,
+                screeningId: job.screening_id, componentKey, value })
+            };
+            const extraction = createEventRegistryArticleResolver({
+              getApiKey: async () => process.env.EVENT_REGISTRY_API_KEY || '',
+              reviewArticle: async () => ({}), fetchImpl: costGuard.fetch });
             assessment = await assessAdvanceScreening({ response: reviewResponse,
               archiveItems, policySet: job.advance.policy_set,
-              identifiers: job.advance.identifiers, apiKey: aiApiKey, fetchImpl: costGuard.fetch });
+              identifiers: job.advance.identifiers, apiKey: aiApiKey, fetchImpl: costGuard.fetch,
+              checkpoint: reviewCheckpoint, maxBatches: 1,
+              extractArticle: (item) => extraction({ url: item.url, title: item.title,
+                source: item.publisher }, job.request) });
+            if (assessment.pending) return { __advance_pending: true, progress: assessment };
             await reportStore.saveDeepResearchComponent({ ownerId: job.owner_id,
               screeningId: job.screening_id, componentKey: 'advance-assessment', value: assessment });
           }
+          const register = assessment.evidence_register || [];
+          let lowerPage = 0;
+          let upperPage = Math.ceil(register.length / 100);
+          while (lowerPage < upperPage) {
+            const middlePage = Math.floor((lowerPage + upperPage) / 2);
+            const done = await reportStore.getDeepResearchComponent({ ownerId: job.owner_id,
+              screeningId: job.screening_id,
+              componentKey: `advance-evidence-page:${middlePage}` });
+            if (done) lowerPage = middlePage + 1;
+            else upperPage = middlePage;
+          }
+          const pageIndex = lowerPage;
+          const start = pageIndex * 100;
+          for (const item of register.slice(start, start + 100)) {
+            await reportStore.saveAdvanceEvidenceItem({ ownerId: job.owner_id,
+              screeningId: job.screening_id, item });
+          }
+          const next = Math.min(register.length, start + 100);
+          if (next !== start) await reportStore.saveDeepResearchComponent({ ownerId: job.owner_id,
+            screeningId: job.screening_id, componentKey: `advance-evidence-page:${pageIndex}`,
+            value: { start, next } });
+          if (next < register.length) return { __advance_pending: true,
+            progress: { reason: 'advance_evidence_persisting', persisted: next, total: register.length } };
+          assessment = { ...assessment,
+            evidence_export_url: `/service/adverse_media_advance/jobs/${job.screening_id}/evidence` };
           finalResponse = withAdvanceAssessment(response, assessment);
+          const selected = new Set(assessment.report_selection?.selected_result_ids || []);
+          finalResponse.advance_assessment = { ...assessment,
+            evidence_register: register.filter((item) => selected.has(item.result_id)),
+            finding_decisions: (assessment.finding_decisions || []).filter((item) =>
+              selected.has(item.finding_id)),
+            policy_results: (assessment.policy_results || []).map(({ applications: _applications,
+              ...policy }) => policy) };
+          const displayRank = new Map((assessment.report_selection?.selected_result_ids || [])
+            .map((resultId, index) => [resultId, index]));
+          finalResponse.media_buckets = Object.fromEntries(Object.entries(finalResponse.media_buckets)
+            .map(([bucket, items]) => [bucket, items.filter((item) => item.selected_for_pdf)
+              .sort((a, b) => displayRank.get(a.result_id) - displayRank.get(b.result_id))]));
+          finalResponse.results = finalResponse.media_buckets.adverse_media;
         }
         return finalizeAdverseMediaReport({
           request: job.request, response: finalResponse, ownerId: job.owner_id, origin: job.request_origin,
@@ -3151,8 +3244,12 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         return processArchiveReviewPage({ ownerId: job.owner_id,
           request: { ...job.request, associations: preparedArchiveScope?.associations || [] },
           store: reportStore, resolveArticle,
-          candidateFilter: job.advance ? advanceTitleUrlCandidate : null, pageSize: 4,
-          maxPostings: Math.min(1000, Math.max(1, Number(process.env.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS) || 200)) });
+          expectedSnapshot: job.advance?.archive_snapshot || null,
+          budgetRevision: process.env.ADVERSE_MEDIA_ADVANCE_BUDGET_REVISION || '1',
+          candidateFilter: job.advance ? advanceTitleUrlCandidate : null,
+          pageSize: job.advance ? 20 : 4,
+          maxPostings: job.advance ? Number.MAX_SAFE_INTEGER
+            : Math.min(1000, Math.max(1, Number(process.env.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS) || 200)) });
       }),
       archiveReviewEnabled: archiveReviewAvailable,
       fetchImpl,
@@ -3378,6 +3475,10 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (req.method === 'GET' && advanceJobMatch)
         return await getAdvanceScreening(req, res, advanceJobMatch[1].toLowerCase(),
           advanceAdmissionStore, reportStore, jsonStore);
+      const advanceEvidenceMatch = /^\/service\/adverse_media_advance\/jobs\/([0-9a-f-]{36})\/evidence$/i.exec(url.pathname);
+      if (req.method === 'GET' && advanceEvidenceMatch)
+        return await getAdvanceEvidence(req, res, advanceEvidenceMatch[1].toLowerCase(),
+          url.searchParams.get('cursor'), advanceAdmissionStore, reportStore);
       const archiveEvidenceMatch = /^\/service\/adverse_media\/reviews\/([a-f0-9]{32})\/evidence$/i.exec(url.pathname);
       if (req.method === 'GET' && archiveEvidenceMatch) {
         const token = bearerToken(req);
