@@ -20,6 +20,8 @@ test('Advance appends the selected geography language to the requested languages
   assert.deepEqual(china.searchRequest.languages, ['en', 'zh']);
   const uae = validateAdvanceRequest({ ...base, countries: ['AE'] });
   assert.deepEqual(uae.searchRequest.languages, ['en', 'ar']);
+  const ukraine = validateAdvanceRequest({ ...base, countries: ['UA'], languages: ['en'] });
+  assert.deepEqual(ukraine.searchRequest.languages, ['en', 'uk']);
 });
 
 test('Advance keeps private business identifiers out of the provider search request', () => {
