@@ -20,6 +20,7 @@ import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, 
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
 import { validateAdvanceRequest, advanceRequestDigest } from './lib/adverse-media-advance-request.mjs';
 import { assessAdvanceScreening, withAdvanceAssessment } from './lib/adverse-media-advance-classifier.mjs';
+import { createAdvanceNarrative } from './lib/adverse-media-advance-narrative.mjs';
 import { ADVANCE_POLICY_CATALOG_VERSION, listAdvancePolicies } from './lib/adverse-media-advance-policy-catalog.mjs';
 import { createAdvanceAdmissionStore } from './lib/adverse-media-advance-store.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
@@ -27,6 +28,7 @@ import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs'
 import { processArchiveReviewPage } from './lib/gdelt-archive-review.mjs';
 import { searchLocalGdeltIndex } from './lib/gdelt-local-index.mjs';
 import { createEventRegistryArticleResolver, createEventRegistryBulkArticleResolver } from './lib/gdelt-article-evidence-provider.mjs';
+import { advanceTitleUrlCandidate } from './lib/gdelt-archive-candidate.mjs';
 import { merchantScreenshotAssets, screenMerchantWebsite, validateMerchantScreeningRequest } from './lib/merchant-screening.mjs';
 import { createMerchantScreeningAuditPdf } from './lib/merchant-screening-report.mjs';
 import { createScreeningCostGuard } from './lib/screening-cost-guard.mjs';
@@ -661,8 +663,12 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
       const publicReport = existing && await reportStore.getPublic({ reportId });
       if (publicReport?.metadata.transaction_id === response.screening_id) {
         const reportPath = `${reportBase}/reports/${reportId}.pdf`;
+        const retainedNarrative = variant === 'advance'
+          ? await reportStore.getDeepResearchComponent?.({ ownerId,
+            screeningId: response.screening_id, componentKey: `report-narrative:${reportId}` }) : null;
         const finalized = { ...response, report: { ...existing.metadata,
-          download_url: process.env.API_PUBLIC_BASE_URL ? new URL(reportPath, process.env.API_PUBLIC_BASE_URL).href : reportPath } };
+          download_url: process.env.API_PUBLIC_BASE_URL ? new URL(reportPath, process.env.API_PUBLIC_BASE_URL).href : reportPath },
+          ...(retainedNarrative ? { report_narrative: retainedNarrative } : {}) };
         try {
           await jsonStore.save({ ownerId, screeningId: response.screening_id, transactionId, input: inputPayload,
             response: finalized });
@@ -677,8 +683,10 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
     });
     if (!narrative) {
       const reviewed = !response.coverage?.reason_codes?.includes('classification_incomplete');
-      narrative = await createAdverseMediaNarrative({ response,
-        apiKey: reviewed && response.results?.length ? aiApiKey : '', fetchImpl });
+      narrative = variant === 'advance'
+        ? await createAdvanceNarrative({ response, apiKey: aiApiKey, fetchImpl })
+        : await createAdverseMediaNarrative({ response,
+          apiKey: reviewed && response.results?.length ? aiApiKey : '', fetchImpl });
       if (narrativeKey) await reportStore.saveDeepResearchComponent?.({
         ownerId, screeningId: response.screening_id, componentKey: narrativeKey, value: narrative
       });
@@ -695,7 +703,8 @@ export async function finalizeAdverseMediaReport({ request, response, ownerId, o
       filename: report.filename,
       retention: 'permanent'
     };
-    const finalized = { ...response, report: metadata };
+    const finalized = { ...response,
+      ...(variant === 'advance' ? { report_narrative: narrative } : {}), report: metadata };
     const [pdfWrite, jsonWrite] = await Promise.allSettled([
       reportStore.save({ ownerId, reportId: report.reportId, bytes: report.bytes,
         metadata: { ...metadata, report_type: reportType } }),
@@ -3095,7 +3104,25 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           let assessment = await reportStore.getDeepResearchComponent({ ownerId: job.owner_id,
             screeningId: job.screening_id, componentKey: 'advance-assessment' });
           if (!assessment) {
-            assessment = await assessAdvanceScreening({ response, policySet: job.advance.policy_set,
+            const reviewId = response.coverage?.archive_review?.review_id;
+            const archiveItems = [];
+            let ledgerComplete = !reviewId && response.coverage?.archive_review?.expected_postings === 0;
+            if (reviewId && reportStore.listArchiveReviewItems) {
+              try {
+                let cursor = null;
+                do {
+                  const page = await reportStore.listArchiveReviewItems({ ownerId: job.owner_id,
+                    reviewId, cursor, pageSize: 100 });
+                  archiveItems.push(...page.items);
+                  cursor = page.nextCursor;
+                } while (cursor && archiveItems.length <= 1000);
+                ledgerComplete = !cursor;
+              } catch { ledgerComplete = false; }
+            }
+            const reviewResponse = ledgerComplete ? response : { ...response,
+              coverage: { ...response.coverage, complete: false } };
+            assessment = await assessAdvanceScreening({ response: reviewResponse,
+              archiveItems, policySet: job.advance.policy_set,
               identifiers: job.advance.identifiers, apiKey: aiApiKey, fetchImpl: costGuard.fetch });
             await reportStore.saveDeepResearchComponent({ ownerId: job.owner_id,
               screeningId: job.screening_id, componentKey: 'advance-assessment', value: assessment });
@@ -3104,7 +3131,8 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         }
         return finalizeAdverseMediaReport({
           request: job.request, response: finalResponse, ownerId: job.owner_id, origin: job.request_origin,
-          aiApiKey: job.request.search_plus ? '' : aiApiKey, fetchImpl: costGuard.fetch, reportStore, jsonStore,
+          aiApiKey: job.advance ? aiApiKey : job.request.search_plus ? '' : aiApiKey,
+          fetchImpl: costGuard.fetch, reportStore, jsonStore,
           reportId: job.report_id, inputPayload: job.input_payload || job.request,
           transactionId: job.transaction_id || null,
           variant: job.advance ? 'advance' : job.request.search_plus ? 'search_plus' : 'legacy'
@@ -3117,12 +3145,13 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         const getApiKey = async () => process.env.EVENT_REGISTRY_API_KEY || '';
         const fallback = createEventRegistryArticleResolver({ getApiKey, reviewArticle,
           fetchImpl: meteredFetch });
-        const resolveArticle = adverseArticleResolver || (process.env.GDELT_ARCHIVE_BULK_SEARCH_ENABLED === 'true'
+        const resolveArticle = adverseArticleResolver || (!job.advance && process.env.GDELT_ARCHIVE_BULK_SEARCH_ENABLED === 'true'
           ? createEventRegistryBulkArticleResolver({ getApiKey, reviewArticle, fallback,
             fetchImpl: meteredFetch }) : fallback);
         return processArchiveReviewPage({ ownerId: job.owner_id,
           request: { ...job.request, associations: preparedArchiveScope?.associations || [] },
-          store: reportStore, resolveArticle, pageSize: 4,
+          store: reportStore, resolveArticle,
+          candidateFilter: job.advance ? advanceTitleUrlCandidate : null, pageSize: 4,
           maxPostings: Math.min(1000, Math.max(1, Number(process.env.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS) || 200)) });
       }),
       archiveReviewEnabled: archiveReviewAvailable,

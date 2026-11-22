@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { processArchiveReviewPage, archiveReviewId } from '../lib/gdelt-archive-review.mjs';
+import { advanceTitleUrlCandidate } from '../lib/gdelt-archive-candidate.mjs';
 import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest,
   prepareArchiveReviewScope } from '../lib/adverse-media.mjs';
@@ -56,6 +57,22 @@ test('complete V1 paging retains all mentions, deduplicates URLs and does not cl
   const evidence = await store.listArchiveReviewItems({ ownerId: 'owner-1', reviewId: result.review_id });
   assert.equal(evidence.items.length, 2);
   assert.equal((await store.listArchiveReviewItems({ ownerId: 'owner-2', reviewId: result.review_id })).items.length, 0);
+});
+
+test('Advance skips Event Registry for body-only mentions and records incomplete evidence', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const unrelated = { ...row(1), title: 'Market report',
+    url: 'https://publisher.example/market-report' };
+  let calls = 0;
+  const result = await finish({ ownerId: 'owner-filter', request, store,
+    snapshotResult: baseline(1), table: table([unrelated]),
+    candidateFilter: advanceTitleUrlCandidate,
+    resolveArticle: async () => { calls += 1; throw new Error('must_not_call'); } });
+  assert.equal(calls, 0);
+  assert.equal(result.status, 'inconclusive');
+  assert.equal(result.not_selected_articles, 1);
+  const evidence = await store.listArchiveReviewItems({ ownerId: 'owner-filter', reviewId: result.review_id });
+  assert.equal(evidence.items[0].reason, 'article_not_selected_by_title_url');
 });
 
 test('a direct adverse decision requires quoted article evidence and a confirmed subject match', async () => {

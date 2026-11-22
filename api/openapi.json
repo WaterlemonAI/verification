@@ -482,7 +482,7 @@
     "/service/adverse_media_advance": {
       "post": {
         "summary": "Queue Adverse Media Advance",
-        "description": "Runs Search+ and stored-history article review with a versioned selection from 64 event policies. This endpoint is asynchronous and requires an entitled workspace, a configured Advance rate, an Idempotency-Key and a public HTTPS callback. Source gaps or unresolved articles cannot produce a Safe profile. A current stored-history point summary is required before a new job is charged or queued.",
+        "description": "Runs region-prioritized Search+ publisher searches and stored-history article review with a versioned selection from 64 event policies. A selected country adds its supported local search language. AI7 EDD proposes bounded name variants and search terms; the archive uses exact names and variants, while indexed web searches use the terms. Only archive URLs with a subject name in the title or URL path are sent for article extraction. Excluded or unresolved archive mentions cannot produce a Safe profile. Indexed web and Entity Map evidence is normalized before AI7 EDD classification and the Advance PDF. This endpoint is asynchronous and requires an entitled workspace, a configured Advance rate, an Idempotency-Key and a public HTTPS callback. A current stored-history point summary is required before a new job is charged or queued.",
         "operationId": "queueAdverseMediaAdvance",
         "security": [{ "ApiKey": [] }],
         "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true,
@@ -3271,8 +3271,8 @@
           "entity_type": { "type": "string", "enum": ["individual", "business"] },
           "name": { "type": "string", "minLength": 2, "maxLength": 200 },
           "aliases": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 200 } },
-          "countries": { "type": "array", "maxItems": 20, "items": { "type": "string", "pattern": "^[A-Za-z]{2}$" } },
-          "languages": { "type": "array", "maxItems": 5, "default": ["en", "ar"], "items": { "type": "string", "enum": ["ar", "de", "en", "es", "fa", "fr", "hi", "it", "nl", "pl", "pt", "ru", "tr", "uk", "ur", "zh"] } },
+          "countries": { "type": "array", "maxItems": 20, "description": "Selected countries prioritize Search+ publishers and automatically append their supported local language to the requested languages, subject to the five-language ceiling.", "items": { "type": "string", "pattern": "^[A-Za-z]{2}$" } },
+          "languages": { "type": "array", "maxItems": 5, "default": ["en", "ar"], "items": { "type": "string", "enum": ["ar", "de", "en", "es", "fa", "fr", "hi", "id", "it", "nl", "pl", "pt", "ru", "tr", "uk", "ur", "zh"] } },
           "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 },
           "callback_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Public HTTPS URL that receives the completed result and report link." },
           "callback_access_key": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z0-9._~+/-]+=*$", "description": "Optional token sent only in the callback Authorization header." },
@@ -3313,7 +3313,7 @@
           "screening_id": { "type": "string", "format": "uuid" },
           "status": { "type": "string", "enum": ["queued", "processing", "completed"] },
           "callback_delivery": { "type": "string", "enum": ["delivered", "not_confirmed"], "description": "Present when the screening completed." },
-          "result": { "type": "object", "description": "Stored screening result, including assessment and PDF report link, present when completed.", "additionalProperties": true }
+          "result": { "type": "object", "description": "Stored screening result, including AI7 EDD assessment, normalized evidence register, report narrative and PDF report link, present when completed.", "additionalProperties": true }
         }, "additionalProperties": false
       },
       "AdverseMediaRequest": {

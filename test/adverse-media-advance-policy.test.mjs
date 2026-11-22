@@ -127,7 +127,7 @@ test('All lets Gemini classify adverseness across the catalog with independent i
   assert.equal(result.counts.distinct_adverse_stories, 1);
   assert.equal(result.counts.unselected_adverse_stories, 0);
   assert.equal(result.finding_decisions[1].status, 'not_adverse');
-  assert.equal(result.finding_decisions[1].gemini_assessment, 'not_adverse');
+  assert.equal(result.finding_decisions[1].ai7_edd_assessment, 'not_adverse');
 });
 
 test('a Gemini adverse proposal without a trusted identity match stays unresolved', () => {

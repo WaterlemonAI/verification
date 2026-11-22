@@ -15,6 +15,13 @@ test('Advance defaults to all policies and forces async Search+ archive review',
   assert.equal(parsed.searchRequest.archive_all_stored, true);
 });
 
+test('Advance appends the selected geography language to the requested languages', () => {
+  const china = validateAdvanceRequest({ ...base, countries: ['CN'], languages: ['en'] });
+  assert.deepEqual(china.searchRequest.languages, ['en', 'zh']);
+  const uae = validateAdvanceRequest({ ...base, countries: ['AE'] });
+  assert.deepEqual(uae.searchRequest.languages, ['en', 'ar']);
+});
+
 test('Advance keeps private business identifiers out of the provider search request', () => {
   const parsed = validateAdvanceRequest({ ...base, identifiers: {
     registration_numbers: ['12345'], trade_licence_numbers: ['TL-678'],
