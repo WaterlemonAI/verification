@@ -12,7 +12,7 @@ const article = { result_id: 'article-1', title: 'Regulator action concerning Ex
   excerpt: quote, url: 'https://publisher.example/story' };
 const policySet = compileAdvancePolicySet({ policy_ids: ['FIN-01'] });
 
-function tagFetch(tag, inspect = () => {}) {
+function tagFetch(tag, inspect = () => {}, sourceQuote = quote) {
   return async (_url, options) => {
     inspect(JSON.parse(options.body));
     const key = JSON.parse(options.body).contents[0].parts[0].text;
@@ -20,7 +20,7 @@ function tagFetch(tag, inspect = () => {}) {
     return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events: [
       { story_key: storyKey, adverse_assessment: 'adverse', subject_role: 'direct_actor',
         entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
-        legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95, ...tag }
+        legal_stage: 'regulatory_action', supporting_quote: sourceQuote, confidence: 0.95, ...tag }
     ] }) }] } }] });
   };
 }
@@ -46,6 +46,21 @@ test('a directly supported adverse article with a matching registration is Unsaf
     }) });
   assert.equal(result.evidence_profile.status, 'unsafe');
   assert.equal(result.policy_outcome.status, 'escalate');
+});
+
+test('a full legal business name with an independent exact-name match can support Unsafe', async () => {
+  const legalQuote = 'The regulator found that Wirecard AG committed accounting fraud.';
+  const legalArticle = { ...article, title: 'Wirecard AG accounting case', excerpt: legalQuote,
+    identity_match: { type: 'exact_name', matched_input: 'Wirecard AG' } };
+  const response = { ...base, entity: { name: 'Wirecard AG', entity_type: 'business' },
+    media_buckets: { ...base.media_buckets, adverse_media: [legalArticle] } };
+  const fetchImpl = tagFetch({}, () => {}, legalQuote);
+  assert.equal((await assessAdvanceScreening({ response, policySet, apiKey: 'test-key', fetchImpl }))
+    .evidence_profile.status, 'unsafe');
+  const partial = { ...legalArticle, identity_match: { type: 'partial', matched_input: 'Wirecard' } };
+  assert.equal((await assessAdvanceScreening({ response: { ...response,
+    media_buckets: { ...base.media_buckets, adverse_media: [partial] } }, policySet,
+  apiKey: 'test-key', fetchImpl })).evidence_profile.status, 'inconclusive');
 });
 
 test('Advance can resolve legacy article uncertainty without inheriting stale unresolved counts', async () => {
