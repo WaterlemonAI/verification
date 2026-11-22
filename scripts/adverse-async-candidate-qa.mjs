@@ -37,11 +37,12 @@ if (qaIdentifiers !== undefined && (route !== 'adverse_media_advance'
 const token = randomBytes(32).toString('hex');
 process.env.AI7_API_KEY_HASHES = createHash('sha256').update(token).digest('hex');
 process.env.API_HOSTS = 'localhost,127.0.0.1';
-// The default candidate run is small. An explicit override can exercise the
-// runtime's 200-posting default; every external request remains reserved under
-// the route-specific provider ceiling.
+// The default candidate run is small. An explicit Advance override may cover
+// a larger pinned snapshot; refuse it before provider calls if the snapshot
+// exceeds that bound. The route-specific provider ceiling remains in force.
 const qaMaxPostings = Number(process.env.ADVERSE_QA_MAX_POSTINGS || '20');
-if (!Number.isInteger(qaMaxPostings) || qaMaxPostings < 1 || qaMaxPostings > 200) {
+const qaPostingCeiling = route === 'adverse_media_advance' ? 100_000 : 200;
+if (!Number.isInteger(qaMaxPostings) || qaMaxPostings < 1 || qaMaxPostings > qaPostingCeiling) {
   throw new Error('invalid_qa_max_postings');
 }
 process.env.GDELT_ARCHIVE_REVIEW_MAX_POSTINGS = String(qaMaxPostings);
@@ -57,6 +58,10 @@ const preflight = await searchLocalGdeltIndex({ entity_type: entityType, name: s
   aliases: [], transliterations: {}, associations: [], archive_all_stored: true }, { requireV2: true });
 if (!preflight?.complete || preflight.scan?.mode !== 'v2_point_summary') {
   throw new Error('candidate_v2_snapshot_unavailable');
+}
+if (route === 'adverse_media_advance'
+  && preflight.scan.mentions_indexed > qaMaxPostings) {
+  throw new Error('candidate_archive_posting_limit_exceeded');
 }
 const vault = createStore();
 const brave = await vault.getMasterKey('adverse-media');
@@ -182,9 +187,20 @@ try {
   const deadline = Date.now() + 10 * 60_000;
   let finalizedAt = null;
   let state;
+  let budgetBlock = null;
+  let lastProgressPoll = 0;
   while (Date.now() < deadline) {
     state = await reportStore.getDeepResearchState({ ownerId, screeningId: receipt.screening_id });
     if (state?.stage === 'delivered') break;
+    if (route === 'adverse_media_advance' && Date.now() - lastProgressPoll >= 2_000) {
+      lastProgressPoll = Date.now();
+      const progress = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`,
+        { headers: { authorization: `Bearer ${token}` } });
+      if (progress.ok) {
+        const body = await progress.json();
+        if (body.status === 'budget_blocked') { budgetBlock = body; break; }
+      }
+    }
     if (['finalized', 'callback'].includes(state?.stage)) finalizedAt ||= Date.now();
     if (process.env.ADVERSE_QA_ALLOW_CALLBACK_PENDING === 'true'
       && finalizedAt && Date.now() - finalizedAt >= 20_000) break;
@@ -203,7 +219,7 @@ try {
       const page = await reportStore.listArchiveReviewItems({ ownerId,
         reviewId: final.coverage.archive_review.review_id, cursor, pageSize: 100 });
       evidenceItems.push(...page.items);
-      if (evidenceItems.length > 200) throw new Error('candidate_evidence_limit');
+      if (evidenceItems.length > qaPostingCeiling) throw new Error('candidate_evidence_limit');
       cursor = page.nextCursor;
     } while (cursor);
   }
@@ -243,12 +259,14 @@ try {
         { mode: 0o600 });
     }
   }
-  const expectedEvidence = final?.coverage?.archive_review?.unique_articles;
+  const expectedEvidence = route === 'adverse_media_advance'
+    ? final?.coverage?.archive_review?.postings_recorded
+    : final?.coverage?.archive_review?.unique_articles;
   const callbackSignatureVerified = process.env.ADVERSE_QA_VERIFY_CALLBACK === 'true'
     ? state?.stage === 'delivered' && await verifyCallbackReceipt(receipt) : null;
   const screeningVerified = Boolean(final && pdfHash === final.report?.sha256
     && (expectedEvidence === undefined || evidenceItems.length === expectedEvidence));
-  status = screeningVerified && state?.stage === 'delivered'
+  status = budgetBlock ? 'budget_blocked' : screeningVerified && state?.stage === 'delivered'
     && (process.env.ADVERSE_QA_VERIFY_CALLBACK !== 'true' || callbackSignatureVerified)
     ? 'verified' : screeningVerified ? 'screening_verified_callback_pending' : 'incomplete';
   process.stdout.write(`${JSON.stringify({ event: 'adverse_async_candidate_qa', status,
@@ -257,13 +275,16 @@ try {
     profile: final?.summary?.profile_status || null,
     policy_outcome: final?.advance_assessment?.policy_outcome?.status || null,
     decision_eligible: final?.summary?.decision_eligible ?? null,
+    budget_pending_count: budgetBlock?.pending_count ?? null,
     coverage_complete: final?.coverage?.complete ?? null,
     archive_review: final?.coverage?.archive_review ? {
       status: final.coverage.archive_review.status,
       reason: final.coverage.archive_review.reason || null,
       expected_postings: final.coverage.archive_review.expected_postings || 0,
       postings_scanned: final.coverage.archive_review.postings_scanned || 0,
+      postings_recorded: final.coverage.archive_review.postings_recorded || 0,
       unique_articles: final.coverage.archive_review.unique_articles || 0,
+      deferred: final.coverage.archive_review.deferred || 0,
       adverse: final.coverage.archive_review.adverse || 0,
       unresolved: final.coverage.archive_review.unresolved || 0
     } : null,

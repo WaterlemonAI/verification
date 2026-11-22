@@ -4,8 +4,9 @@ import { createHash } from 'node:crypto';
 import { processArchiveReviewPage, archiveReviewId } from '../lib/gdelt-archive-review.mjs';
 import { advanceTitleUrlCandidate } from '../lib/gdelt-archive-candidate.mjs';
 import { assessAdvanceScreening } from '../lib/adverse-media-advance-classifier.mjs';
+import { normalizeAdvanceEvidence } from '../lib/adverse-media-advance-evidence.mjs';
 import { compileAdvancePolicySet } from '../lib/adverse-media-advance-policy.mjs';
-import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
+import { AzureAdverseMediaReportStore, MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest,
   prepareArchiveReviewScope } from '../lib/adverse-media.mjs';
 
@@ -126,6 +127,60 @@ test('Advance defers selected archive URLs to one merged extraction and model re
   await assessAdvanceScreening(options);
   assert.equal(extractionCalls, 1);
   assert.equal(modelCalls, 1);
+});
+
+test('Advance preserves an adverse title on a later posting of the same URL', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const url = 'https://publisher.example/example-holdings-story';
+  const postings = [{ ...row(1, url), title: 'Example Holdings product update' },
+    { ...row(2, url), title: 'Example Holdings fined for fraud' }];
+  const state = await finish({ ownerId: 'advance-overlap-owner', request, store,
+    snapshotResult: baseline(2), table: table(postings), pageSize: 1,
+    candidateFilter: advanceTitleUrlCandidate, deferSelected: true });
+  assert.equal(state.status, 'completed');
+  assert.equal(state.postings_scanned, 2);
+  assert.equal(state.postings_recorded, 2);
+  assert.equal(state.unique_articles, 1);
+  assert.equal(state.metadata_excluded, 1);
+  assert.equal(state.deferred, 1);
+  const items = (await store.listArchiveReviewItems({
+    ownerId: 'advance-overlap-owner', reviewId: state.review_id })).items;
+  assert.equal(items.length, 2);
+  const evidence = normalizeAdvanceEvidence({ advance_source_results: [] }, items);
+  assert.equal(evidence.counts.selected_candidates, 1);
+  assert.equal(evidence.items[0].title, postings[1].title);
+  assert.equal(evidence.items[0].selection_reason, 'title_and_adverse_signal');
+});
+
+test('Azure archive metadata writes one page per transaction and safely replays conflicts', async () => {
+  const rows = new Map();
+  let transactions = 0;
+  let individualCreates = 0;
+  const store = Object.create(AzureAdverseMediaReportStore.prototype);
+  store.table = {
+    async submitTransaction(actions) {
+      transactions += 1;
+      assert.equal(actions.length, 2);
+      if (actions.some(([, row]) => rows.has(row.rowKey))) {
+        throw Object.assign(new Error('conflict'), { statusCode: 409 });
+      }
+      for (const [, row] of actions) rows.set(row.rowKey, row);
+    },
+    async createEntity(row) {
+      individualCreates += 1;
+      if (rows.has(row.rowKey)) throw Object.assign(new Error('conflict'), { statusCode: 409 });
+      rows.set(row.rowKey, row);
+    }
+  };
+  const input = { ownerId: 'batch-owner', reviewId: 'review-1', items: [
+    { articleId: 'first', item: { status: 'metadata_excluded' } },
+    { articleId: 'second', item: { status: 'deferred' } }
+  ] };
+  await store.saveArchiveReviewItems(input);
+  await store.saveArchiveReviewItems(input);
+  assert.equal(transactions, 2);
+  assert.equal(individualCreates, 2);
+  assert.equal(rows.size, 2);
 });
 
 test('Advance records more than 1,000 archive postings without the legacy scan ceiling', async () => {
