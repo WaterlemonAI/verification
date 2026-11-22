@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { advanceArchiveMediaItems, assessAdvanceScreening, withAdvanceAssessment } from '../lib/adverse-media-advance-classifier.mjs';
 import { compileAdvancePolicySet } from '../lib/adverse-media-advance-policy.mjs';
+import { createAdverseMediaNarrative } from '../lib/adverse-media-report.mjs';
 
 const subject = { entity_type: 'business', name: 'Example Trading LLC' };
 const base = { entity: subject, summary: { unresolved_results: 0 },
@@ -61,6 +62,62 @@ test('a full legal business name with an independent exact-name match can suppor
   assert.equal((await assessAdvanceScreening({ response: { ...response,
     media_buckets: { ...base.media_buckets, adverse_media: [partial] } }, policySet,
   apiKey: 'test-key', fetchImpl })).evidence_profile.status, 'inconclusive');
+});
+
+test('Advance report buckets follow confirmed article decisions', async () => {
+  const legalQuote = 'The regulator found that Wirecard AG committed accounting fraud.';
+  const confirmed = { ...article, title: 'Wirecard AG accounting case', excerpt: legalQuote,
+    identity_match: { type: 'exact_name', matched_input: 'Wirecard AG' } };
+  const uncertain = { ...article, result_id: 'article-2', url: 'https://publisher.example/linked',
+    title: 'Linked company story', excerpt: 'Wirecard AG was mentioned in the report.',
+    identity_match: { type: 'partial', matched_input: 'Wirecard' } };
+  const response = { ...base, entity: { name: 'Wirecard AG', entity_type: 'business' },
+    media_buckets: { adverse_media: [uncertain], general_news_mentions: [confirmed], no_impact_media: [] } };
+  const assessment = await assessAdvanceScreening({ response, policySet, apiKey: 'test-key',
+    fetchImpl: async (_url, options) => {
+      const articles = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text).articles;
+      const events = articles.map(({ story_key, title }) => title === confirmed.title
+        ? { story_key, adverse_assessment: 'adverse', subject_role: 'direct_actor',
+          entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
+          legal_stage: 'regulatory_action', supporting_quote: legalQuote, confidence: 0.95 }
+        : { story_key, adverse_assessment: 'unclear', subject_role: 'unclear',
+          entity_match: 'possible', event_type_ids: [], severity: 'minor',
+          legal_stage: 'media_mention', supporting_quote: '', confidence: 0 });
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events }) }] } }] });
+    } });
+  const final = withAdvanceAssessment(response, assessment);
+  assert.equal(final.summary.profile_status, 'unsafe');
+  assert.deepEqual(final.media_buckets.adverse_media.map((item) => item.title),
+    ['Wirecard AG accounting case']);
+  assert.deepEqual(final.media_buckets.general_news_mentions.map((item) => item.title),
+    ['Linked company story']);
+  assert.equal(final.summary.media_bucket_counts.adverse_media, 1);
+  assert.equal(assessment.finding_decisions.find((item) => item.status === 'confirmed_event')?.subject_role,
+    'direct_actor');
+  const narrative = await createAdverseMediaNarrative({ response: final, apiKey: '' });
+  assert.match(narrative.summary, /Collected news includes "Wirecard AG accounting case"/);
+});
+
+test('a quote about another convicted actor cannot implicate the named business', async () => {
+  const otherQuote = 'Two executives at a linked firm were convicted of falsifying documents.';
+  const source = { ...article, title: 'Case linked to Wirecard AG',
+    excerpt: `Wirecard AG was mentioned. ${otherQuote}`,
+    identity_match: { type: 'exact_name', matched_input: 'Wirecard AG' } };
+  const response = { ...base, entity: { name: 'Wirecard AG', entity_type: 'business' },
+    media_buckets: { ...base.media_buckets, adverse_media: [source] } };
+  const result = await assessAdvanceScreening({ response, policySet, apiKey: 'test-key',
+    fetchImpl: tagFetch({}, () => {}, otherQuote) });
+  assert.equal(result.evidence_profile.status, 'inconclusive');
+  assert.equal(result.counts.distinct_adverse_stories, 0);
+  assert.equal(result.counts.unresolved_stories, 1);
+  const linkedQuote = 'Two executives at a firm linked to Wirecard AG were convicted.';
+  const linked = { ...source, excerpt: linkedQuote,
+    evidence_assessment: `Other Executive: ${linkedQuote}` };
+  const linkedResult = await assessAdvanceScreening({ response: { ...response,
+    media_buckets: { ...base.media_buckets, adverse_media: [linked] } }, policySet,
+  apiKey: 'test-key', fetchImpl: tagFetch({}, () => {}, linkedQuote) });
+  assert.equal(linkedResult.evidence_profile.status, 'inconclusive');
+  assert.equal(linkedResult.counts.distinct_adverse_stories, 0);
 });
 
 test('Advance can resolve legacy article uncertainty without inheriting stale unresolved counts', async () => {
