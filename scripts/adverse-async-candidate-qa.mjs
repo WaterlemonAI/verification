@@ -1,7 +1,7 @@
 // One controlled, unbilled candidate screening through HTTP, the real worker,
 // V1 article review, retained JSON/PDF and an explicitly supplied HTTPS callback.
 // This in-process queue proves worker behavior; Azure Queue durability is a separate gate.
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -98,6 +98,35 @@ await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${app.address().port}`;
 const started = performance.now();
 let status = 'error';
+async function verifyCallbackReceipt(receipt) {
+  const secret = receipt.callback?.signing_secret;
+  const callback = new URL(process.env.ADVERSE_QA_CALLBACK_URL);
+  const match = callback.hostname === 'webhook.site'
+    ? callback.pathname.match(/^\/([0-9a-f-]{36})$/i) : null;
+  if (!match || typeof secret !== 'string' || !secret) return false;
+  const endpoint = `https://webhook.site/token/${match[1]}/requests?sorting=newest&per_page=100`;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const result = await fetch(endpoint, { signal: AbortSignal.timeout(10_000),
+        headers: { accept: 'application/json' } });
+      if (result.ok) {
+        const page = await result.json();
+        const request = page.data?.find((item) => item.headers?.['x-ai7-screening-id']?.[0]
+          === receipt.screening_id);
+        if (request) {
+          const supplied = request.headers?.['x-ai7-signature']?.[0];
+          const expected = `sha256=${createHmac('sha256', secret).update(request.content || '').digest('hex')}`;
+          return request.method === 'POST'
+            && request.headers?.['x-ai7-event']?.[0] === 'adverse_media.advance.completed'
+            && typeof supplied === 'string' && supplied.length === expected.length
+            && timingSafeEqual(Buffer.from(supplied), Buffer.from(expected));
+        }
+      }
+    } catch { /* The receiver may need a moment to index the delivered request. */ }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  return false;
+}
 try {
   const response = await fetch(`${base}/service/${route}`, { method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json',
@@ -152,8 +181,11 @@ try {
     if (report?.bytes) await writeFile(join(directory, `${receipt.screening_id}.pdf`), report.bytes, { mode: 0o600 });
   }
   const expectedEvidence = final?.coverage?.archive_review?.unique_articles;
+  const callbackSignatureVerified = process.env.ADVERSE_QA_VERIFY_CALLBACK === 'true'
+    ? state?.stage === 'delivered' && await verifyCallbackReceipt(receipt) : null;
   status = state?.stage === 'delivered' && final && pdfHash === final.report?.sha256
     && (expectedEvidence === undefined || evidenceItems.length === expectedEvidence)
+    && (process.env.ADVERSE_QA_VERIFY_CALLBACK !== 'true' || callbackSignatureVerified)
     ? 'verified' : 'incomplete';
   process.stdout.write(`${JSON.stringify({ event: 'adverse_async_candidate_qa', status,
     route, subject_sha256: createHash('sha256').update(subject).digest('hex'),
@@ -172,6 +204,7 @@ try {
       unresolved: final.coverage.archive_review.unresolved || 0
     } : null,
     evidence_items: evidenceItems.length,
+    callback_signature_verified: callbackSignatureVerified,
     artifacts_retained: Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && final),
     json_sha256: final ? createHash('sha256').update(JSON.stringify(final)).digest('hex') : null,
     pdf_sha256: pdfHash, provider_calls: usage.providerCalls,

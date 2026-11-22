@@ -120,6 +120,21 @@ test('a quote about another convicted actor cannot implicate the named business'
   assert.equal(linkedResult.counts.distinct_adverse_stories, 0);
 });
 
+test('official legal-name title and distinctive business name in its quote support attribution', async () => {
+  const boeingQuote = 'Boeing breached its obligations under the agreement.';
+  const source = { ...article, title: 'United States v. The Boeing Company',
+    excerpt: boeingQuote, identity_match: { type: 'exact_name', matched_input: 'Boeing Company' } };
+  const response = { ...base, entity: { name: 'Boeing Company', entity_type: 'business' },
+    media_buckets: { ...base.media_buckets, adverse_media: [source] } };
+  const fetchImpl = tagFetch({}, () => {}, boeingQuote);
+  assert.equal((await assessAdvanceScreening({ response, policySet, apiKey: 'test-key', fetchImpl }))
+    .evidence_profile.status, 'unsafe');
+  const weakTitle = { ...source, title: 'Boeing case' };
+  assert.equal((await assessAdvanceScreening({ response: { ...response,
+    media_buckets: { ...base.media_buckets, adverse_media: [weakTitle] } }, policySet,
+  apiKey: 'test-key', fetchImpl })).evidence_profile.status, 'inconclusive');
+});
+
 test('an individual name plus supplied organisation supports attribution', async () => {
   const personQuote = 'The regulator charged Bernard Madoff with securities fraud.';
   const response = { ...base, entity: { name: 'Bernard Madoff', entity_type: 'individual' },
