@@ -1,32 +1,43 @@
-# Adverse Media Advance release gate readout — 22 November 2026
+# Adverse Media Advance release gate readout — 23 November 2026
 
-Scope: draft PR #157, with draft PR #156 as its V2 dependency. Live environment checks were read-only; the duplicate-call failure found during this gate was fixed on the isolated branch. **Release decision: HOLD.** Advance is not enabled on the running API; no production deployment or customer activation was performed.
+Scope: draft [PR #157](https://github.com/WaterlemonAI/verification/pull/157) at `f243758aa0c2e5a51da541e073f0b08c07a68423`, based on the V2 index dependency in draft PR #156. **Release decision: HOLD.** The code and hosted test gate pass, but the live data and operational gates do not. The running customer API and scheduled ingestion jobs were not changed. The user authorized isolated validation only.
 
-## Pass 1 — completeness and correctness
+## Implementation and local proof
 
-| Gate | Observation | Status |
+The Advance branch implements the versioned 500+ adverse-term title/URL filter, a decision for every returned Brave result and V2 posting, paged candidate review, three-way subject relationship with an unassessed state, grounded quote checks, full owner-scoped evidence export, and deterministic selection of at most 20 PDF leads. It preserves a candidate as unresolved when article evidence or a model decision cannot be verified; it cannot turn a processing limit into `Safe`. Archive posting decisions are keyed by posting ID so a neutral and adverse posting with the same canonical URL cannot suppress the adverse candidate. The final review deduplicates by URL.
+
+The lexicon version is `2026-11-22.2` with 748 distinct terms. A live Brave response exposed the exact title `India's Digital Identity Titan Faces Cybersecurity Scare, Highlighting Concerns With Digital ID`; the new `cybersecurity scare` phrase selects it for article review. The review schema is `advance-review-v3`, with an explicit prompt for a contiguous verbatim quote. The server still verifies that quote against source text rather than trusting the model.
+
+Local `npm test` passed **615/615** at this head. The hosted `test` check passed in [run 45040582182](https://github.com/WaterlemonAI/verification/actions/runs/45040582182). The PR remains draft and targets PR #156's branch.
+
+## Isolated real-provider proof
+
+The private candidate had internal-only ingress, one replica during validation, and a digest-pinned image. It used an in-process QA queue, so these runs do not prove Azure Queue durability. No customer Advance access was enabled.
+
+| Case and image | Observed result | Gate |
 | --- | --- | --- |
-| V2 stored-range coverage | Azure Blob readback: V1 `2026-09-24T10:15:00Z` to `2026-11-22T01:30:00Z`; V2 `20260924101500` to `20261122013000`, index version 2, 5,630 committed intervals, last updated `2026-11-22T01:52:02Z`. The windows align. | Partial: current 50-subject parity and posting reconciliation remain unverified. |
-| Ongoing V2 dual write | Current scheduled ingest and backfill Container App job templates have no `GDELT_V2_DUAL_WRITE` environment setting. The script enables V2 writes only when it equals `true`. Recent ingest executions succeeded, but their success does not prove future scheduled V2 maintenance. | Fail for ongoing coverage. |
-| Live V1/V2 subject parity | The controlled 50-subject parity readback received Azure Table `AuthorizationPermissionMismatch` (403). No RBAC or secret changes were made. A prior 50-subject parity result predates this implementation. | Blocked. |
-| Candidate selection and relationship logic | Focused local tests passed 43/43, including all returned Brave metadata decisions, >1,000 archive postings, missing evidence, three relationship classes, and the 20-item cap. The lexicon has 741 distinct terms at version `2026-11-22.1`. | Local pass; real-provider verification pending. |
-| Signzy recall | Replaying the retained, pre-upgrade Signzy response identified 19 article entries, selected 8 by title/URL, and selected the one security-incident/data-leak entry. This proves metadata recall on that retained input only; article review and final attribution were not run on the new candidate. | Partial. |
-| Controlled cohort | The required 10 earlier problematic and 10 independent real-provider cases have not been run against this commit. Historical artifacts are from an earlier candidate. The current local shell lacks the isolated candidate's managed identity and provider configuration; no suitable isolated candidate job was found. | Blocked. |
+| Signzy, `8213978` candidate | Delivered JSON/PDF with matching hashes and a verified signed callback. Brave returned 30 results / 28 unique; 17 selected and 11 excluded. Seventeen article extractions and four Gemini calls were recorded; reservation was USD 0.118488; end-to-end time was 65.366 s. The cybersecurity-scare title was missed by the earlier lexicon. | Recall fail; corrected in `ceaaecf`. |
+| Signzy, `ceaaecf` candidate | Delivered JSON/PDF with matching hashes and a verified signed callback. Brave returned 29 results / 27 unique; the full 27-item evidence register was exported and reconciled. Sixteen selected, 11 excluded; 16 extractions and four Gemini calls; reservation USD 0.117515; end-to-end time 64.902 s. The cybersecurity-scare title was selected, extracted, sent to Gemini, and appeared among 15 PDF leads. Its relationship was **unassessed**: the model supplied a non-verbatim quote, so the server withheld the proposed finding. | Metadata recall pass; grounded classification remains unproven. Prompt revised in `f243758`. |
+| Adobe Inc, `ceaaecf` candidate | Preflight found 106 archive postings and the worker reached the screened stage. The interactive run ended without a captured terminal result or retained artifact. | No pass claimed. |
+| Signzy, `f243758` candidate | The QA preflight stopped before provider calls with `candidate_v2_snapshot_unavailable`. On 23 November, the V1 archive watermark was `2026-11-23T01:30:00Z`, while V2 remained at `20261122013000` (5,630 committed intervals). The V2 summary refuses a snapshot that no longer covers V1. | Live validation blocked by V2 drift; fail closed. |
 
-## Pass 2 — operations and cost
+The Signzy case is a recall and attribution test, **not** a finding that Signzy committed misconduct. The unresolved status is the correct outcome when the proposed evidence cannot be anchored.
 
-| Gate | Observation | Status |
-| --- | --- | --- |
-| One paid extraction and model decision per canonical URL/version | Gate inspection found a duplicate archive-stage Gemini call. The isolated branch now records selected archive metadata as `deferred` and sends the merged canonical URL through the final Advance extractor and model reviewer once. A local overlap/replay test counted zero archive-stage calls, one extraction and one model decision, with no extra call on replay. | Local pass; real-provider and crash replay proof pending. |
-| Replay, owner isolation, pagination, callback, payload bounds and PDF cap | Local tests cover parts of these behaviors. No post-upgrade crash replay, owner isolation, callback delivery, large-register export or PDF readback was exercised on an isolated real-provider candidate. | Pending live proof. |
-| Usage, cost and latency | No post-upgrade candidate run exists from which to measure per-source/model spend or cold/warm end-to-end p50/p90/p95/p99. | Pending. |
-| Log/PDF sensitive-data review | No post-upgrade run artifacts exist for the required log and PDF inspection. | Pending. |
-| Staged rollback | The running API has no `ADVERSE_MEDIA_ADVANCE_ENABLED` setting, and the route remains disabled. A staged enable/disable drill retaining evidence was not run. | Pending; currently off. |
+## Remaining release gates
 
-## Required before release
+| Gate | Status and evidence |
+| --- | --- |
+| Continuous V2 coverage | **Fail.** Scheduled ingest and backfill jobs have no `GDELT_V2_DUAL_WRITE=true` setting. V1 advanced by one day while V2 did not. Changing those production job templates was outside the user's isolated-validation authorization. |
+| Current V1/V2 parity | **Blocked.** The local 50-subject Azure Table data-plane read received `AuthorizationPermissionMismatch` (403); no RBAC change was made. Current posting-count reconciliation is therefore unproven. |
+| Twenty-case controlled cohort | **Incomplete.** The required ten earlier problematic and ten independent cases were not run at this head. The latest candidate cannot start while V2 is behind V1. |
+| Grounded relationship and adverse classification | **Open.** The live Signzy headline reached Gemini but failed quote anchoring under the preceding schema. The `advance-review-v3` prompt is tested locally, but has no successful real-provider run because of V2 drift. |
+| Crash replay, private owner scope, Azure Queue, callback, cost and latency | **Partial.** Local tests cover replay and owner scope; the Signzy isolated run verified callback and artifact consistency. No full crash/restart drill, durable Azure Queue proof, private owner export readback, or cohort p50/p90/p95/p99 exists. |
+| Rollback and customer flag | **Customer route remains off.** Private candidate revision `--0000061` was read back with its baseline digest `sha256:729f4cfc5c49668b459bed37379a4dcd6d6d8959f02a5eef91471bd6f02b5cab`, `minReplicas=0`, and provisioning `Succeeded`. No production flag or scheduled job was changed. |
 
-1. Make scheduled V2 dual writes durable, then obtain authorized Azure Table read access for current parity and posting-count reconciliation. Keep the running Advance route disabled while checking these.
-2. Verify the new deferred archive path on the isolated real-provider candidate, including overlap, interruption and replay, before accepting the one-call cost invariant.
-3. Deploy an isolated, digest-pinned candidate with the required managed identity and approved provider configuration. Run the 10 + 10 real-provider cohort, retain bounded evidence and callback artifacts, and measure costs, timing, PDF cap, source reconciliation and rollback. A metadata-only Signzy match is not a finding about the company.
+## Release sequence after authorization
 
-Evidence for this readout: Azure Blob V1/V2 state readback; current Container App job and API template readback; latest job execution statuses; focused Advance/Archive tests (43/43), including a new overlap/replay call-count test; full local `npm test` (613/613); local matcher replay against the retained Signzy response. The private QA outputs under `output/` remain untracked and must not be committed.
+1. Review and authorize the production V2 maintenance scope separately. Make scheduled dual-write durable, catch V2 up to V1, and verify current 50-subject and posting-count parity with appropriate read access.
+2. Re-run the digest-pinned `f243758` isolated Signzy case and the 10 + 10 cohort. Inspect article-level relationship, quote anchoring, complete register, 20-item PDF cap, JSON/PDF/callback agreement, cost, and latency. A model failure or exhausted budget must remain unresolved or budget-blocked.
+3. Exercise durable Azure Queue replay, owner isolation, paged export, and rollback. Re-review PRs #156 and #157 and their hosted checks before any customer enablement.
+
+Private QA outputs and provider exchanges remain outside the committed tree under `output/` or the candidate's temporary storage. Do not commit provider credentials, source bodies, or case artifacts.
