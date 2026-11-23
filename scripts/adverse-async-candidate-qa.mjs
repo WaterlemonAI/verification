@@ -249,10 +249,15 @@ try {
       throw new Error('candidate_advance_result_lookup_failed');
     }
   }
-  if (process.env.ADVERSE_QA_ARTIFACT_DIR && final) {
+  if (process.env.ADVERSE_QA_ARTIFACT_DIR && (final || budgetBlock)) {
     const directory = process.env.ADVERSE_QA_ARTIFACT_DIR;
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    await writeFile(join(directory, `${receipt.screening_id}.json`), `${JSON.stringify(final, null, 2)}\n`, { mode: 0o600 });
+    if (final) await writeFile(join(directory, `${receipt.screening_id}.json`),
+      `${JSON.stringify(final, null, 2)}\n`, { mode: 0o600 });
+    if (budgetBlock) await writeFile(join(directory, `${receipt.screening_id}.budget-stop.json`),
+      `${JSON.stringify(redact({ screening_id: receipt.screening_id, worker_stage: state?.stage || null,
+        job: budgetBlock, provider_calls: usage.providerCalls,
+        reserved_provider_usd: usage.reservedMicroUsd / 1_000_000 }), null, 2)}\n`, { mode: 0o600 });
     await writeFile(join(directory, `${receipt.screening_id}.request.json`),
       `${JSON.stringify({ method: 'POST', path: `/service/${route}`, idempotency_key: idempotencyKey,
         payload: inputPayload, source_sha: process.env.ADVERSE_QA_SOURCE_SHA || null,
@@ -262,13 +267,13 @@ try {
     await writeFile(join(directory, `${receipt.screening_id}.cost.json`),
       `${JSON.stringify({ provider_calls: usage.providerCalls,
         reserved_provider_usd: usage.reservedMicroUsd / 1_000_000,
-        result_usage: final.usage || null }, null, 2)}\n`, { mode: 0o600 });
+        result_usage: final?.usage || null }, null, 2)}\n`, { mode: 0o600 });
     await writeFile(join(directory, `${receipt.screening_id}.provider-exchanges.json`),
       `${JSON.stringify({ screening_id: receipt.screening_id,
         note: 'Credential fields redacted; Azure SDK calls and signed callback transport are logged separately.',
         exchanges: providerExchange }, null, 2)}\n`, { mode: 0o600 });
     if (report?.bytes) await writeFile(join(directory, `${receipt.screening_id}.pdf`), report.bytes, { mode: 0o600 });
-    if (process.env.ADVERSE_QA_EXPORT_EVIDENCE === 'true') {
+    if (process.env.ADVERSE_QA_EXPORT_EVIDENCE === 'true' && final) {
       await writeFile(join(directory, `${receipt.screening_id}.evidence.json`),
         `${JSON.stringify({ screening_id: receipt.screening_id, subject,
           archive_review: final.coverage?.archive_review || null, items: evidenceItems }, null, 2)}\n`,
@@ -317,7 +322,7 @@ try {
       && Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && final),
     callback_signature_verified: callbackSignatureVerified,
     callback_delivery_stage: state?.stage || null,
-    artifacts_retained: Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && final),
+    artifacts_retained: Boolean(process.env.ADVERSE_QA_ARTIFACT_DIR && (final || budgetBlock)),
     json_sha256: final ? createHash('sha256').update(JSON.stringify(final)).digest('hex') : null,
     pdf_sha256: pdfHash, provider_calls: usage.providerCalls,
     reserved_provider_usd: usage.reservedMicroUsd / 1_000_000,
