@@ -46,7 +46,7 @@ test('a directly supported adverse article with a matching registration is Unsaf
     identifiers: { registration_numbers: ['12345'] }, apiKey: 'test-key',
     fetchImpl: tagFetch({}, (body) => {
       assert.match(body.systemInstruction.parts[0].text, /untrusted data/);
-      assert.match(body.systemInstruction.parts[0].text, /one continuous 12 to 180 character span/);
+      assert.match(body.systemInstruction.parts[0].text, /one continuous 12 to 600 character span/);
       assert.doesNotMatch(JSON.stringify(body.contents), /test-key|registration_numbers/);
       const input = JSON.parse(body.contents[0].parts[0].text);
       assert.equal(input.policy_catalog.length, 64);
@@ -75,6 +75,24 @@ test('a documented breach victim is Direct adverse media without an Unsafe culpr
   const final = withAdvanceAssessment(response, result);
   assert.equal(final.media_buckets.adverse_media.length, 1);
   assert.equal(final.media_buckets.adverse_media[0].subject_relationship, 'direct');
+});
+
+test('a verified lead-body incident can corroborate a generic headline and long exact quote', async () => {
+  const longQuote = 'India\'s Signzy, an online ID verification and digital onboarding provider used by hundreds of financial institutions around the world, has confirmed a security incident affecting customer information after a recent cyberattack.';
+  assert.ok(longQuote.length > 180 && longQuote.length <= 600);
+  const response = { ...base, entity: { entity_type: 'business', name: 'Signzy' },
+    media_buckets: { ...base.media_buckets, adverse_media: [{ ...article,
+      title: 'Digital identity platform confirms incident',
+      excerpt: `${longQuote} Signzy is investigating the incident. Signzy notified customers.` }] } };
+  const result = await assessAdvanceScreening({ response,
+    policySet: compileAdvancePolicySet({ policy_ids: ['CYB-05'] }), apiKey: 'test-key',
+    fetchImpl: tagFetch({ adverse_assessment: 'adverse', subject_role: 'victim',
+      subject_relationship: 'direct', entity_match: 'confirmed', event_type_ids: ['CYB-05'],
+      severity: 'moderate', legal_stage: 'media_mention', supporting_quote: longQuote },
+    () => {}, longQuote) });
+  assert.equal(result.finding_decisions[0].status, 'confirmed_event');
+  assert.equal(result.evidence_register[0].subject_relationship, 'direct');
+  assert.equal(result.evidence_register[0].ai7_edd_assessment, 'adverse');
 });
 
 test('a model cannot clear a documented breach victim by calling the incident not adverse', async () => {
