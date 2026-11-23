@@ -3354,7 +3354,8 @@
           "matched_term_ids": { "type": "array", "items": { "type": "string" } },
           "matched_categories": { "type": "array", "items": { "type": "string" } },
           "ai7_edd_review_status": { "type": "string", "enum": ["reviewed", "unassessed", "unresolved", "metadata_excluded"] },
-          "subject_relationship": { "type": ["string", "null"], "enum": ["direct", "indirect", "no_association", null] },
+          "subject_relationship": { "type": ["string", "null"], "enum": ["direct", "indirect", "no_association", null], "description": "The only assessed relationship categories are Direct, Indirect and No Association. Null means the article is not yet verified; see ai7_edd_review_status. Direct includes a subject affected by an adverse incident and does not imply culpability." },
+          "ai7_edd_assessment": { "type": ["string", "null"], "enum": ["adverse", "not_adverse", "unclear", null], "description": "Adverse incident assessment for this subject, separate from subject_relationship and from a finding of misconduct." },
           "report_priority": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
           "finding_status": { "type": ["string", "null"] },
           "evidence_grade": { "type": "string" }
@@ -3432,7 +3433,7 @@
           },
           "search_plus_match": { "type": "boolean", "description": "True when the evidence URL belongs to the approved Search+ publisher catalog." },
           "media_bucket": { "type": "string", "enum": ["adverse_media", "general_news_mentions", "no_impact_media"] },
-          "subject_role": { "type": "string", "enum": ["direct_actor", "related_party", "victim", "namesake", "context_only", "unclear", "unresolved"] },
+          "subject_role": { "type": "string", "enum": ["direct_actor", "related_party", "victim", "namesake", "context_only", "unclear", "unresolved"], "description": "Internal incident role. For Advance, use subject_relationship for the public three-category relationship." },
           "risk_score": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Null outside the Adverse Media bucket." },
           "risk_level": { "type": "string", "enum": ["safe", "review", "high", "not_applicable"] },
           "categories": { "type": "array", "items": { "type": "string", "enum": ["financial_crime", "crime_and_enforcement", "sanctions_and_security", "regulatory_and_governance", "cybersecurity_and_data_protection", "corporate_misconduct", "governance_and_leadership_dispute", "workforce_and_restructuring", "financial_distress"] } },

@@ -2,6 +2,8 @@
 
 Scope: draft [PR #157](https://github.com/WaterlemonAI/verification/pull/157) at `f243758aa0c2e5a51da541e073f0b08c07a68423`, based on the V2 index dependency in draft PR #156. **Release decision: HOLD.** The code and hosted test gate pass, but the live data and operational gates do not. The running customer API and scheduled ingestion jobs were not changed. The user authorized isolated validation only.
 
+**23 November classification follow-up:** The branch now contains local `advance-review-v4` relationship/adverseness corrections described in the [classification RCA](./adverse-media-advance-classification-rca-2026-11-23.md). The live observations below remain from the earlier digest-pinned candidates; no `v4` real-provider result exists while V2 is behind V1.
+
 ## Implementation and local proof
 
 The Advance branch implements the versioned 500+ adverse-term title/URL filter, a decision for every returned Brave result and V2 posting, paged candidate review, three-way subject relationship with an unassessed state, grounded quote checks, full owner-scoped evidence export, and deterministic selection of at most 20 PDF leads. It preserves a candidate as unresolved when article evidence or a model decision cannot be verified; it cannot turn a processing limit into `Safe`. Archive posting decisions are keyed by posting ID so a neutral and adverse posting with the same canonical URL cannot suppress the adverse candidate. The final review deduplicates by URL.

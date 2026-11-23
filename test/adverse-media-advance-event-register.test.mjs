@@ -145,13 +145,14 @@ test('former employee and incidental advertisement receive distinct public relat
           confidence: 0.9, report_priority: 50
         } : { story_key: item.story_key, adverse_assessment: 'not_adverse',
           subject_role: 'context_only', subject_relationship: 'no_association',
-          entity_match: 'unlikely', event_type_ids: [], severity: 'minor',
+          entity_match: 'confirmed', event_type_ids: [], severity: 'minor',
           legal_stage: 'media_mention', supporting_quote: cases[1].excerpt,
           confidence: 0.9, report_priority: 0 }) }) }] } }] });
     } });
   assert.deepEqual(assessment.evidence_register.map((item) => item.subject_relationship),
     ['indirect', 'no_association']);
   const final = withAdvanceAssessment(response, assessment);
-  assert.equal(final.media_buckets.adverse_media.length, 0);
+  assert.equal(final.media_buckets.adverse_media.length, 1);
+  assert.equal(final.media_buckets.adverse_media[0].subject_relationship, 'indirect');
   assert.equal(final.media_buckets.no_impact_media.length, 1);
 });

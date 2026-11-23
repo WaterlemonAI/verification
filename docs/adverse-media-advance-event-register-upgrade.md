@@ -4,6 +4,8 @@ Developer handoff, reviewed against the `codex/adverse-media-advance-policy` wor
 
 **Implementation status (23 November 2026):** The code changes below are on draft PR #157 at `f243758aa0c2e5a51da541e073f0b08c07a68423`; the local 615-test suite and hosted test check pass. Release remains on hold because scheduled V2 dual-write is disabled and the V2 archive snapshot has fallen behind V1. See the [gate readout](./adverse-media-advance-gate-readout-2026-11-22.md) for live validation results and remaining authorization-dependent gates. The historical starting-point map below remains the reviewed problem statement.
 
+**Relationship follow-up:** `advance-review-v4` separates the three public relationship categories from incident adverseness and culpability. A verified directly affected victim can appear in adverse media without becoming an Unsafe culprit finding. The full local suite passes 620/620. See the [classification RCA](./adverse-media-advance-classification-rca-2026-11-23.md). Live V4 validation is still blocked by V2 drift.
+
 ## Starting point and PR sequence
 
 - Repository: `/Users/zainabkhan/Documents/ChatGPT/verification-adverse-advance` (`WaterlemonAI/verification`). Current branch and [draft PR #157](https://github.com/WaterlemonAI/verification/pull/157): `codex/adverse-media-advance-policy`, inspected head `f9ca5da42d94ea2cfb9a631a152bcf0e462a0529`. PR #157 targets `codex/gdelt-versioned-summary`, **not** `main`.

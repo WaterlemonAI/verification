@@ -57,6 +57,59 @@ test('a directly supported adverse article with a matching registration is Unsaf
   assert.equal(result.policy_outcome.status, 'escalate');
 });
 
+test('a documented breach victim is Direct adverse media without an Unsafe culprit finding', async () => {
+  const breachQuote = 'Example Trading LLC disclosed a data breach affecting customer records.';
+  const response = { ...base, media_buckets: { ...base.media_buckets,
+    adverse_media: [{ ...article, title: 'Example Trading LLC data breach', excerpt: breachQuote }] } };
+  const result = await assessAdvanceScreening({ response,
+    policySet: compileAdvancePolicySet({ policy_ids: ['CYB-05'] }), apiKey: 'test-key',
+    fetchImpl: tagFetch({ adverse_assessment: 'adverse', subject_role: 'victim',
+      subject_relationship: 'direct', entity_match: 'confirmed', event_type_ids: ['CYB-05'],
+      severity: 'moderate', legal_stage: 'media_mention', supporting_quote: breachQuote },
+    () => {}, breachQuote) });
+  assert.equal(result.evidence_register[0].subject_relationship, 'direct');
+  assert.equal(result.evidence_register[0].ai7_edd_review_status, 'reviewed');
+  assert.equal(result.finding_decisions[0].status, 'confirmed_event');
+  assert.equal(result.evidence_profile.status, 'safe');
+  assert.equal(result.report_selection.selected_count, 1);
+  const final = withAdvanceAssessment(response, result);
+  assert.equal(final.media_buckets.adverse_media.length, 1);
+  assert.equal(final.media_buckets.adverse_media[0].subject_relationship, 'direct');
+});
+
+test('a model cannot clear a documented breach victim by calling the incident not adverse', async () => {
+  const breachQuote = 'Example Trading LLC disclosed a data breach affecting customer records.';
+  const response = { ...base, media_buckets: { ...base.media_buckets,
+    adverse_media: [{ ...article, title: 'Example Trading LLC data breach', excerpt: breachQuote }] } };
+  const result = await assessAdvanceScreening({ response,
+    policySet: compileAdvancePolicySet({ policy_ids: ['CYB-05'] }), apiKey: 'test-key',
+    fetchImpl: tagFetch({ adverse_assessment: 'not_adverse', subject_role: 'victim',
+      subject_relationship: 'direct', entity_match: 'confirmed', event_type_ids: [],
+      supporting_quote: breachQuote }, () => {}, breachQuote) });
+  assert.equal(result.classification_completed, false);
+  assert.equal(result.evidence_register[0].subject_relationship, null);
+  assert.equal(result.evidence_profile.status, 'inconclusive');
+});
+
+test('a direct victim or incidental advertisement needs a quote naming the subject', async () => {
+  const genericQuote = 'Customer records were exposed during the incident.';
+  const response = { ...base, media_buckets: { ...base.media_buckets,
+    adverse_media: [{ ...article, title: 'Example Trading LLC data breach',
+      excerpt: `${genericQuote} Example Trading LLC was mentioned elsewhere.` }] } };
+  for (const tag of [
+    { adverse_assessment: 'adverse', subject_role: 'victim',
+      subject_relationship: 'direct', event_type_ids: ['CYB-05'] },
+    { adverse_assessment: 'not_adverse', subject_role: 'context_only',
+      subject_relationship: 'no_association', event_type_ids: [] }
+  ]) {
+    const result = await assessAdvanceScreening({ response,
+      policySet: compileAdvancePolicySet({ policy_ids: ['CYB-05'] }), apiKey: 'test-key',
+      fetchImpl: tagFetch({ ...tag, supporting_quote: genericQuote }, () => {}, genericQuote) });
+    assert.equal(result.evidence_register[0].subject_relationship, null);
+    assert.equal(result.evidence_register[0].finding_status, 'unresolved');
+  }
+});
+
 test('AI7 EDD places a supported namesake article in No Impact', async () => {
   const namesakeQuote = 'A different Example Trading LLC in another country announced a merger.';
   const namesake = { ...article, result_id: 'namesake-1', excerpt: namesakeQuote,
