@@ -75,6 +75,10 @@ test('a documented breach victim is Direct adverse media without an Unsafe culpr
   const final = withAdvanceAssessment(response, result);
   assert.equal(final.media_buckets.adverse_media.length, 1);
   assert.equal(final.media_buckets.adverse_media[0].subject_relationship, 'direct');
+  assert.equal(final.summary.confirmed_distinct_adverse_articles, 1);
+  assert.equal(final.summary.potentially_relevant_results, 1);
+  assert.equal(final.summary.unresolved_results, 0);
+  assert.match(final.summary.statement, /Verified adverse incidents involving the subject/);
 });
 
 test('a verified lead-body incident can corroborate a generic headline and long exact quote', async () => {

@@ -156,6 +156,18 @@ test('Advance report writer receives the fixed PDF structure and rejects model b
   assert.doesNotMatch(JSON.stringify(narrative), /Gemini/i);
 });
 
+test('Advance fallback describes an affected victim without implying culpability', async () => {
+  const response = { entity: { name: 'Example Group LLC', entity_type: 'business' },
+    summary: { profile_status: 'safe', media_bucket_counts: {
+      adverse_media: 1, general_news_mentions: 0, no_impact_media: 0 } },
+    media_buckets: { adverse_media: [{ title: 'Example Group LLC confirms a breach',
+      subject_role: 'victim', subject_relationship: 'direct', selected_for_pdf: true,
+      review_status: 'reviewed' }], general_news_mentions: [], no_impact_media: [] } };
+  const narrative = await createAdvanceNarrative({ response, apiKey: '' });
+  assert.match(narrative.findings[0], /verified adverse incident article/);
+  assert.doesNotMatch(narrative.findings[0], /directly attributable/);
+});
+
 test('Advance report writer accepts only evidence-linked findings consistent with the locked profile', async () => {
   const response = { entity: { name: 'Example Group LLC', entity_type: 'business' },
     summary: { profile_status: 'unsafe', media_bucket_counts: {
