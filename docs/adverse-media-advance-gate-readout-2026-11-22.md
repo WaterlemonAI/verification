@@ -45,3 +45,9 @@ The Signzy case is a recall and attribution test, **not** a finding that Signzy 
 3. Exercise durable Azure Queue replay, owner isolation, paged export, and rollback. Re-review PRs #156 and #157 and their hosted checks before any customer enablement.
 
 Private QA outputs and provider exchanges remain outside the committed tree under `output/` or the candidate's temporary storage. Do not commit provider credentials, source bodies, or case artifacts.
+
+## 23 November authorized repair and rerun
+
+The prior V2 and live-classification gate readings above are historical. Under the later authorization, 96 stored V2 intervals were replayed; V2 and V1 now cover the same end watermark (`2026-11-23T01:30:00Z`). A 50-subject count comparison found zero mismatches. The daily ingest and weekly backfill job templates now read back with the V2 digest and `GDELT_V2_DUAL_WRITE=true`; their next scheduled executions have not yet been observed.
+
+The five-case isolated rerun found two verified Direct adverse Signzy security articles, three eMudhra adverse articles and no selected Ai7lab articles. Sonu Sood had 21 selected but no verified relationship without independent individual identifiers; Salman Khan hit the existing $0.25 provider guard before a final report. The subsequent V6 Signzy run confirmed both Direct adverse articles and corrected the JSON summary to match its media buckets and PDF. The [five-case evaluation](./adverse-media-advance-five-case-evaluation-2026-11-23.md) records the provider calls, costs, remaining evidence limits and release gates. Customer Advance access remains off; the private candidate was returned to its baseline image and `minReplicas=0`.

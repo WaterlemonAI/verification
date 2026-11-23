@@ -24,6 +24,10 @@ if (!['adverse_media', 'adverse_media_search_plus', 'adverse_media_advance'].inc
 }
 const subject = process.env.ADVERSE_QA_SUBJECT.trim();
 if (subject.length < 3 || subject.length > 160) throw new Error('invalid_qa_subject');
+if (process.env.ADVERSE_QA_ARTIFACT_DIR
+  && process.env.ADVERSE_QA_ARTIFACT_DIR !== '/tmp/adverse-qa-artifacts') {
+  throw new Error('invalid_qa_artifact_directory');
+}
 const route = process.env.ADVERSE_QA_ROUTE || 'adverse_media';
 if (route === 'adverse_media_advance') process.env.ADVERSE_MEDIA_ADVANCE_ENABLED = 'true';
 const entityType = process.env.ADVERSE_QA_ENTITY_TYPE === 'individual' ? 'individual' : 'business';
@@ -247,7 +251,6 @@ try {
   }
   if (process.env.ADVERSE_QA_ARTIFACT_DIR && final) {
     const directory = process.env.ADVERSE_QA_ARTIFACT_DIR;
-    if (directory !== '/tmp/adverse-qa-artifacts') throw new Error('invalid_qa_artifact_directory');
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await writeFile(join(directory, `${receipt.screening_id}.json`), `${JSON.stringify(final, null, 2)}\n`, { mode: 0o600 });
     await writeFile(join(directory, `${receipt.screening_id}.request.json`),

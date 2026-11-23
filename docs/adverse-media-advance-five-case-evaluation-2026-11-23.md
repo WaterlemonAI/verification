@@ -46,6 +46,12 @@ The preceding V4 Signzy diagnostic added 29 provider calls and $0.118002 of rese
 
 `unassessed` is a **review status**, not a fourth Subject Relationship value. A successfully verified candidate has only `direct`, `indirect` or `no_association`; an unsupported or incomplete candidate has a null public relationship and an explicit unresolved reason. This matches the event-register contract and avoids presenting a model guess as a source-backed finding.
 
+## V6 private Signzy confirmation
+
+The V6 digest `sha256:0baa47b4e85b7fafd1c7a9121d876249e28a912a0c0c833ea055bb22459b9ca6` was run again in the internal-only candidate. The verified run `060a749b-ebda-4de9-8091-21d1db127615` selected 14 of 24 register URLs, excluded 10 by metadata, reviewed both security-incident articles as **Direct adverse affected-party** items, and left seven candidates unresolved. Its JSON summary says **2 confirmed adverse articles, 14 potentially relevant results and 7 unresolved results**; the media buckets and 8-page PDF agree. Nine leads entered the PDF. The retained PDF SHA-256 `eca1cd5925cc1c2ca810d7b94d1b3e8133802ecf74f0d6076d751183f9ac3eed` matches the response, and the signed callback was verified. The run used 10 Brave, four Gemini and 15 article-resolver calls, reserved $0.114734 and took 68.054 s. V5 and V6 counts differ modestly because the live provider results changed; both runs found the two security articles.
+
+An initial V6 QA attempt reached its callback after 10 Brave, four Gemini and 17 resolver calls, then rejected a nonstandard local artifact path at export time. It retained no final local package and exposed a QA-runner preflight error. The runner now validates that path before provider work; a fake-credential local invocation confirmed it exits at configuration validation. That first attempt's exact provider reservation was not captured, so the V6 reserve above is for the successful rerun only. The successful rerun's JSON, provider exchanges, evidence, request, cost record and PDF are in untracked `output/adverse-advance-qa-2026-11-23/five-global-v6/03-signzy/`.
+
 ## Remaining release decisions
 
 - Keep customer Advance disabled. Four of five cases produced verified callbacks, but Salman is budget blocked and Sonu Sood has no verified selected relationship.
