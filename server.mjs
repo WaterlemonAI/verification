@@ -937,9 +937,13 @@ async function getAdvanceScreening(req, res, screeningId, admissionStore, report
     if (!record?.response) {
       return json(res, 503, { status: 'Error', error: 'The screening record is temporarily unavailable.' });
     }
+    const result = record.response.coverage?.sources?.some((source) => source.source === 'official_records')
+      ? { ...record.response, coverage: { ...record.response.coverage,
+        sources: record.response.coverage.sources.filter((source) => source.source !== 'official_records') } }
+      : record.response;
     return json(res, 200, { screening_id: screeningId, status: 'completed',
       callback_delivery: state.stage === 'delivered' ? 'delivered' : 'not_confirmed',
-      result: record.response });
+      result });
   } catch {
     return json(res, 503, { status: 'Error', error: 'The screening record is temporarily unavailable.' });
   }
@@ -3143,8 +3147,9 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       finalize: async ({ job, response, aiApiKey, costGuard }) => {
         let finalResponse = response;
         if (job.advance) {
+          const assessmentKey = `advance-assessment:${ADVANCE_REVIEW_SCHEMA_VERSION}`;
           let assessment = await reportStore.getDeepResearchComponent({ ownerId: job.owner_id,
-            screeningId: job.screening_id, componentKey: 'advance-assessment' });
+            screeningId: job.screening_id, componentKey: assessmentKey });
           if (!assessment) {
             const reviewId = response.coverage?.archive_review?.review_id;
             const archiveItems = [];
@@ -3180,7 +3185,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
                 source: item.publisher }, job.request) });
             if (assessment.pending) return { __advance_pending: true, progress: assessment };
             await reportStore.saveDeepResearchComponent({ ownerId: job.owner_id,
-              screeningId: job.screening_id, componentKey: 'advance-assessment', value: assessment });
+              screeningId: job.screening_id, componentKey: assessmentKey, value: assessment });
           }
           const register = assessment.evidence_register || [];
           let lowerPage = 0;

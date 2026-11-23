@@ -191,6 +191,16 @@ test('a CEO quoted about a company incident is not a personal adverse finding', 
     source_reliability_score: 0.68, ai_classification }, entity), 'adverse_media');
 });
 
+test('a customer review listing is general news even when AI calls it adverse', () => {
+  const ai_classification = { confidence: 0.99, media_bucket: 'adverse_media',
+    subject_role: 'direct_actor', entity_match: 'confirmed', adverse: 'confirmed' };
+  const entity = { entity_type: 'business', name: 'Example Trading LLC', aliases: [] };
+  assert.equal(mediaBucket({ title: 'Example Trading LLC fraud reviews',
+    url: 'https://www.trustpilot.com/review/example-trading-llc.com',
+    excerpt: 'A customer gave Example Trading LLC one star and called it a fraud.',
+    ai_classification }, entity), 'general_news_mentions');
+});
+
 test('an employee indictment cannot become a direct company finding even if AI over-attributes it', () => {
   const ai_classification = { confidence: 0.99, media_bucket: 'adverse_media',
     subject_role: 'direct_actor', entity_match: 'confirmed', adverse: 'confirmed' };

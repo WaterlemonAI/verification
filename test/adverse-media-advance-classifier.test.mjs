@@ -40,6 +40,16 @@ test('fully resolved zero-result screening is Safe without a model call', async 
   assert.equal(result.policy_outcome.status, 'acceptable');
 });
 
+test('Advance JSON omits the Official records coverage field from an older response', async () => {
+  const response = { ...base, coverage: { ...base.coverage, sources: [
+    { source: 'open_web', status: 'complete' },
+    { source: 'official_records', status: 'not_requested' }
+  ] } };
+  const assessment = await assessAdvanceScreening({ response, policySet, apiKey: '' });
+  assert.deepEqual(withAdvanceAssessment(response, assessment).coverage.sources,
+    [{ source: 'open_web', status: 'complete' }]);
+});
+
 test('a directly supported adverse article with a matching registration is Unsafe', async () => {
   const response = { ...base, media_buckets: { ...base.media_buckets, adverse_media: [article] } };
   const result = await assessAdvanceScreening({ response, policySet,
@@ -57,7 +67,7 @@ test('a directly supported adverse article with a matching registration is Unsaf
   assert.equal(result.policy_outcome.status, 'escalate');
 });
 
-test('a documented breach victim is Direct adverse media without an Unsafe culprit finding', async () => {
+test('a documented breach victim is Direct adverse media and makes the profile Unsafe without alleging culpability', async () => {
   const breachQuote = 'Example Trading LLC disclosed a data breach affecting customer records.';
   const response = { ...base, media_buckets: { ...base.media_buckets,
     adverse_media: [{ ...article, title: 'Example Trading LLC data breach', excerpt: breachQuote }] } };
@@ -70,7 +80,7 @@ test('a documented breach victim is Direct adverse media without an Unsafe culpr
   assert.equal(result.evidence_register[0].subject_relationship, 'direct');
   assert.equal(result.evidence_register[0].ai7_edd_review_status, 'reviewed');
   assert.equal(result.finding_decisions[0].status, 'confirmed_event');
-  assert.equal(result.evidence_profile.status, 'safe');
+  assert.equal(result.evidence_profile.status, 'unsafe');
   assert.equal(result.report_selection.selected_count, 1);
   const final = withAdvanceAssessment(response, result);
   assert.equal(final.media_buckets.adverse_media.length, 1);
@@ -78,7 +88,7 @@ test('a documented breach victim is Direct adverse media without an Unsafe culpr
   assert.equal(final.summary.confirmed_distinct_adverse_articles, 1);
   assert.equal(final.summary.potentially_relevant_results, 1);
   assert.equal(final.summary.unresolved_results, 0);
-  assert.match(final.summary.statement, /Verified adverse incidents involving the subject/);
+  assert.match(final.summary.statement, /Verified adverse media met the Unsafe profile rule/);
 });
 
 test('a verified lead-body incident can corroborate a generic headline and long exact quote', async () => {
@@ -111,6 +121,19 @@ test('a model cannot clear a documented breach victim by calling the incident no
   assert.equal(result.classification_completed, false);
   assert.equal(result.evidence_register[0].subject_relationship, null);
   assert.equal(result.evidence_profile.status, 'inconclusive');
+});
+
+test('a negative customer review is not adverse media even when Gemini proposes fraud', async () => {
+  const reviewQuote = 'A customer called Example Trading LLC a fraud and gave it one star.';
+  const response = { ...base, media_buckets: { ...base.media_buckets,
+    adverse_media: [{ ...article, title: 'Example Trading LLC fraud reviews and ratings',
+      url: 'https://www.trustpilot.com/review/example-trading-llc.com', excerpt: reviewQuote }] } };
+  const result = await assessAdvanceScreening({ response, policySet, apiKey: 'test-key',
+    fetchImpl: tagFetch({ supporting_quote: reviewQuote }, () => {}, reviewQuote) });
+  assert.equal(result.evidence_profile.status, 'safe');
+  assert.equal(result.finding_decisions[0].status, 'not_adverse');
+  assert.equal(result.evidence_register[0].ai7_edd_assessment, 'not_adverse');
+  assert.equal(withAdvanceAssessment(response, result).summary.confirmed_distinct_adverse_articles, 0);
 });
 
 test('a direct victim or incidental advertisement needs a quote naming the subject', async () => {
@@ -309,7 +332,7 @@ test('a contradictory model tag stays unresolved without erasing a supported adv
 });
 
 test('a later model outage preserves earlier supported adverse decisions', async () => {
-  const items = Array.from({ length: 11 }, (_, index) => ({ ...article,
+  const items = Array.from({ length: 8 }, (_, index) => ({ ...article,
     result_id: `article-${index}`, url: `https://publisher.example/story-${index}` }));
   const response = { ...base, media_buckets: { ...base.media_buckets, adverse_media: items } };
   let calls = 0;
@@ -320,8 +343,9 @@ test('a later model outage preserves earlier supported adverse decisions', async
       const keys = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text)
         .articles.map((item) => item.story_key);
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events: keys.map(
-        (story_key) => ({ story_key, adverse_assessment: 'adverse', subject_role: 'direct_actor',
-          entity_match: 'confirmed', event_type_ids: ['FIN-01'], severity: 'serious',
+        (story_key, index) => ({ story_key, adverse_assessment: index < 3 ? 'adverse' : 'not_adverse',
+          subject_role: index < 3 ? 'direct_actor' : 'context_only',
+          entity_match: 'confirmed', event_type_ids: index < 3 ? ['FIN-01'] : [], severity: 'serious',
           legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95,
           subject_relationship: 'direct', report_priority: 80 })) }) }] } }] });
     } });
@@ -329,6 +353,37 @@ test('a later model outage preserves earlier supported adverse decisions', async
   assert.equal(result.evidence_profile.status, 'unsafe');
   assert.equal(result.classification_completed, false);
   assert.ok(result.counts.unresolved_stories >= 1);
+});
+
+test('a provider budget stop after a confirmed Direct article still returns Unsafe', async () => {
+  const items = Array.from({ length: 6 }, (_, index) => ({ ...article,
+    result_id: `budget-${index}`, url: `https://publisher.example/fraud-${index}` }));
+  let extractions = 0;
+  let modelCalls = 0;
+  const result = await assessScreening({ response: { ...base,
+    media_buckets: { ...base.media_buckets, adverse_media: items } }, policySet,
+    identifiers: { registration_numbers: ['12345'] }, apiKey: 'test-key',
+    extractArticle: async () => ++extractions > 4
+      ? { reason: 'article_cost_limit' } : { text: quote },
+    fetchImpl: async (_url, options) => {
+      modelCalls += 1;
+      const keys = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text)
+        .articles.map((item) => item.story_key);
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events: keys.map(
+        (story_key, index) => ({ story_key, adverse_assessment: index === 0 ? 'adverse' : 'not_adverse',
+          subject_role: index === 0 ? 'direct_actor' : 'context_only',
+          subject_relationship: 'direct', entity_match: 'confirmed',
+          event_type_ids: index === 0 ? ['FIN-01'] : [], severity: 'serious',
+          legal_stage: 'regulatory_action', supporting_quote: quote,
+          confidence: 0.95, report_priority: 80 })) }) }] } }] });
+    } });
+  assert.equal(result.pending, undefined);
+  assert.equal(result.evidence_profile.status, 'unsafe');
+  assert.equal(result.early_stop.reason, 'provider_budget_after_confirmed_direct_adverse');
+  assert.equal(result.early_stop.pending_candidates, 2);
+  assert.equal(result.counts.unresolved_stories, 2);
+  assert.equal(modelCalls, 1);
+  assert.equal(extractions, 5);
 });
 
 test('a supported archive direct-actor finding remains Unsafe and is visible in the report evidence', async () => {
@@ -355,6 +410,20 @@ test('a supported archive direct-actor finding remains Unsafe and is visible in 
   assert.equal(final.summary.media_bucket_counts.adverse_media, 1);
   assert.equal(final.usage.reserved_provider_cost_upper_bound_usd, 0.12);
   assert.equal(Object.hasOwn(final.usage, 'cost_guardrail_usd'), false);
+});
+
+test('an archived review listing cannot supply an adverse-media shortcut', async () => {
+  const review = { record_id: 'archive-review', title: 'Example Trading LLC fraud reviews',
+    url: 'https://www.trustpilot.com/review/example-trading-llc.com',
+    quote: 'A customer called Example Trading LLC a fraud and gave it one star.',
+    status: 'adverse', subject_role: 'direct_actor', reason: 'article_party_fact_supported' };
+  const response = { ...base, coverage: { ...base.coverage,
+    archive_review: { status: 'completed', expected_postings: 1, adverse: 1,
+      adverse_sample: [review] } } };
+  const assessment = await assessAdvanceScreening({ response, policySet, apiKey: '' });
+  assert.notEqual(assessment.evidence_profile.status, 'unsafe');
+  assert.equal(advanceArchiveMediaItems(response).length, 0);
+  assert.equal(withAdvanceAssessment(response, assessment).media_buckets.adverse_media.length, 0);
 });
 
 test('a reviewed archive fact using the subject alias cannot be cleared as Safe', async () => {

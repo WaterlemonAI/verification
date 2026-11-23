@@ -244,13 +244,37 @@ test('an isolated employee event can be acceptable without erasing its related-p
   assert.equal(result.policy_results[0].triggered_stories, 1);
 });
 
-test('a victim is not escalated by a fraud rule merely because the event mentions them', () => {
+test('a Direct victim is Unsafe while the policy result retains its nonculpability action', () => {
   const selection = compileAdvancePolicySet({ policy_ids: ['FIN-01'] });
   const result = evaluateAdvancePolicies({ selection, coverage: COMPLETE,
     findings: [event('victim', ['FIN-01'], { role: 'victim' })] });
-  assert.equal(result.evidence_profile.status, 'safe');
+  assert.equal(result.evidence_profile.status, 'unsafe');
   assert.equal(result.policy_outcome.status, 'acceptable');
   assert.equal(result.policy_results[0].highest_action, 'acceptable');
+});
+
+test('four confirmed indirect articles make the profile Unsafe while three resolved indirect articles do not', () => {
+  const selection = compileAdvancePolicySet({ policy_ids: ['EMP-01'] });
+  const findings = Array.from({ length: 4 }, (_, index) =>
+    event(`employee-${index}`, ['EMP-01'], { role: 'related_party' }));
+  const three = evaluateAdvancePolicies({ selection, coverage: COMPLETE, findings: findings.slice(0, 3) });
+  assert.equal(three.evidence_profile.status, 'safe');
+  assert.equal(three.counts.confirmed_adverse_stories, 3);
+  const four = evaluateAdvancePolicies({ selection, coverage: { ...COMPLETE,
+    source_complete: false, article_review_complete: false }, findings });
+  assert.equal(four.evidence_profile.status, 'unsafe');
+  assert.equal(four.evidence_profile.reason, 'four_confirmed_adverse_media');
+  assert.equal(four.counts.confirmed_adverse_stories, 4);
+  assert.equal(four.counts.distinct_adverse_stories, 0);
+});
+
+test('one verified Direct adverse article stays Unsafe despite other unresolved coverage', () => {
+  const result = evaluateAdvancePolicies({ selection: compileAdvancePolicySet({ policy_ids: ['FIN-01'] }),
+    coverage: { ...COMPLETE, source_complete: false, unresolved_count: 2 },
+    findings: [event('verified', ['FIN-01'])] });
+  assert.equal(result.evidence_profile.status, 'unsafe');
+  assert.equal(result.evidence_profile.decision_eligible, false);
+  assert.equal(result.counts.unresolved_stories, 2);
 });
 
 test('non-adverse classification without a supported quote remains unresolved', () => {

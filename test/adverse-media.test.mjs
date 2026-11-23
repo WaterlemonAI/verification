@@ -592,10 +592,10 @@ test('retries transient provider failures and reports partial coverage instead o
   assert.deepEqual(body.coverage.sources, [
     { source: 'current_news', status: 'unavailable' },
     { source: 'open_web', status: 'unavailable' },
-    { source: 'archive', status: 'complete' },
-    { source: 'official_records', status: 'not_requested' }
+    { source: 'archive', status: 'complete' }
   ]);
   assert.deepEqual(body.coverage.reason_codes, ['current_news_unavailable', 'open_web_unavailable']);
+  assert.equal(JSON.stringify(body).includes('"official_records"'), false);
   assert.equal(body.coverage.retryable, true);
   assert.equal(body.coverage.source_status, undefined);
   assert.equal(body.coverage.indexes_attempted, undefined);

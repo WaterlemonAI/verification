@@ -44,7 +44,7 @@ test('all returned Brave metadata receives a selected or excluded register decis
   assert.equal(evidence.items.find((item) => item.result_id === 'b-51').selection_status, 'selected');
 });
 
-test('resumable review screens all 25 candidates then ranks at most 20 for the PDF', async () => {
+test('four confirmed adverse articles stop later review batches and remain Unsafe on replay', async () => {
   const news = Array.from({ length: 25 }, (_, index) => ({ result_id: `b-${index}`,
     title: `Example Trading LLC fraud case ${index}`,
     url: `https://news.example/fraud-${index}`, excerpt: quote,
@@ -67,19 +67,20 @@ test('resumable review screens all 25 candidates then ranks at most 20 for the P
           legal_stage: 'regulatory_action', supporting_quote: quote, confidence: 0.95,
           report_priority: Number(item.title.match(/(\d+)$/)[1]) })) }) }] } }] });
     } };
-  assert.equal((await assessAdvanceScreening(options)).pending, true);
-  assert.equal(modelCalls, 1);
-  assert.equal((await assessAdvanceScreening(options)).pending, true);
   const assessment = await assessAdvanceScreening(options);
-  assert.equal(modelCalls, 3);
+  assert.equal(modelCalls, 1);
   assert.equal(assessment.articles_considered, 25);
   assert.equal(assessment.evidence_profile.status, 'unsafe');
-  assert.equal(assessment.report_selection.selected_count, 20);
-  assert.equal(assessment.report_selection.omitted_count, 5);
-  assert.equal(assessment.report_selection.selected_result_ids[0], 'b-24');
-  assert.equal(assessment.evidence_register.filter((item) => item.subject_relationship === 'direct').length, 25);
+  assert.equal(assessment.counts.confirmed_adverse_stories, 4);
+  assert.equal(assessment.early_stop.pending_candidates, 21);
+  assert.equal(assessment.report_selection.selected_count, 4);
+  assert.equal(assessment.evidence_register.filter((item) => item.subject_relationship === 'direct').length, 4);
+  assert.equal(assessment.evidence_register.filter((item) => item.finding_reason
+    === 'research_stopped_after_four_confirmed_adverse').length, 21);
   const final = withAdvanceAssessment(response, assessment);
-  assert.equal(final.media_buckets.adverse_media.filter((item) => item.selected_for_pdf).length, 20);
+  assert.equal(final.media_buckets.adverse_media.filter((item) => item.selected_for_pdf).length, 4);
+  assert.equal((await assessAdvanceScreening(options)).early_stop.pending_candidates, 21);
+  assert.equal(modelCalls, 1);
 });
 
 test('cost ceiling pauses review without a model call or a Safe result', async () => {
@@ -122,7 +123,7 @@ test('a verified Signzy security incident reaches review with a direct affected-
   assert.equal(result.articles_considered, 1);
   assert.equal(result.evidence_register[0].subject_relationship, 'direct');
   assert.equal(result.evidence_register[0].ai7_edd_review_status, 'reviewed');
-  assert.notEqual(result.evidence_profile.status, 'unsafe');
+  assert.equal(result.evidence_profile.status, 'unsafe');
 });
 
 test('former employee and incidental advertisement receive distinct public relationships', async () => {
