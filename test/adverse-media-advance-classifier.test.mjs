@@ -305,6 +305,140 @@ test('model failure remains Inconclusive with no second provider attempt', async
   assert.equal(result.classification_completed, false);
 });
 
+test('a prohibited-content batch isolates the blocked article and retains other classifications', async () => {
+  const items = Array.from({ length: 4 }, (_, index) => ({ ...article,
+    result_id: `sensitive-${index}`, url: `https://publisher.example/sensitive-${index}`,
+    title: `Example Trading LLC fraud report ${index}`,
+    excerpt: `Example Trading LLC opened branch ${index}.` }));
+  const response = { ...base, media_buckets: { ...base.media_buckets, adverse_media: items } };
+  const entries = new Map();
+  const checkpoint = { get: async (key) => entries.get(key),
+    save: async (key, value) => { entries.set(key, value); } };
+  let calls = 0;
+  const fetchImpl = async (_url, options) => {
+    calls += 1;
+    const articles = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text).articles;
+    if (articles.some((item) => item.url.endsWith('/sensitive-2'))) {
+      return Response.json({ promptFeedback: { blockReason: 'PROHIBITED_CONTENT' },
+        responseId: `blocked-${calls}` });
+    }
+    return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events:
+      articles.map((item) => ({ story_key: item.story_key,
+        adverse_assessment: 'not_adverse', subject_role: 'context_only',
+        subject_relationship: 'direct', entity_match: 'confirmed', event_type_ids: [],
+        severity: 'minor', legal_stage: 'media_mention',
+        supporting_quote: item.text, confidence: 0.95,
+        report_priority: 20 })) }) }] } }] });
+  };
+  const options = { response, policySet, apiKey: 'test-key', fetchImpl, checkpoint };
+  const first = await assessAdvanceScreening(options);
+  assert.equal(calls, 5);
+  assert.equal(first.evidence_profile.status, 'inconclusive');
+  assert.equal(first.classification_completed, false);
+  assert.equal(first.classification_blocks.count, 1);
+  assert.equal(first.evidence_register.filter((item) => item.ai7_edd_review_status === 'blocked').length, 1);
+  assert.equal(first.evidence_register.filter((item) => item.ai7_edd_review_status === 'reviewed').length, 3);
+  assert.equal(first.evidence_register.find((item) => item.ai7_edd_review_status === 'blocked')
+    .finding_reason, 'provider_content_blocked');
+  const replay = await assessAdvanceScreening(options);
+  assert.equal(calls, 5);
+  assert.deepEqual(replay.classification_blocks, first.classification_blocks);
+});
+
+test('a blocked model output remains a recorded unresolved article', async () => {
+  const response = { ...base, media_buckets: { ...base.media_buckets, adverse_media: [article] } };
+  let calls = 0;
+  const result = await assessAdvanceScreening({ response, policySet, apiKey: 'test-key',
+    fetchImpl: async () => { calls += 1; return Response.json({ candidates: [
+      { finishReason: 'PROHIBITED_CONTENT' }] }); } });
+  assert.equal(calls, 1);
+  assert.equal(result.evidence_profile.status, 'inconclusive');
+  assert.equal(result.classification_blocks.count, 1);
+  assert.equal(result.evidence_register[0].ai7_edd_review_status, 'blocked');
+  assert.equal(result.evidence_register[0].finding_reason, 'provider_content_blocked');
+  assert.equal(result.evidence_register[0].subject_relationship, null);
+});
+
+test('a verified Direct adverse article remains Unsafe beside a blocked article', async () => {
+  const blocked = { ...article, result_id: 'blocked-article',
+    url: 'https://publisher.example/blocked' };
+  const response = { ...base, media_buckets: { ...base.media_buckets,
+    adverse_media: [article, blocked] } };
+  const result = await assessAdvanceScreening({ response, policySet,
+    identifiers: { registration_numbers: ['12345'] }, apiKey: 'test-key',
+    fetchImpl: async (_url, options) => {
+      const articles = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text).articles;
+      if (articles.some((item) => item.url.endsWith('/blocked'))) {
+        return Response.json({ promptFeedback: { blockReason: 'PROHIBITED_CONTENT' } });
+      }
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events:
+        articles.map((item) => ({ story_key: item.story_key,
+          adverse_assessment: 'adverse', subject_role: 'direct_actor',
+          subject_relationship: 'direct', entity_match: 'confirmed', event_type_ids: ['FIN-01'],
+          severity: 'serious', legal_stage: 'regulatory_action',
+          supporting_quote: quote, confidence: 0.95, report_priority: 90 })) }) }] } }] });
+    } });
+  assert.equal(result.evidence_profile.status, 'unsafe');
+  assert.equal(result.counts.confirmed_adverse_stories, 1);
+  assert.equal(result.classification_blocks.count, 1);
+  assert.equal(result.classification_completed, false);
+});
+
+test('blocked-batch isolation still obeys the provider cost guard', async () => {
+  const items = Array.from({ length: 4 }, (_, index) => ({ ...article,
+    result_id: `guard-${index}`, url: `https://publisher.example/guard-${index}` }));
+  let calls = 0;
+  const result = await assessAdvanceScreening({ response: { ...base,
+    media_buckets: { ...base.media_buckets, adverse_media: items } },
+  policySet, apiKey: 'test-key', fetchImpl: async () => {
+    calls += 1;
+    if (calls === 1) return Response.json({ promptFeedback: { blockReason: 'PROHIBITED_CONTENT' } });
+    throw new Error('screening_cost_limit');
+  } });
+  assert.equal(calls, 2);
+  assert.equal(result.pending, true);
+  assert.equal(result.reason, 'budget_blocked');
+  assert.equal(result.pending_count, 4);
+});
+
+test('a resumed blocked batch reuses saved child classifications after a write interruption', async () => {
+  const blocked = { ...article, result_id: 'blocked-replay',
+    url: 'https://publisher.example/blocked-replay' };
+  const response = { ...base, media_buckets: { ...base.media_buckets,
+    adverse_media: [article, blocked] } };
+  const entries = new Map();
+  let failRootSave = true;
+  const checkpoint = { get: async (key) => entries.get(key),
+    save: async (key, value) => {
+      if (key.endsWith(':batch:0:result') && failRootSave) {
+        failRootSave = false;
+        throw new Error('simulated_result_write_interruption');
+      }
+      entries.set(key, value);
+    } };
+  let calls = 0;
+  const fetchImpl = async (_url, options) => {
+    calls += 1;
+    const articles = JSON.parse(JSON.parse(options.body).contents[0].parts[0].text).articles;
+    if (articles.some((item) => item.url.endsWith('/blocked-replay'))) {
+      return Response.json({ promptFeedback: { blockReason: 'PROHIBITED_CONTENT' } });
+    }
+    return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events:
+      articles.map((item) => ({ story_key: item.story_key,
+        adverse_assessment: 'not_adverse', subject_role: 'direct_actor',
+        subject_relationship: 'direct', entity_match: 'confirmed', event_type_ids: [],
+        severity: 'minor', legal_stage: 'media_mention',
+        supporting_quote: quote, confidence: 0.95, report_priority: 20 })) }) }] } }] });
+  };
+  const options = { response, policySet, apiKey: 'test-key', fetchImpl, checkpoint };
+  await assert.rejects(assessAdvanceScreening(options), /simulated_result_write_interruption/);
+  assert.equal(calls, 3);
+  const resumed = await assessAdvanceScreening(options);
+  assert.equal(calls, 3);
+  assert.equal(resumed.classification_blocks.count, 1);
+  assert.equal(resumed.evidence_profile.status, 'inconclusive');
+});
+
 test('a contradictory model tag stays unresolved without erasing a supported adverse finding', async () => {
   const second = { ...article, result_id: 'article-2', url: 'https://publisher.example/second' };
   const response = { ...base, media_buckets: { ...base.media_buckets,
