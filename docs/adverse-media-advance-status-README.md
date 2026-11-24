@@ -1,6 +1,6 @@
 # Adverse Media Advance API — current status and artifact index
 
-Status snapshot: 24 November 2026 (Asia/Kolkata). This README covers the Advance API work on draft [PR #157](https://github.com/WaterlemonAI/verification/pull/157), based on the V2 archive-index dependency in draft [PR #156](https://github.com/WaterlemonAI/verification/pull/156). Both draft PRs are open and their latest hosted `test` checks passed at inspection. The implementation is **not released to customers**. The release decision remains **HOLD**. PR #157's hosted check passed at source/documentation head `485c20a`; the V7 code change is `2261339`. The full local suite passed 634/634 before the final V7 PDF adjustment, and focused Advance tests passed 64/64 afterward. The latest private candidate was restored to its baseline image and observed at zero replicas. Recheck live state before a release decision.
+Status snapshot: 25 November 2026 (Asia/Kolkata). This README covers the Advance API work on draft [PR #157](https://github.com/WaterlemonAI/verification/pull/157), based on the V2 archive-index dependency in draft [PR #156](https://github.com/WaterlemonAI/verification/pull/156). Both draft PRs are open; their hosted `test` checks passed at the previous documentation head. The implementation is **not released to customers**. The release decision remains **HOLD**. The V7 code change is `2261339`. The full local suite passed 634/634 before the final V7 PDF adjustment, and focused Advance tests passed 64/64 afterward. The latest private candidate was restored to its baseline image with minimum replicas zero. Recheck live state before a release decision.
 
 ## What the current V7 source does
 
@@ -28,7 +28,19 @@ The V2 point-summary/index implementation is the dependency in PR #156. The auth
 
 All paths below are relative to this repository root. **`output/` is local, private and untracked**; it is not part of PR #157. Provider exchanges and case data must remain private.
 
-### Latest V7 isolated validation — Mickey Mouse
+### Latest V7 three-subject isolated rerun
+
+Directory: `output/adverse-advance-qa-2026-11-24/three-v7-rerun/`. The [three-subject evaluation](./adverse-media-advance-three-subject-v7-rerun-2026-11-25.md) records the exact source/image, monitored provider responses, relationship and evidence outcomes, costs, hash checks, signed callbacks and candidate restoration. `run-manifest.json`, `SHA256SUMS` and `artifacts.tgz` are retained locally. Each completed screening has `<ID>.json`, `<ID>.pdf`, `<ID>.request.json`, `<ID>.cost.json`, `<ID>.provider-exchanges.json`, `<ID>.evidence.json` and `<ID>.advance-evidence.json` under `adverse-qa-artifacts/`.
+
+| Subject | Screening ID | V7 profile | PDF | Key limitation |
+| --- | --- | --- | --- | --- |
+| Chota Bheem | `a51c7835-d46d-4e6a-8f75-8e582a3035d9` | Safe | Yes | No selected adverse-signal candidates |
+| Jesus Christ | `74bd7a47-8e71-4616-80c7-1c7738fb6aea` | Inconclusive | Yes | 25 selected relationships null; archive expected 7,625 postings but retained 7,624 |
+| Mickey Mouse | `015b18cd-831f-4080-8d1b-b86d8d422e37` | Inconclusive | Yes | 20 selected relationships null after evidence gates |
+
+All three PDF hashes match their response JSON. All three signed callbacks verified. The Gemini responses in these runs finished normally, with no content block; unverified article evidence still prevents most selected relationships from being published as assessed.
+
+### Prior V7 isolated validation — Mickey Mouse budget stop
 
 Directory: `output/adverse-advance-qa-2026-11-24/mickey-v7-content-block/`
 
@@ -63,4 +75,4 @@ Directory: `output/adverse-advance-qa-2026-11-23/five-global-v6/03-signzy/`. It 
 
 ## Remaining release gates
 
-The V7 source and hosted test check pass, but the full live release gate does not. Open work includes: exact source-span/quote recovery; independent identity evidence for name-only individual subjects; reconciliation of the missing one-of-7,508 Jesus Christ archive posting; a bounded handoff for individually blocked Gemini articles; cost handling for large candidate sets without silent omissions; and the controlled 10 + 10 release cohort with durable queue, owner-scoped export, callback, latency and rollback verification. The latest V7 run stopped before a final JSON/PDF. Keep customer Advance access off until these gates are resolved and reviewed.
+The V7 source and prior hosted test check pass, but the full live release gate does not. Open work includes: exact source-span/quote recovery; independent identity evidence for name-only individual subjects; reconciliation of the recurring one-posting Jesus Christ archive mismatch; a bounded handoff for individually blocked Gemini articles; cost handling for large candidate sets without silent omissions; and the controlled 10 + 10 release cohort with durable queue, owner-scoped export, callback, latency and rollback verification. The three latest V7 runs produced JSON/PDF reports, but Jesus Christ and Mickey Mouse remain decision-ineligible. Keep customer Advance access off until these gates are resolved and reviewed.
