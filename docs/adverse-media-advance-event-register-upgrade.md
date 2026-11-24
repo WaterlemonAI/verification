@@ -1,5 +1,7 @@
 # Adverse Media Advance: event-register and relationship upgrade
 
+For the latest source status, remaining gates and exact private JSON/PDF artifact paths, see the [current status README](./adverse-media-advance-status-README.md). The dated handoff and implementation plan below retain their historical inspection points.
+
 Developer handoff, reviewed against the `codex/adverse-media-advance-policy` worktree on 22 November 2026. This is an implementation plan, not a description of a released feature.
 
 **Implementation status (23 November 2026):** The current Advance code is on draft PR #157; the V6 summary/report correction at `3b983d4ae304b03686fff49779ae871254651b8e` passed all 623 local tests and the hosted `test` check. An authorized isolated operation repaired the 96-interval V2 gap, verified 50-subject V1/V2 parity, and enabled V2 dual-write on the two scheduled job templates. A digest-pinned V6 private Signzy run classified both security-incident articles as Direct adverse media, returned matching JSON/PDF hashes and a verified signed callback, and reconciled the public summary to two adverse articles, 14 selected candidates and seven unresolved. The five-case live gate remains open: Salman Khan reached the existing per-screening provider ceiling before a final report, and the other unresolved evidence cases require review. Customer Advance access remains off. See the [five-case evaluation](./adverse-media-advance-five-case-evaluation-2026-11-23.md). The historical starting-point map below remains the reviewed problem statement.
