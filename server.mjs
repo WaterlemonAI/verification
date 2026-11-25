@@ -1,5 +1,5 @@
 import { createReadStream, readFileSync, existsSync, statSync } from 'node:fs';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { createServer } from 'node:http';
 import { get as httpsGet } from 'node:https';
@@ -20,13 +20,18 @@ import { createDeepResearchQueue, makeDeepResearchJob, startDeepResearchWorker, 
 import { createAdverseMediaAuditPdf, createAdverseMediaNarrative } from './lib/adverse-media-report.mjs';
 import { validateAdvanceRequest, advanceRequestDigest } from './lib/adverse-media-advance-request.mjs';
 import { assessAdvanceScreening, withAdvanceAssessment } from './lib/adverse-media-advance-classifier.mjs';
+import { JevScreeningError, screenJevEventRegister } from './lib/adverse-media-jev-screening.mjs';
+import { groupJevIncidents } from './lib/adverse-media-jev-incidents.mjs';
+import { JevIntegratedError, runJevIntegratedTest } from './lib/adverse-media-jev-integrated.mjs';
+import { createAdverseMediaIncidentReport } from './lib/adverse-media-incident-final.mjs';
+import { loadIncidentReportSigningIdentity } from './lib/adverse-media-jev-pdf-signing.mjs';
 import { createAdvanceNarrative } from './lib/adverse-media-advance-narrative.mjs';
 import { ADVANCE_POLICY_CATALOG_VERSION, listAdvancePolicies } from './lib/adverse-media-advance-policy-catalog.mjs';
 import { createAdvanceAdmissionStore } from './lib/adverse-media-advance-store.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
 import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs';
 import { processArchiveReviewPage } from './lib/gdelt-archive-review.mjs';
-import { searchLocalGdeltIndex } from './lib/gdelt-local-index.mjs';
+import { pageLocalGdeltMentions, searchLocalGdeltIndex } from './lib/gdelt-local-index.mjs';
 import { createEventRegistryArticleResolver, createEventRegistryBulkArticleResolver } from './lib/gdelt-article-evidence-provider.mjs';
 import { advanceTitleUrlCandidate } from './lib/gdelt-archive-candidate.mjs';
 import { ADVANCE_LEXICON_VERSION } from './lib/adverse-media-advance-lexicon.mjs';
@@ -3039,6 +3044,10 @@ async function handleDocumentOcr(req, res, url, documentStore, usageStore) {
 export function createAppServer({ store = createStore(), mailer = createPlatformMailer(), fetchImpl = fetch,
   adverseArchiveSearch = null,
   advanceArchivePreflight = searchLocalGdeltIndex,
+  jevArchiveSearch = searchLocalGdeltIndex,
+  jevArchivePage = pageLocalGdeltMentions,
+  incidentReportSigning = null,
+  onIncidentReportAudit = null,
   adverseArchiveReviewStep = null,
   adverseArticleResolver = null,
   peppolLookup = searchPeppolIndex,
@@ -3430,6 +3439,79 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (url.pathname === '/healthz') {
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
         return res.end('ok\n');
+      }
+      if (url.pathname === '/internal/adverse-media-jev/screen'
+        || url.pathname === '/internal/adverse-media-jev/group-events'
+        || url.pathname === '/internal/adverse-media-jev/integrated-test'
+        || url.pathname === '/internal/adverse-media-advance/report-test') {
+        if (process.env.ADVERSE_MEDIA_JEV_API_ENABLED !== 'true')
+          return json(res, 503, { error: 'jev_screening_disabled' });
+        if (req.method !== 'POST') return json(res, 405, { error: 'method_not_allowed' }, { allow: 'POST' });
+        const expected = process.env.ADVERSE_MEDIA_JEV_SCREENING_TOKEN || '';
+        const supplied = bearerToken(req);
+        if (expected.length < 32 || !supplied
+          || !timingSafeEqual(createHash('sha256').update(supplied).digest(),
+            createHash('sha256').update(expected).digest()))
+          return json(res, 401, { error: 'unauthorized' });
+        let input;
+        try { input = await readJson(req, 320 * 1024); }
+        catch (error) { return json(res, error.message === 'request_too_large' ? 413 : 400,
+          { error: error.message === 'request_too_large' ? 'request_too_large' : 'invalid_event_register' }); }
+        try {
+          if (url.pathname === '/internal/adverse-media-advance/report-test') {
+            const result = await createAdverseMediaIncidentReport(input, {
+              screeningDependencies: {
+                braveApiKey: await store.getMasterKey('adverse-media'),
+                eventRegistryApiKey: process.env.EVENT_REGISTRY_API_KEY || '',
+                jevApiKey: await store.getMasterKey('adverse-media-jev'), fetchImpl,
+                archiveSearch: jevArchiveSearch, archivePage: jevArchivePage
+              },
+              summaryApiKey: process.env.MISTRAL_API_KEY || await store.getMasterKey('adverse-media-summary'),
+              signing: incidentReportSigning || await loadIncidentReportSigningIdentity(),
+              fetchImpl
+            });
+            if (onIncidentReportAudit) await onIncidentReportAudit({
+              transaction_id: transactionId,
+              timings_ms: result.audit.timings_ms,
+              usage: result.audit.usage,
+              costs: result.audit.costs
+            });
+            return json(res, 200, result.response, { 'cache-control': 'private, no-store' });
+          }
+          if (url.pathname.endsWith('/integrated-test')) {
+            const result = await runJevIntegratedTest(input, {
+              braveApiKey: await store.getMasterKey('adverse-media'),
+              eventRegistryApiKey: process.env.EVENT_REGISTRY_API_KEY || '',
+              jevApiKey: await store.getMasterKey('adverse-media-jev'), fetchImpl,
+              archiveSearch: jevArchiveSearch, archivePage: jevArchivePage });
+            return json(res, 200, result);
+          }
+          const operation = url.pathname.endsWith('/group-events') ? groupJevIncidents : screenJevEventRegister;
+          const result = await operation(input, {
+            apiKey: await store.getMasterKey('adverse-media-jev'), fetchImpl });
+          return json(res, 200, result);
+        } catch (error) {
+          if (url.pathname === '/internal/adverse-media-advance/report-test') {
+            if (onIncidentReportAudit) await onIncidentReportAudit({ error: error.message });
+            if (error instanceof JevIntegratedError) return json(res, error.status, {
+              error: error.status === 400 ? 'invalid_request'
+                : error.status === 424 ? 'evidence_unavailable'
+                  : error.status === 413 ? 'cost_limit_reached' : 'report_unavailable'
+            });
+            return json(res, error.message === 'pdf_signing_certificate_required'
+              || error.message === 'summary_credential_required' ? 503 : 502,
+            { error: 'report_unavailable' });
+          }
+          if (error instanceof JevIntegratedError) return json(res, error.status, { error: error.message });
+          if (error instanceof JevScreeningError) {
+            const status = error.message === 'jev_key_unavailable' ? 503
+              : error.message === 'invalid_event_register' || error.message === 'duplicate_story_key' ? 400
+                : error.message === 'jev_incident_budget_exceeded'
+                  || error.message === 'jev_integrated_budget_exceeded' ? 413 : 502;
+            return json(res, status, { error: error.message });
+          }
+          throw error;
+        }
       }
       if (req.method === 'GET' && url.pathname === '/service/health') {
         const client = req.ai7Client || await store.getClientForKey?.(bearerToken(req));
