@@ -213,8 +213,10 @@ param adverseJsonStorageName string = 'stai7uaejsonuaen001'
 
 var deepResearchQueueName = 'adverse-media-deep-research'
 var deepResearchDeadLetterQueueName = 'adverse-media-deep-research-deadletter'
-var incidentQueueName = parallelDeployment ? 'adverse-media-incident-qa' : 'adverse-media-incident'
-var incidentDeadLetterQueueName = parallelDeployment ? 'adverse-media-incident-qa-deadletter' : 'adverse-media-incident-deadletter'
+// Any app other than the canonical customer app must not consume production incident jobs.
+var incidentQueueIsolated = parallelDeployment || containerAppName != 'ca-ai7uae-api'
+var incidentQueueName = incidentQueueIsolated ? 'adverse-media-incident-qa' : 'adverse-media-incident'
+var incidentDeadLetterQueueName = incidentQueueIsolated ? 'adverse-media-incident-qa-deadletter' : 'adverse-media-incident-deadletter'
 var formsQueueName = 'forms-submissions'
 var formsDeadLetterQueueName = 'forms-submissions-deadletter'
 
