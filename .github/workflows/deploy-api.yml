@@ -488,6 +488,8 @@ jobs:
               enableTaedMoa="${{ vars.DOCUMENT_OCR_TAED_MOA_ENABLED == 'true' && 'true' || 'false' }}" \
               enableTaedTradeLicense="${{ vars.DOCUMENT_OCR_TAED_TRADE_LICENSE_ENABLED == 'true' && 'true' || 'false' }}" \
               enableAdverseMediaSearchPlusGpt="${{ vars.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableAdverseMediaAdvance="${{ vars.ADVERSE_MEDIA_ADVANCE_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableAdverseMediaIncidentScreening="${{ vars.ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltV2ReadEnabled="${{ vars.GDELT_V2_READ_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltArchiveReviewEnabled="${{ vars.GDELT_ARCHIVE_REVIEW_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltArchiveBulkSearchEnabled="${{ vars.GDELT_ARCHIVE_BULK_SEARCH_ENABLED == 'true' && 'true' || 'false' }}" \
@@ -536,6 +538,8 @@ jobs:
               enableTaedMoa="${{ vars.DOCUMENT_OCR_TAED_MOA_ENABLED == 'true' && 'true' || 'false' }}" \
               enableTaedTradeLicense="${{ vars.DOCUMENT_OCR_TAED_TRADE_LICENSE_ENABLED == 'true' && 'true' || 'false' }}" \
               enableAdverseMediaSearchPlusGpt="${{ vars.ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableAdverseMediaAdvance="${{ vars.ADVERSE_MEDIA_ADVANCE_ENABLED == 'true' && 'true' || 'false' }}" \
+              enableAdverseMediaIncidentScreening="${{ vars.ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltV2ReadEnabled="${{ vars.GDELT_V2_READ_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltArchiveReviewEnabled="${{ vars.GDELT_ARCHIVE_REVIEW_ENABLED == 'true' && 'true' || 'false' }}" \
               gdeltArchiveBulkSearchEnabled="${{ vars.GDELT_ARCHIVE_BULK_SEARCH_ENABLED == 'true' && 'true' || 'false' }}" \

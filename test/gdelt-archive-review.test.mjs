@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { processArchiveReviewPage, archiveReviewId } from '../lib/gdelt-archive-review.mjs';
-import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
+import { advanceTitleUrlCandidate } from '../lib/gdelt-archive-candidate.mjs';
+import { assessAdvanceScreening } from '../lib/adverse-media-advance-classifier.mjs';
+import { normalizeAdvanceEvidence } from '../lib/adverse-media-advance-evidence.mjs';
+import { compileAdvancePolicySet } from '../lib/adverse-media-advance-policy.mjs';
+import { AzureAdverseMediaReportStore, MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { presentAdverseMediaResponse, screenAdverseMedia, validateAdverseMediaRequest,
   prepareArchiveReviewScope } from '../lib/adverse-media.mjs';
 
@@ -56,6 +60,182 @@ test('complete V1 paging retains all mentions, deduplicates URLs and does not cl
   const evidence = await store.listArchiveReviewItems({ ownerId: 'owner-1', reviewId: result.review_id });
   assert.equal(evidence.items.length, 2);
   assert.equal((await store.listArchiveReviewItems({ ownerId: 'owner-2', reviewId: result.review_id })).items.length, 0);
+});
+
+test('Advance skips Event Registry for body-only mentions and records metadata exclusions', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const unrelated = { ...row(1), title: 'Market report',
+    url: 'https://publisher.example/market-report' };
+  let calls = 0;
+  const result = await finish({ ownerId: 'owner-filter', request, store,
+    snapshotResult: baseline(1), table: table([unrelated]),
+    candidateFilter: advanceTitleUrlCandidate,
+    resolveArticle: async () => { calls += 1; throw new Error('must_not_call'); } });
+  assert.equal(calls, 0);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.not_selected_articles, 1);
+  assert.equal(result.metadata_excluded, 1);
+  const evidence = await store.listArchiveReviewItems({ ownerId: 'owner-filter', reviewId: result.review_id });
+  assert.equal(evidence.items[0].status, 'metadata_excluded');
+});
+
+test('Advance defers selected archive URLs to one merged extraction and model review', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const adverse = { ...row(1), title: 'Example Holdings fraud investigation',
+    url: 'https://publisher.example/example-holdings-fraud' };
+  let archiveProviderCalls = 0;
+  const state = await finish({ ownerId: 'advance-deferred-owner', request, store,
+    snapshotResult: baseline(1), table: table([adverse]),
+    candidateFilter: advanceTitleUrlCandidate, deferSelected: true,
+    resolveArticle: async () => { archiveProviderCalls += 1; throw new Error('must_not_call'); } });
+  assert.equal(state.status, 'completed');
+  assert.equal(state.deferred, 1);
+  assert.equal(archiveProviderCalls, 0);
+  const archiveItems = (await store.listArchiveReviewItems({
+    ownerId: 'advance-deferred-owner', reviewId: state.review_id })).items;
+  const quote = 'The regulator fined Example Holdings for fraud.';
+  const response = { entity: { name, entity_type: 'business' },
+    advance_source_results: [{ result_id: 'brave-overlap', title: adverse.title,
+      url: adverse.url, excerpt: quote, source_type: 'brave_search' }],
+    coverage: { complete: true, archive_review: state }, summary: {},
+    media_buckets: { adverse_media: [], general_news_mentions: [], no_impact_media: [] } };
+  const saved = new Map();
+  const checkpoint = { get: async (key) => saved.get(key) || null,
+    save: async (key, value) => { saved.set(key, value); } };
+  let extractionCalls = 0;
+  let modelCalls = 0;
+  const options = { response, archiveItems, policySet: compileAdvancePolicySet({ policy_ids: ['FIN-01'] }),
+    apiKey: 'test', checkpoint,
+    extractArticle: async () => { extractionCalls += 1;
+      return { text: `Verified article body. ${quote} Additional context.` }; },
+    fetchImpl: async (_url, init) => {
+      modelCalls += 1;
+      const articles = JSON.parse(JSON.parse(init.body).contents[0].parts[0].text).articles;
+      assert.equal(articles.length, 1);
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ events: [{
+        story_key: articles[0].story_key, adverse_assessment: 'adverse',
+        subject_role: 'direct_actor', subject_relationship: 'direct', entity_match: 'confirmed',
+        event_type_ids: ['FIN-01'], severity: 'serious', legal_stage: 'regulatory_action',
+        supporting_quote: quote, confidence: 0.95, report_priority: 90
+      }] }) }] } }] });
+    } };
+  const assessment = await assessAdvanceScreening(options);
+  assert.equal(assessment.articles_considered, 1);
+  assert.equal(assessment.evidence_profile.status, 'unsafe');
+  assert.equal(extractionCalls, 1);
+  assert.equal(modelCalls, 1);
+  await assessAdvanceScreening(options);
+  assert.equal(extractionCalls, 1);
+  assert.equal(modelCalls, 1);
+});
+
+test('Advance preserves an adverse title on a later posting of the same URL', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const url = 'https://publisher.example/example-holdings-story';
+  const postings = [{ ...row(1, url), title: 'Example Holdings product update' },
+    { ...row(2, url), title: 'Example Holdings fined for fraud' }];
+  const state = await finish({ ownerId: 'advance-overlap-owner', request, store,
+    snapshotResult: baseline(2), table: table(postings), pageSize: 1,
+    candidateFilter: advanceTitleUrlCandidate, deferSelected: true });
+  assert.equal(state.status, 'completed');
+  assert.equal(state.postings_scanned, 2);
+  assert.equal(state.postings_recorded, 2);
+  assert.equal(state.unique_articles, 1);
+  assert.equal(state.metadata_excluded, 1);
+  assert.equal(state.deferred, 1);
+  const items = (await store.listArchiveReviewItems({
+    ownerId: 'advance-overlap-owner', reviewId: state.review_id })).items;
+  assert.equal(items.length, 2);
+  const evidence = normalizeAdvanceEvidence({ advance_source_results: [] }, items);
+  assert.equal(evidence.counts.selected_candidates, 1);
+  assert.equal(evidence.items[0].title, postings[1].title);
+  assert.equal(evidence.items[0].selection_reason, 'title_and_adverse_signal');
+});
+
+test('Azure archive metadata writes one page per transaction and safely replays conflicts', async () => {
+  const rows = new Map();
+  let transactions = 0;
+  let individualCreates = 0;
+  const store = Object.create(AzureAdverseMediaReportStore.prototype);
+  store.table = {
+    async submitTransaction(actions) {
+      transactions += 1;
+      assert.equal(actions.length, 2);
+      if (actions.some(([, row]) => rows.has(row.rowKey))) {
+        throw Object.assign(new Error('conflict'), { statusCode: 409 });
+      }
+      for (const [, row] of actions) rows.set(row.rowKey, row);
+    },
+    async createEntity(row) {
+      individualCreates += 1;
+      if (rows.has(row.rowKey)) throw Object.assign(new Error('conflict'), { statusCode: 409 });
+      rows.set(row.rowKey, row);
+    }
+  };
+  const input = { ownerId: 'batch-owner', reviewId: 'review-1', items: [
+    { articleId: 'first', item: { status: 'metadata_excluded' } },
+    { articleId: 'second', item: { status: 'deferred' } }
+  ] };
+  await store.saveArchiveReviewItems(input);
+  await store.saveArchiveReviewItems(input);
+  assert.equal(transactions, 2);
+  assert.equal(individualCreates, 2);
+  assert.equal(rows.size, 2);
+});
+
+test('Advance records more than 1,000 archive postings without the legacy scan ceiling', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const postings = Array.from({ length: 1005 }, (_, index) => ({ ...row(index),
+    title: `Neutral market update ${index}` }));
+  let state;
+  for (let index = 0; index < 12; index++) {
+    state = await processArchiveReviewPage({ ownerId: 'advance-large-owner', request, store,
+      snapshotResult: baseline(postings.length), table: table(postings),
+      candidateFilter: advanceTitleUrlCandidate, pageSize: 100,
+      maxPostings: Number.MAX_SAFE_INTEGER });
+    if (state.status !== 'processing') break;
+  }
+  assert.equal(state.status, 'completed');
+  assert.equal(state.postings_scanned, 1005);
+  assert.equal(state.metadata_excluded, 1005);
+  assert.equal(state.unscanned_postings || 0, 0);
+});
+
+test('Advance archive review pauses at its cost ceiling and resumes after a budget revision', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  const adverse = { ...row(1), title: 'Example Holdings fined for fraud' };
+  let calls = 0;
+  const input = { ownerId: 'advance-budget-owner', request, store,
+    snapshotResult: baseline(1), table: table([adverse]),
+    candidateFilter: advanceTitleUrlCandidate, pageSize: 1,
+    maxPostings: Number.MAX_SAFE_INTEGER,
+    resolveArticle: async () => {
+      calls += 1;
+      const text = 'The regulator fined Example Holdings for fraudulent accounting.';
+      return calls === 1 ? { reason: 'article_cost_limit' }
+        : { status: 'adverse', url: adverse.url, text, quote: text,
+          subject_role: 'direct_actor', entity_match: 'confirmed',
+          reason: 'article_party_fact_supported' };
+    } };
+  const blocked = await processArchiveReviewPage({ ...input, budgetRevision: '1' });
+  assert.equal(blocked.status, 'budget_blocked');
+  assert.equal(blocked.pending_count, 1);
+  assert.equal((await processArchiveReviewPage({ ...input, budgetRevision: '1' })).status,
+    'budget_blocked');
+  assert.equal(calls, 1);
+  const resumed = await finish({ ...input, budgetRevision: '2' });
+  assert.equal(resumed.status, 'completed');
+  assert.equal(resumed.adverse, 1);
+  assert.equal(calls, 2);
+});
+
+test('Advance refuses an archive snapshot that changed after admission', async () => {
+  const store = new MemoryAdverseMediaReportStore();
+  await assert.rejects(processArchiveReviewPage({ ownerId: 'snapshot-owner', request, store,
+    snapshotResult: baseline(1), table: table([row(1)]),
+    candidateFilter: advanceTitleUrlCandidate,
+    expectedSnapshot: { ...snapshot, coverage_end: '2026-11-21T01:30:00.000Z' } }),
+  /archive_review_snapshot_changed/);
 });
 
 test('a direct adverse decision requires quoted article evidence and a confirmed subject match', async () => {

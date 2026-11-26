@@ -1,0 +1,199 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { after, before, test } from 'node:test';
+import { EnvironmentStore } from '../lib/api-store.mjs';
+import { MemoryCustomerUsageStore, validateUsagePolicy } from '../lib/customer-usage.mjs';
+import { MemoryAdvanceAdmissionStore } from '../lib/adverse-media-advance-store.mjs';
+import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
+import { MemoryAdverseMediaJsonStore } from '../lib/adverse-media-json-store.mjs';
+
+process.env.NODE_ENV = 'test';
+process.env.ADVERSE_MEDIA_ADVANCE_ENABLED = 'true';
+process.env.GDELT_ARCHIVE_REVIEW_ENABLED = 'true';
+process.env.ADVERSE_MEDIA_WORKER_ENABLED = 'true';
+const { createAppServer } = await import('../server.mjs');
+
+const store = new EnvironmentStore();
+const usageStore = new MemoryCustomerUsageStore();
+const admissionStore = new MemoryAdvanceAdmissionStore();
+const reportStore = new MemoryAdverseMediaReportStore();
+const jsonStore = new MemoryAdverseMediaJsonStore();
+const jobs = [];
+let archiveReady = true;
+let issued;
+let app;
+let base;
+
+before(async () => {
+  issued = await store.createClient('Advance API test workspace');
+  const policy = validateUsagePolicy({ mode: 'postpay', currency: 'USD',
+    allowed_modules: ['adverse-media-advance'],
+    rates: { 'adverse-media-advance': [{ up_to: null, price: '0.75' }] }
+  }, new Set(['adverse-media-advance']));
+  await usageStore.configure(issued.client.id, policy);
+  app = createAppServer({ store, usageStore, advanceAdmissionStore: admissionStore,
+    reportStore, jsonStore,
+    deepResearchQueue: { async enqueue(job) { jobs.push(job); } },
+    advanceArchivePreflight: async () => archiveReady
+      ? { complete: true, scan: { mode: 'v2_point_summary' } }
+      : { complete: false, scan: { mode: 'v2_unavailable' } },
+    adverseArchiveReviewStep: async () => ({ status: 'completed' }), startWorker: false });
+  await new Promise((resolve) => app.listen(0, '127.0.0.1', resolve));
+  base = `http://127.0.0.1:${app.address().port}`;
+});
+
+after(async () => new Promise((resolve) => app.close(resolve)));
+
+const input = { entity_type: 'business', name: 'Example Trading LLC', countries: [], languages: ['en', 'ar'],
+  callback_url: 'https://example.com/webhook', policy_selection: 'all',
+  identifiers: { registration_numbers: ['123456'] } };
+const headers = (key) => ({ authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json',
+  'idempotency-key': key });
+
+test('Advance admission queues one Search+ archive job and replays without a second charge', async () => {
+  const key = 'advance-api-primary-0001';
+  const first = await fetch(`${base}/service/adverse_media_advance`, {
+    method: 'POST', headers: headers(key), body: JSON.stringify(input) });
+  assert.equal(first.status, 202);
+  const receipt = await first.json();
+  assert.match(receipt.callback.signing_secret, /^[A-Za-z0-9_-]{32,}$/);
+  assert.equal(receipt.callback.event, 'adverse_media.advance.completed');
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].request.search_plus, true);
+  assert.equal(jobs[0].request.archive_all_stored, true);
+  assert.equal(jobs[0].archive_review_enabled, true);
+  assert.equal(jobs[0].owner_id, `workspace-${issued.client.id}`);
+  assert.equal(jobs[0].advance.policy_set.policies.length, 64);
+  assert.deepEqual(jobs[0].advance.identifiers.registration_numbers, ['123456']);
+
+  const queued = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`,
+    { headers: { authorization: `Bearer ${issued.apiKey}` } });
+  assert.equal(queued.status, 200);
+  assert.equal((await queued.json()).status, 'queued');
+
+  const replay = await fetch(`${base}/service/adverse_media_advance`, {
+    method: 'POST', headers: headers(key), body: JSON.stringify(input) });
+  assert.equal(replay.status, 202);
+  const replayReceipt = await replay.json();
+  assert.equal(replayReceipt.screening_id, receipt.screening_id);
+  assert.equal(replayReceipt.callback.signing_secret, undefined);
+  assert.equal(jobs.length, 1);
+  assert.equal((await usageStore.account(issued.client.id)).charged_calls, 1);
+  archiveReady = false;
+  try {
+    const replayWhileStale = await fetch(`${base}/service/adverse_media_advance`, {
+      method: 'POST', headers: headers(key), body: JSON.stringify(input) });
+    assert.equal(replayWhileStale.status, 202);
+    assert.equal((await replayWhileStale.json()).screening_id, receipt.screening_id);
+    assert.equal((await usageStore.account(issued.client.id)).charged_calls, 1);
+  } finally { archiveReady = true; }
+
+  const ownerId = `workspace-${issued.client.id}`;
+  await reportStore.saveDeepResearchState({ ownerId, screeningId: receipt.screening_id,
+    state: { stage: 'screened' } });
+  await reportStore.saveDeepResearchComponent({ ownerId, screeningId: receipt.screening_id,
+    componentKey: 'advance-budget-status:1', value: { pending_count: 3 } });
+  const blockedPoll = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`,
+    { headers: { authorization: `Bearer ${issued.apiKey}` } });
+  assert.equal((await blockedPoll.json()).status, 'budget_blocked');
+  const result = { screening_id: receipt.screening_id, status: 'completed',
+    summary: { profile_status: 'inconclusive' }, report: { report_id: jobs[0].report_id } };
+  await jsonStore.save({ ownerId, screeningId: receipt.screening_id, response: result,
+    input: input, transactionId: 'test-transaction' });
+  await reportStore.saveDeepResearchState({ ownerId, screeningId: receipt.screening_id,
+    state: { stage: 'finalized', response: result } });
+  const completed = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`,
+    { headers: { authorization: `Bearer ${issued.apiKey}` } });
+  assert.equal(completed.status, 200);
+  const completedBody = await completed.json();
+  assert.equal(completedBody.status, 'completed');
+  assert.equal(completedBody.callback_delivery, 'not_confirmed');
+  assert.deepEqual(completedBody.result, result);
+  for (let index = 0; index < 101; index++) {
+    await reportStore.saveAdvanceEvidenceItem({ ownerId, screeningId: receipt.screening_id,
+      item: { result_id: `item-${String(index).padStart(3, '0')}`,
+        selection_status: 'not_selected', ai7_edd_review_status: 'metadata_excluded',
+        subject_relationship: null } });
+  }
+  const firstPage = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}/evidence`,
+    { headers: { authorization: `Bearer ${issued.apiKey}` } });
+  assert.equal(firstPage.status, 200);
+  const firstEvidence = await firstPage.json();
+  assert.equal(firstEvidence.items.length, 100);
+  assert.ok(firstEvidence.next_cursor);
+  const secondPage = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}/evidence?cursor=${encodeURIComponent(firstEvidence.next_cursor)}`,
+    { headers: { authorization: `Bearer ${issued.apiKey}` } });
+  assert.equal((await secondPage.json()).items.length, 1);
+  const stranger = await store.createClient('Separate workspace');
+  const isolated = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`,
+    { headers: { authorization: `Bearer ${stranger.apiKey}` } });
+  assert.equal(isolated.status, 403);
+  const isolatedEvidence = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}/evidence`,
+    { headers: { authorization: `Bearer ${stranger.apiKey}` } });
+  assert.equal(isolatedEvidence.status, 403);
+  const unauthenticated = await fetch(`${base}/service/adverse_media_advance/jobs/${receipt.screening_id}`);
+  assert.equal(unauthenticated.status, 401);
+
+  const conflict = await fetch(`${base}/service/adverse_media_advance`, {
+    method: 'POST', headers: headers(key), body: JSON.stringify({ ...input, name: 'Different Trading LLC' }) });
+  assert.equal(conflict.status, 409);
+  assert.equal(jobs.length, 1);
+});
+
+test('Advance rejects caller provider controls and missing idempotency without queueing', async () => {
+  const invalid = await fetch(`${base}/service/adverse_media_advance`, {
+    method: 'POST', headers: headers('advance-api-invalid-0001'),
+    body: JSON.stringify({ ...input, search_plus: false }) });
+  assert.equal(invalid.status, 400);
+  const missingKey = await fetch(`${base}/service/adverse_media_advance`, {
+    method: 'POST', headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify(input) });
+  assert.equal(missingKey.status, 400);
+  assert.equal(jobs.length, 1);
+});
+
+test('entitled workspaces can read the versioned policy catalog without a charge', async () => {
+  const before = (await usageStore.account(issued.client.id)).charged_calls;
+  const response = await fetch(`${base}/service/adverse_media_advance/policies`, {
+    headers: { authorization: `Bearer ${issued.apiKey}` }
+  });
+  assert.equal(response.status, 200);
+  const catalog = await response.json();
+  assert.equal(catalog.default_selection, 'all');
+  assert.equal(catalog.policies.length, 64);
+  assert.match(catalog.catalog_version, /^\d{4}-\d{2}-\d{2}\.\d+$/);
+  assert.equal((await usageStore.account(issued.client.id)).charged_calls, before);
+});
+
+test('public Advance API contract documents admission, policies, polling and PDF routes', () => {
+  const spec = JSON.parse(readFileSync(new URL('../api/openapi.json', import.meta.url), 'utf8'));
+  const route = '/service/adverse_media_advance';
+  assert.ok(spec.paths[route].post);
+  assert.ok(spec.paths[`${route}/policies`].get);
+  assert.ok(spec.paths[`${route}/jobs/{screeningId}`].get);
+  assert.ok(spec.paths[`${route}/jobs/{screeningId}/evidence`].get);
+  assert.ok(spec.paths[`${route}/reports/{reportId}.pdf`].get);
+  assert.equal(spec.components.schemas.AdverseMediaAdvanceRequest.additionalProperties, false);
+  assert.equal(spec.components.schemas.AdverseMediaAdvanceRequest.properties.policy_selection.const, 'all');
+  for (const path of Object.values(spec.paths)) {
+    for (const operation of Object.values(path)) {
+      if (!operation || typeof operation !== 'object' || !operation.operationId) continue;
+      const refs = JSON.stringify(operation).matchAll(/"\$ref":"#\/components\/schemas\/([^\"]+)"/g);
+      for (const match of refs) assert.ok(spec.components.schemas[match[1]], `missing schema ${match[1]}`);
+    }
+  }
+});
+
+test('Advance refuses a stale V2 index before queueing or charging', async () => {
+  const queuedBefore = jobs.length;
+  archiveReady = false;
+  try {
+    const denied = await fetch(`${base}/service/adverse_media_advance`, {
+      method: 'POST', headers: headers('advance-api-stale-v2-0001'), body: JSON.stringify(input)
+    });
+    assert.equal(denied.status, 503);
+    assert.match((await denied.json()).error, /stored media index/i);
+    assert.equal(jobs.length, queuedBefore);
+    assert.equal((await usageStore.account(issued.client.id)).charged_calls, 1);
+  } finally { archiveReady = true; }
+});

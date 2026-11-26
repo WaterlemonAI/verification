@@ -36,6 +36,18 @@ test('OCR extraction and BSA analysis do not imply identity or credit approval',
   assert.equal(caseOutcome('future-integration', { error: 'unavailable' }, { httpStatus: 503 }).outcome, 'could_not_complete');
 });
 
+test('incident screening only passes complete no-adverse source coverage', () => {
+  const safe = { status: 'completed', screening_result: 'Safe',
+    coverage: { source_coverage_status: 'complete' } };
+  assert.equal(caseOutcome('adverse-media-incident-screening', safe, { httpStatus: 200 }).outcome, 'passed');
+  assert.equal(caseOutcome('adverse-media-incident-screening', { ...safe,
+    coverage: { source_coverage_status: 'incomplete' } }, { httpStatus: 200 }).outcome, 'review_required');
+  assert.equal(caseOutcome('adverse-media-incident-screening', { ...safe,
+    screening_result: undefined }, { httpStatus: 200 }).outcome, 'review_required');
+  assert.equal(caseOutcome('adverse-media-incident-screening', { status: 'failed' }, { httpStatus: 200 }).outcome,
+    'could_not_complete');
+});
+
 test('every direct service has a conservative synthetic result path', () => {
   for (const service of CASE_DIRECT_SERVICES) {
     const outcome = caseOutcome(service.service, { status: 'completed', data: { synthetic: true } }, { httpStatus: 200 });

@@ -3,7 +3,7 @@
   "info": {
     "title": "AI7 UAE Verification API",
     "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, merchant-website risk screening, Forms orchestration, and asynchronous bank statement analysis. Every user-facing API response includes the random X-AI7-Transaction-ID header. Signed-in customers can review UTC timestamps, HTTP codes and per-hit costs in Account settings. Modules must be enabled for the workspace (otherwise HTTP 403); prepaid workspaces need sufficient credit (otherwise HTTP 402). Supplier response JSON and HTTP codes are preserved. Supplier HTTP 4xx/5xx results and capacity rejections are refunded and logged. A business-level partial result returned with HTTP 2xx retains its charge. Form submissions reserve one Form hit and one hit per selected API; failed selected API results are refunded, and callback retries are free. Under peak demand, a request can wait in a bounded service lane before execution. If capacity is exhausted, HTTP 503 with reasonCode CAPACITY_BUSY, Retry-After: 5 and the transaction ID means no supplier call occurred and no charge was retained.",
-    "version": "1.10.0"
+    "version": "1.11.0"
   },
   "servers": [
     {
@@ -23,6 +23,9 @@
     "/service/dubai_ejari_verification": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification" },
     "/service/dubai_ejari_verification/jobs/{jobId}": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification~1jobs~1{jobId}" },
     "/service/dubai_ejari_verification/jobs/{jobId}/result": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification~1jobs~1{jobId}~1result" },
+    "/service/adverse_media_incident_screening": { "$ref": "/adverse-media-incident/openapi.json#/paths/~1service~1adverse_media_incident_screening" },
+    "/service/adverse_media_incident_screening/jobs/{screeningId}": { "$ref": "/adverse-media-incident/openapi.json#/paths/~1service~1adverse_media_incident_screening~1jobs~1{screeningId}" },
+    "/service/adverse_media_incident_screening/reports/{reportId}.pdf": { "$ref": "/adverse-media-incident/openapi.json#/paths/~1service~1adverse_media_incident_screening~1reports~1{reportId}.pdf" },
     "/service/dubai_ejari_verification/jobs/{jobId}/certificate.pdf": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification~1jobs~1{jobId}~1certificate.pdf" },
     "/service/{documentService}/jobs/{jobId}": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1{documentService}~1jobs~1{jobId}" },
     "/service/{documentService}/jobs/{jobId}/result": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1{documentService}~1jobs~1{jobId}~1result" },
@@ -476,6 +479,97 @@
           "429": { "description": "Request capacity or usage policy limit was reached." },
           "502": { "description": "The media search service is unavailable." },
           "503": { "description": "The parallel API is disabled or a required service is unavailable." }
+        }
+      }
+    },
+    "/service/adverse_media_advance": {
+      "post": {
+        "summary": "Queue Adverse Media Advance",
+        "description": "Runs Search+ publisher searches and verified stored-history review using 64 versioned event policies. A versioned lexicon of at least 500 strings selects potentially adverse returned indexed-news and subject-matched archive title/URL hits. All selected candidates enter resumable AI7 EDD article review, and the PDF displays at most 20 ranked items. The complete owner-scoped register is available through the paged evidence route. This asynchronous endpoint requires an entitled workspace, a configured rate, an Idempotency-Key, a public HTTPS callback and a current archive point summary.",
+        "operationId": "queueAdverseMediaAdvance",
+        "security": [{ "ApiKey": [] }],
+        "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true,
+          "schema": { "type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]{16,128}$" },
+          "description": "Reuse this key only for an identical request. A changed payload returns 409; an accepted replay is not charged again." }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdverseMediaAdvanceRequest" } } } },
+        "responses": {
+          "202": { "description": "One screening was queued, or an identical accepted request was replayed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdverseMediaAdvanceQueuedResponse" } } } },
+          "400": { "description": "The request or idempotency key is invalid." },
+          "401": { "description": "The API key is missing or invalid." },
+          "402": { "description": "The workspace lacks sufficient prepaid credit." },
+          "403": { "description": "The workspace lacks Advance entitlement or a configured rate." },
+          "409": { "description": "The idempotency key was used with different input." },
+          "429": { "description": "The workspace rate or request capacity was exceeded." },
+          "503": { "description": "The feature, queue, archive summary, or required processing service is unavailable. A stale archive summary is rejected before charging." }
+        }
+      }
+    },
+    "/service/adverse_media_advance/policies": {
+      "get": {
+        "summary": "List Advance event policies",
+        "description": "Returns the stable IDs, labels, families and default actions in the current versioned catalog. Reading the catalog is not billed. Omit policy_selection and policy_ids to select all policies in a screening request.",
+        "operationId": "listAdverseMediaAdvancePolicies",
+        "security": [{ "ApiKey": [] }],
+        "responses": {
+          "200": { "description": "The current 64-policy catalog.", "content": { "application/json": { "schema": { "type": "object", "required": ["catalog_version", "default_selection", "policies"], "properties": { "catalog_version": { "type": "string" }, "default_selection": { "type": "string", "const": "all" }, "policies": { "type": "array", "minItems": 64, "maxItems": 64, "items": { "type": "object", "required": ["id", "family", "event_type", "label", "default_action", "catalog_version"], "properties": { "id": { "type": "string", "pattern": "^[A-Z]{3}-[0-9]{2}$" }, "family": { "type": "string" }, "event_type": { "type": "string" }, "label": { "type": "string" }, "default_action": { "type": "string", "enum": ["review", "escalate"] }, "catalog_version": { "type": "string" } }, "additionalProperties": false } } }, "additionalProperties": false } } } },
+          "401": { "description": "The API key is missing or invalid." },
+          "403": { "description": "The workspace lacks Advance entitlement or a configured rate." },
+          "503": { "description": "Advance is disabled." }
+        }
+      }
+    },
+    "/service/adverse_media_advance/jobs/{screeningId}": {
+      "get": {
+        "summary": "Retrieve an Advance job and its final result",
+        "description": "The owning workspace can read queued, processing or completed status without another charge. A completed response contains the stored result and callback delivery state; the callback may still be retrying.",
+        "operationId": "getAdverseMediaAdvanceJob",
+        "security": [{ "ApiKey": [] }],
+        "parameters": [{ "name": "screeningId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "Current job status, with the final result when complete.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AdverseMediaAdvanceJobResponse" } } } },
+          "401": { "description": "The API key is missing or invalid." },
+          "403": { "description": "The workspace lacks Advance entitlement or a configured rate." },
+          "404": { "description": "No screening with this ID belongs to the workspace." },
+          "503": { "description": "Advance or its record store is unavailable." }
+        }
+      }
+    },
+    "/service/adverse_media_advance/jobs/{screeningId}/evidence": {
+      "get": {
+        "summary": "Page through the full Advance evidence register",
+        "description": "Returns up to 100 owner-scoped metadata and article-review decisions per page. Metadata exclusions and unassessed candidates remain visible. The register may grow while the job is processing. Reading it is not billed.",
+        "operationId": "getAdverseMediaAdvanceEvidence",
+        "security": [{ "ApiKey": [] }],
+        "parameters": [
+          { "name": "screeningId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "A page of evidence and an optional next_cursor.", "content": { "application/json": { "schema": { "type": "object", "required": ["screening_id", "status", "items", "next_cursor"], "properties": {
+            "screening_id": { "type": "string", "format": "uuid" },
+            "status": { "type": "string", "enum": ["processing", "completed"] },
+            "items": { "type": "array", "maxItems": 100, "items": { "$ref": "#/components/schemas/AdverseMediaAdvanceEvidenceItem" } },
+            "next_cursor": { "type": ["string", "null"] }
+          }, "additionalProperties": false } } } },
+          "400": { "description": "Invalid cursor." },
+          "401": { "description": "Missing or invalid API key." },
+          "403": { "description": "Workspace lacks Advance entitlement." },
+          "404": { "description": "Screening does not belong to this workspace." },
+          "503": { "description": "Evidence store is unavailable." }
+        }
+      }
+    },
+    "/service/adverse_media_advance/reports/{reportId}.pdf": {
+      "get": {
+        "summary": "Download an Advance PDF report",
+        "description": "Downloads the stored PDF by its unguessable capability ID. Anyone with the URL can download it without an API key.",
+        "operationId": "downloadAdverseMediaAdvanceReport",
+        "security": [],
+        "parameters": [{ "name": "reportId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "The Advance PDF report.", "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } } } },
+          "404": { "description": "The report does not exist for this API." },
+          "503": { "description": "The report store is unavailable." }
         }
       }
     },
@@ -3198,6 +3292,78 @@
         "description": "Exact pass-through response. Fields vary with selected checks; all documented fields and any additional dataset-specific fields are preserved.",
         "x-ai7-response-field-count": 382
       },
+      "AdverseMediaAdvanceRequest": {
+        "type": "object",
+        "required": ["entity_type", "name", "countries", "callback_url"],
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["individual", "business"] },
+          "name": { "type": "string", "minLength": 2, "maxLength": 200 },
+          "aliases": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 200 } },
+          "countries": { "type": "array", "maxItems": 20, "description": "Required geography. Use [] for global coverage or ISO country codes for specific geographies. Selected countries prioritize Search+ publishers and automatically append their supported local language, subject to the five-language ceiling.", "items": { "type": "string", "pattern": "^[A-Za-z]{2}$" } },
+          "languages": { "type": "array", "maxItems": 5, "default": ["en", "ar"], "items": { "type": "string", "enum": ["ar", "de", "en", "es", "fa", "fr", "hi", "id", "it", "nl", "pl", "pt", "ru", "tr", "uk", "ur", "zh"] } },
+          "max_results": { "type": "integer", "minimum": 1, "maximum": 50, "default": 25 },
+          "callback_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Public HTTPS URL that receives the completed result and report link." },
+          "callback_access_key": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z0-9._~+/-]+=*$", "description": "Optional token sent only in the callback Authorization header." },
+          "customer_logo_url": { "type": "string", "format": "uri", "maxLength": 2048, "description": "Optional public HTTPS PNG or JPEG for the report." },
+          "policy_selection": { "type": "string", "const": "all", "description": "Selects every policy. This is also the default when both policy_selection and policy_ids are omitted; it cannot be combined with policy_ids." },
+          "policy_ids": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "description": "Select one or more IDs from the versioned policy catalog. Omit policy_selection when using this field.", "items": { "type": "string" } },
+          "identifiers": { "type": "object", "description": "Identifiers narrow subject attribution; fields that do not apply to the entity type are rejected.", "properties": {
+            "registration_numbers": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 100 } },
+            "trade_licence_numbers": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 100 } },
+            "tax_numbers": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 100 } },
+            "lei": { "type": "string", "pattern": "^[A-Z0-9]{20}$" },
+            "domains": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 253 } },
+            "addresses": { "type": "array", "maxItems": 5, "items": { "type": "string", "maxLength": 300 } },
+            "date_of_birth": { "type": "string", "format": "date", "description": "Individuals only." },
+            "nationalities": { "type": "array", "maxItems": 10, "items": { "type": "string", "pattern": "^[A-Z]{2}$" }, "description": "Individuals only." },
+            "associated_organisations": { "type": "array", "maxItems": 10, "items": { "type": "string", "maxLength": 200 } }
+          }, "additionalProperties": false }
+        },
+        "additionalProperties": false
+      },
+      "AdverseMediaAdvanceQueuedResponse": {
+        "type": "object", "required": ["screening_id", "status", "callback", "message"],
+        "properties": {
+          "screening_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "const": "queued" },
+          "callback": { "type": "object", "required": ["configured", "event", "signature_header"], "properties": {
+            "configured": { "type": "boolean", "const": true },
+            "event": { "type": "string", "const": "adverse_media.advance.completed" },
+            "signature_header": { "type": "string", "const": "x-ai7-signature" },
+            "signing_secret": { "type": "string", "description": "One-time callback verification secret shown only on first acceptance." }
+          }, "additionalProperties": false },
+          "message": { "type": "string" }
+        }, "additionalProperties": false
+      },
+      "AdverseMediaAdvanceJobResponse": {
+        "type": "object", "required": ["screening_id", "status"],
+        "properties": {
+          "screening_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["queued", "processing", "budget_blocked", "completed"] },
+          "profile_status": { "type": "string", "const": "inconclusive", "description": "Present while budget_blocked." },
+          "pending_count": { "type": "integer", "minimum": 1, "description": "Candidates still awaiting review while budget_blocked." },
+          "callback_delivery": { "type": "string", "enum": ["delivered", "not_confirmed"], "description": "Present when the screening completed." },
+          "result": { "type": "object", "description": "Stored screening result with aggregate counts, at most 20 PDF evidence items, a paged evidence_export_url, narrative and PDF link.", "additionalProperties": true }
+        }, "additionalProperties": false
+      },
+      "AdverseMediaAdvanceEvidenceItem": {
+        "type": "object", "required": ["result_id", "selection_status", "ai7_edd_review_status", "subject_relationship"],
+        "properties": {
+          "result_id": { "type": "string" }, "story_key": { "type": "string" },
+          "url": { "type": "string" }, "title": { "type": "string" },
+          "sources": { "type": "array", "items": { "type": "string" } },
+          "selection_status": { "type": "string", "enum": ["selected", "not_selected"] },
+          "lexicon_version": { "type": "string" },
+          "matched_term_ids": { "type": "array", "items": { "type": "string" } },
+          "matched_categories": { "type": "array", "items": { "type": "string" } },
+          "ai7_edd_review_status": { "type": "string", "enum": ["reviewed", "unassessed", "unresolved", "metadata_excluded"] },
+          "subject_relationship": { "type": ["string", "null"], "enum": ["direct", "indirect", "no_association", null], "description": "The only assessed relationship categories are Direct, Indirect and No Association. Null means the article is not yet verified; see ai7_edd_review_status. Direct includes a subject affected by an adverse incident and does not imply culpability." },
+          "ai7_edd_assessment": { "type": ["string", "null"], "enum": ["adverse", "not_adverse", "unclear", null], "description": "Adverse incident assessment for this subject, separate from subject_relationship and from a finding of misconduct." },
+          "report_priority": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+          "finding_status": { "type": ["string", "null"] },
+          "evidence_grade": { "type": "string" }
+        }, "additionalProperties": true
+      },
       "AdverseMediaRequest": {
         "type": "object",
         "required": ["entity_type", "name"],
@@ -3270,7 +3436,7 @@
           },
           "search_plus_match": { "type": "boolean", "description": "True when the evidence URL belongs to the approved Search+ publisher catalog." },
           "media_bucket": { "type": "string", "enum": ["adverse_media", "general_news_mentions", "no_impact_media"] },
-          "subject_role": { "type": "string", "enum": ["direct_actor", "related_party", "victim", "namesake", "context_only", "unclear", "unresolved"] },
+          "subject_role": { "type": "string", "enum": ["direct_actor", "related_party", "victim", "namesake", "context_only", "unclear", "unresolved"], "description": "Internal incident role. For Advance, use subject_relationship for the public three-category relationship." },
           "risk_score": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "Null outside the Adverse Media bucket." },
           "risk_level": { "type": "string", "enum": ["safe", "review", "high", "not_applicable"] },
           "categories": { "type": "array", "items": { "type": "string", "enum": ["financial_crime", "crime_and_enforcement", "sanctions_and_security", "regulatory_and_governance", "cybersecurity_and_data_protection", "corporate_misconduct", "governance_and_leadership_dispute", "workforce_and_restructuring", "financial_distress"] } },

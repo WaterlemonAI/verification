@@ -66,13 +66,47 @@ test('report narrative uses a strict single-purpose JSON contract', async () => 
   assert.match(narrative.recommendations[0], /human review/);
 });
 
-test('clean report narrative uses the No Adverse Media Found label', async () => {
+test('clean report narrative uses the Safe profile without an internal coverage statement', async () => {
   const clean = { ...response, summary: { ...response.summary,
     outcome: 'no_material_results', outcome_label: 'No Adverse Media Found',
     potentially_relevant_results: 0, human_review_required: false,
     statement: 'No materially adverse results were identified in the sources searched.' } };
   const narrative = await createAdverseMediaNarrative({ response: clean, apiKey: '' });
-  assert.match(narrative.summary, /^No Adverse Media Found\./);
+  assert.match(narrative.summary, /The profile is Safe/);
+  assert.doesNotMatch(narrative.summary, /coverage or classification|source failures/i);
+});
+
+test('report narrative refuses model text that exposes internal review state', async () => {
+  const narrative = await createAdverseMediaNarrative({ response, apiKey: 'private', fetchImpl: async () =>
+    Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+      summary: 'Archive review failed after 200 postings scanned.', findings: [], recommendations: []
+    }) }] } }] }) });
+  assert.doesNotMatch(narrative.summary, /archive review|postings scanned/i);
+  assert.match(narrative.summary, /media buckets/i);
+});
+
+test('customer narrative refuses provider account details in any model field', async () => {
+  const narrative = await createAdverseMediaNarrative({ response, apiKey: 'private', fetchImpl: async () =>
+    Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+      summary: 'The profile is Inconclusive on the collected articles.',
+      findings: ['The article provider account is on a free trial.'],
+      recommendations: ['Review the cited articles.']
+    }) }] } }] }) });
+  assert.doesNotMatch(JSON.stringify(narrative), /free trial|provider account/i);
+  assert.match(narrative.summary, /media buckets/i);
+});
+
+test('Advance report carries its own title and filename without changing existing report types', async () => {
+  const report = await createAdverseMediaAuditPdf({ request, response: {
+    ...response, summary: { ...response.summary, profile_status: 'inconclusive' },
+    advance_assessment: { policy_set: { selection_mode: 'all', selected_policy_ids: ['FIN-01', 'HSE-03'] },
+      policy_outcome: { status: 'review' },
+      policy_results: [{ policy_id: 'FIN-01', status: 'triggered' }] }
+  }, narrative: { summary: 'Coverage or classification is incomplete. Review source failures.' },
+  variant: 'advance' });
+  const parsed = await PDFDocument.load(report.bytes);
+  assert.match(parsed.getTitle(), /Adverse Media Advance/);
+  assert.match(report.filename, /^kycprobe-adverse-media-advance-/);
 });
 
 test('PDF includes a complete multi-page audit artifact and stable integrity metadata', async () => {
@@ -88,7 +122,7 @@ test('PDF includes a complete multi-page audit artifact and stable integrity met
   assert.ok(report.bytes.length < 500_000, 'English reports should not embed the optional multilingual fonts');
   const parsed = await PDFDocument.load(report.bytes);
   assert.ok(parsed.getPageCount() >= 2);
-  assert.match(parsed.getTitle(), /Adverse Media Screening Result/);
+  assert.match(parsed.getTitle(), /Adverse Media Profile/);
   assert.match(parsed.getSubject(), new RegExp(response.screening_id));
   assert.equal(parsed.catalog.get(PDFName.of('Names')), undefined, 'public PDF must not embed raw request or response JSON');
 });
@@ -221,7 +255,8 @@ test('Azure JSON retention writes only private JSON under an owner-scoped path',
   });
   let uploaded;
   store.container = { getBlockBlobClient: (name) => ({
-    uploadData: async (bytes, options) => { uploaded = { name, bytes: Buffer.from(bytes), options }; }
+    uploadData: async (bytes, options) => { uploaded = { name, bytes: Buffer.from(bytes), options }; },
+    download: async () => ({ readableStreamBody: Readable.from([uploaded.bytes]) })
   }) };
   await store.save({ ownerId: 'customer-a', screeningId: response.screening_id,
     transactionId: 'transaction-1', input: request, response });
@@ -233,6 +268,7 @@ test('Azure JSON retention writes only private JSON under an owner-scoped path',
   assert.deepEqual(saved.response, response);
   assert.equal(saved.transaction_id, 'transaction-1');
   assert.ok(!('bytes' in saved));
+  assert.deepEqual((await store.get({ ownerId: 'customer-a', screeningId: response.screening_id })).response, response);
 });
 
 test('a quota-failed classification cannot trigger another Gemini call for the PDF', async () => {

@@ -134,6 +134,15 @@ test('retryable provider failures are bounded and cost denial prevents a call', 
   assert.equal((await denied(row, request)).reason, 'article_cost_limit');
 });
 
+test('provider account messages are not returned in article evidence', async () => {
+  const resolve = createEventRegistryArticleResolver({ getApiKey: async () => 'provider-secret',
+    reviewArticle: async () => ({ status: 'general' }),
+    fetchImpl: async () => new Response('This account is on a free trial.', { status: 403 }) });
+  const result = await resolve(row, request);
+  assert.equal(result.reason, 'article_provider_http_403');
+  assert.doesNotMatch(JSON.stringify(result), /free trial|provider account/i);
+});
+
 test('oversize provider responses stop before article review', async () => {
   let reviewed = false;
   const resolve = createEventRegistryArticleResolver({ getApiKey: async () => 'provider-secret',

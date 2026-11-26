@@ -203,11 +203,14 @@ test('stored rebuild accepts compact UTC interval boundaries and checkpoints eac
   const timestamp = '20261120013000';
   const container = new MemoryContainer();
   const processed = [];
+  const progress = [];
   const result = await rebuildStoredV2({ container, table: new MemoryTable(), v2: {},
     sourceState: { coverage_start: '2026-11-20T01:30:00.000Z', coverage_end: '2026-11-20T01:30:00.000Z' },
     from: timestamp, to: timestamp,
+    onProgress: (item) => progress.push(item),
     processInterval: async ({ timestamp: value, storedOnly }) => { assert.equal(storedOnly, true); processed.push(value); } });
   assert.deepEqual(processed, [timestamp]);
+  assert.deepEqual(progress, [{ processed: 1, last_completed_interval: '2026-11-20T01:30:00.000Z' }]);
   assert.equal(result.more, false);
   assert.equal(result.last_completed_interval, '2026-11-20T01:30:00.000Z');
   assert.equal(container.blobs.has('state/v2-rebuild.json'), false);
