@@ -308,8 +308,13 @@ test('encrypted IBAN adapter privately encrypts, verifies and decrypts without c
   assert.equal(configured.status, 200);
   assert.equal((await configured.json()).integration.masterAuthKeyConfigured, false);
 
-  const credential = await fetch(`${appUrl}/admin/api/integrations/iban-verification/credential`, {
+  const missingPassword = await fetch(`${appUrl}/admin/api/integrations/iban-verification/credential`, {
     method: 'PUT', headers: adminHeaders(), body: JSON.stringify({ credential: 'private-username' })
+  });
+  assert.equal(missingPassword.status, 400);
+
+  const credential = await fetch(`${appUrl}/admin/api/integrations/iban-verification/credential`, {
+    method: 'PUT', headers: adminHeaders(), body: JSON.stringify({ credential: 'private-username', password: 'private-password' })
   });
   assert.equal(credential.status, 200);
   assert.equal((await credential.json()).integration.masterAuthKeyConfigured, true);
@@ -342,7 +347,26 @@ test('encrypted IBAN adapter privately encrypts, verifies and decrypts without c
   assert.deepEqual(relayRequests[2].body, { responseData: 'encrypted-response-payload' });
   for (const request of relayRequests) {
     assert.equal(request.headers.username, 'private-username');
+    assert.equal(request.headers.password, 'private-password');
     assert.equal(request.headers.authorization, undefined);
+  }
+
+  const replaced = await fetch(`${appUrl}/admin/api/integrations/iban-verification/credential`, {
+    method: 'PUT', headers: adminHeaders(), body: JSON.stringify({ credential: 'new-username', password: 'new-password' })
+  });
+  assert.equal(replaced.status, 200);
+  assert.deepEqual(await store.getIbanCredentials(), { username: 'new-username', password: 'new-password' });
+  relayRequests = [];
+  const replacementRequest = await fetch(`${appUrl}/service/iban_verification`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${issued.apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  });
+  assert.equal(replacementRequest.status, 200);
+  assert.equal(relayRequests.length, 3);
+  for (const request of relayRequests) {
+    assert.equal(request.headers.username, 'new-username');
+    assert.equal(request.headers.password, 'new-password');
   }
 
   const adminListing = JSON.stringify(await (await fetch(`${appUrl}/admin/api/integrations`, { headers: adminHeaders() })).json());
@@ -350,6 +374,9 @@ test('encrypted IBAN adapter privately encrypts, verifies and decrypts without c
   for (const output of [adminListing, publicCatalog]) {
     assert.equal(output.includes('bank.test'), false);
     assert.equal(output.includes('private-username'), false);
+    assert.equal(output.includes('private-password'), false);
+    assert.equal(output.includes('new-username'), false);
+    assert.equal(output.includes('new-password'), false);
   }
 });
 

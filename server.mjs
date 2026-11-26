@@ -958,13 +958,16 @@ function encryptedValue(text, field) {
 }
 
 async function executeEncryptedJsonIntegration(integration, store, fetchImpl, body) {
-  const credential = await store.getMasterKey(integration.id);
+  const isIban = integration.id === 'iban-verification';
+  const ibanCredential = isIban ? await store.getIbanCredentials() : null;
+  const credential = isIban ? ibanCredential.username : await store.getMasterKey(integration.id);
   if (!credential) throw new Error('provider_credentials_unavailable');
 
   const headers = {
     accept: 'application/json',
     'content-type': 'application/json',
-    [integration.authHeader]: `${integration.authPrefix || ''}${credential}`
+    [integration.authHeader]: `${integration.authPrefix || ''}${credential}`,
+    ...(isIban && ibanCredential.password ? { password: ibanCredential.password } : {})
   };
   const timeout = Number(process.env.UPSTREAM_TIMEOUT_MS || 120000);
   const verificationUrl = new URL(integration.upstreamUrl);
@@ -2329,7 +2332,10 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
       const integrationId = url.pathname.split('/')[4];
       const credential = String(body.credential || '');
       if (!credential) return json(res, 400, { status: 'Error', error: 'A private credential is required.' });
-      const saved = await store.setMasterKey(integrationId, credential);
+      const isIban = integrationId === 'iban-verification';
+      const password = isIban && typeof body.password === 'string' ? body.password : '';
+      if (isIban && !password) return json(res, 400, { status: 'Error', error: 'A supplier password is required.' });
+      const saved = isIban ? await store.setIbanCredentials(credential, password) : await store.setMasterKey(integrationId, credential);
       return saved ? json(res, 200, { integration: saved }) : json(res, 404, { status: 'Error', error: 'Integration was not found.' });
     } catch (error) {
       return json(res, error.statusCode || 500, { status: 'Error', error: error.statusCode ? 'The request is invalid.' : 'The private credential could not be saved.' });

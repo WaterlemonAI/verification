@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="/admin/admin.css?v=12" />
     <link rel="stylesheet" href="/flo-builder.css?v=1" />
     <script src="/flo-sortable.min.js" defer></script>
-    <script src="/admin/admin.js?v=18" defer></script>
+    <script src="/admin/admin.js?v=19" defer></script>
 
   </head>
   <body>
@@ -314,9 +314,10 @@
     <dialog id="supplier-credential-dialog">
       <form id="supplier-credential-form">
         <div class="dialog-head"><div><p class="eyebrow">PRIVATE CREDENTIAL</p><h2>Set API credential</h2></div><button type="button" class="close" data-close="supplier-credential-dialog">×</button></div>
-        <p class="notice">This value is stored write-only in the AI7 UAE Key Vault and is applied only to <strong id="supplier-credential-name"></strong>.</p>
+        <p class="notice">Credential values are stored write-only in the AI7 UAE Key Vault and are applied only to <strong id="supplier-credential-name"></strong>.</p>
         <input name="id" type="hidden" />
         <label id="supplier-credential-label">Supplier credential<input name="credential" type="password" autocomplete="off" placeholder="Enter the private credential" required /></label>
+        <label id="supplier-password-label" hidden>Supplier password<input name="password" type="password" autocomplete="new-password" placeholder="Enter the supplier password" /></label>
         <p class="field-help" id="supplier-credential-help"></p>
         <p class="error" id="supplier-credential-error" aria-live="polite"></p>
         <div class="actions"><button type="button" class="secondary" data-close="supplier-credential-dialog">Cancel</button><button type="submit">Save credential securely</button></div>

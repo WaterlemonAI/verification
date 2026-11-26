@@ -155,9 +155,17 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
     adapter: 'encrypted-json-relay'
   };
   await store.upsertIntegration(ibanIntegration, '');
-  const savedCredential = await store.setMasterKey('iban-verification', 'private-username');
+  const legacyCredential = await store.setMasterKey('iban-verification', 'private-username');
+  assert.equal(legacyCredential.masterAuthKeyConfigured, false);
+  assert.deepEqual(await store.getIbanCredentials(), { username: 'private-username', password: '' });
+  assert.equal((await store.listIntegrations()).find((item) => item.id === 'iban-verification').masterAuthKeyConfigured, false);
+  const savedCredential = await store.setIbanCredentials('new-username', 'private-password');
   assert.equal(savedCredential.masterAuthKeyConfigured, true);
-  assert.equal(secrets.get('integration-iban-verification-master-key').value, 'private-username');
+  assert.equal((await store.listIntegrations()).find((item) => item.id === 'iban-verification').masterAuthKeyConfigured, true);
+  assert.deepEqual(JSON.parse(secrets.get('integration-iban-verification-master-key').value), { username: 'new-username', password: 'private-password' });
+  assert.deepEqual(await store.getIbanCredentials(), { username: 'new-username', password: 'private-password' });
   assert.equal(secrets.get('integration-uae-trade-licence-master-key').value, 'upstream-master-key');
-  assert.equal(JSON.stringify(await store.listIntegrations()).includes('private-username'), false);
+  const listing = JSON.stringify(await store.listIntegrations());
+  assert.equal(listing.includes('new-username'), false);
+  assert.equal(listing.includes('private-password'), false);
 });
