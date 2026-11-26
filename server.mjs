@@ -172,11 +172,13 @@ async function prepareIncidentSubmission(req, transactionId, queue, admissionSto
     return { status: error.message === 'request_too_large' ? 413 : 400,
       error: 'Invalid incident screening request.' };
   }
-  const [braveKey, jevKey, summaryKey] = await Promise.all([
+  const [braveKey, jevKey, managedSummaryKey, managedArticleKey] = await Promise.all([
     store.getMasterKey('adverse-media'), store.getMasterKey('adverse-media-jev'),
-    process.env.MISTRAL_API_KEY || store.getMasterKey('adverse-media-summary')
+    store.getMasterKey('adverse-media-summary'), store.getMasterKey('adverse-media-article-extraction')
   ]);
-  if (!braveKey || !jevKey || !summaryKey || !process.env.EVENT_REGISTRY_API_KEY)
+  const summaryKey = managedSummaryKey || process.env.MISTRAL_API_KEY;
+  const articleKey = managedArticleKey || process.env.EVENT_REGISTRY_API_KEY;
+  if (!braveKey || !jevKey || !summaryKey || !articleKey)
     return { status: 503, error: 'Incident screening is temporarily unavailable.' };
   const job = { version: 2, incident_report_v1: true, screening_id: randomUUID(),
     report_id: randomUUID(), workspace_id: workspaceId,

@@ -10,7 +10,7 @@ import { INCIDENT_PUBLIC_PATH, INCIDENT_SERVICE_ID,
 
 process.env.NODE_ENV = 'test';
 process.env.ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED = 'true';
-process.env.EVENT_REGISTRY_API_KEY = 'fake-event-registry-key';
+delete process.env.EVENT_REGISTRY_API_KEY;
 const { createAppServer } = await import('../server.mjs');
 
 const store = new EnvironmentStore();
@@ -29,6 +29,7 @@ before(async () => {
   await store.setMasterKey('adverse-media', 'brave-test-key');
   await store.setMasterKey('adverse-media-jev', 'jev-test-key');
   await store.setMasterKey('adverse-media-summary', 'summary-test-key');
+  await store.setMasterKey('adverse-media-article-extraction', 'article-test-key');
   issued = await store.createClient('Incident screening workspace');
   await usageStore.configure(issued.client.id, validateUsagePolicy({ mode: 'postpay', currency: 'USD',
     allowed_modules: [INCIDENT_SERVICE_ID],
@@ -78,11 +79,16 @@ test('new API queues once, bills once, and returns private JSON and PDF', async 
   const pdf = Buffer.from('%PDF-1.7\nsynthetic-test\n');
   await processIncidentReportJob(jobs[0], { store, reportStore, jsonStore, usageStore,
     archiveSearch: async () => ({}), archivePage: async () => ({}),
-    createReport: async () => ({ response: { contract: 'adverse-media-incident-report-v1',
+    createReport: async (_input, dependencies) => {
+      assert.equal(dependencies.screeningDependencies.eventRegistryApiKey, 'article-test-key');
+      assert.equal(dependencies.screeningDependencies.jevApiKey, 'jev-test-key');
+      assert.equal(dependencies.summaryApiKey, 'summary-test-key');
+      return { response: { contract: 'adverse-media-incident-report-v1',
       subject: { name: input.subject.name }, screening_result: 'Safe',
       report: { filename: 'test-report.pdf', sha256: 'synthetic', digitally_signed: false,
         pdf_base64: pdf.toString('base64') } }, pdf,
-    audit: { timings_ms: { total: 1 }, usage: {}, costs: {} } }) });
+      audit: { timings_ms: { total: 1 }, usage: {}, costs: {} } };
+    } });
   const completed = await fetch(`${base}${receipt.status_url}`, { headers: authorization() });
   const body = await completed.json();
   assert.equal(body.status, 'completed');
@@ -135,4 +141,10 @@ test('new API documentation and credential gate are independent of the older API
     assert.equal(unavailable.status, 503);
     assert.equal(jobs.length, queuedBefore);
   } finally { await store.setMasterKey('adverse-media-summary', 'summary-test-key'); }
+  await store.setMasterKey('adverse-media-article-extraction', '');
+  try {
+    const unavailable = await submit('incident-no-articles-0001');
+    assert.equal(unavailable.status, 503);
+    assert.equal(jobs.length, queuedBefore);
+  } finally { await store.setMasterKey('adverse-media-article-extraction', 'article-test-key'); }
 });
