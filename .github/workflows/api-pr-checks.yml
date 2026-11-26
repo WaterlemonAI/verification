@@ -22,6 +22,7 @@ on:
       - package.json
       - package-lock.json
       - infrastructure/api.bicep
+      - infrastructure/adverse-media-incident-queues.bicep
       - infrastructure/api-flo-platform.bicep
       - infrastructure/api-dns.bicep
       - infrastructure/api-billing-notifications-bootstrap.bicep
@@ -35,6 +36,8 @@ on:
       - infrastructure/api-case-manager-cutover-certificates.bicep
       - infrastructure/api-case-manager-release-reader.bicep
       - .github/workflows/deploy-api.yml
+      - .github/workflows/promote-incident-api.yml
+      - .github/workflows/activate-incident-api.yml
       - .github/workflows/deploy-gdelt-backfill.yml
       - .github/workflows/deploy-flo-staging.yml
       - .github/workflows/api-pr-checks.yml
