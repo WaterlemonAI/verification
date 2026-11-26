@@ -47,7 +47,9 @@ jobs:
           test -n "${ACR_LOGIN_SERVER}"
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${QA_RUN_ID}" > qa-run.json
           jq -e --arg sha "${GITHUB_SHA}" --arg attempt "${QA_RUN_ATTEMPT}" \
-            '.name == "Deploy AI7 UAE API" and .event == "push" and .head_branch == "main" and .conclusion == "success" and .head_sha == $sha and (.run_attempt | tostring) == $attempt' \
+            '.name == "Deploy AI7 UAE API" and (.event == "push" or .event == "workflow_dispatch") and
+              .head_branch == "main" and .conclusion == "success" and .head_sha == $sha and
+              (.run_attempt | tostring) == $attempt' \
             qa-run.json > /dev/null
           mkdir -p qa-evidence
           gh run download "${QA_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
