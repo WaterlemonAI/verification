@@ -995,6 +995,7 @@ async function queueAdvanceScreening(req, res, queue, admissionStore) {
 }
 
 async function queueIncidentScreening(req, res, queue, admissionStore) {
+  if (!req.ai7Client) return json(res, 401, { status: 'Error', error: 'An active API key is required.' });
   const prepared = req.ai7PreparedIncident;
   if (!prepared) return json(res, 503, { status: 'Error', error: 'Incident screening is temporarily unavailable.' });
   try { await queue.enqueue(prepared.job); }

@@ -124,6 +124,10 @@ test('new API documentation and credential gate are independent of the older API
   assert.ok(spec.paths[INCIDENT_PUBLIC_PATH].post);
   assert.ok(spec.paths[`${INCIDENT_PUBLIC_PATH}/jobs/{screeningId}`].get);
   assert.ok(spec.paths[`${INCIDENT_PUBLIC_PATH}/reports/{reportId}.pdf`].get);
+  const withoutKey = await fetch(`${base}${INCIDENT_PUBLIC_PATH}`, { method: 'POST',
+    headers: { 'content-type': 'application/json', 'idempotency-key': 'incident-no-auth-0001' },
+    body: JSON.stringify(input) });
+  assert.equal(withoutKey.status, 401);
   const queuedBefore = jobs.length;
   await store.setMasterKey('adverse-media-summary', '');
   try {
