@@ -97,6 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           az containerapp update --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+            --container-name api \
             --set-env-vars ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED=true --output none
 
       - name: Verify ready production revision and feature switch
@@ -127,6 +128,7 @@ jobs:
         run: |
           set -euo pipefail
           az containerapp update --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+            --container-name api \
             --set-env-vars ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED=false --output none
 
       - name: Retain activation evidence

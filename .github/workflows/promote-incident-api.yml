@@ -130,6 +130,7 @@ jobs:
         run: |
           set -euo pipefail
           az containerapp update --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+            --container-name api \
             --image "${IMAGE}" --set-env-vars \
             ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED=false \
             "ADVERSE_MEDIA_INCIDENT_QUEUE_URL=https://${QUEUE_STORAGE}.queue.core.windows.net/adverse-media-incident" \
@@ -167,6 +168,7 @@ jobs:
           set -euo pipefail
           test -n "${PREVIOUS_IMAGE}"
           az containerapp update --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+            --container-name api \
             --image "${PREVIOUS_IMAGE}" --set-env-vars ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED=false --output none
 
       - name: Retain production promotion evidence
