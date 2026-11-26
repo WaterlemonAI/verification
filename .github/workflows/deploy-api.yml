@@ -573,6 +573,33 @@ jobs:
             --query properties.outputs \
             --output json > api-deployment-outputs.json
 
+      - name: Verify incident queue isolation and API revision
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          API_CONTAINER_APP_NAME: ${{ vars.API_CONTAINER_APP_NAME || 'ca-ai7uae-api' }}
+          IMAGE: ${{ steps.image.outputs.image }}
+          EXPECTED_ENABLED: ${{ vars.ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED == 'true' && 'true' || 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${API_CONTAINER_APP_NAME}" == 'ca-ai7uae-api' ]]; then
+            expected_queue='adverse-media-incident'
+          else
+            expected_queue='adverse-media-incident-qa'
+          fi
+          for attempt in $(seq 1 20); do
+            # shellcheck disable=SC2016
+            az containerapp show --resource-group "${AZURE_RESOURCE_GROUP}" --name "${API_CONTAINER_APP_NAME}" \
+              --query '{image:properties.template.containers[0].image,ready:properties.latestReadyRevisionName,latest:properties.latestRevisionName,enabled:properties.template.containers[0].env[?name==`ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED`].value | [0],queue:properties.template.containers[0].env[?name==`ADVERSE_MEDIA_INCIDENT_QUEUE_URL`].value | [0]}' \
+              --output json > api-incident-readback.json
+            if jq -e --arg image "${IMAGE}" --arg suffix "/${expected_queue}" --arg enabled "${EXPECTED_ENABLED}" \
+              '.image == $image and .ready == .latest and .enabled == $enabled and
+                (.queue | endswith($suffix))' api-incident-readback.json > /dev/null; then exit 0; fi
+            echo "Waiting for incident API revision and isolated queue (${attempt}/20)"
+            sleep 15
+          done
+          exit 1
+
       - name: Retain API deployment evidence
         uses: actions/upload-artifact@v4
         with:
@@ -580,5 +607,6 @@ jobs:
           path: |
             api-deployment-evidence.json
             api-deployment-outputs.json
+            api-incident-readback.json
           if-no-files-found: error
           retention-days: 30
