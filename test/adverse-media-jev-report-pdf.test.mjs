@@ -76,6 +76,15 @@ test('dashboard counts come from finalized article labels and evidence grades', 
   });
 });
 
+test('Safe with retained non-adverse media keeps the signed incident-register layout', async () => {
+  const safe = { ...response, screening_result: 'Safe', event_register: {
+    articles: [article('ordinary', null, 'non-adverse')], incidents: [] } };
+  const report = await createJevIncidentPdf({ response: safe, signing });
+  assert.equal(report.pageCount, 4);
+  assert.equal(report.digitallySigned, true);
+  assert.equal((await PDFDocument.load(report.bytes)).getPageCount(), 4);
+});
+
 test('incident PDF cannot be generated without a signing identity', async () => {
   await assert.rejects(() => createJevIncidentPdf({ response }),
     { message: 'pdf_signing_certificate_required' });

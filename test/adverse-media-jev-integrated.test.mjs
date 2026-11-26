@@ -53,7 +53,7 @@ let archiveRows = [archiveArticle, { recordId: 'archive-excluded',
 let eventStatus = 200;
 let qaSourceGap = false;
 const archiveSearch = async () => ({ complete: true, scan: { mode: 'v2_point_summary' },
-  state: { coverage_start: '2026-10-01T00:00:00.000Z', coverage_end: '2026-11-25T23:45:00.000Z',
+  state: { coverage_start: '2026-10-01T00:00:00.000Z', coverage_end: '2026-11-26T23:45:00.000Z',
     ...(qaSourceGap ? { qa_source_gap: true } : {}) } });
 const archivePage = async () => ({ rows: archiveRows, done: true, nextCursor: null });
 const fetchImpl = async (url, options) => {
@@ -226,6 +226,20 @@ test('public report marks a QA source gap without naming its provider', async ()
   assert.equal(report.coverage.source_coverage_status, 'incomplete');
   assert.deepEqual(report.coverage.unavailable_sources, ['archived_media_index']);
   assert.equal(JSON.stringify(report).includes('qa_source_gap'), false);
+});
+
+test('zero adverse classifications produce a Safe profile with retained media', async () => {
+  const integrated = await (await post(input)).json();
+  integrated.event_register.articles = integrated.event_register.articles.map((article, index) => ({
+    ...article, adverseness: index === 0 ? 'non-adverse' : 'inconclusive',
+    incident_id: null, incident_reason: 'not_an_adverse_incident'
+  }));
+  integrated.event_register.incidents = [];
+  const report = publicIncidentReport(integrated, 'No article was classified adverse.');
+  assert.equal(report.screening_result, 'Safe');
+  assert.equal(report.event_register.articles.length, 2);
+  assert.deepEqual(report.event_register.articles.map((article) => article.adverseness),
+    ['non-adverse', 'inconclusive']);
 });
 
 test('end-to-end route returns provider-neutral JSON and a fully signed PDF', async () => {
