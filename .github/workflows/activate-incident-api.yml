@@ -1,0 +1,144 @@
+name: Activate Incident Screening API
+
+on:
+  workflow_dispatch:
+    inputs:
+      promotion_run_id:
+        description: Successful main-branch incident API promotion run ID
+        required: true
+        type: string
+      promotion_run_attempt:
+        description: Attempt number of that promotion run
+        required: true
+        default: '1'
+        type: string
+      release_gate:
+        description: Enter qa-and-credentials-verified after public QA, admin credentials, entitlement and rate are checked
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: ai7uae-api-production
+  cancel-in-progress: false
+
+jobs:
+  activate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: ai7uae-api
+    steps:
+      - name: Check out reviewed main source
+        uses: actions/checkout@v4
+
+      - name: Verify promotion evidence and release attestation
+        id: evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROMOTION_RUN_ID: ${{ inputs.promotion_run_id }}
+          PROMOTION_RUN_ATTEMPT: ${{ inputs.promotion_run_attempt }}
+          RELEASE_GATE: ${{ inputs.release_gate }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${PROMOTION_RUN_ID}" =~ ^[0-9]+$ ]]
+          [[ "${PROMOTION_RUN_ATTEMPT}" =~ ^[0-9]+$ ]]
+          test "${RELEASE_GATE}" = 'qa-and-credentials-verified'
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PROMOTION_RUN_ID}" > promotion-run.json
+          jq -e --arg sha "${GITHUB_SHA}" --arg attempt "${PROMOTION_RUN_ATTEMPT}" \
+            '.name == "Promote Incident Screening API image" and .event == "workflow_dispatch" and
+              .head_branch == "main" and .head_sha == $sha and .conclusion == "success" and
+              (.run_attempt | tostring) == $attempt' promotion-run.json > /dev/null
+          mkdir -p promotion-evidence
+          gh run download "${PROMOTION_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "incident-api-promotion-${PROMOTION_RUN_ID}-${PROMOTION_RUN_ATTEMPT}" \
+            --dir promotion-evidence
+          jq -e --arg sha "${GITHUB_SHA}" \
+            '.source_sha == $sha and (.image | test("^.+/ai7uae-api@sha256:[a-f0-9]{64}$"))' \
+            promotion-evidence/qa-evidence/api-deployment-evidence.json > /dev/null
+          jq -e --arg image "$(jq -r .image promotion-evidence/qa-evidence/api-deployment-evidence.json)" \
+            '.image == $image and .ready == .latest and .enabled == "false"' \
+            promotion-evidence/production-after.json > /dev/null
+          echo "image=$(jq -r .image promotion-evidence/qa-evidence/api-deployment-evidence.json)" >> "${GITHUB_OUTPUT}"
+
+      - name: Sign in to Azure with workload identity
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify customer app and dedicated queue before activation
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          IMAGE: ${{ steps.evidence.outputs.image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${AZURE_RESOURCE_GROUP}"
+          # shellcheck disable=SC2016
+          az containerapp show --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+            --query '{image:properties.template.containers[0].image,ready:properties.latestReadyRevisionName,latest:properties.latestRevisionName,enabled:properties.template.containers[0].env[?name==`ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED`].value | [0],queue:properties.template.containers[0].env[?name==`ADVERSE_MEDIA_INCIDENT_QUEUE_URL`].value | [0],archive:properties.template.containers[0].env[?name==`GDELT_STORAGE_ACCOUNT_URL`].value | [0],identities:identity.userAssignedIdentities}' \
+            --output json > activation-before.json
+          jq -e --arg image "${IMAGE}" \
+            '.image == $image and .ready == .latest and .enabled == "false" and
+              (.queue | test("^https://[a-z0-9]+[.]queue[.]core[.]windows[.]net/adverse-media-incident$")) and
+              (.archive | test("^https://[a-z0-9]+[.]blob[.]core[.]windows[.]net$")) and
+              (.identities | length > 0)' activation-before.json > /dev/null
+
+      - name: Activate separate incident screening product
+        id: activate
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          set -euo pipefail
+          az containerapp update --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+            --set-env-vars ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED=true --output none
+
+      - name: Verify ready production revision and feature switch
+        id: verify
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          IMAGE: ${{ steps.evidence.outputs.image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            # shellcheck disable=SC2016
+            az containerapp show --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+              --query '{image:properties.template.containers[0].image,ready:properties.latestReadyRevisionName,latest:properties.latestRevisionName,enabled:properties.template.containers[0].env[?name==`ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED`].value | [0]}' \
+              --output json > activation-after.json
+            if jq -e --arg image "${IMAGE}" \
+              '.image == $image and .ready == .latest and .enabled == "true"' \
+              activation-after.json > /dev/null; then exit 0; fi
+            echo "Waiting for incident API revision readiness (${attempt}/20)"
+            sleep 15
+          done
+          exit 1
+
+      - name: Restore disabled switch if activation verification fails
+        if: failure() && (steps.activate.outcome == 'failure' || steps.verify.outcome == 'failure')
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          set -euo pipefail
+          az containerapp update --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+            --set-env-vars ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED=false --output none
+
+      - name: Retain activation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: incident-api-activation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            promotion-run.json
+            promotion-evidence/qa-evidence/api-deployment-evidence.json
+            promotion-evidence/production-after.json
+            activation-before.json
+            activation-after.json
+          if-no-files-found: ignore
+          retention-days: 30
