@@ -23,6 +23,8 @@ If Case Manager is enabled for a workspace, submission creates a pending case. T
 
 The customer API uses the existing Brave credential, Azure archive, and three separate admin credential slots: `adverse-media-jev` for screening, `adverse-media-summary` for name variants and summaries, and `adverse-media-article-extraction` for full-text extraction. The extraction slot may be supplied by the existing `EVENT_REGISTRY_API_KEY` runtime secret where that secret is correctly provisioned. These credentials are server-side and never accepted from the caller. The incident queue and dead-letter queue are separate from the older deep-research queue, including a distinct QA queue when deployed in parallel mode. Queue visibility is one hour; an interrupted job fails and is refunded rather than repeating provider calls without a checkpoint.
 
+The incident archive lookup explicitly requires a verified V2 snapshot, even where the global V2 read switch for older products remains off. The app must retain `GDELT_STORAGE_ACCOUNT_URL` and managed-identity read access. A missing or incomplete V2 snapshot fails the screening; it does not silently use a V1 scan.
+
 See [the standalone OpenAPI contract](/Users/zainabkhan/Documents/ChatGPT/verification-adverse-advance/api/adverse-media-incident-openapi.json) for fields and response codes.
 
 ## Release gates

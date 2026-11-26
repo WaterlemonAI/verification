@@ -52,6 +52,31 @@ test('a required V2 lookup never silently falls back to a V1 scan', async () => 
   }
 });
 
+test('a product-required V2 lookup works while the global V2 switch is off', async () => {
+  const previous = process.env.GDELT_V2_READ_ENABLED;
+  process.env.GDELT_V2_READ_ENABLED = 'false';
+  try {
+    const snapshotTime = new Date(Math.floor((Date.now() - 60 * 60_000) / (15 * 60_000)) * 15 * 60_000);
+    const timestamp = snapshotTime.toISOString().replace(/[-:T]/g, '').slice(0, 12) + '00';
+    const sourceTime = `${snapshotTime.toISOString().slice(0, 16)}:00.000Z`;
+    const result = await searchLocalGdeltIndex({ name: 'No Matching Entity',
+      entity_type: 'business', archive_all_stored: true }, {
+      requireV2: true, state: { coverage_start: sourceTime, coverage_end: sourceTime },
+      v2State: { index_version: 2, coverage_start: timestamp, coverage_end: timestamp,
+        committed_intervals: 1 },
+      v2Clients: { summaryTable: { async getEntity() { throw Object.assign(new Error('not found'),
+        { statusCode: 404 }); } } },
+      clients: { table: { listEntities() { throw new Error('v1_scan_must_not_run'); } } }
+    });
+    assert.equal(result.scan.mode, 'v2_point_summary');
+    assert.equal(result.complete, true);
+    assert.deepEqual(result.results, []);
+  } finally {
+    if (previous === undefined) delete process.env.GDELT_V2_READ_ENABLED;
+    else process.env.GDELT_V2_READ_ENABLED = previous;
+  }
+});
+
 test('local archive streams beyond the former 250-row cutoff and includes older stored records', async () => {
   const current = Date.now();
   const state = {
