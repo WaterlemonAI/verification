@@ -870,7 +870,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
             { name: 'ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED', value: enableAdverseMediaSearchPlusGpt ? '1' : '0' }
             { name: 'ADVERSE_MEDIA_ADVANCE_ENABLED', value: enableAdverseMediaAdvance && gdeltV2ReadEnabled && gdeltArchiveReviewEnabled && enableDeepResearchWorker && !parallelDeployment ? 'true' : 'false' }
-            { name: 'ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED', value: enableAdverseMediaIncidentScreening && gdeltV2ReadEnabled ? 'true' : 'false' }
+            { name: 'ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED', value: enableAdverseMediaIncidentScreening ? 'true' : 'false' }
             { name: 'ADVERSE_MEDIA_INCIDENT_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${incidentQueueName}' }
             { name: 'ADVERSE_MEDIA_INCIDENT_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${incidentDeadLetterQueueName}' }
             { name: 'ADVERSE_MEDIA_WORKER_ENABLED', value: !parallelDeployment && enableDeepResearchWorker ? 'true' : 'false' }
