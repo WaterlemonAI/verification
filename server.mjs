@@ -3459,6 +3459,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           { error: error.message === 'request_too_large' ? 'request_too_large' : 'invalid_event_register' }); }
         try {
           if (url.pathname === '/internal/adverse-media-advance/report-test') {
+            const allowUnsignedPdf = process.env.ADVERSE_MEDIA_ADVANCE_UNSIGNED_PDF_ENABLED === 'true';
             const result = await createAdverseMediaIncidentReport(input, {
               screeningDependencies: {
                 braveApiKey: await store.getMasterKey('adverse-media'),
@@ -3467,7 +3468,9 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
                 archiveSearch: jevArchiveSearch, archivePage: jevArchivePage
               },
               summaryApiKey: process.env.MISTRAL_API_KEY || await store.getMasterKey('adverse-media-summary'),
-              signing: incidentReportSigning || await loadIncidentReportSigningIdentity(),
+              signing: allowUnsignedPdf ? null
+                : incidentReportSigning || await loadIncidentReportSigningIdentity(),
+              allowUnsignedPdf,
               fetchImpl
             });
             if (onIncidentReportAudit) await onIncidentReportAudit({

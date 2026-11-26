@@ -315,6 +315,29 @@ test('no-media case returns Safe JSON and a one-page signed PDF with names actua
   } finally { newsRows = previousNews; archiveRows = previousArchive; }
 });
 
+test('explicit unsigned report mode returns JSON and an unsigned PDF', async () => {
+  const previousNews = newsRows;
+  const previousArchive = archiveRows;
+  newsRows = [];
+  archiveRows = [];
+  process.env.ADVERSE_MEDIA_ADVANCE_UNSIGNED_PDF_ENABLED = 'true';
+  try {
+    const response = await reportPost({ subject: { name: 'Arbaz Uddin', entity_type: 'individual' },
+      date_from: '2026-11-01', date_to: '2026-11-25' });
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.screening_result, 'Safe');
+    assert.equal(result.report.digitally_signed, false);
+    const pdf = Buffer.from(result.report.pdf_base64, 'base64');
+    assert.equal((await PDFDocument.load(pdf)).getPageCount(), 1);
+    assert.doesNotMatch(pdf.toString('latin1'), /\/SubFilter\s*\/adbe\.pkcs7\.detached/);
+  } finally {
+    delete process.env.ADVERSE_MEDIA_ADVANCE_UNSIGNED_PDF_ENABLED;
+    newsRows = previousNews;
+    archiveRows = previousArchive;
+  }
+});
+
 test('caller-supplied transliterations are searched exactly without generating replacements', async () => {
   const previousNews = newsRows;
   const previousArchive = archiveRows;

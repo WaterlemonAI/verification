@@ -85,6 +85,17 @@ test('Safe with retained non-adverse media keeps the signed incident-register la
   assert.equal((await PDFDocument.load(report.bytes)).getPageCount(), 4);
 });
 
+test('explicit unsigned mode labels both report layouts and omits a signature', async () => {
+  const safe = { ...response, screening_result: 'Safe', event_register: {
+    articles: [article('ordinary', null, 'non-adverse')], incidents: [] } };
+  for (const input of [safe, { ...safe, event_register: { articles: [], incidents: [] } }]) {
+    const report = await createJevIncidentPdf({ response: input, allowUnsignedPdf: true });
+    assert.equal(report.digitallySigned, false);
+    assert.ok((await PDFDocument.load(report.bytes)).getPageCount() >= 1);
+    assert.doesNotMatch(report.bytes.toString('latin1'), /\/SubFilter\s*\/adbe\.pkcs7\.detached/);
+  }
+});
+
 test('incident PDF cannot be generated without a signing identity', async () => {
   await assert.rejects(() => createJevIncidentPdf({ response }),
     { message: 'pdf_signing_certificate_required' });
