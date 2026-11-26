@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { KeyVaultStore } from '../lib/api-store.mjs';
+import { KeyVaultStore, additionalAdminSecretName } from '../lib/api-store.mjs';
+import { adminBankStatementOwnerId, createAdminAccount } from '../lib/admin-auth.mjs';
 
 test('Key Vault store keeps customer credentials hashed and supports revocation', async () => {
   process.env.IDENTITY_ENDPOINT = 'http://identity.local/token';
@@ -31,6 +32,17 @@ test('Key Vault store keeps customer credentials hashed and supports revocation'
   };
 
   const store = new KeyVaultStore({ vaultUri: 'https://vault.test/', managedIdentityClientId: 'runtime-client-id', fetchImpl });
+  const primaryAdmin = createAdminAccount('admin@ai7uae.com', 'PrimaryPassword!123');
+  await store.setAdminAccount(primaryAdmin);
+  const secondaryAdmin = await store.setAdditionalAdminAccount(createAdminAccount('tech@ai7uae.com', 'SecondaryPassword!123'));
+  assert.equal((await store.getAdminAccount()).email, primaryAdmin.email);
+  assert.equal((await store.getAdminAccountByEmail('TECH@AI7UAE.COM')).email, secondaryAdmin.email);
+  assert.equal(adminBankStatementOwnerId(secondaryAdmin), adminBankStatementOwnerId(primaryAdmin));
+  assert.equal(secrets.has(additionalAdminSecretName(secondaryAdmin.email)), true);
+  assert.equal(secrets.get('ai7-admin-account').value, JSON.stringify(primaryAdmin));
+  await store.setAdminAccountByEmail(createAdminAccount(secondaryAdmin.email, 'ChangedPassword!123', secondaryAdmin));
+  assert.equal((await store.getAdminAccountByEmail(secondaryAdmin.email)).version, 2);
+  assert.equal((await store.getAdminAccount()).version, 1);
   const videoCall = (await store.listIntegrations()).find((item) => item.id === 'setup-video-call');
   assert.equal(videoCall.masterAuthKeyConfigured, false);
   assert.equal(videoCall.upstreamUrl, undefined);
