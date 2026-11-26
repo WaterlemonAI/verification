@@ -9,6 +9,7 @@ process.env.AI7_API_KEY_HASHES = createHash('sha256').update(apiKey).digest('hex
 
 const { createAppServer } = await import('../server.mjs');
 const { EnvironmentStore } = await import('../lib/api-store.mjs');
+const { validateAdverseMediaRequest } = await import('../lib/adverse-media.mjs');
 
 const store = new EnvironmentStore();
 await store.setMasterKey('adverse-media', 'private-search-key');
@@ -115,7 +116,9 @@ before(async () => {
       if (url.hostname === 'api.gdeltproject.org') {
         assert.equal(options.headers['x-subscription-token'], undefined);
         assert.equal(url.searchParams.get('format'), 'json');
-        assert.equal(url.searchParams.get('timespan'), '1y');
+        assert.match(url.searchParams.get('startdatetime'), /^\d{14}$/);
+        assert.match(url.searchParams.get('enddatetime'), /^\d{14}$/);
+        assert.equal(url.searchParams.get('timespan'), null);
         const failureCheck = url.searchParams.get('query').includes('AI Failure Example');
         const schemaEscapeCheck = url.searchParams.get('query').includes('Schema Escape Example');
         const chinaCheck = url.searchParams.get('query').includes('华信科技');
@@ -265,6 +268,27 @@ before(async () => {
 
 after(async () => new Promise((resolve) => app.close(resolve)));
 
+test('adverse media defaults to a disclosed one-year UTC window', () => {
+  const yearEndingOnDate = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd',
+    date_to: '2026-11-18' });
+  assert.equal(yearEndingOnDate.date_from, '2025-11-18');
+  assert.equal(yearEndingOnDate.date_to, '2026-11-18');
+  assert.equal(yearEndingOnDate.archive_all_stored, false);
+
+  const leapYear = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd',
+    date_to: '2024-02-29' });
+  assert.equal(leapYear.date_from, '2023-02-28');
+
+  const today = new Date().toISOString().slice(0, 10);
+  const current = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd' });
+  assert.equal(current.archive_all_stored, true);
+  assert.equal(current.date_to, today);
+  assert.equal(current.date_from, validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd',
+    date_to: today }).date_from);
+  assert.throws(() => validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Ltd',
+    date_from: '2099-01-01' }), /date_from must not be after date_to/);
+});
+
 test('adverse media endpoint returns a customer-safe evidence response', async () => {
   const response = await fetch(`${appUrl}/service/adverse_media`, {
     method: 'POST',
@@ -275,7 +299,7 @@ test('adverse media endpoint returns a customer-safe evidence response', async (
       aliases: ['J Example'],
       countries: ['AE'],
       languages: ['en'],
-      date_from: '2025-01-01',
+      date_from: '2026-10-01',
       max_results: 25
     })
   });
@@ -316,6 +340,17 @@ test('adverse media endpoint returns a customer-safe evidence response', async (
   assert.equal(requests.length, 7);
 });
 
+test('standard endpoint cannot bypass Search+ entitlement with a body flag', async () => {
+  const before = requests.length;
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'business', name: 'John Example', search_plus: true })
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /adverse_media_search_plus/);
+  assert.equal(requests.length, before);
+});
+
 test('identical checks reuse cached evidence without paid search calls', async () => {
   const paidSearchCount = () => requests.filter(({ url }) => url.hostname === 'api.search.brave.com').length;
   const beforeCount = paidSearchCount();
@@ -324,19 +359,36 @@ test('identical checks reuse cached evidence without paid search calls', async (
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       entity_type: 'individual', name: 'John Example', aliases: ['J Example'], countries: ['AE'],
-      languages: ['en'], date_from: '2025-01-01', risk_threshold: 1, max_results: 25
+      languages: ['en'], date_from: '2026-10-01', max_results: 25
     })
   });
   const body = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(body.summary.risk_threshold, 1);
-  assert.equal(body.summary.results_at_or_above_threshold, 0);
-  assert.equal(body.summary.human_review_required, false);
-  assert.equal(body.summary.threshold_status, 'safe');
-  assert.equal(body.summary.risk_level, 'safe');
-  assert.equal(body.results[0].risk_level, 'safe');
-  assert.equal(body.results[0].review_required, false);
+  assert.equal(body.summary.risk_threshold, 0.65);
+  assert.equal(body.summary.results_at_or_above_threshold, 1);
+  assert.equal(body.summary.human_review_required, true);
+  assert.equal(body.summary.profile_status, 'unsafe');
+  assert.equal(body.summary.threshold_status, 'high_risk');
+  assert.equal(body.summary.risk_level, 'high');
+  assert.equal(body.results[0].risk_level, 'high');
+  assert.equal(body.results[0].review_required, true);
   assert.equal(paidSearchCount(), beforeCount);
+});
+
+test('a changed threshold gets a fresh search and never clears a confirmed adverse profile', async () => {
+  const paidSearchCount = () => requests.filter(({ url }) => url.hostname === 'api.search.brave.com').length;
+  const beforeCount = paidSearchCount();
+  const response = await fetch(`${appUrl}/service/adverse_media`, {
+    method: 'POST', headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_type: 'individual', name: 'John Example', aliases: ['J Example'],
+      countries: ['AE'], languages: ['en'], date_from: '2026-10-01', risk_threshold: 1, max_results: 25 })
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.ok(paidSearchCount() > beforeCount);
+  assert.equal(body.summary.profile_status, 'unsafe');
+  assert.equal(body.summary.risk_level, 'below_review_threshold');
+  assert.equal(body.results[0].review_required, true);
 });
 
 test('customers can configure High Risk and Review percentage bands', async () => {
@@ -455,9 +507,10 @@ test('returns deterministic evidence when optional AI classification is unavaila
   assert.equal(body.results.length, 0);
   assert.equal(body.media_buckets.general_news_mentions.length, 1);
   assert.equal(body.media_buckets.general_news_mentions[0].ai_classification, undefined);
-  assert.equal(body.status, 'partial');
+  assert.equal(body.status, 'completed');
   assert.equal(body.summary.decision_eligible, false);
-  assert.equal(body.summary.threshold_status, 'incomplete_coverage');
+  assert.equal(body.summary.profile_status, 'inconclusive');
+  assert.equal(body.summary.threshold_status, 'classification_incomplete');
   assert.equal(body.methodology, undefined);
   assert.equal(body.usage, undefined);
 });
@@ -472,7 +525,7 @@ test('does not suppress exact-name adverse evidence using a zero-confidence AI n
   const body = await response.json();
   const paidCalls = requests.slice(beforeCount).filter(({ url }) => url.hostname === 'api.search.brave.com');
   assert.equal(response.status, 200);
-  assert.equal(body.status, 'partial');
+  assert.equal(body.status, 'completed');
   assert.ok(body.media_buckets.no_impact_media.length >= 1);
   assert.ok(body.media_buckets.no_impact_media.some((result) => /Prabhpreet Singh Gill|Pay10/.test(result.title)));
   assert.equal(body.summary.potentially_relevant_results, 0);
@@ -534,7 +587,7 @@ test('retries transient provider failures and reports partial coverage instead o
   assert.equal(paidCalls.length, 8);
   assert.equal(body.status, 'partial');
   assert.equal(body.coverage.complete, false);
-  assert.equal(body.summary.outcome, 'inconclusive');
+  assert.equal(body.summary.outcome, 'unsafe');
   assert.equal(body.summary.risk_level, 'indeterminate');
   assert.deepEqual(body.coverage.sources, [
     { source: 'current_news', status: 'unavailable' },
@@ -632,6 +685,8 @@ test('deep research queues an optional signed HTTPS callback without exposing cr
     assert.equal(jobs[0].callback_secret, body.callback.signing_secret);
     assert.equal(jobs[0].callback_access_key, 'callback-token-123');
     assert.equal(jobs[0].request.callback_url, '');
+    assert.equal(jobs[0].request.archive_review, false);
+    assert.equal(jobs[0].archive_review_enabled, false);
     assert.equal(JSON.stringify(jobs[0].request).includes('callback-token-123'), false);
     assert.equal(JSON.stringify(jobs[0].input_payload).includes('callback-token-123'), false);
     assert.equal(JSON.stringify(body).includes('callback-token-123'), false);
@@ -652,6 +707,44 @@ test('deep research queues an optional signed HTTPS callback without exposing cr
   } finally {
     await new Promise((resolve) => queuedApp.close(resolve));
   }
+});
+
+test('archive article review requires explicit opt-in, an undated callback and a ready resolver', async (t) => {
+  const base = { entity_type: 'business', name: 'Example LLC', deep_research: true,
+    callback_url: 'https://example.com/ai7-webhook', archive_review: true };
+  assert.throws(() => validateAdverseMediaRequest({ ...base, archive_review: 'true' }), /archive_review must be a boolean/);
+  assert.throws(() => validateAdverseMediaRequest({ ...base, callback_url: '' }), /archive_review requires/);
+  assert.throws(() => validateAdverseMediaRequest({ ...base, date_from: '2026-01-01' }), /undated/);
+
+  const prior = process.env.GDELT_ARCHIVE_REVIEW_ENABLED;
+  t.after(() => { if (prior === undefined) delete process.env.GDELT_ARCHIVE_REVIEW_ENABLED;
+    else process.env.GDELT_ARCHIVE_REVIEW_ENABLED = prior; });
+  process.env.GDELT_ARCHIVE_REVIEW_ENABLED = 'true';
+  const jobs = [];
+  const queue = { enqueue: async (job) => jobs.push(job) };
+  const unavailable = createAppServer({ store, deepResearchQueue: queue, startWorker: false });
+  await new Promise((resolve) => unavailable.listen(0, '127.0.0.1', resolve));
+  t.after(() => unavailable.close());
+  const unavailableUrl = `http://127.0.0.1:${unavailable.address().port}`;
+  assert.equal((await (await fetch(`${unavailableUrl}/service/adverse_media/config`)).json()).archive_review_enabled, false);
+  const headers = { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' };
+  const rejected = await fetch(`${unavailableUrl}/service/adverse_media`, {
+    method: 'POST', headers, body: JSON.stringify(base) });
+  assert.equal(rejected.status, 503);
+  assert.equal(jobs.length, 0);
+
+  const ready = createAppServer({ store, deepResearchQueue: queue, startWorker: false,
+    adverseArchiveReviewStep: async () => ({ status: 'completed' }) });
+  await new Promise((resolve) => ready.listen(0, '127.0.0.1', resolve));
+  t.after(() => ready.close());
+  const readyUrl = `http://127.0.0.1:${ready.address().port}`;
+  assert.equal((await (await fetch(`${readyUrl}/service/adverse_media/config`)).json()).archive_review_enabled, true);
+  const accepted = await fetch(`${readyUrl}/service/adverse_media`, {
+    method: 'POST', headers, body: JSON.stringify(base) });
+  assert.equal(accepted.status, 202);
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].request.archive_review, true);
+  assert.equal(jobs[0].archive_review_enabled, true);
 });
 
 test('all-source outage fails closed with a customer-safe reason and transaction ID', async () => {
@@ -694,7 +787,7 @@ test('public documentation exposes the complete route without provider or key de
   const specText = await (await fetch(`${appUrl}/openapi.json`)).text();
   const spec = JSON.parse(specText);
   assert.ok(Object.hasOwn(spec.paths, '/service/adverse_media'));
-  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'high_risk_threshold_percent', 'review_threshold_percent', 'search_plus', 'max_results', 'deep_research', 'callback_url']) {
+  for (const field of ['entity_type', 'name', 'aliases', 'countries', 'languages', 'date_from', 'date_to', 'high_risk_threshold_percent', 'review_threshold_percent', 'search_plus', 'max_results', 'deep_research', 'archive_review', 'callback_url']) {
     assert.ok(Object.hasOwn(spec.components.schemas.AdverseMediaRequest.properties, field));
     assert.ok(html.includes(field));
   }

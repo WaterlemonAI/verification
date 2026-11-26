@@ -30,6 +30,9 @@ param targetDays int = 365
 @description('Name of the separate weekly backfill job.')
 param jobName string = 'caj-ai7uae-gdelt-backfill'
 
+@description('Enable V2 manifest and summary dual writes after V2 tables exist.')
+param v2DualWrite bool = false
+
 resource backfillJob 'Microsoft.App/jobs@2024-03-01' = {
   name: jobName
   location: location
@@ -69,6 +72,9 @@ resource backfillJob 'Microsoft.App/jobs@2024-03-01' = {
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${storageAccountName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
             { name: 'GDELT_INDEX_TABLE', value: 'GdeltEntityMentions' }
+            { name: 'GDELT_V2_SUMMARY_TABLE', value: 'GdeltEntitySummaryV2' }
+            { name: 'GDELT_V2_MANIFEST_TABLE', value: 'GdeltIntervalManifestV2' }
+            { name: 'GDELT_V2_DUAL_WRITE', value: v2DualWrite ? 'true' : 'false' }
             { name: 'GDELT_BACKFILL_TARGET_DAYS', value: string(targetDays) }
           ]
           resources: {

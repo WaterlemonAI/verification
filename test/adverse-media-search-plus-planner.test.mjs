@@ -28,5 +28,29 @@ test('Search+ reserves every allowed language and publisher queries with associa
   assert.ok(result.coverage.search_plus.publisher_batches_attempted >= 1);
   assert.ok(result.coverage.search_plus.publishers_attempted > 0);
   assert.ok(paidQueries.some((query) => query.includes('"Cobalt Holdings"')));
-  assert.ok(paidQueries.length <= 12);
+  assert.ok(paidQueries.length <= 20);
+});
+
+test('Search+ adds publisher queries without removing any base Brave query', async () => {
+  const observed = [];
+  const fetchImpl = async (input) => {
+    const url = new URL(input);
+    observed.push({ path: url.pathname, query: url.searchParams.get('q') });
+    return Response.json(url.pathname.includes('/news/') ? { results: [] } : { web: { results: [] } });
+  };
+  const run = async (searchPlus) => {
+    observed.length = 0;
+    const request = validateAdverseMediaRequest({ entity_type: 'business', name: 'Example Group',
+      countries: ['AE'], languages: ['en', 'ar'], search_plus: searchPlus });
+    await screenAdverseMedia({ request, apiKey: 'test', fetchImpl,
+      archiveSearch: async () => ({ results: [], complete: true, origin: 'local', state: null }) });
+    return [...observed];
+  };
+  const standard = await run(false);
+  const plus = await run(true);
+  assert.ok(standard.length > 0);
+  assert.ok(plus.length > standard.length);
+  for (const query of standard) assert.ok(plus.some((candidate) => candidate.path === query.path
+    && candidate.query === query.query), query.query);
+  assert.ok(plus.some((query) => query.query.includes('site:')));
 });

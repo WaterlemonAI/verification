@@ -1,6 +1,6 @@
 const samples = {
   curl: `curl --request POST \\
-  --url https://api.ai7uae.com/service/adverse_media \\
+  --url https://api.ai7uae.com/service/adverse_media_search_plus \\
   --header 'Authorization: Bearer YOUR_AI7_API_KEY' \\
   --header 'Content-Type: application/json' \\
   --data '{
@@ -9,18 +9,14 @@ const samples = {
     "aliases": ["ALTERNATE NAME"],
     "countries": ["AE"],
     "languages": ["en", "ar"],
-    "date_from": "2023-01-01",
     "high_risk_threshold_percent": 90,
     "review_threshold_percent": 65,
     "search_plus": true,
-    "deep_research": true,
-    "callback_url": "https://your-domain.example/webhooks/ai7",
-    "callback_access_key": "YOUR_CALLBACK_BEARER_KEY",
     "customer_logo_url": "https://your-domain.example/logo.png",
     "max_results": 25
   }'`,
   javascript: `const response = await fetch(
-  'https://api.ai7uae.com/service/adverse_media',
+  'https://api.ai7uae.com/service/adverse_media_search_plus',
   {
     method: 'POST',
     headers: {
@@ -33,13 +29,9 @@ const samples = {
       aliases: ['ALTERNATE NAME'],
       countries: ['AE'],
       languages: ['en', 'ar'],
-      date_from: '2023-01-01',
       high_risk_threshold_percent: 90,
       review_threshold_percent: 65,
       search_plus: true,
-      deep_research: true,
-      callback_url: 'https://your-domain.example/webhooks/ai7',
-      callback_access_key: 'YOUR_CALLBACK_BEARER_KEY',
       customer_logo_url: 'https://your-domain.example/logo.png',
       max_results: 25
     })
@@ -50,7 +42,7 @@ const result = await response.json();`,
   python: `import requests
 
 response = requests.post(
-    "https://api.ai7uae.com/service/adverse_media",
+    "https://api.ai7uae.com/service/adverse_media_search_plus",
     headers={"Authorization": "Bearer YOUR_AI7_API_KEY"},
     json={
         "entity_type": "individual",
@@ -58,13 +50,9 @@ response = requests.post(
         "aliases": ["ALTERNATE NAME"],
         "countries": ["AE"],
         "languages": ["en", "ar"],
-        "date_from": "2023-01-01",
         "high_risk_threshold_percent": 90,
         "review_threshold_percent": 65,
         "search_plus": True,
-        "deep_research": True,
-        "callback_url": "https://your-domain.example/webhooks/ai7",
-        "callback_access_key": "YOUR_CALLBACK_BEARER_KEY",
         "customer_logo_url": "https://your-domain.example/logo.png",
         "max_results": 25,
     },
@@ -81,6 +69,8 @@ const copyResponse = byId('copy-response');
 const sendButton = byId('send-request');
 const formError = byId('form-error');
 const deepResearch = byId('deep-research');
+const archiveReview = byId('archive-review');
+const archiveReviewField = byId('archive-review-field');
 const callbackField = byId('callback-field');
 const callbackUrl = byId('callback-url');
 const callbackAccessKeyField = byId('callback-access-key-field');
@@ -88,6 +78,11 @@ const callbackAccessKey = byId('callback-access-key');
 const customerLogoUrl = byId('customer-logo-url');
 const downloadReport = byId('download-report');
 let latestReportUrl = '';
+let archiveReviewEnabled = false;
+fetch('/service/adverse_media/config').then((response) => response.ok ? response.json() : null)
+  .then((config) => { archiveReviewEnabled = config?.archive_review_enabled === true;
+    archiveReviewField.hidden = !archiveReviewEnabled; })
+  .catch(() => {});
 
 const regionPresets = {
   gulf: { countries: ['AE', 'SA', 'QA', 'KW', 'BH', 'OM'], languages: ['en', 'ar'] },
@@ -199,6 +194,7 @@ function requestBody() {
     search_plus: byId('search-plus').checked,
     max_results: maxResults,
     deep_research: deepResearch.checked,
+    archive_review: archiveReviewEnabled && archiveReview.checked,
     callback_url: deepResearch.checked ? callbackUrl.value.trim() : '',
     callback_access_key: deepResearch.checked ? callbackAccessKey.value : '',
     customer_logo_url: customerLogoUrl.value.trim()
@@ -212,6 +208,7 @@ deepResearch.addEventListener('change', () => {
   callbackUrl.disabled = !deepResearch.checked;
   callbackAccessKey.disabled = !deepResearch.checked;
   if (!deepResearch.checked) { callbackUrl.value = ''; callbackAccessKey.value = ''; }
+  if (!deepResearch.checked) archiveReview.checked = false;
 });
 
 byId('regions').addEventListener('change', (event) => {
@@ -259,6 +256,14 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
   let body;
   try { body = requestBody(); }
   catch (error) { formError.textContent = error.message; return; }
+  if (body.archive_review && (!body.deep_research || !body.callback_url || body.date_from || body.date_to)) {
+    formError.textContent = 'Archive article review requires deep research, a callback URL and no date filters.';
+    return;
+  }
+  if (body.search_plus && body.deep_research && !body.archive_review) {
+    formError.textContent = 'Search+ deep research callbacks require an available, explicitly selected archive review.';
+    return;
+  }
 
   sendButton.disabled = true;
   copyResponse.disabled = true;
@@ -269,7 +274,7 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
   responseJson.textContent = JSON.stringify({ status: 'pending', request: body }, null, 2);
   responseJson.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   try {
-    const response = await fetch('/service/adverse_media', {
+    const response = await fetch(body.search_plus ? '/service/adverse_media_search_plus' : '/service/adverse_media', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -282,10 +287,11 @@ byId('adverse-media-form').addEventListener('submit', async (event) => {
     copyResponse.disabled = false;
     latestReportUrl = parsed?.report?.download_url || '';
     downloadReport.disabled = !latestReportUrl;
-    const isPartial = response.ok && parsed?.status === 'partial';
-    responseStatus.className = response.ok && !isPartial ? 'success' : 'error';
-    responseStatus.textContent = isPartial
-      ? `${response.status} Partial — manual review required`
+    const profile = parsed?.summary?.profile_status;
+    const incomplete = response.ok && parsed?.coverage?.complete === false;
+    responseStatus.className = response.ok && profile === 'safe' && !incomplete ? 'success' : 'error';
+    responseStatus.textContent = response.ok && profile
+      ? `${profile[0].toUpperCase()}${profile.slice(1)}${incomplete ? ' · Coverage incomplete' : ''}`
       : `${response.status} ${response.statusText}`;
   } catch {
     responseStatus.className = 'error';

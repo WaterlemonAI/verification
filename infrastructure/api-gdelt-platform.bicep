@@ -17,6 +17,8 @@ param registryId string
 
 var archiveContainerName = 'gdelt-archive'
 var indexTableName = 'GdeltEntityMentions'
+var summaryV2TableName = 'GdeltEntitySummaryV2'
+var manifestV2TableName = 'GdeltIntervalManifestV2'
 var acrPullRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
 var blobContributorRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
 var tableContributorRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')
@@ -72,6 +74,16 @@ resource tableService 'Microsoft.Storage/storageAccounts/tableServices@2023-05-0
 resource indexTable 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
   parent: tableService
   name: indexTableName
+}
+
+resource summaryV2Table 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  parent: tableService
+  name: summaryV2TableName
+}
+
+resource manifestV2Table 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  parent: tableService
+  name: manifestV2TableName
 }
 
 resource ingestionCanPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -130,3 +142,5 @@ output ingestionIdentityResourceId string = ingestionIdentity.id
 output ingestionIdentityClientId string = ingestionIdentity.properties.clientId
 output archiveContainerName string = archiveContainer.name
 output indexTableName string = indexTable.name
+output summaryV2TableName string = summaryV2Table.name
+output manifestV2TableName string = manifestV2Table.name

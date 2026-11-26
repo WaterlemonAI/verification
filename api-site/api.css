@@ -72,8 +72,8 @@ article > p:not(.label,.footnote) { color: var(--muted); line-height: 1.75; }
 .code-block { position: relative; margin-top: 1.5rem; padding: 1.25rem 5rem 1.25rem 1.25rem; overflow: auto; color: #d7e4df; background: var(--dark); border-radius: 5px; }
 .code-block .copy { position: absolute; top: 0; right: 0; border-left-color: #31433e; }
 .code-block code, .code-block pre { font-size: .78rem; line-height: 1.75; white-space: pre; }
-.field-grid { display: grid; grid-template-columns: 1fr 1fr; margin-top: 2rem; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
-.field-grid > div { padding: 1.4rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #fff; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 2rem; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.field-grid > div { min-width: 0; padding: 1.4rem; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: #fff; overflow-wrap: anywhere; }
 .field-grid strong { display: block; font: .82rem "DM Mono", monospace; }
 .field-grid span { color: var(--green); font: .67rem "DM Mono", monospace; }
 .field-grid p { min-height: 2.6em; margin: .7rem 0 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
@@ -298,7 +298,7 @@ body.portal-ready { padding-left: 276px; }
   .layout { display: block; padding-inline: 1.25rem; }
   aside { position:static; display:flex; overflow-x:auto; gap:1rem; margin-bottom:2rem; padding:0 0 1rem; border-left:0; border-bottom:1px solid var(--line); white-space:nowrap; }
   aside p { display:none; }
-  .field-grid { grid-template-columns: 1fr; }
+  .field-grid { grid-template-columns: minmax(0, 1fr); }
   .input-grid { grid-template-columns: 1fr; }
   .checkbox-grid, .weight-grid { grid-template-columns: 1fr 1fr; }
   .schema-tools { align-items: stretch; flex-direction: column; }

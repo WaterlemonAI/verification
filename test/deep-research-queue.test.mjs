@@ -111,6 +111,141 @@ test('deep research worker delivers and removes a completed decision-eligible sc
   assert.equal(deliveredResult.usage, undefined);
 });
 
+test('archive review checkpoints sources first and screens again after bounded pages settle', async () => {
+  const job = makeDeepResearchJob({ ...request, archive_all_stored: true, search_plus: true },
+    { owner_id: 'synthetic-owner' });
+  job.archive_review_enabled = true;
+  const message = messageFor(job);
+  let available = true;
+  let releases = 0;
+  let steps = 0;
+  let screenCalls = 0;
+  let finalReview;
+  let controller;
+  const done = new Promise((resolve) => {
+    const queue = {
+      receive: async () => {
+        if (!available) return null;
+        available = false;
+        return message;
+      },
+      release: async (_message, nextJob) => {
+        releases += 1;
+        message.messageText = JSON.stringify(nextJob);
+        available = true;
+      },
+      complete: async () => { controller.stop(); resolve(); }
+    };
+    controller = startDeepResearchWorker({ queue, resultStore: new MemoryAdverseMediaReportStore(),
+      store: { getMasterKey: async () => 'configured' },
+      archiveReviewStep: async () => (++steps < 3 ? { status: 'processing' }
+        : { review_id: 'a'.repeat(32), status: 'completed', adverse: 0, unresolved: 0 }),
+      screen: async ({ archiveReview, aiClassifier }) => {
+        screenCalls += 1;
+        finalReview = archiveReview;
+        if (screenCalls === 1) {
+          assert.equal(archiveReview.reason, 'archive_review_pending');
+          assert.equal(aiClassifier, undefined);
+        } else assert.equal(typeof aiClassifier, 'function');
+        return { status: 'completed', coverage: { complete: true }, summary: { decision_eligible: true } };
+      },
+      finalize: async ({ response }) => response,
+      deliver: async () => {}
+    });
+  });
+  await done;
+  assert.equal(steps, 3);
+  assert.equal(releases, 2);
+  assert.equal(screenCalls, 2);
+  assert.equal(finalReview.status, 'completed');
+});
+
+test('individual association discovery is frozen across archive pages and final screening', async () => {
+  const job = makeDeepResearchJob({ ...request, entity_type: 'individual',
+    name: 'Mohammad Arbaz Uddin', aliases: [], archive_all_stored: true, archive_review: true },
+  { owner_id: 'synthetic-owner' });
+  job.archive_review_enabled = true;
+  const message = messageFor(job);
+  let available = true;
+  let braveCalls = 0;
+  let reviewSteps = 0;
+  let screenCalls = 0;
+  let reviewedAssociations;
+  let screenedAssociations;
+  let controller;
+  const done = new Promise((resolve) => {
+    const queue = {
+      receive: async () => {
+        if (!available) return null;
+        available = false;
+        return message;
+      },
+      release: async (_message, nextJob) => {
+        message.messageText = JSON.stringify(nextJob);
+        available = true;
+      },
+      complete: async () => { controller.stop(); resolve(); }
+    };
+    controller = startDeepResearchWorker({ queue, resultStore: new MemoryAdverseMediaReportStore(),
+      store: { getMasterKey: async () => 'configured' },
+      fetchImpl: async (url) => {
+        assert.equal(new URL(url).hostname, 'api.search.brave.com');
+        braveCalls += 1;
+        return Response.json({ web: { results: [{
+          title: 'Mohammad Arbaz Uddin founder of Acme Holdings',
+          description: 'Mohammad Arbaz Uddin is founder of Acme Holdings.'
+        }] } });
+      },
+      archiveReviewStep: async (_job, { preparedArchiveScope }) => {
+        reviewSteps += 1;
+        reviewedAssociations = preparedArchiveScope.associations;
+        return reviewSteps === 1 ? { status: 'processing' }
+          : { review_id: 'a'.repeat(32), status: 'completed', adverse: 0, unresolved: 0 };
+      },
+      screen: async ({ preparedArchiveScope }) => {
+        screenCalls += 1;
+        screenedAssociations = preparedArchiveScope.associations;
+        return { status: 'completed', coverage: { complete: true }, summary: { decision_eligible: true } };
+      },
+      finalize: async ({ response }) => response,
+      deliver: async () => {}
+    });
+  });
+  await done;
+  assert.deepEqual(reviewedAssociations, [{ value: 'Acme Holdings', type: 'organization' }]);
+  assert.deepEqual(screenedAssociations, reviewedAssociations);
+  assert.equal(braveCalls, 1);
+  assert.equal(reviewSteps, 2);
+  assert.equal(screenCalls, 2);
+});
+
+test('disabled archive review settles queued work as inconclusive without resolving articles', async () => {
+  const job = makeDeepResearchJob({ ...request, archive_all_stored: true, archive_review: true },
+    { owner_id: 'synthetic-owner' });
+  job.archive_review_enabled = true;
+  let controller;
+  let reviewCalls = 0;
+  let screened;
+  let delivered;
+  const done = new Promise((resolve) => {
+    const queue = { receive: async () => messageFor(job),
+      complete: async () => { controller.stop(); resolve(); } };
+    controller = startDeepResearchWorker({ queue, resultStore: new MemoryAdverseMediaReportStore(),
+      store: { getMasterKey: async () => 'configured' }, archiveReviewEnabled: () => false,
+      archiveReviewStep: async () => { reviewCalls += 1; return { status: 'completed' }; },
+      screen: async (input) => { screened = input;
+        return { status: 'completed', coverage: { complete: true }, summary: { profile_status: 'inconclusive', decision_eligible: false } }; },
+      finalize: async ({ response }) => response,
+      deliver: async (_job, result) => { delivered = result; }
+    });
+  });
+  await done;
+  assert.equal(reviewCalls, 0);
+  assert.equal(screened.request.archive_review, true);
+  assert.equal(screened.archiveReview.reason, 'archive_review_disabled');
+  assert.equal(delivered.summary.profile_status, 'inconclusive');
+});
+
 test('failed callbacks reuse the saved screening and make zero additional Brave calls', async () => {
   const job = makeDeepResearchJob(request, { owner_id: 'synthetic-owner' });
   const resultStore = new MemoryAdverseMediaReportStore();
