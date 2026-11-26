@@ -187,6 +187,8 @@ The API Engine manages these records inside the dedicated Key Vault:
 - `AdverseMediaReports` table partition `customer-invitations`: atomic, hash-only invitation claims so parallel app replicas cannot accept the same setup link twice.
 - `integration-<id>-master-key`: one write-only upstream master key per integration.
 
+For `iban-verification`, the upstream secret contains the supplier username and password as one JSON value. The admin console replaces both together; existing username-only secrets remain usable until replaced.
+
 `adverse-media` and `adverse-media-ai` are runtime-managed integrations. Their private credentials are stored separately as `integration-adverse-media-master-key` and `integration-adverse-media-ai-master-key`; either can be set or rotated from the protected administration console. The AI credential is optional and deterministic screening remains available without it.
 
 ### Azure OpenAI account

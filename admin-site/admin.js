@@ -311,10 +311,12 @@ async function loadIntegrations() {
       const isDocumentOcrAi = item.id === 'document-ocr-ai';
       const isDocumentOcrTaed = item.id === 'document-ocr-taed';
       const isMeeting = item.id === 'setup-video-call' || item.id === 'meeting-availability';
+      byId('supplier-password-label').hidden = !isIban;
+      form.elements.password.required = isIban;
       byId('supplier-credential-label').firstChild.textContent = isIban ? 'Supplier username' : isMeeting ? 'Shared meeting bearer token' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi || isDocumentOcrAi || isDocumentOcrTaed) ? 'Private API key' : 'Supplier credential';
       form.elements.credential.placeholder = isIban ? 'Enter the supplier username' : isMeeting ? 'Enter the bearer token without Bearer prefix' : (isEntitySearch || isAdverseMedia || isAdverseMediaAi || isDocumentOcrAi || isDocumentOcrTaed) ? 'Enter the private API key' : 'Enter the private credential';
       byId('supplier-credential-help').textContent = isIban
-        ? 'The supplied IBAN collection authenticates each internal request with this username header; it does not transmit a password.'
+        ? 'The username and password are sent as private headers on the supplier encrypt, verify, and decrypt requests. Saving replaces both values together.'
         : isEntitySearch
           ? 'This write-only API key is applied internally to comprehensive entity-search requests.'
           : isAdverseMedia
@@ -1056,7 +1058,7 @@ byId('supplier-credential-form').addEventListener('submit', async (event) => {
   byId('supplier-credential-error').textContent = '';
   try {
     await request(`/admin/api/integrations/${id}/credential`, {
-      method: 'PUT', body: JSON.stringify({ credential: form.elements.credential.value })
+      method: 'PUT', body: JSON.stringify({ credential: form.elements.credential.value, ...(id === 'iban-verification' ? { password: form.elements.password.value } : {}) })
     });
     form.reset();
     byId('supplier-credential-dialog').close();
