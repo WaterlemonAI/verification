@@ -15,6 +15,9 @@ process.env.AI7_API_KEY_HASHES = [key, otherKey].map((value) => createHash('sha2
 process.env.AI7_ADMIN_KEY_HASHES = createHash('sha256').update(adminKey).digest('hex');
 const { createAppServer } = await import('../server.mjs');
 const { encryptBsa } = await import('../lib/bsa-crypto.mjs');
+const { EnvironmentStore } = await import('../lib/api-store.mjs');
+const { createAdminAccount } = await import('../lib/admin-auth.mjs');
+const { reportOwnerId } = await import('../lib/adverse-media-report-store.mjs');
 
 let directory;
 let server;
@@ -22,6 +25,8 @@ let url;
 let pdf;
 let adminCookie;
 let adminCsrf;
+let adminStore;
+let adminAnalysisStatusUrl;
 const codes = [];
 
 before(async () => {
@@ -29,7 +34,8 @@ before(async () => {
   process.env.BSA_DATA_DIR = directory;
   pdf = await readFile(new URL('./fixtures/bsa-synthetic-combined.pdf', import.meta.url));
   await writeFile(join(directory, 'worker-capabilities.json'), JSON.stringify({ native: 'ready', rapidocr: 'ready', paddleocr: 'ready', azureLayout: 'configured' }));
-  server = createAppServer({ startWorker: false, mailer: { configured: true,
+  adminStore = new EnvironmentStore();
+  server = createAppServer({ store: adminStore, startWorker: false, mailer: { configured: true,
     sendLoginCode: async (value) => { codes.push(value); } } });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   url = `http://127.0.0.1:${server.address().port}`;
@@ -169,6 +175,7 @@ test('admin console uses its signed session and CSRF protection for the local de
   const submitted = await fetch(`${url}/admin/api/bsa`, { method: 'POST', headers, body: form() });
   assert.equal(submitted.status, 202);
   const accepted = await submitted.json();
+  adminAnalysisStatusUrl = accepted.statusUrl;
   assert.match(accepted.statusUrl, /^\/admin\/api\/bsa\//);
   assert.equal((await fetch(`${url}${accepted.statusUrl}`, { headers })).status, 200);
   assert.equal((await fetch(`${url}${accepted.statusUrl}`, { headers: { authorization: `Bearer ${key}` } })).status, 401);
@@ -181,6 +188,28 @@ test('admin console uses its signed session and CSRF protection for the local de
   const publicPage = await fetch(`${url}/bank-statement-analysis`);
   assert.equal(publicPage.status, 200);
   assert.match(await publicPage.text(), /Bank statement analysis/);
+});
+
+test('admin email change retains prior analyses and leaves customer keys active', async () => {
+  const previous = await adminStore.getAdminAccount();
+  const ownerId = reportOwnerId(`admin:${previous.email}`);
+  await adminStore.setAdminAccount({ ...previous, email: 'new-admin@example.com',
+    bank_statement_owner_id: ownerId, version: previous.version + 1, updated_at: new Date().toISOString() });
+  assert.equal((await fetch(`${url}/admin/api/auth/session`, { headers: { cookie: adminCookie } })).status, 401);
+  assert.equal(await adminStore.isClientKey(key), true);
+  assert.equal(createAdminAccount('new-admin@example.com', 'AnotherStrong!456', await adminStore.getAdminAccount()).bank_statement_owner_id, ownerId);
+
+  const login = await fetch(`${url}/admin/api/auth/login`, { method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'new-admin@example.com', password: 'StrongAnalysis!123' }) });
+  assert.equal(login.status, 202);
+  const verified = await fetch(`${url}/admin/api/auth/verify-code`, { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'new-admin@example.com',
+      challenge_id: (await login.json()).challenge_id, code: codes.at(-1).code }) });
+  assert.equal(verified.status, 200);
+  adminCookie = verified.headers.get('set-cookie').split(';')[0];
+  adminCsrf = (await verified.json()).csrf_token;
+  assert.equal((await fetch(`${url}${adminAnalysisStatusUrl}`, { headers: { cookie: adminCookie } })).status, 200);
 });
 
 test('local demo assets and routes are hidden when the feature gate is off', async () => {

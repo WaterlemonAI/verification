@@ -49,7 +49,7 @@ import { createFormsAuditPdf } from './lib/forms-report.mjs';
 import { CapacityError, createRequestCapacity } from './lib/request-capacity.mjs';
 import {
   ADMIN_COOKIE, adminCookie, clearAdminCookie, createAdminAccount, createAdminSession,
-  newSigningKey, normalizeAdminEmail, parseCookies, safeAdminAccount, verifyAdminPassword, verifyAdminSession
+  adminBankStatementOwnerId, newSigningKey, normalizeAdminEmail, parseCookies, safeAdminAccount, verifyAdminPassword, verifyAdminSession
 } from './lib/admin-auth.mjs';
 import {
   PORTAL_COOKIE, clearPortalCookie, createPortalAccount, createPortalSession,
@@ -2911,7 +2911,7 @@ async function handleBsa(req, res, url, store, adminAccount = null) {
   const admin = Boolean(adminAccount);
   const token = admin ? null : bearerToken(req);
   if (!admin && !req.ai7Client && !(await store.isClientKey(token))) return json(res, 401, { status: 'Error', error: 'API key is missing or incorrect.' });
-  const ownerId = reportOwnerId(admin ? `admin:${adminAccount.email}` : token);
+  const ownerId = admin ? adminBankStatementOwnerId(adminAccount) : reportOwnerId(token);
   const rootPath = admin ? '/admin/api/bsa' : '/service/bank_statement_analysis';
   if (admin && req.method === 'GET' && url.pathname === `${rootPath}/config`) {
     const managed = bsaCapabilities();
