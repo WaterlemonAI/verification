@@ -22,12 +22,14 @@ import { validateAdvanceRequest, advanceRequestDigest } from './lib/adverse-medi
 import { assessAdvanceScreening, withAdvanceAssessment } from './lib/adverse-media-advance-classifier.mjs';
 import { JevScreeningError, screenJevEventRegister } from './lib/adverse-media-jev-screening.mjs';
 import { groupJevIncidents } from './lib/adverse-media-jev-incidents.mjs';
-import { JevIntegratedError, runJevIntegratedTest } from './lib/adverse-media-jev-integrated.mjs';
+import { JevIntegratedError, runJevIntegratedTest, validateJevIntegratedRequest } from './lib/adverse-media-jev-integrated.mjs';
 import { createAdverseMediaIncidentReport } from './lib/adverse-media-incident-final.mjs';
+import { INCIDENT_PUBLIC_PATH, INCIDENT_SERVICE_ID, incidentQueueReceipt,
+  processIncidentReportJob } from './lib/adverse-media-incident-job.mjs';
 import { loadIncidentReportSigningIdentity } from './lib/adverse-media-jev-pdf-signing.mjs';
 import { createAdvanceNarrative } from './lib/adverse-media-advance-narrative.mjs';
 import { ADVANCE_POLICY_CATALOG_VERSION, listAdvancePolicies } from './lib/adverse-media-advance-policy-catalog.mjs';
-import { createAdvanceAdmissionStore } from './lib/adverse-media-advance-store.mjs';
+import { createAdvanceAdmissionStore, createIncidentAdmissionStore } from './lib/adverse-media-advance-store.mjs';
 import { createAdverseMediaReportStore, reportOwnerId } from './lib/adverse-media-report-store.mjs';
 import { createAdverseMediaJsonStore } from './lib/adverse-media-json-store.mjs';
 import { processArchiveReviewPage } from './lib/gdelt-archive-review.mjs';
@@ -158,6 +160,33 @@ async function prepareAdvanceSubmission(req, transactionId, queue, admissionStor
   }
 }
 
+async function prepareIncidentSubmission(req, transactionId, queue, admissionStore, store, workspaceId) {
+  if (!queue || !admissionStore) return { status: 503, error: 'Incident screening is temporarily unavailable.' };
+  let input;
+  try {
+    input = await readJson(req, 32 * 1024);
+    input = { ...input, adverse_profile: input.adverse_profile ?? 'all',
+      countries: input.countries ?? [], max_articles: input.max_articles ?? 40 };
+    validateJevIntegratedRequest(input);
+  } catch (error) {
+    return { status: error.message === 'request_too_large' ? 413 : 400,
+      error: 'Invalid incident screening request.' };
+  }
+  const [braveKey, jevKey, summaryKey] = await Promise.all([
+    store.getMasterKey('adverse-media'), store.getMasterKey('adverse-media-jev'),
+    process.env.MISTRAL_API_KEY || store.getMasterKey('adverse-media-summary')
+  ]);
+  if (!braveKey || !jevKey || !summaryKey || !process.env.EVENT_REGISTRY_API_KEY)
+    return { status: 503, error: 'Incident screening is temporarily unavailable.' };
+  const job = { version: 2, incident_report_v1: true, screening_id: randomUUID(),
+    report_id: randomUUID(), workspace_id: workspaceId,
+    owner_id: `workspace-${workspaceId}`, input_payload: input,
+    transaction_id: transactionId, queued_at: new Date().toISOString() };
+  if (Buffer.byteLength(JSON.stringify(job)) > 44 * 1024)
+    return { status: 413, error: 'Incident screening request is too large.' };
+  return { input, job };
+}
+
 function json(res, status, body, extraHeaders = {}) {
   const payload = Buffer.from(JSON.stringify(body));
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': payload.length, 'cache-control': 'no-store', ...extraHeaders });
@@ -190,6 +219,7 @@ async function classifyCustomerApi(req, url, store) {
     '/service/adverse_media': 'adverse-media',
     '/service/adverse_media_search_plus': 'adverse-media-search-plus',
     '/service/adverse_media_advance': 'adverse-media-advance',
+    [INCIDENT_PUBLIC_PATH]: INCIDENT_SERVICE_ID,
     '/service/merchant_screening': 'merchant-screening',
     '/service/bank_statement_analysis': 'bank-statement-analysis',
     '/service/dubai_ejari_verification': 'ejari-verification',
@@ -204,6 +234,9 @@ async function classifyCustomerApi(req, url, store) {
   if (path === '/service/keys/self/rotate') return { moduleIds: [], method: 'POST', billable: false };
   if (/^\/service\/adverse_media_advance\/jobs\/[0-9a-f-]{36}(?:\/evidence)?$/i.test(path)) {
     return { moduleIds: ['adverse-media-advance'], method: 'GET', billable: false };
+  }
+  if (/^\/service\/adverse_media_incident_screening\/(?:jobs\/[0-9a-f-]{36}|reports\/[0-9a-f-]{36}\.pdf)$/i.test(path)) {
+    return { moduleIds: [INCIDENT_SERVICE_ID], method: 'GET', billable: false };
   }
   const documentOcr = DOCUMENT_OCR_BY_PATH.get(path);
   if (documentOcr) return { moduleIds: [documentOcr.id], method: 'POST', billable: true };
@@ -251,7 +284,8 @@ function completeUsageBeforeResponse(res, usageStore, workspaceId, logKey, trans
 }
 
 async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore, advanceAdmissionStore,
-  deepResearchQueue, archiveReviewAvailable, archivePreflight, caseStore, transactionId) {
+  incidentAdmissionStore,
+  deepResearchQueue, incidentQueue, archiveReviewAvailable, archivePreflight, caseStore, transactionId) {
   const route = await classifyCustomerApi(req, url, store);
   if (!route) return true;
   const token = bearerToken(req);
@@ -311,6 +345,16 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
       return false;
     }
   }
+  if (route.moduleIds.includes(INCIDENT_SERVICE_ID)) {
+    const account = await usageStore.account(workspaceId, managed);
+    if (!account.allowed_modules.includes(INCIDENT_SERVICE_ID)
+      || !Array.isArray(account.rates[INCIDENT_SERVICE_ID])
+      || account.rates[INCIDENT_SERVICE_ID].length === 0) {
+      await usageStore.record(workspaceId, details, 403);
+      json(res, 403, { status: 'Error', error: 'Incident screening requires workspace access and a configured rate.' });
+      return false;
+    }
+  }
   if (req.method !== route.method) {
     await usageStore.record(workspaceId, details, 405);
     const body = { status: 'Error', error: `Method must be ${route.method}.` };
@@ -363,6 +407,37 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
     prepared.claim = claim.row;
     req.ai7PreparedAdvance = prepared;
   }
+  if (url.pathname === INCIDENT_PUBLIC_PATH && route.billable) {
+    const prepared = await prepareIncidentSubmission(req, transactionId, incidentQueue,
+      incidentAdmissionStore, store, workspaceId);
+    if (prepared.status) {
+      await usageStore.record(workspaceId, details, prepared.status);
+      json(res, prepared.status, { status: 'Error', error: prepared.error });
+      return false;
+    }
+    const idempotencyKey = String(req.headers['idempotency-key'] || '').trim();
+    if (!/^[A-Za-z0-9._:-]{16,128}$/.test(idempotencyKey)) {
+      await usageStore.record(workspaceId, details, 400);
+      json(res, 400, { status: 'Error', error: 'Idempotency-Key must contain 16–128 letters, digits, dots, underscores, colons or hyphens.' });
+      return false;
+    }
+    const claim = await incidentAdmissionStore.claim({ workspaceId, idempotencyKey,
+      payloadHash: createHash('sha256').update(JSON.stringify(prepared.input)).digest('hex'),
+      job: prepared.job });
+    if (claim.status !== 'new') {
+      const status = claim.status === 'replayed' ? 202 : claim.status === 'conflict' ? 409 : 503;
+      await usageStore.record(workspaceId, details, status);
+      if (claim.status === 'replayed') json(res, 202, incidentQueueReceipt(claim.row));
+      else json(res, status, { status: 'Error',
+        reasonCode: claim.status === 'conflict' ? 'IDEMPOTENCY_CONFLICT' : 'SUBMISSION_PENDING',
+        error: claim.status === 'conflict' ? 'This Idempotency-Key was used with different input.'
+          : 'Submission admission is pending reconciliation. No additional check was queued or charged.' },
+      claim.status === 'in_progress' ? { 'retry-after': '2' } : {});
+      return false;
+    }
+    prepared.claim = claim.row;
+    req.ai7PreparedIncident = prepared;
+  }
   if (formMatch && route.billable) {
     const prepared = await prepareFormSubmission(req, formMatch[1], store, formsQueue, transactionId);
     if (prepared.status) {
@@ -413,11 +488,13 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
     catch (error) {
       if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
       if (req.ai7PreparedAdvance?.claim) await advanceAdmissionStore.abandon(req.ai7PreparedAdvance.claim);
+      if (req.ai7PreparedIncident?.claim) await incidentAdmissionStore.abandon(req.ai7PreparedIncident.claim);
       throw error;
     }
     if (!admission.allowed) {
       if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
       if (req.ai7PreparedAdvance?.claim) await advanceAdmissionStore.abandon(req.ai7PreparedAdvance.claim);
+      if (req.ai7PreparedIncident?.claim) await incidentAdmissionStore.abandon(req.ai7PreparedIncident.claim);
       const body = { status: 'Error', error: admission.reason };
       await captureRejectedAttempt(admission.statusCode, body, admission.casePolicy);
       json(res, admission.statusCode, body);
@@ -432,6 +509,7 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
           await usageStore.complete(workspaceId, admission.logKey, 503, 'case_manager_unavailable');
           if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
           if (req.ai7PreparedAdvance?.claim) await advanceAdmissionStore.abandon(req.ai7PreparedAdvance.claim);
+          if (req.ai7PreparedIncident?.claim) await incidentAdmissionStore.abandon(req.ai7PreparedIncident.claim);
           json(res, 503, { status: 'Error', error: 'Case Manager is temporarily unavailable.' });
           return false;
         }
@@ -454,6 +532,7 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
           await usageStore.complete(workspaceId, admission.logKey, 503, 'case_manager_intent_failed');
           if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
           if (req.ai7PreparedAdvance?.claim) await advanceAdmissionStore.abandon(req.ai7PreparedAdvance.claim);
+          if (req.ai7PreparedIncident?.claim) await incidentAdmissionStore.abandon(req.ai7PreparedIncident.claim);
           json(res, 503, { status: 'Error', error: 'Case Manager is temporarily unavailable.' });
           return false;
         }
@@ -461,6 +540,7 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
     }
     req.ai7Usage = { workspaceId, logKey: admission.logKey };
     if (req.ai7PreparedForm) req.ai7PreparedForm.job.billing.log_key = admission.logKey;
+    if (req.ai7PreparedIncident) req.ai7PreparedIncident.job.billing_log_key = admission.logKey;
     const capture = req.ai7Case ? async (response, args) => {
       const status = response.statusCode;
       if (req.ai7Case.reused && status < 500) return;
@@ -912,6 +992,48 @@ async function queueAdvanceScreening(req, res, queue, admissionStore) {
   try { await admissionStore.accept(prepared.claim); }
   catch { console.warn('advance_admission_accept_repair_needed', JSON.stringify({ screening_id: prepared.job.screening_id })); }
   return json(res, 202, advanceQueueReceipt(prepared.claim, prepared.job.callback_secret));
+}
+
+async function queueIncidentScreening(req, res, queue, admissionStore) {
+  const prepared = req.ai7PreparedIncident;
+  if (!prepared) return json(res, 503, { status: 'Error', error: 'Incident screening is temporarily unavailable.' });
+  try { await queue.enqueue(prepared.job); }
+  catch {
+    await admissionStore.abandon(prepared.claim).catch(() => {});
+    res.ai7BillingReason = 'incident_queue_failed';
+    return json(res, 503, { status: 'Error', error: 'Incident screening is temporarily unavailable.' });
+  }
+  try { await admissionStore.accept(prepared.claim); }
+  catch { console.warn('incident_admission_accept_repair_needed', JSON.stringify({ screening_id: prepared.job.screening_id })); }
+  return json(res, 202, incidentQueueReceipt(prepared.claim));
+}
+
+async function getIncidentScreening(req, res, screeningId, admissionStore, reportStore, jsonStore) {
+  if (!req.ai7Client) return json(res, 401, { status: 'Error', error: 'An active API key is required.' });
+  if (!admissionStore?.find) return json(res, 503, { status: 'Error', error: 'Incident screening is temporarily unavailable.' });
+  const workspaceId = req.ai7Client.id;
+  const admission = await admissionStore.find({ workspaceId, screeningId });
+  if (!admission) return json(res, 404, { status: 'Error', error: 'Screening was not found.' });
+  const ownerId = `workspace-${workspaceId}`;
+  const state = await reportStore.getDeepResearchState({ ownerId, screeningId });
+  if (state?.stage === 'failed') return json(res, 200, { screening_id: screeningId,
+    status: 'failed', reason: 'Report could not be completed. The check was not charged.' });
+  if (state?.stage !== 'completed') return json(res, 200, { screening_id: screeningId,
+    status: state?.stage === 'processing' ? 'processing' : 'queued' });
+  const record = await jsonStore.get({ ownerId, screeningId });
+  if (!record?.response) return json(res, 503, { status: 'Error', error: 'The screening record is temporarily unavailable.' });
+  return json(res, 200, { screening_id: screeningId, status: 'completed', result: record.response });
+}
+
+async function downloadIncidentReport(req, res, reportId, reportStore) {
+  if (!req.ai7Client) return json(res, 401, { status: 'Error', error: 'An active API key is required.' });
+  const report = await reportStore.get({ ownerId: `workspace-${req.ai7Client.id}`, reportId });
+  if (!report || report.metadata.report_type !== INCIDENT_SERVICE_ID)
+    return json(res, 404, { status: 'Error', error: 'Report was not found.' });
+  res.writeHead(200, { 'content-type': 'application/pdf', 'content-length': report.bytes.length,
+    'content-disposition': `inline; filename="${reportId}.pdf"`,
+    'cache-control': 'private, no-store' });
+  return res.end(report.bytes);
 }
 
 async function getAdvanceScreening(req, res, screeningId, admissionStore, reportStore, jsonStore) {
@@ -3054,8 +3176,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   peppolGlobalLookup = searchPeppolGlobal, peppolCountryList = peppolGlobalCountries,
   otpStore = createLoginOtpStore(),
   deepResearchQueue = process.env.ADVERSE_MEDIA_WORKER_ENABLED === 'false' ? null : createDeepResearchQueue(),
+  incidentQueue = createDeepResearchQueue(process.env.ADVERSE_MEDIA_INCIDENT_QUEUE_URL || '',
+    process.env.ADVERSE_MEDIA_INCIDENT_DEAD_LETTER_QUEUE_URL || '', { visibilityTimeout: 60 * 60 }),
   formsQueue = createFormsQueue(), formSubmissionStore = createFormsSubmissionStore(),
   advanceAdmissionStore = createAdvanceAdmissionStore(),
+  incidentAdmissionStore = createIncidentAdmissionStore(),
   reportStore = createAdverseMediaReportStore(), jsonStore = createAdverseMediaJsonStore(),
   documentOcrStore = createDocumentOcrStore(),
   ejariStore = createEjariStore(),
@@ -3284,6 +3409,15 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       }
     });
   }
+  if (startWorker && incidentQueue && process.env.ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED === 'true') {
+    startDeepResearchWorker({ queue: incidentQueue, store, resultStore: reportStore,
+      screen: () => { throw new Error('wrong_queue'); }, incidentOnly: true,
+      processIncidentReport: (job) => processIncidentReportJob(job, {
+        store, reportStore, jsonStore, usageStore, fetchImpl,
+        archiveSearch: jevArchiveSearch, archivePage: jevArchivePage,
+        onAudit: onIncidentReportAudit
+      }) });
+  }
   if (startWorker && formsQueue) {
     startFormsWorker({
       queue: formsQueue,
@@ -3402,8 +3536,12 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
         || url.pathname.startsWith('/service/adverse_media_advance/jobs/'))
         && process.env.ADVERSE_MEDIA_ADVANCE_ENABLED !== 'true')
         return json(res, 503, { status: 'Error', error: 'Adverse Media Advance is not enabled.' });
+      if ((url.pathname === INCIDENT_PUBLIC_PATH || url.pathname.startsWith(`${INCIDENT_PUBLIC_PATH}/`))
+        && process.env.ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED !== 'true')
+        return json(res, 503, { status: 'Error', error: 'Incident screening is not enabled.' });
       if (customerApiPath && !(await gateCustomerApi(req, res, url, store, usageStore, formsQueue, formSubmissionStore,
-        advanceAdmissionStore, deepResearchQueue, archiveReviewAvailable, advanceArchivePreflight,
+        advanceAdmissionStore, incidentAdmissionStore, deepResearchQueue, incidentQueue,
+        archiveReviewAvailable, advanceArchivePreflight,
         caseStore, transactionId))) return;
       if (req.ai7CapacityLane) {
         const queuedAt = Date.now();
@@ -3418,6 +3556,7 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           if (error instanceof CapacityError) {
             if (req.ai7PreparedForm?.claim) await formSubmissionStore.abandon(req.ai7PreparedForm.claim);
             if (req.ai7PreparedAdvance?.claim) await advanceAdmissionStore.abandon(req.ai7PreparedAdvance.claim);
+            if (req.ai7PreparedIncident?.claim) await incidentAdmissionStore.abandon(req.ai7PreparedIncident.claim);
             console.warn('api_capacity_rejected', JSON.stringify({ transaction_id: transactionId,
               lane: req.ai7CapacityLane, reason: error.reason,
               waiting_ms: Date.now() - queuedAt, capacity: requestCapacity.snapshot?.() || null }));
@@ -3558,6 +3697,15 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
           'search_plus', adverseArchiveSearch, archiveReviewAvailable());
       if (req.method === 'POST' && url.pathname === '/service/adverse_media_advance')
         return await queueAdvanceScreening(req, res, deepResearchQueue, advanceAdmissionStore);
+      if (req.method === 'POST' && url.pathname === INCIDENT_PUBLIC_PATH)
+        return await queueIncidentScreening(req, res, incidentQueue, incidentAdmissionStore);
+      const incidentJobMatch = /^\/service\/adverse_media_incident_screening\/jobs\/([0-9a-f-]{36})$/i.exec(url.pathname);
+      if (req.method === 'GET' && incidentJobMatch)
+        return await getIncidentScreening(req, res, incidentJobMatch[1].toLowerCase(),
+          incidentAdmissionStore, reportStore, jsonStore);
+      const incidentPdfMatch = /^\/service\/adverse_media_incident_screening\/reports\/([0-9a-f-]{36})\.pdf$/i.exec(url.pathname);
+      if (req.method === 'GET' && incidentPdfMatch)
+        return await downloadIncidentReport(req, res, incidentPdfMatch[1].toLowerCase(), reportStore);
       if (req.method === 'GET' && url.pathname === '/service/adverse_media_advance/policies') {
         return json(res, 200, { catalog_version: ADVANCE_POLICY_CATALOG_VERSION,
           default_selection: 'all', policies: listAdvancePolicies() });
@@ -3690,6 +3838,11 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
       if (url.pathname === '/openapi.json') {
         const spec = readFileSync(join(root, 'api', 'openapi.json'));
         res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length, 'cache-control': 'public, max-age=300' });
+        return res.end(spec);
+      }
+      if (url.pathname === '/adverse-media-incident/openapi.json') {
+        const spec = readFileSync(join(root, 'api', 'adverse-media-incident-openapi.json'));
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': spec.length });
         return res.end(spec);
       }
       if (url.pathname === '/flo/openapi.json') {

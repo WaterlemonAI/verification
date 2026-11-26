@@ -44,6 +44,9 @@ param enableAdverseMediaSearchPlusGpt bool = false
 @description('Enable Adverse Media Advance only after provider, archive, policy and callback release gates pass.')
 param enableAdverseMediaAdvance bool = false
 
+@description('Enable the separate Adverse Media Incident Screening API after its queue, provider and archive gates pass.')
+param enableAdverseMediaIncidentScreening bool = false
+
 @description('Use verified V2 GDELT summaries for undated Azure archive searches after parity checks.')
 param gdeltV2ReadEnabled bool = false
 
@@ -210,6 +213,8 @@ param adverseJsonStorageName string = 'stai7uaejsonuaen001'
 
 var deepResearchQueueName = 'adverse-media-deep-research'
 var deepResearchDeadLetterQueueName = 'adverse-media-deep-research-deadletter'
+var incidentQueueName = parallelDeployment ? 'adverse-media-incident-qa' : 'adverse-media-incident'
+var incidentDeadLetterQueueName = parallelDeployment ? 'adverse-media-incident-qa-deadletter' : 'adverse-media-incident-deadletter'
 var formsQueueName = 'forms-submissions'
 var formsDeadLetterQueueName = 'forms-submissions-deadletter'
 
@@ -225,6 +230,16 @@ resource deepResearchQueueService 'Microsoft.Storage/storageAccounts/queueServic
 resource deepResearchDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = if (!parallelDeployment) {
   parent: deepResearchQueueService
   name: deepResearchDeadLetterQueueName
+}
+
+resource incidentQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: deepResearchQueueService
+  name: incidentQueueName
+}
+
+resource incidentDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
+  parent: deepResearchQueueService
+  name: incidentDeadLetterQueueName
 }
 
 resource formsDeadLetterQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = if (!parallelDeployment) {
@@ -855,6 +870,9 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'RUNTIME_IDENTITY_CLIENT_ID', value: runtimeIdentityClientId }
             { name: 'ADVERSE_MEDIA_SEARCH_PLUS_GPT_ENABLED', value: enableAdverseMediaSearchPlusGpt ? '1' : '0' }
             { name: 'ADVERSE_MEDIA_ADVANCE_ENABLED', value: enableAdverseMediaAdvance && gdeltV2ReadEnabled && gdeltArchiveReviewEnabled && enableDeepResearchWorker && !parallelDeployment ? 'true' : 'false' }
+            { name: 'ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED', value: enableAdverseMediaIncidentScreening && gdeltV2ReadEnabled ? 'true' : 'false' }
+            { name: 'ADVERSE_MEDIA_INCIDENT_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${incidentQueueName}' }
+            { name: 'ADVERSE_MEDIA_INCIDENT_DEAD_LETTER_QUEUE_URL', value: 'https://${deepResearchStorageName}.queue.${environment().suffixes.storage}/${incidentDeadLetterQueueName}' }
             { name: 'ADVERSE_MEDIA_WORKER_ENABLED', value: !parallelDeployment && enableDeepResearchWorker ? 'true' : 'false' }
             { name: 'GDELT_STORAGE_ACCOUNT_URL', value: 'https://${gdeltStorageName}.blob.${environment().suffixes.storage}' }
             { name: 'GDELT_ARCHIVE_CONTAINER', value: 'gdelt-archive' }
@@ -979,6 +997,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       }
     }
   }
+  dependsOn: [incidentQueue, incidentDeadLetterQueue]
 }
 
 resource apiLogWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {

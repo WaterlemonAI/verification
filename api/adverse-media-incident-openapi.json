@@ -1,0 +1,90 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "KYCProbe Adverse Media Incident Screening API",
+    "version": "1.0.0",
+    "description": "A separate asynchronous API for public-media incident screening. The original Adverse Media Advance API is unchanged. PDFs in this release are explicitly unsigned."
+  },
+  "servers": [{ "url": "https://api.ai7uae.com" }],
+  "paths": {
+    "/service/adverse_media_incident_screening": {
+      "post": {
+        "operationId": "queueAdverseMediaIncidentScreening",
+        "summary": "Start an incident screening",
+        "description": "Requires an entitled workspace, its own configured rate, and an Idempotency-Key. Accepted replays return the original screening ID without another charge. A failed check is refunded.",
+        "security": [{ "ApiKey": [] }],
+        "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true,
+          "schema": { "type": "string", "minLength": 16, "maxLength": 128, "pattern": "^[A-Za-z0-9._:-]{16,128}$" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IncidentScreeningRequest" } } } },
+        "responses": {
+          "202": { "description": "Queued or replayed without another charge.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IncidentQueued" } } } },
+          "400": { "description": "Invalid request or idempotency key." },
+          "401": { "description": "An active API key is required." },
+          "402": { "description": "Insufficient prepaid credit." },
+          "403": { "description": "Separate incident-screening entitlement and rate required." },
+          "409": { "description": "Idempotency key reused with different input." },
+          "503": { "description": "The feature or a required processing dependency is unavailable." }
+        }
+      }
+    },
+    "/service/adverse_media_incident_screening/jobs/{screeningId}": {
+      "get": {
+        "operationId": "getAdverseMediaIncidentScreening",
+        "summary": "Poll an incident screening",
+        "security": [{ "ApiKey": [] }],
+        "parameters": [{ "name": "screeningId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "Queued, processing, failed, or completed result. A completed result includes the private PDF URL.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IncidentJobResult" } } } },
+          "401": { "description": "An active API key is required." },
+          "403": { "description": "Workspace is not entitled." },
+          "404": { "description": "Screening not found in this workspace." }
+        }
+      }
+    },
+    "/service/adverse_media_incident_screening/reports/{reportId}.pdf": {
+      "get": {
+        "operationId": "downloadAdverseMediaIncidentPdf",
+        "summary": "Download the private unsigned PDF",
+        "security": [{ "ApiKey": [] }],
+        "parameters": [{ "name": "reportId", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": {
+          "200": { "description": "Private unsigned PDF.", "content": { "application/pdf": { "schema": { "type": "string", "format": "binary" } } } },
+          "401": { "description": "An active API key is required." },
+          "403": { "description": "Workspace is not entitled." },
+          "404": { "description": "Report not found in this workspace." }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": { "ApiKey": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "IncidentScreeningRequest": {
+        "type": "object", "additionalProperties": false, "required": ["subject"],
+        "properties": {
+          "subject": { "type": "object", "additionalProperties": false, "required": ["name"],
+            "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+              "entity_type": { "type": "string", "enum": ["individual", "business", ""] },
+              "aliases": { "type": "array", "maxItems": 3, "items": { "type": "string" } },
+              "transliterations": { "type": "object", "properties": {
+                "ar": { "type": "array", "items": { "type": "string" } },
+                "hi": { "type": "array", "items": { "type": "string" } } } } } },
+          "adverse_profile": { "type": "string", "const": "all", "default": "all" },
+          "countries": { "type": "array", "maxItems": 0, "default": [] },
+          "date_from": { "type": "string", "format": "date" },
+          "date_to": { "type": "string", "format": "date" },
+          "max_articles": { "type": "integer", "minimum": 1, "maximum": 40, "default": 40 },
+          "max_archive_postings": { "type": "integer", "minimum": 1, "maximum": 1000 }
+        }
+      },
+      "IncidentQueued": { "type": "object", "required": ["screening_id", "status", "status_url"],
+        "properties": { "screening_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "const": "queued" }, "status_url": { "type": "string" } } },
+      "IncidentJobResult": { "type": "object", "required": ["screening_id", "status"],
+        "properties": { "screening_id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "enum": ["queued", "processing", "failed", "completed"] },
+          "reason": { "type": "string" }, "result": { "type": "object", "description": "Final public JSON result, with event register and incident groups, plus report.pdf_url and report.digitally_signed=false." } } }
+    }
+  }
+}

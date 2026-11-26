@@ -3,7 +3,7 @@
   "info": {
     "title": "AI7 UAE Verification API",
     "description": "AI7 UAE verification APIs for UAE trade licences, international bank accounts, comprehensive entity screening, multilingual adverse media, merchant-website risk screening, Forms orchestration, and asynchronous bank statement analysis. Every user-facing API response includes the random X-AI7-Transaction-ID header. Signed-in customers can review UTC timestamps, HTTP codes and per-hit costs in Account settings. Modules must be enabled for the workspace (otherwise HTTP 403); prepaid workspaces need sufficient credit (otherwise HTTP 402). Supplier response JSON and HTTP codes are preserved. Supplier HTTP 4xx/5xx results and capacity rejections are refunded and logged. A business-level partial result returned with HTTP 2xx retains its charge. Form submissions reserve one Form hit and one hit per selected API; failed selected API results are refunded, and callback retries are free. Under peak demand, a request can wait in a bounded service lane before execution. If capacity is exhausted, HTTP 503 with reasonCode CAPACITY_BUSY, Retry-After: 5 and the transaction ID means no supplier call occurred and no charge was retained.",
-    "version": "1.10.0"
+    "version": "1.11.0"
   },
   "servers": [
     {
@@ -23,6 +23,9 @@
     "/service/dubai_ejari_verification": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification" },
     "/service/dubai_ejari_verification/jobs/{jobId}": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification~1jobs~1{jobId}" },
     "/service/dubai_ejari_verification/jobs/{jobId}/result": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification~1jobs~1{jobId}~1result" },
+    "/service/adverse_media_incident_screening": { "$ref": "/adverse-media-incident/openapi.json#/paths/~1service~1adverse_media_incident_screening" },
+    "/service/adverse_media_incident_screening/jobs/{screeningId}": { "$ref": "/adverse-media-incident/openapi.json#/paths/~1service~1adverse_media_incident_screening~1jobs~1{screeningId}" },
+    "/service/adverse_media_incident_screening/reports/{reportId}.pdf": { "$ref": "/adverse-media-incident/openapi.json#/paths/~1service~1adverse_media_incident_screening~1reports~1{reportId}.pdf" },
     "/service/dubai_ejari_verification/jobs/{jobId}/certificate.pdf": { "$ref": "/ejari-verification/openapi.json#/paths/~1service~1dubai_ejari_verification~1jobs~1{jobId}~1certificate.pdf" },
     "/service/{documentService}/jobs/{jobId}": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1{documentService}~1jobs~1{jobId}" },
     "/service/{documentService}/jobs/{jobId}/result": { "$ref": "/document-extraction/openapi.json#/paths/~1service~1{documentService}~1jobs~1{jobId}~1result" },
