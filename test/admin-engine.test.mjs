@@ -127,7 +127,7 @@ test('admin can register a provider-neutral API without exposing its upstream de
 
   const listing = await fetch(`${appUrl}/admin/api/integrations`, { headers: adminHeaders() });
   const body = await listing.json();
-  assert.equal(body.integrations.length, 23);
+  assert.equal(body.integrations.length, 24);
   assert.equal(body.integrations.filter((item) => item.formsCompatible === false && item.publicPath.startsWith('/service/')).length, 14);
   assert.ok(body.integrations.some((item) => item.id === 'peppol-directory' && item.publicPath === '/service/peppol_check'));
   assert.ok(body.integrations.some((item) => item.id === 'adverse-media-search-plus' && item.enabled === false));
@@ -136,6 +136,7 @@ test('admin can register a provider-neutral API without exposing its upstream de
   assert.ok(body.integrations.some((item) => item.id === 'merchant-screening'));
   assert.ok(body.integrations.some((item) => item.id === 'adverse-media-ai'));
   assert.ok(body.integrations.some((item) => item.id === 'adverse-media-jev-integrated-test' && item.internal));
+  assert.ok(body.integrations.some((item) => item.id === 'adverse-media-summary' && item.internal));
   assert.ok(body.integrations.some((item) => item.id === 'document-ocr-taed' && item.internal));
   const companySearch = body.integrations.find((item) => item.id === 'company-search');
   assert.equal(companySearch.publicPath, '/service/company_search');
