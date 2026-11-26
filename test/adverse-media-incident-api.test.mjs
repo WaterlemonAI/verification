@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { EnvironmentStore } from '../lib/api-store.mjs';
-import { MemoryCustomerUsageStore, validateUsagePolicy } from '../lib/customer-usage.mjs';
+import { MemoryCustomerUsageStore, validateCasePolicy, validateUsagePolicy } from '../lib/customer-usage.mjs';
+import { MemoryCaseManagerStore } from '../lib/case-manager-store.mjs';
 import { MemoryAdvanceAdmissionStore } from '../lib/adverse-media-advance-store.mjs';
 import { MemoryAdverseMediaReportStore } from '../lib/adverse-media-report-store.mjs';
 import { MemoryAdverseMediaJsonStore } from '../lib/adverse-media-json-store.mjs';
@@ -123,6 +124,33 @@ test('worker failure refunds a separate incident check', async () => {
   const account = await usageStore.account(issued.client.id);
   assert.equal(account.charged_calls, 1);
   assert.equal(account.spent, '0.750000');
+});
+
+test('queued incident screening links to its workspace case', async (t) => {
+  process.env.CASE_MANAGER_ENABLED = 'true';
+  t.after(() => { delete process.env.CASE_MANAGER_ENABLED; });
+  const cases = new MemoryCaseManagerStore();
+  await usageStore.updateCasePolicy(issued.client.id,
+    validateCasePolicy({ version: 0, enabled: true, ttl_days: 30 }));
+  const submitted = [];
+  const caseApp = createAppServer({ store, usageStore, caseStore: cases,
+    incidentAdmissionStore: new MemoryAdvanceAdmissionStore({ namespace: 'incident-case' }),
+    reportStore: new MemoryAdverseMediaReportStore(), jsonStore: new MemoryAdverseMediaJsonStore(),
+    incidentQueue: { async enqueue(job) { submitted.push(job); } }, startWorker: false });
+  await new Promise((resolve) => caseApp.listen(0, '127.0.0.1', resolve));
+  t.after(() => caseApp.close());
+  const response = await fetch(`http://127.0.0.1:${caseApp.address().port}${INCIDENT_PUBLIC_PATH}`,
+    { method: 'POST', headers: { ...authorization(), 'content-type': 'application/json',
+      'idempotency-key': 'incident-case-link-0001' }, body: JSON.stringify(input) });
+  assert.equal(response.status, 202);
+  const receipt = await response.json();
+  assert.equal(submitted.length, 1);
+  assert.match(submitted[0].case_id, /^[0-9a-f-]{36}$/i);
+  assert.equal(submitted[0].case_workspace_id, issued.client.id);
+  const linked = await cases.getCase(issued.client.id, submitted[0].case_id);
+  assert.equal(linked.service_id, INCIDENT_SERVICE_ID);
+  assert.equal(linked.state, 'pending');
+  assert.equal(receipt.screening_id, submitted[0].screening_id);
 });
 
 test('new API documentation and credential gate are independent of the older API', async () => {

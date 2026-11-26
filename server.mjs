@@ -529,6 +529,10 @@ async function gateCustomerApi(req, res, url, store, usageStore, formsQueue, for
             req.ai7PreparedAdvance.job.case_id = req.ai7Case.id;
             req.ai7PreparedAdvance.job.case_workspace_id = workspaceId;
           }
+          if (req.ai7PreparedIncident) {
+            req.ai7PreparedIncident.job.case_id = req.ai7Case.id;
+            req.ai7PreparedIncident.job.case_workspace_id = workspaceId;
+          }
         } catch {
           console.warn('case_manager_intent_failed', JSON.stringify({ transaction_id: transactionId }));
           await usageStore.complete(workspaceId, admission.logKey, 503, 'case_manager_intent_failed');
@@ -3415,11 +3419,39 @@ export function createAppServer({ store = createStore(), mailer = createPlatform
   if (startWorker && incidentQueue && process.env.ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED === 'true') {
     startDeepResearchWorker({ queue: incidentQueue, store, resultStore: reportStore,
       screen: () => { throw new Error('wrong_queue'); }, incidentOnly: true,
-      processIncidentReport: (job) => processIncidentReportJob(job, {
-        store, reportStore, jsonStore, usageStore, fetchImpl,
-        archiveSearch: jevArchiveSearch, archivePage: jevArchivePage,
-        onAudit: onIncidentReportAudit
-      }) });
+      processIncidentReport: async (job) => {
+        let response;
+        try {
+          response = await processIncidentReportJob(job, {
+            store, reportStore, jsonStore, usageStore, fetchImpl,
+            archiveSearch: jevArchiveSearch, archivePage: jevArchivePage,
+            onAudit: onIncidentReportAudit
+          });
+        } catch (error) {
+          if (process.env.CASE_MANAGER_ENABLED === 'true' && caseStore && job.case_id && job.case_workspace_id)
+            await caseStore.markIncomplete(job.case_workspace_id, job.case_id).catch(() => {});
+          throw error;
+        }
+        if (process.env.CASE_MANAGER_ENABLED !== 'true' || !caseStore || !job.case_id || !job.case_workspace_id)
+          return;
+        if (!response) {
+          await caseStore.markIncomplete(job.case_workspace_id, job.case_id).catch(() => {});
+          return;
+        }
+        const mapping = caseOutcome(INCIDENT_SERVICE_ID, response, { httpStatus: 200 });
+        try {
+          await caseStore.captureFinal(job.case_workspace_id, job.case_id, {
+            response, contentType: 'application/json', httpStatus: 200,
+            outcome: mapping.outcome, reasonCodes: mapping.reasonCodes,
+            originalArtifactOwner: job.owner_id,
+            artifactRefs: response.report?.report_id
+              ? [{ type: INCIDENT_SERVICE_ID, report_id: response.report.report_id }] : []
+          });
+        } catch {
+          await caseStore.markIncomplete(job.case_workspace_id, job.case_id).catch(() => {});
+          console.warn('case_manager_capture_failed', JSON.stringify({ case_id: job.case_id }));
+        }
+      } });
   }
   if (startWorker && formsQueue) {
     startFormsWorker({
