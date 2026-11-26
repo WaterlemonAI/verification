@@ -8,6 +8,7 @@ process.env.AI7_ADMIN_KEY_HASHES = createHash('sha256').update(setupKey).digest(
 
 const { createAppServer } = await import('../server.mjs');
 const { EnvironmentStore } = await import('../lib/api-store.mjs');
+const { adminBankStatementOwnerId, createAdminAccount, verifyAdminPassword } = await import('../lib/admin-auth.mjs');
 
 const store = new EnvironmentStore();
 const sentCodes = [];
@@ -146,4 +147,45 @@ test('email delivery failure issues no session and allows a safe retry', async (
     body: JSON.stringify({ email: 'admin@example.com', password: 'VeryStrong!123' }) });
   assert.equal(retry.status, 202);
   assert.equal(retry.headers.get('set-cookie'), null);
+});
+
+test('a second administrator has equal access and independent credentials and recovery', async () => {
+  const primaryBefore = await store.getAdminAccount();
+  const secondary = await store.setAdditionalAdminAccount(createAdminAccount('tech@ai7uae.com', 'TemporaryPass!234'));
+  assert.equal(adminBankStatementOwnerId(secondary), adminBankStatementOwnerId(primaryBefore));
+  assert.equal((await store.getAdminAccount()).password_hash, primaryBefore.password_hash);
+
+  const login = await fetch(`${appUrl}/admin/api/auth/login`, { method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: secondary.email, password: 'TemporaryPass!234' }) });
+  assert.equal(login.status, 202);
+  assert.equal(sentCodes.at(-1).to, secondary.email);
+  const challenge = (await login.json()).challenge_id;
+  const verified = await fetch(`${appUrl}/admin/api/auth/verify-code`, { method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: secondary.email, challenge_id: challenge, code: sentCodes.at(-1).code }) });
+  assert.equal(verified.status, 200);
+  const secondaryCookie = verified.headers.get('set-cookie').split(';')[0];
+  assert.equal((await fetch(`${appUrl}/admin/api/integrations`, { headers: { cookie: secondaryCookie } })).status, 200);
+  assert.equal((await fetch(`${appUrl}/admin/api/auth/session`, { headers: { cookie } })).status, 200);
+
+  const resetMessages = [];
+  mailer.sendPasswordReset = async (message) => { resetMessages.push(message); };
+  const forgot = await fetch(`${appUrl}/admin/api/auth/forgot-password`, { method: 'POST',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: secondary.email }) });
+  assert.equal(forgot.status, 202);
+  assert.equal(resetMessages.at(-1).to, secondary.email);
+  const resetToken = new URL(resetMessages.at(-1).url).searchParams.get('reset');
+  const reset = await fetch(`${appUrl}/admin/api/auth/reset-password`, { method: 'POST',
+    headers: { origin: appUrl, 'content-type': 'application/json' },
+    body: JSON.stringify({ token: resetToken, password: 'NewTechPassword!456' }) });
+  assert.equal(reset.status, 200);
+  assert.equal((await fetch(`${appUrl}/admin/api/auth/session`, { headers: { cookie: secondaryCookie } })).status, 401);
+  assert.equal((await fetch(`${appUrl}/admin/api/auth/session`, { headers: { cookie } })).status, 200);
+  assert.equal((await store.getAdminAccount()).password_hash, primaryBefore.password_hash);
+  assert.equal(adminBankStatementOwnerId(await store.getAdminAccountByEmail(secondary.email)), adminBankStatementOwnerId(primaryBefore));
+
+  assert.equal(verifyAdminPassword(await store.getAdminAccountByEmail(secondary.email), secondary.email, 'NewTechPassword!456'), true);
+  assert.equal(verifyAdminPassword(await store.getAdminAccountByEmail(secondary.email), secondary.email, 'TemporaryPass!234'), false);
+  assert.equal(verifyAdminPassword(await store.getAdminAccount(), primaryBefore.email, 'VeryStrong!123'), true);
 });

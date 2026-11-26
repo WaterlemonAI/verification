@@ -49,7 +49,8 @@ import { createFormsAuditPdf } from './lib/forms-report.mjs';
 import { CapacityError, createRequestCapacity } from './lib/request-capacity.mjs';
 import {
   ADMIN_COOKIE, adminCookie, clearAdminCookie, createAdminAccount, createAdminSession,
-  adminBankStatementOwnerId, newSigningKey, normalizeAdminEmail, parseCookies, safeAdminAccount, verifyAdminPassword, verifyAdminSession
+  adminBankStatementOwnerId, adminSessionEmail, newSigningKey, normalizeAdminEmail, parseCookies, safeAdminAccount,
+  verifyAdminPassword, verifyAdminSession
 } from './lib/admin-auth.mjs';
 import {
   PORTAL_COOKIE, clearPortalCookie, createPortalAccount, createPortalSession,
@@ -1855,7 +1856,7 @@ async function requestPasswordReset(req, res, { kind, store, throttle, mailer })
   const key = `reset:${kind}:${loginThrottleKey(req, email)}`;
   if (!throttle.blocked(key)) {
     throttle.failed(key);
-    const account = kind === 'admin' ? await store.getAdminAccount() : await store.getPortalUser(email);
+    const account = kind === 'admin' ? await store.getAdminAccountByEmail(email) : await store.getPortalUser(email);
     if (account?.email === email) {
       const signingKey = kind === 'admin' ? await store.getAdminSessionKey() : await store.getPortalSessionKey();
       if (signingKey) {
@@ -1878,7 +1879,8 @@ async function completePasswordReset(req, res, { kind, store, mailer }) {
   const signingKey = kind === 'admin' ? await store.getAdminSessionKey() : await store.getPortalSessionKey();
   const reset = parsePasswordResetToken(body.token, { kind, signingKey });
   if (!reset) return json(res, 400, { status: 'Error', error: 'This reset link is invalid or expired.' });
-  const account = kind === 'admin' ? await store.getAdminAccount({ fresh: true }) : await store.getPortalUser(reset.email, { fresh: true });
+  const account = kind === 'admin' ? await store.getAdminAccountByEmail(reset.email, { fresh: true })
+    : await store.getPortalUser(reset.email, { fresh: true });
   if (!account || account.email !== reset.email || account.version !== reset.version) {
     return json(res, 400, { status: 'Error', error: 'This reset link is invalid or expired.' });
   }
@@ -1886,7 +1888,7 @@ async function completePasswordReset(req, res, { kind, store, mailer }) {
     const updated = kind === 'admin'
       ? createAdminAccount(account.email, body.password, account)
       : createPortalAccount(account.email, body.password, { id: account.client_id, name: account.client_name }, account);
-    if (kind === 'admin') await store.setAdminAccount(updated);
+    if (kind === 'admin') await store.setAdminAccountByEmail(updated);
     else await store.setPortalUser(updated);
     try { await mailer.sendSecurityAlert({ to: account.email, event: 'reset' }); }
     catch { console.warn('platform_security_alert_failed'); }
@@ -2440,10 +2442,11 @@ function portalLoginRedirect(res, pathname, search = '') {
 }
 
 async function currentAdminSession(req, store) {
-  const account = await store.getAdminAccount({ fresh: true });
-  if (!account) return { account: null, session: null };
   const signingKey = await store.getAdminSessionKey();
   const token = parseCookies(req.headers.cookie)[ADMIN_COOKIE];
+  const email = adminSessionEmail(token, signingKey);
+  const account = email ? await store.getAdminAccountByEmail(email, { fresh: true }) : await store.getAdminAccount({ fresh: true });
+  if (!account) return { account: null, session: null };
   return { account, session: verifyAdminSession(token, account, signingKey) };
 }
 
@@ -2501,7 +2504,7 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
       const body = await readJson(req);
       const key = loginThrottleKey(req, body.email);
       if (loginThrottle.blocked(key)) return json(res, 429, { status: 'Error', error: 'Too many sign-in attempts. Try again later.' });
-      const account = await store.getAdminAccount();
+      const account = await store.getAdminAccountByEmail(body.email);
       if (!verifyAdminPassword(account, body.email, body.password)) {
         loginThrottle.failed(key);
         return json(res, 401, { status: 'Error', error: 'Email or password is incorrect.' });
@@ -2517,7 +2520,7 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
   if (req.method === 'POST' && url.pathname === '/admin/api/auth/verify-code') {
     try {
       const body = await readJson(req);
-      const account = await store.getAdminAccount({ fresh: true });
+      const account = await store.getAdminAccountByEmail(body.email, { fresh: true });
       const signingKey = await store.getAdminSessionKey();
       if (normalizeAdminEmail(body.email) !== account?.email
         || !(await consumeEmailLogin(req, { kind: 'admin', body, account, signingKey, otpStore }))) {
@@ -2550,7 +2553,7 @@ async function handleAdminApi(req, res, url, store, loginThrottle, resetThrottle
       const body = await readJson(req);
       if (!verifyAdminPassword(access.account, access.account.email, body.current_password)) return json(res, 401, { status: 'Error', error: 'Current password is incorrect.' });
       const account = createAdminAccount(access.account.email, body.new_password, access.account);
-      await store.setAdminAccount(account);
+      await store.setAdminAccountByEmail(account);
       try { await mailer.sendSecurityAlert({ to: account.email, event: 'changed' }); }
       catch { console.warn('platform_security_alert_failed'); }
       const signingKey = await store.getAdminSessionKey();
