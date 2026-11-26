@@ -1,0 +1,184 @@
+name: Promote Incident Screening API image
+
+on:
+  workflow_dispatch:
+    inputs:
+      qa_run_id:
+        description: Successful main-branch Deploy AI7 UAE API workflow run ID
+        required: true
+        type: string
+      qa_run_attempt:
+        description: Attempt number of that workflow run
+        required: true
+        default: '1'
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: ai7uae-api-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: ai7uae-api
+    steps:
+      - name: Check out reviewed main source
+        uses: actions/checkout@v4
+
+      - name: Verify successful main build and retained digest evidence
+        id: evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QA_RUN_ID: ${{ inputs.qa_run_id }}
+          QA_RUN_ATTEMPT: ${{ inputs.qa_run_attempt }}
+          ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+        shell: bash
+        run: |
+          # shellcheck disable=SC2016,SC2129
+          set -euo pipefail
+          [[ "${QA_RUN_ID}" =~ ^[0-9]+$ ]]
+          [[ "${QA_RUN_ATTEMPT}" =~ ^[0-9]+$ ]]
+          test -n "${ACR_LOGIN_SERVER}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${QA_RUN_ID}" > qa-run.json
+          jq -e --arg sha "${GITHUB_SHA}" --arg attempt "${QA_RUN_ATTEMPT}" \
+            '.name == "Deploy AI7 UAE API" and .event == "push" and .head_branch == "main" and .conclusion == "success" and .head_sha == $sha and (.run_attempt | tostring) == $attempt' \
+            qa-run.json > /dev/null
+          mkdir -p qa-evidence
+          gh run download "${QA_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name "ai7uae-api-deployment-evidence-${QA_RUN_ID}-${QA_RUN_ATTEMPT}" --dir qa-evidence
+          jq -e --arg sha "${GITHUB_SHA}" --arg run "${QA_RUN_ID}" \
+            --arg attempt "${QA_RUN_ATTEMPT}" --arg registry "${ACR_LOGIN_SERVER}" \
+            '.repository == "ai7uae-api" and .source_sha == $sha and .run_id == $run and .run_attempt == $attempt and
+              (.digest | test("^sha256:[a-f0-9]{64}$")) and
+              .image == ($registry + "/ai7uae-api@" + .digest)' \
+            qa-evidence/api-deployment-evidence.json > /dev/null
+          echo "image=$(jq -r .image qa-evidence/api-deployment-evidence.json)" >> "${GITHUB_OUTPUT}"
+          echo "digest=$(jq -r .digest qa-evidence/api-deployment-evidence.json)" >> "${GITHUB_OUTPUT}"
+
+      - name: Sign in to Azure with workload identity
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify target, registry digest, and queue storage
+        id: preflight
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          ACR_NAME: ${{ vars.ACR_NAME }}
+          IMAGE: ${{ steps.evidence.outputs.image }}
+          DIGEST: ${{ steps.evidence.outputs.digest }}
+        shell: bash
+        run: |
+          # shellcheck disable=SC2016,SC2129
+          set -euo pipefail
+          test -n "${AZURE_RESOURCE_GROUP}" && test -n "${ACR_NAME}"
+          test "$(az acr repository show --name "${ACR_NAME}" --image "ai7uae-api@${DIGEST}" --query digest --output tsv)" = "${DIGEST}"
+          # shellcheck disable=SC2016
+          app="$(az containerapp show --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+            --query '{location:location,image:properties.template.containers[0].image,revision:properties.latestReadyRevisionName,mode:properties.configuration.activeRevisionsMode,queue:properties.template.containers[0].env[?name==`ADVERSE_MEDIA_QUEUE_URL`].value | [0]}' --output json)"
+          jq -e '.location == "UAE North" and .mode == "Single" and
+            (.image | test("^.+/ai7uae-api@sha256:[a-f0-9]{64}$")) and
+            (.queue | test("^https://[a-z0-9]+[.]queue[.]core[.]windows[.]net/adverse-media-deep-research$"))' \
+            <<< "${app}" > /dev/null
+          queue_url="$(jq -r .queue <<< "${app}")"
+          queue_storage="${queue_url#https://}"
+          queue_storage="${queue_storage%%.*}"
+          {
+            echo "queue_storage=${queue_storage}"
+            echo "previous_image=$(jq -r .image <<< "${app}")"
+            echo "previous_revision=$(jq -r .revision <<< "${app}")"
+          } >> "${GITHUB_OUTPUT}"
+          printf '%s\n' "${app}" | jq '{location,image,revision,mode,queue}' > production-before.json
+
+      - name: Preview dedicated production queues
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          QUEUE_STORAGE: ${{ steps.preflight.outputs.queue_storage }}
+        run: |
+          set -euo pipefail
+          az bicep build --file infrastructure/adverse-media-incident-queues.bicep --stdout > /dev/null
+          az deployment group what-if --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --template-file infrastructure/adverse-media-incident-queues.bicep \
+            --parameters queueStorageName="${QUEUE_STORAGE}" > incident-queue-preview.txt
+
+      - name: Provision dedicated production queues
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          QUEUE_STORAGE: ${{ steps.preflight.outputs.queue_storage }}
+        run: |
+          set -euo pipefail
+          az deployment group create --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "incident-api-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --template-file infrastructure/adverse-media-incident-queues.bicep \
+            --parameters queueStorageName="${QUEUE_STORAGE}" --query properties.outputs \
+            --output json > incident-queue-outputs.json
+
+      - name: Promote exact image with new API disabled
+        id: promote_image
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          IMAGE: ${{ steps.evidence.outputs.image }}
+          QUEUE_STORAGE: ${{ steps.preflight.outputs.queue_storage }}
+        run: |
+          set -euo pipefail
+          az containerapp update --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+            --image "${IMAGE}" --set-env-vars \
+            ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED=false \
+            "ADVERSE_MEDIA_INCIDENT_QUEUE_URL=https://${QUEUE_STORAGE}.queue.core.windows.net/adverse-media-incident" \
+            "ADVERSE_MEDIA_INCIDENT_DEAD_LETTER_QUEUE_URL=https://${QUEUE_STORAGE}.queue.core.windows.net/adverse-media-incident-deadletter" \
+            --output none
+
+      - name: Verify digest and disabled gate on customer app
+        id: verify
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          IMAGE: ${{ steps.evidence.outputs.image }}
+          QUEUE_STORAGE: ${{ steps.preflight.outputs.queue_storage }}
+        run: |
+          # shellcheck disable=SC2016
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            # shellcheck disable=SC2016
+            az containerapp show --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+              --query '{image:properties.template.containers[0].image,ready:properties.latestReadyRevisionName,latest:properties.latestRevisionName,enabled:properties.template.containers[0].env[?name==`ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED`].value | [0],queue:properties.template.containers[0].env[?name==`ADVERSE_MEDIA_INCIDENT_QUEUE_URL`].value | [0]}' \
+              --output json > production-after.json
+            if jq -e --arg image "${IMAGE}" --arg queue "https://${QUEUE_STORAGE}.queue.core.windows.net/adverse-media-incident" \
+              '.image == $image and .ready == .latest and .enabled == "false" and .queue == $queue' \
+              production-after.json > /dev/null; then exit 0; fi
+            echo "Waiting for production revision readiness (${attempt}/20)"
+            sleep 15
+          done
+          exit 1
+
+      - name: Restore prior digest if promotion verification fails
+        if: failure() && (steps.promote_image.outcome == 'failure' || steps.verify.outcome == 'failure')
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          PREVIOUS_IMAGE: ${{ steps.preflight.outputs.previous_image }}
+        run: |
+          set -euo pipefail
+          test -n "${PREVIOUS_IMAGE}"
+          az containerapp update --resource-group "${AZURE_RESOURCE_GROUP}" --name ca-ai7uae-api \
+            --image "${PREVIOUS_IMAGE}" --set-env-vars ADVERSE_MEDIA_INCIDENT_SCREENING_ENABLED=false --output none
+
+      - name: Retain production promotion evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: incident-api-promotion-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            qa-evidence/api-deployment-evidence.json
+            production-before.json
+            incident-queue-preview.txt
+            incident-queue-outputs.json
+            production-after.json
+          if-no-files-found: ignore
+          retention-days: 30
