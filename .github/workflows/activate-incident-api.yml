@@ -13,7 +13,7 @@ on:
         default: '1'
         type: string
       release_gate:
-        description: Enter qa-and-credentials-verified after public QA, admin credentials, entitlement and rate are checked
+        description: Enter qa-and-credentials-verified after public QA and three admin credentials are checked
         required: true
         type: string
 
